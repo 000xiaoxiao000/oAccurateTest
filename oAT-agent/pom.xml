@@ -19,12 +19,6 @@
         <maven.compiler.source>8</maven.compiler.source><!-- compile插件 -->
         <maven.compiler.target>8</maven.compiler.target><!-- compile插件 -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-        <!-- compile插件 -->
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <locales>en_US</locales>
-        <!-- site插件 -->
-        <argLine>-XX:-UseSplitVerifier</argLine>
     </properties>
 
     <build>
@@ -32,6 +26,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
                 <configuration>
                     <source>${maven.compiler.source}</source>
                     <target>${maven.compiler.target}</target>
