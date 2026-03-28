@@ -20,6 +20,7 @@ target/**
 .sts4-cache
 
 # idea ignore
+.idea
 .idea/**
 *.ipr
 *.iml
