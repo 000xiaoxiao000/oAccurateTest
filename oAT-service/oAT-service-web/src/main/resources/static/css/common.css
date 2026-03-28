@@ -1,0 +1,119 @@
+body {
+    background: #f7f7f7;
+}
+
+body {
+    overflow: scroll;
+    overflow-x: hidden;
+}
+
+/*流程图dagre-d3 样式 ============begin*/
+
+.node rect {
+    stroke: #999;
+    fill: #fff;
+    stroke-width: 1.5px;
+    cursor: pointer;
+}
+
+.node.error rect {
+    stroke: red;
+}
+
+.node rect:hover {
+    stroke: dodgerblue;
+    stroke-width: 1.5px;
+}
+
+.node .label {
+    pointer-events: none;
+}
+
+.labelContent {
+    margin-top: 5px;
+    margin-left: 5px;
+}
+
+.node text {
+    font-weight: 300;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.edgePath path {
+    stroke: #333;
+    stroke-width: 1.5px;
+}
+
+.labelTable {
+    margin: 0px;
+}
+
+/* Toast Notification Container */
+#toast-container {
+    position: fixed;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    width: auto;
+    min-width: 300px;
+    text-align: center;
+}
+
+#toast-container .ui.message {
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    margin-bottom: 10px;
+    text-align: left;
+    display: inline-block;
+    width: 100%;
+}
+
+/* Ensure colors are correct even if Semantic UI defaults are overridden */
+.ui.positive.message {
+    background-color: #fcfff5 !important;
+    color: #2c662d !important;
+    box-shadow: 0 0 0 1px #a3c293 inset, 0 0 0 0 transparent !important;
+}
+
+.ui.negative.message {
+    background-color: #fff6f6 !important;
+    color: #9f3a38 !important;
+    box-shadow: 0 0 0 1px #e0b4b4 inset, 0 0 0 0 transparent !important;
+}
+
+.labelTitle {
+    font-size: 1.2rem;
+}
+
+.subTitle {
+    color: #9aa1ac;
+}
+
+.labelIcon {
+    margin: 0px 5px 0px 0px;
+    color: #5c5c5c;
+}
+
+.ui.breadcrumb {
+    margin-left: 5px;
+    margin-top: -10px;
+}
+
+/* Highlight rows in version list that have coverage reports */
+.has-coverage td {
+    background-color: #f7fff6; /* very light green */
+}
+
+/* Optional: make links inside covered rows slightly darker green */
+.has-coverage td a {
+    color: #1b6b1b;
+}
+
+/* No special styling for rows without coverage; keep default */
+.no-coverage td {
+    background-color: #ffffff; /* explicit white to contrast */
+}
+
+/*流程图dagre-d3 样式 ============end*/

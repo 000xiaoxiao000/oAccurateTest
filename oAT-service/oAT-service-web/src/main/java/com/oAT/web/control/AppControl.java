@@ -1,0 +1,245 @@
+package com.oAT.web.control;
+
+import com.oAT.server.model.ClientSessionVo;
+import com.oAT.web.common.DateUtil;
+import com.oAT.web.esDao.entity.App;
+import com.oAT.web.esDao.entity.SystemLog;
+import com.oAT.web.service.AppService;
+import com.oAT.web.service.ClientSessionService;
+import com.oAT.web.service.ProjectService;
+import com.oAT.web.service.SystemLogService;
+import com.oAT.web.service.entity.AppVo;
+import com.oAT.web.service.entity.ProjectMemberVo;
+import com.oAT.web.service.entity.ProjectVo;
+import com.oAT.web.service.entity.UserVo;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.util.Assert;
+import org.springframework.util.DigestUtils;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.*;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+/**
+ * 应用管理控制器
+ */
+@Controller
+@RequestMapping("/p/{projectId}/app/")
+public class AppControl {
+
+    @Autowired
+    ProjectService projectService;
+
+    @Autowired
+    AppService appService;
+
+    @Autowired
+    ClientSessionService sessionService;
+
+    @Autowired
+    private SystemLogService systemLogService;
+
+    @RequestMapping("create")
+    public String openAppAddView(@PathVariable String projectId,
+                                 @SessionAttribute UserVo user,
+                                 Model model) {
+        ProjectVo project = projectService.getProjectByProjectIdAndMemberId(projectId, user.getId());
+        if (project == null) {
+            model.addAttribute("errorMessage", "找不到指定项目,或者您没有该项目的访问权限");
+            return "/error/404";
+        }
+        model.addAttribute("project", project);
+        return "/settings/createApp";
+    }
+
+    // 打开APP列表页
+    @RequestMapping("/list")
+    public String openAppListView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
+        List<AppVo> list = appService.getAppList(projectId);
+        model.addAttribute("apps", list);
+        for (AppVo appVo : list) {
+            appVo.setOnlineCount(sessionService.getOnlineSessionsByAppId(appVo.getId()).size());
+        }
+
+        String loginName = user.getName();
+        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
+
+        // 登录用户权限，原则是最小权限（访客）
+        String loginNameRole = "visitor";
+        for (ProjectMemberVo member : members) {
+            if (loginName.equals(member.getMemberName())) {
+                loginNameRole = String.valueOf(member.getRole());
+            }
+        }
+
+        model.addAttribute("loginNameRole", loginNameRole);
+
+        return "/settings/appList";
+    }
+
+    /**
+     * 创建新的应用
+     */
+    @RequestMapping("doCreate")
+    @ResponseBody
+    public com.oAT.web.control.entity.ResultNotified doCreateApp(@SessionAttribute UserVo user, App app) {
+        app.setCreateUserId(user.getId());
+        AppVo appVo = appService.createApp(app);
+        doLog(SystemLogService.Action.addApp, "添加了一个新应用", user, appVo);
+        return new com.oAT.web.control.entity.ResultNotified(true, "应用创建成功", "/p/" + app.getCreateProjectId() + "/app/list");
+    }
+
+    private void doLog(SystemLogService.Action action, String actionMessage, UserVo user, AppVo appVo) {
+        SystemLog log = new SystemLog();
+
+        log.setTitle(String.format("%s %s <a href='app/list?id=%s'>%s</a>", user.getName(), actionMessage,
+                appVo.getId(), appVo.getName()));
+        log.setMessage(appVo.getDescribe());
+        log.setUserId(user.getId());
+        log.setUserName(user.getName());
+        log.setProjectId(appVo.getCreateProjectId());
+        log.setAction(SystemLogService.Action.addApp.toString());
+        systemLogService.addLog(log);
+    }
+
+    @RequestMapping("edit")
+    public String openEditView(@PathVariable String projectId, String appId, Model model) {
+        AppVo app = appService.getApp(appId);
+        model.addAttribute("app", app);
+        return "/settings/editApp";
+    }
+
+    @RequestMapping(value = "{appId}/edit", method = RequestMethod.POST)
+    @ResponseBody
+    public com.oAT.web.control.entity.ResultNotified openEditView(@PathVariable String projectId,
+                               @PathVariable String appId,
+                               @SessionAttribute UserVo user, AppVo app) {
+        Assert.isTrue(app.getId().equalsIgnoreCase(appId), "参数非法");
+        app = appService.updateApp(projectId, app);
+        doLog(SystemLogService.Action.editApp, "修改了应用信息", user, app);
+        return new com.oAT.web.control.entity.ResultNotified(true, "应用修改成功", "/p/" + projectId + "/app/" + appId + "/settings");
+    }
+
+    @RequestMapping(value = "{appId}/delete", method = RequestMethod.POST)
+    @ResponseBody
+    public com.oAT.web.control.entity.ResultNotified deleteApp(@PathVariable String projectId,
+                            @PathVariable String appId,
+                            String password,
+                            @SessionAttribute UserVo user) {
+        String md5Pwd = DigestUtils.md5DigestAsHex(password.getBytes(StandardCharsets.UTF_8));
+        Assert.isTrue(user.getPassword().equalsIgnoreCase(md5Pwd), "删除失败!密码错误");
+        AppVo appVo = appService.deleteApp(projectId, appId);
+        //记录删除日志
+        SystemLog log = new SystemLog();
+        log.setTitle(String.format("%s 删除了应用 %s", user.getName(), appVo.getName()));
+        log.setUserId(user.getId());
+        log.setUserName(user.getName());
+        log.setProjectId(projectId);
+        log.setAction(SystemLogService.Action.addApp.toString());
+        systemLogService.addLog(log);
+        return new com.oAT.web.control.entity.ResultNotified(true, "应用已经被删除", "/p/" + projectId + "/home");
+    }
+
+    @RequestMapping("doEdit")
+    @ResponseBody
+    public com.oAT.web.control.entity.ResultNotified doEditApp(@PathVariable String projectId, @SessionAttribute UserVo user, AppVo app) {
+        app = appService.updateApp(projectId, app);
+        doLog(SystemLogService.Action.editApp, "修改了应用信息", user, app);
+        return new com.oAT.web.control.entity.ResultNotified(true, "应用修改成功");
+    }
+
+    @RequestMapping("{appid}/oAT.key")
+    @ResponseBody
+    public String doDonwloadRegisterKey(@PathVariable String projectId, @PathVariable("appid") String appId) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("#将此注册文件拷贝至应用工作目录，即：user.dir");
+        builder.append("\r\n");
+        builder.append("#app id 用于识别当前应用");
+        builder.append("\r\n");
+        builder.append("appKey=" + appId);
+        builder.append("\r\n");
+        builder.append("#保留配置");
+        builder.append("\r\n");
+        builder.append("#projectKey=" + projectId);
+        return builder.toString();
+
+    }
+
+    @RequestMapping("doDelete")
+    @ResponseBody
+    public com.oAT.web.control.entity.ResultNotified doDeleteApp(@PathVariable String projectId, String appId, @SessionAttribute UserVo user) {
+        AppVo appVo = appService.deleteApp(projectId, appId);
+        //记录删除日志
+        SystemLog log = new SystemLog();
+        log.setTitle(String.format("%s 删除了应用 %s", user.getName(), appVo.getName()));
+        log.setUserId(user.getId());
+        log.setUserName(user.getName());
+        log.setProjectId(projectId);
+        log.setAction(SystemLogService.Action.addApp.toString());
+        systemLogService.addLog(log);
+        return new com.oAT.web.control.entity.ResultNotified(true, "应用删除成功");
+    }
+
+    @RequestMapping("online")
+    public String openOnlineList(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
+        List<ClientSessionVo> list = new ArrayList<>();
+        List<String> appIds = new ArrayList<>();
+        for (AppVo appVo : appService.getAppList(projectId)) {
+            appIds.add(appVo.getId());
+        }
+        for (ClientSessionVo onlineSession : sessionService.getOnlineSessions()) {
+            // 应用key等于空 ，或者属于当前项目
+            if (!StringUtils.hasText(onlineSession.getClientInfo().getAppKey()) ||
+                    appIds.contains(onlineSession.getClientInfo().getAppKey())) {
+                onlineSession.setOnlineTime(DateUtil.timeDifference(onlineSession.getLoginTime(), new Date()));
+                list.add(onlineSession);
+            }
+        }
+
+        String loginName = user.getName();
+        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
+
+        // 登录用户权限，原则是最小权限（访客）
+        String loginNameRole = "visitor";
+        for (ProjectMemberVo member : members) {
+            if (loginName.equals(member.getMemberName())) {
+                loginNameRole = String.valueOf(member.getRole());
+            }
+        }
+
+        model.addAttribute("loginNameRole", loginNameRole);
+
+        model.addAttribute("sessions", list);
+        return "/settings/onlineAppList";
+    }
+
+    @RequestMapping("{appId}/settings")
+    public String openSetting(@PathVariable String projectId, @PathVariable String appId,
+                              @SessionAttribute UserVo user, Model model) {
+        AppVo app = appService.getApp(appId);
+        List<AppVo> appList = appService.getAppList(projectId);
+
+        String loginName = user.getName();
+        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
+
+        // 登录用户权限，原则是最小权限（访客）
+        String loginNameRole = "visitor";
+        for (ProjectMemberVo member : members) {
+            if (loginName.equals(member.getMemberName())) {
+                loginNameRole = String.valueOf(member.getRole());
+            }
+        }
+
+        model.addAttribute("loginNameRole", loginNameRole);
+
+        model.addAttribute("app", app);
+        model.addAttribute("apps", appList);
+        return "/app/settings";
+    }
+
+}
