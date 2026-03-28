@@ -1,0 +1,61 @@
+/*******************************************************************************
+ * Copyright (c) 2009, 2016 Mountainminds GmbH & Co. KG and Contributors
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v1.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
+ * Contributors:
+ *    Marc R. Hoffmann - initial API and implementation
+ *    
+ *******************************************************************************/
+package com.oAT.agent.jacoco.flow;
+
+import com.oAT.agent.jacoco.instr.InstrSupport;
+import com.oAT.shaded.asm97.Label;
+import com.oAT.shaded.asm97.MethodVisitor;
+import com.oAT.shaded.asm97.commons.JSRInlinerAdapter;
+
+/**
+ * This method visitor fixes two potential issues with Java byte code:
+ * 
+ * <ul>
+ * <li>Remove JSR/RET instructions by inlining subroutines which are deprecated
+ * since Java 6. The RET statement complicates control flow analysis as the jump
+ * target is not explicitly given.</li>
+ * <li>Remove code attributes line number and local variable name if they point
+ * to invalid offsets which some tools create. When writing out such invalid
+ * labels with ASM class files do not verify any more.</li>
+ * </ul>
+ */
+class MethodSanitizer extends JSRInlinerAdapter {
+
+	MethodSanitizer(final MethodVisitor mv, final int access,
+			final String name, final String desc, final String signature,
+			final String[] exceptions) {
+		super(InstrSupport.ASM_API_VERSION, mv, access, name, desc, signature,
+				exceptions);
+	}
+
+	@Override
+	public void visitLocalVariable(final String name, final String desc,
+			final String signature, final Label start, final Label end,
+			final int index) {
+		// Here we rely on the usage of the info fields by the tree API. If the
+		// labels have been properly used before the info field contains a
+		// reference to the LabelNode, otherwise null.
+		if (start.info != null && end.info != null) {
+			super.visitLocalVariable(name, desc, signature, start, end, index);
+		}
+	}
+
+	@Override
+	public void visitLineNumber(final int line, final Label start) {
+		// Here we rely on the usage of the info fields by the tree API. If the
+		// labels have been properly used before the info field contains a
+		// reference to the LabelNode, otherwise null.
+		if (start.info != null) {
+			super.visitLineNumber(line, start);
+		}
+	}
+
+}

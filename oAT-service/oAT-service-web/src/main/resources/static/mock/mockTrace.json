@@ -1,0 +1,85 @@
+{
+  "title": "http://localhost:63342/oAT-web-html/MonitorPlatform.html?_ijt=qh570mffpjinced066aegvfs4k",
+  "showDefaultNode": {
+    "id": "1",
+    "properties": {
+      "label": "User",
+      "userId": "111",
+      "type": "http"
+    }
+  },
+  "nodes": [
+    {
+      "id": "1",
+      "label": "User",
+      "userId": "111",
+      "type": "http"
+    },
+    {
+      "id": "2",
+      "label": "Server",
+      "name": "oAT-goods-page",
+      "title": "商品中心详情页",
+      "description": "商品中心详情页",
+      "type": "server"
+    },
+    {
+      "id": "3",
+      "label": "Server",
+      "name": "oAT-goods-server",
+      "title": "商品服务",
+      "description": "商品服务",
+      "type": "server"
+    },
+    {
+      "id": "4",
+      "label": "Server",
+      "name": "oAT-store-server",
+      "title": "库存服务",
+      "description": "库存服务",
+      "type": "server"
+    },
+    {
+      "id": "5",
+      "label": "Mysql",
+      "name": "db_goods",
+      "title": "商品数据库",
+      "type": "server"
+    },
+    {
+      "id": "6",
+      "label": "Mysql",
+      "name": "db_store",
+      "title": "库存数据库",
+      "description": "Neo4j graph visualization using D3.js.",
+      "type": "server"
+    }
+  ],
+  "edges": [
+    {
+      "from": "1",
+      "to": "2",
+      "label": "http请求"
+    },
+    {
+      "from": "1",
+      "to": "3",
+      "label": "Dubbo 调用"
+    },
+    {
+      "from": "3",
+      "to": "4",
+      "label": "Dubbo 调用"
+    },
+    {
+      "from": "3",
+      "to": "5",
+      "label": "Dubbo 调用"
+    },
+    {
+      "from": "5",
+      "to": "6",
+      "label": "SQL请求"
+    }
+  ]
+}

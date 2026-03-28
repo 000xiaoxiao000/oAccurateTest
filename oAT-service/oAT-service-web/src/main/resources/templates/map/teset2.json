@@ -1,0 +1,130 @@
+{
+    "nodes": [
+        {
+            "data": {
+                "id": "root",
+                "weight": 40,
+                "source": null,
+                "target": null,
+                "name": "http://localhost:8000/oms/user/getUserList/6",
+                "describe": null,
+                "doLines": null,
+                "lines": 0,
+                "coverageRate": 0,
+                "cyclo": 0,
+                "unionCount": 0
+            },
+            "removed": false,
+            "selected": false,
+            "selectable": true,
+            "locked": false,
+            "grabbed": false,
+            "grabbable": true,
+            "classes": [
+                "code_class"
+            ]
+        },
+        {
+            "data": {
+                "id": "javax.servlet.http.HttpServlet service",
+                "weight": 30,
+                "source": null,
+                "target": null,
+                "name": "HttpServlet service 0.0%",
+                "describe": null,
+                "doLines": [],
+                "lines": 0,
+                "coverageRate": 0,
+                "cyclo": 0,
+                "unionCount": 0
+            },
+            "removed": false,
+            "selected": false,
+            "selectable": true,
+            "locked": false,
+            "grabbed": false,
+            "grabbable": true,
+            "classes": [
+                "code_class"
+            ]
+        },
+        {
+            "data": {
+                "id": "com.at.oms.api.controller.system.UserController getUserList (Ljava/lang/Integer;)Lcom/at/framework/core/response/Result;",
+                "weight": 30,
+                "source": null,
+                "target": null,
+                "name": "UserController getUserList 100.0%",
+                "describe": null,
+                "doLines": [
+                    43,
+                    44
+                ],
+                "lines": 2,
+                "coverageRate": 100,
+                "cyclo": 0,
+                "unionCount": 0
+            },
+            "removed": false,
+            "selected": false,
+            "selectable": true,
+            "locked": false,
+            "grabbed": false,
+            "grabbable": true,
+            "classes": [
+                "code_class"
+            ]
+        }
+    ],
+    "lines": [
+        {
+            "data": {
+                "id": "HttpServlet service ->invoke-> UserController getUserList (Ljava/lang/Integer;)Lcom/at/framework/core/response/Result;",
+                "weight": 0,
+                "source": "javax.servlet.http.HttpServlet service",
+                "target": "com.at.oms.api.controller.system.UserController getUserList (Ljava/lang/Integer;)Lcom/at/framework/core/response/Result;",
+                "name": "invoke",
+                "describe": null,
+                "doLines": null,
+                "lines": 0,
+                "coverageRate": 0,
+                "cyclo": 0,
+                "unionCount": 0
+            },
+            "removed": false,
+            "selected": false,
+            "selectable": true,
+            "locked": false,
+            "grabbed": false,
+            "grabbable": true,
+            "classes": [
+                "invoke"
+            ]
+        },
+        {
+            "data": {
+                "id": "15191649",
+                "weight": 0,
+                "source": "root",
+                "target": "javax.servlet.http.HttpServlet service",
+                "name": "invoke",
+                "describe": null,
+                "doLines": null,
+                "lines": 0,
+                "coverageRate": 0,
+                "cyclo": 0,
+                "unionCount": 0
+            },
+            "removed": false,
+            "selected": false,
+            "selectable": true,
+            "locked": false,
+            "grabbed": false,
+            "grabbable": true,
+            "classes": [
+                "start_invoke",
+                "invoke"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,174 @@
+package com.oAT.web.esDao.entity;
+
+import org.springframework.data.annotation.Id;
+import org.springframework.data.elasticsearch.annotations.DateFormat;
+import org.springframework.data.elasticsearch.annotations.Document;
+import org.springframework.data.elasticsearch.annotations.Field;
+import org.springframework.data.elasticsearch.annotations.FieldType;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+@Document(indexName = "system", type = "doc", shards = 2)
+public class SystemIndex implements java.io.Serializable, StandardDate {
+    private static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss,SSS";
+    //基础属性 ========================================
+    @Id
+    private String id;
+
+    @Field(type = FieldType.Keyword)
+    private String type;
+
+    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
+    private String createTime;
+
+    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
+    private String updateTime;
+
+    //实体对象=================================================================
+    @Field(type = FieldType.Object)
+    private User user;
+
+    @Field(type = FieldType.Object)
+    private Project project;
+
+    @Field(type = FieldType.Object)
+    private App app;
+
+    @Field(type = FieldType.Object)
+    private LabelGroup labelGroup;
+
+    /*
+     项目成员
+     */
+    @Field(type = FieldType.Object)
+    private ProjectMember projectMember;
+
+    @Field(type = FieldType.Object)
+    private SystemLog systemLog;
+
+    /**
+     * 不能使用该构造函数
+     */
+    @Deprecated
+    public SystemIndex() {
+    }
+
+
+    public SystemIndex(User user) {
+        this("user");
+        this.user = user;
+    }
+
+    public SystemIndex(Project project) {
+        this("project");
+        this.project = project;
+    }
+
+    public SystemIndex(App app) {
+        this("app");
+        this.app = app;
+    }
+
+    public SystemIndex(LabelGroup labelGroup) {
+        this("labelGroup");
+        this.labelGroup = labelGroup;
+    }
+
+    public SystemIndex(ProjectMember projectMember) {
+        this("projectMember");
+        this.projectMember = projectMember;
+    }
+
+    public SystemIndex(SystemLog systemLog) {
+        this("systemLog");
+        this.systemLog = systemLog;
+    }
+
+    private SystemIndex(String type) {
+        this.type = type;
+        createTime = new SimpleDateFormat(DATE_FORMAT).format(new Date());
+        updateTime = new SimpleDateFormat(DATE_FORMAT).format(new Date());
+    }
+
+    public String getCreateTime() {
+        return createTime;
+    }
+
+    public void setCreateTime(String createTime) {
+        this.createTime = createTime;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getUpdateTime() {
+        return updateTime;
+    }
+
+    public void setUpdateTime(String updateTime) {
+        this.updateTime = updateTime;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public Project getProject() {
+        return project;
+    }
+
+    public void setProject(Project project) {
+        this.project = project;
+    }
+
+    public App getApp() {
+        return app;
+    }
+
+    public void setApp(App app) {
+        this.app = app;
+    }
+
+    public LabelGroup getLabelGroup() {
+        return labelGroup;
+    }
+
+    public void setLabelGroup(LabelGroup labelGroup) {
+        this.labelGroup = labelGroup;
+    }
+
+    public ProjectMember getProjectMember() {
+        return projectMember;
+    }
+
+    public void setProjectMember(ProjectMember projectMember) {
+        this.projectMember = projectMember;
+    }
+
+    public SystemLog getSystemLog() {
+        return systemLog;
+    }
+
+    public void setSystemLog(SystemLog systemLog) {
+        this.systemLog = systemLog;
+    }
+}

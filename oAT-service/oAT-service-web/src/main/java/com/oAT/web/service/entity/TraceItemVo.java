@@ -1,0 +1,97 @@
+package com.oAT.web.service.entity;
+
+import java.io.Serializable;
+
+public class TraceItemVo implements Serializable {
+    private String traceId;
+    private String title;
+    private Long cacheTime; // 缓存时间
+    private int validity;//有效期 单位：秒
+    private int index;
+    private String appId;
+    private String addressIp;
+    private String clientIp;// 客户端IP，即终端IP
+
+    /**
+     * @param traceId
+     * @param httpUrl
+     * @param validity
+     */
+    public TraceItemVo(String traceId, String httpUrl, int validity) {
+        this.traceId = traceId;
+        this.title = httpUrl;
+        this.cacheTime = System.currentTimeMillis();
+        this.validity = validity;
+    }
+
+    public TraceItemVo() {
+    }
+
+    public String getTraceId() {
+        return traceId;
+    }
+
+    public void setTraceId(String traceId) {
+        this.traceId = traceId;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public Long getCacheTime() {
+        return cacheTime;
+    }
+
+    public boolean isValidity(long currentTime) {
+        return (cacheTime + (validity * 1000) > currentTime);
+    }
+
+    public void setCacheTime(Long cacheTime) {
+        this.cacheTime = cacheTime;
+    }
+
+    public int getIndex() {
+        return index;
+    }
+
+    public void setIndex(int index) {
+        this.index = index;
+    }
+
+    public int getValidity() {
+        return validity;
+    }
+
+    public void setValidity(int validity) {
+        this.validity = validity;
+    }
+
+    public String getAppId() {
+        return appId;
+    }
+
+    public void setAppId(String appId) {
+        this.appId = appId;
+    }
+
+    public String getAddressIp() {
+        return addressIp;
+    }
+
+    public void setAddressIp(String addressIp) {
+        this.addressIp = addressIp;
+    }
+
+    public String getClientIp() {
+        return clientIp;
+    }
+
+    public void setClientIp(String clientIp) {
+        this.clientIp = clientIp;
+    }
+}
