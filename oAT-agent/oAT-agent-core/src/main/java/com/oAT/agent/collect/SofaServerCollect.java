@@ -5,9 +5,11 @@ import com.oAT.agent.collect.sofaRPC.SofaRequestAdapter;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
-import com.oAT.agent.jacoco.StackSession;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.jacoco.data.StackNodeVoBuilder;
 import com.oAT.agent.model.SofaRpcRemoteTraceNode;
+import com.oAT.agent.model.StackNodeVo;
+import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
 import com.oAT.agent.trace.TraceContext;
@@ -96,7 +98,7 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
             // 仅在配置开启时采集代码堆栈
             if (traceContext.getConfig("codeStack.include") != null
                     || traceContext.getConfig("conf_codeStack.include") != null) {
-                wrapper.stackSession = new StackSession(TARGET_CLASS, TARGET_METHOD, wrapper);
+                wrapper.coverageCollector = CoverageCollector.begin();
             }
             return wrapper;
         } catch (Throwable t) {
@@ -160,16 +162,22 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
             }
             // 采集代码堆栈
             try {
-                if (nodeWrapper.stackSession != null) {
-                    nodeWrapper.stackSession.doneSession();
-                    StackNodeVoBuilder stackNodeVoBuilder = new StackNodeVoBuilder();
-                    node.setCodeNodes(stackNodeVoBuilder.buildCodeNodes(nodeWrapper.stackSession));
+                if (nodeWrapper.coverageCollector != null) {
+                    nodeWrapper.coverageCollector = CoverageCollector.end();
+                    if (nodeWrapper.coverageCollector != null && !nodeWrapper.coverageCollector.getProbeSnapshots().isEmpty()) {
+                        try {
+                            StackNodeVo[] codeNodes = new StackNodeVoBuilder()
+                                    .buildCodeNodes(nodeWrapper.coverageCollector);
+                            node.setCodeNodes(codeNodes);
+                        } catch (Throwable t) {
+                            logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                        }
+                    }
                 }
             } catch (Throwable t) {
-                logger.error("[Agent-EXCError]stackSession doneSession error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                logger.error("[Agent-EXCError]coverageCollector end error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
-            // 保证 codeNodes 有代码覆盖率
-            if (node.getCodeNodes().length > 1) {
+            if (node.getCodeNodes() != null && node.getCodeNodes().length > 0) {
                 traceSession.saveNode(node);
             }
         } catch (Throwable t) {
@@ -196,8 +204,8 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
     public class SofaRpcRemoteTraceNodeWrapper implements ISessionDestroy {
         private final TraceSession session;
         private final SofaRpcRemoteTraceNode node;
-        // 代码堆栈会话
-        private com.oAT.agent.jacoco.StackSession stackSession;
+        // 覆盖率数据聚合器
+        private CoverageCollector coverageCollector;
 
         public SofaRpcRemoteTraceNodeWrapper(TraceSession session, SofaRpcRemoteTraceNode node) {
             this.session = session;
@@ -207,8 +215,8 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
         @Override
         public void doDestroy() {
             try {
-                if (stackSession != null) {
-                    stackSession.close();
+                if (coverageCollector != null) {
+                    CoverageCollector.remove();
                 }
                 traceContext.closeTraceSession(session);
             } catch (Throwable t) {

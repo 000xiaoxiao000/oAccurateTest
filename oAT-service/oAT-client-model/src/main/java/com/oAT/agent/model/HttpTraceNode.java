@@ -1,6 +1,7 @@
 package com.oAT.agent.model;
 
 import java.io.Serializable;
+import java.util.Map;
 
 public class HttpTraceNode extends TraceNode implements CodeNodeBean, StatementError, Serializable {
     private static final long serialVersionUID = -7156032079009497957L;
@@ -31,10 +32,19 @@ public class HttpTraceNode extends TraceNode implements CodeNodeBean, StatementE
     private String responseContent;
 
     private Error error;
-    //完成的代码堆栈
-    private StackNodeVo[] codeNodes;
     //完成的日志信息
     private String log;
+
+    /**
+     * 代码覆盖率报告数据（由 agent-core 端 StackNodeVoBuilder 从探针快照构建）。
+     * <p>
+     * 替代旧的在目标系统运行时实时构建 StackNode 的方案。
+     * 新方案：运行时每个探针仅执行 $jacocoData[idx] = true（约10ns），
+     * 在请求结束时由 CoverageCollector 统一收集探针快照并结合 ClassProbeInfo
+     * 元信息构建 StackNodeVo[]，再通过 HTTP 上报到 service-web。
+     * </p>
+     */
+    private StackNodeVo[] codeNodes;
 
     public String getRequestBody() {
         return requestBody;
@@ -219,8 +229,8 @@ public class HttpTraceNode extends TraceNode implements CodeNodeBean, StatementE
             return Authorization;
         }
 
-        public void setAuthorization(String authorization) {
-            Authorization = authorization;
+        public void setAuthorization(String Authorization) {
+            this.Authorization = Authorization;
         }
 
         public String getUserHeader() {

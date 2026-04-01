@@ -6,9 +6,10 @@ import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.StringUtils;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
-import com.oAT.agent.jacoco.StackSession;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.jacoco.data.StackNodeVoBuilder;
 import com.oAT.agent.model.HttpTraceNode;
+import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
 import com.oAT.agent.trace.TraceContext;
@@ -279,7 +280,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         HttpServletTraceNodeWrapper nodeWrapper = new HttpServletTraceNodeWrapper(traceSession, node);
         if (traceId == null && (StringUtils.hasText(this.traceContext.getConfig("codeStack.include"))
                 || StringUtils.hasText(this.traceContext.getConfig("conf_codeStack.include")))) {
-            nodeWrapper.stackSession = new StackSession(TARGET_CLASS, TARGET_METHOD, nodeWrapper);
+            nodeWrapper.coverageCollector = CoverageCollector.begin();
         }
 
         if (Boolean.parseBoolean(this.traceContext.getConfig("collect.systemLog", "true"))) {
@@ -346,10 +347,18 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             } else {
                 node.setStatus(TraceNode.Status.succeed.toString());
             }
-            if (nodeWrapper.stackSession != null) {
-                nodeWrapper.stackSession.doneSession();
-                StackNodeVoBuilder stackNodeVoBuilder = new StackNodeVoBuilder();
-                node.setCodeNodes(stackNodeVoBuilder.buildCodeNodes(nodeWrapper.stackSession));
+            if (nodeWrapper.coverageCollector != null) {
+                nodeWrapper.coverageCollector = CoverageCollector.end();
+                // 在 agent 端从探针快照 + ClassProbeInfo 元信息构建 codeNodes
+                if (nodeWrapper.coverageCollector != null && !nodeWrapper.coverageCollector.getProbeSnapshots().isEmpty()) {
+                    try {
+                        StackNodeVo[] codeNodes = new StackNodeVoBuilder()
+                                .buildCodeNodes(nodeWrapper.coverageCollector);
+                        node.setCodeNodes(codeNodes);
+                    } catch (Throwable t) {
+                        logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                    }
+                }
             }
 
             if (nodeWrapper.logOut != null) {
@@ -387,7 +396,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
     public class HttpServletTraceNodeWrapper implements ISessionDestroy {
         private final TraceSession traceSession;
         private final HttpTraceNode node;
-        private StackSession stackSession;
+        private CoverageCollector coverageCollector;
         private OutputStream logOut;
 
         public HttpServletTraceNodeWrapper(TraceSession traceSession, HttpTraceNode node) {
@@ -398,8 +407,8 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         @Override
         public void doDestroy() {
             try {
-                if (stackSession != null) {
-                    stackSession.close();
+                if (coverageCollector != null) {
+                    CoverageCollector.remove();
                 }
                 if (logOut != null) {
                     SystemLogCollect.INSTANCE.removeOutput(logOut);

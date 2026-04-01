@@ -1,26 +1,12 @@
 package com.oAT.agent.context;
 
-import com.oAT.agent.jacoco.StackSession;
 import com.oAT.agent.trace.TraceSession;
 
 /**
  * 统一上下文管理，解决跨线程透传问题
  */
 public class AgentContext {
-    private static final ThreadLocal<StackSession> STACK_SESSION = new InheritableThreadLocal<>();
     private static final ThreadLocal<TraceSession> TRACE_SESSION = new InheritableThreadLocal<>();
-
-    public static StackSession getStackSession() {
-        return STACK_SESSION.get();
-    }
-
-    public static void setStackSession(StackSession session) {
-        STACK_SESSION.set(session);
-    }
-
-    public static void removeStackSession() {
-        STACK_SESSION.remove();
-    }
 
     public static TraceSession getTraceSession() {
         return TRACE_SESSION.get();
@@ -38,15 +24,13 @@ public class AgentContext {
      * 获取当前上下文快照
      */
     public static ContextSnapshot capture() {
-        return new ContextSnapshot(STACK_SESSION.get(), TRACE_SESSION.get());
+        return new ContextSnapshot(TRACE_SESSION.get());
     }
 
     public static class ContextSnapshot {
-        private final StackSession stackSession;
         private final TraceSession traceSession;
 
-        public ContextSnapshot(StackSession stackSession, TraceSession traceSession) {
-            this.stackSession = stackSession;
+        public ContextSnapshot(TraceSession traceSession) {
             this.traceSession = traceSession;
         }
 
@@ -55,37 +39,25 @@ public class AgentContext {
          * @return 用于还原现场的 Scope
          */
         public Scope restore() {
-            StackSession previousStack = STACK_SESSION.get();
             TraceSession previousTrace = TRACE_SESSION.get();
 
-            if (this.stackSession != null) {
-                STACK_SESSION.set(this.stackSession);
-            }
             if (this.traceSession != null) {
                 TRACE_SESSION.set(this.traceSession);
             }
 
-            return new Scope(previousStack, previousTrace);
+            return new Scope(previousTrace);
         }
     }
 
     public static class Scope implements AutoCloseable {
-        private final StackSession previousStack;
         private final TraceSession previousTrace;
 
-        public Scope(StackSession previousStack, TraceSession previousTrace) {
-            this.previousStack = previousStack;
+        public Scope(TraceSession previousTrace) {
             this.previousTrace = previousTrace;
         }
 
         @Override
         public void close() {
-            if (previousStack != null) {
-                STACK_SESSION.set(previousStack);
-            } else {
-                STACK_SESSION.remove();
-            }
-
             if (previousTrace != null) {
                 TRACE_SESSION.set(previousTrace);
             } else {
@@ -99,7 +71,6 @@ public class AgentContext {
      */
     public static Runnable wrap(Runnable runnable) {
         if (runnable == null) return null;
-        // 避免多重包装
         if (runnable instanceof ContextAwareRunnable) return runnable;
         ContextSnapshot snapshot = capture();
         return new ContextAwareRunnable(runnable, snapshot);
@@ -149,4 +120,3 @@ public class AgentContext {
         }
     }
 }
-

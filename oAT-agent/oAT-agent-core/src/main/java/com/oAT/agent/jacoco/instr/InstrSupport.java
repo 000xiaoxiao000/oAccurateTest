@@ -124,7 +124,12 @@ public final class InstrSupport {
      * Data type of the field that stores coverage information for a class (
      * <code>boolean[]</code>).
      */
-    public static final String DATAFIELD_DESC = "java/lang/Object";
+    public static final String DATAFIELD_DESC = "[Z";
+
+    /**
+     * Internal name of the CoverageData class, used for $jacocoInit() to register probe arrays.
+     */
+    public static final String COVERAGE_DATA_INTERNAL_NAME = "com/oAT/agent/jacoco/CoverageData";
 
     // === Init Method ===
 
