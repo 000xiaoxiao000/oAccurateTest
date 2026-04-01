@@ -38,12 +38,21 @@ public class StackNodeVo implements java.io.Serializable {
     //条件覆盖率
     //执行到的条件数,map<分支行，第几个条件>
     private Map<String, List<String>> executeCondition = new HashMap<>(8);   //分支中的执行到的条件
+
     /**
-     * 分支中的执行到的条件,用于条件组合的覆盖
-     * if(真),if(假),两种分别执行到，为全部覆盖，执行到其中一个为部分覆盖，最后还有没执行到为未覆盖
-     * 通过执行多次的记录比对决定最后覆盖情况
+     * MC/DC（修订的条件/判定覆盖）覆盖率数据
+     * <p>
+     * MC/DC 要求：对于判定中的每个条件C，至少存在一个测试用例使得：
+     * - 判定结果因C的取值从真变为假（或从假变为真），而其他所有条件的取值保持不变。
+     * <p>
+     * 格式: Map<"分支行号", List<List<String>>>
+     * - key: 分支行号
+     * - value: 条件真值组合列表。每个 List<String> 是一次执行中各条件的 true/false 序列。
+     *   通过多次执行收集不同的真值组合，判断是否满足 MC/DC 覆盖标准。
+     * <p>
+     * 替代旧的 execBranchConditionIsTrue 字段。
      */
-    private String execBranchConditionIsTrue;
+    private Map<String, List<List<String>>> mcdcCoverage = new HashMap<>(8);
 
     /**
      * 圈复杂度
@@ -54,11 +63,11 @@ public class StackNodeVo implements java.io.Serializable {
     /**
      * 是否是递归方法
      */
-    private boolean isRecursive = false;    // 本节点是递归方法
+    private boolean isRecursive = false;
     /**
      * 是否是异步方法
      */
-    private boolean isAsync = false;    // 本节点是异步方法
+    private boolean isAsync = false;
 
     private boolean done;
     private Integer size;
@@ -228,11 +237,11 @@ public class StackNodeVo implements java.io.Serializable {
         this.executeCondition = executeCondition;
     }
 
-    public String getExecBranchConditionIsTrue() {
-        return execBranchConditionIsTrue;
+    public Map<String, List<List<String>>> getMcdcCoverage() {
+        return mcdcCoverage;
     }
 
-    public void setExecBranchConditionIsTrue(String execBranchConditionIsTrue) {
-        this.execBranchConditionIsTrue = execBranchConditionIsTrue;
+    public void setMcdcCoverage(Map<String, List<List<String>>> mcdcCoverage) {
+        this.mcdcCoverage = mcdcCoverage;
     }
 }

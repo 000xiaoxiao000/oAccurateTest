@@ -6,81 +6,240 @@ import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.TypeConvert;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
-import com.oAT.agent.jacoco.StackNode;
-import com.oAT.agent.jacoco.StackSession;
+import com.oAT.agent.jacoco.ClassProbeInfo;
+import com.oAT.agent.jacoco.ClassProbeInfoRegistry;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.model.StackNodeVo;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
+/**
+ * 构建 StackNodeVo[] 数组，从 CoverageCollector 的探针快照 + ClassProbeInfo 元信息生成覆盖率报告。
+ * <p>
+ * 替代旧的从 StackSession + StackNode 树构建的方式。
+ * 新方案在服务端（oAT-service-web）端合并，减轻目标系统运行时压力。
+ * </p>
+ */
 public class StackNodeVoBuilder {
     private final static Log logger = LogFactory.getLog(StackNodeVoBuilder.class);
 
-    public StackNodeVo[] buildCodeNodes(StackSession stackSession) {
+    /**
+     * 从 CoverageCollector 的探针快照构建 codeNodes。
+     * <p>
+     * 遍历所有有覆盖率数据的 classId，结合 ClassProbeInfo 元信息，
+     * 将 boolean[] 探针数据转换为结构化的 StackNodeVo 数组。
+     * </p>
+     *
+     * @param collector 请求结束时收集的覆盖率数据聚合器
+     * @return StackNodeVo[] 覆盖率节点数组
+     */
+    public StackNodeVo[] buildCodeNodes(CoverageCollector collector) {
         try {
-            List<StackNode> allNodes = stackSession.getAllNodes();
-            int size = allNodes.size();
-            logger.debug("[Agent-debug]开始构建代码采集节点数: " + size);
-            StackNodeVo[] result = new StackNodeVo[size];
-            StackNodeVo nodeVo;
-            int i = 0;
+            Map<Long, boolean[]> snapshots = collector.getProbeSnapshots();
+            if (snapshots == null || snapshots.isEmpty()) {
+                return new StackNodeVo[0];
+            }
+
             ILanguageNames javaNames = new JavaNames();
-            for (StackNode n : allNodes) {
-                String originClassName = n.getClassName();
-                String originMethodName = n.getMethodName();
-                String originMethodDesc = n.getMethodDesc();
+            List<StackNodeVo> resultList = new ArrayList<>();
 
-                nodeVo = new StackNodeVo();
-                nodeVo.setId(n.getId());
-                nodeVo.setClassId(n.getClassId());
-                String className = javaNames.getQualifiedClassName(originClassName);
-                nodeVo.setClassName(className);
-                String methodName = javaNames.getMethodName(originClassName, originMethodName, originMethodDesc, null);
-                nodeVo.setMethodName(methodName);
-                nodeVo.setMethodDescriptor(originMethodDesc);
-                nodeVo.setUseTime(n.getUseTime());
+            int nodeIdx = 0;
+            for (Map.Entry<Long, boolean[]> entry : snapshots.entrySet()) {
+                long classId = entry.getKey();
+                boolean[] probes = entry.getValue();
 
-                ArrayList<Integer> executeBranchList = TypeConvert.parseToIntList(n.getExecuteBranch());
-                ArrayList<Integer> doLines = new ArrayList<>(n.getDoLines());
-                if (!doLines.isEmpty()) {
-                    for (Integer branch : executeBranchList) {
-                        doLines.remove(branch);
+                ClassProbeInfo probeInfo = ClassProbeInfoRegistry.get(classId);
+                if (probeInfo == null) {
+                    continue;
+                }
+
+                // 按方法分组探针数据
+                Map<Integer, List<Integer>> methodEntryToProbeIndices = new LinkedHashMap<>();
+                for (int i = 0; i < probes.length; i++) {
+                    if (probes[i]) {
+                        int methodEntryIdx = probeInfo.getProbeMethodEntryIndex()[i];
+                        methodEntryToProbeIndices.computeIfAbsent(methodEntryIdx, k -> new ArrayList<>()).add(i);
                     }
                 }
-                nodeVo.setDoLines(doLines);
-                ArrayList<Integer> lineTotalList = TypeConvert.parseToIntList(n.getLineTotal());
-                nodeVo.setLineTotal(lineTotalList);
-                ArrayList<Integer> executeMethodTotal = new ArrayList<>(n.getExecuteMethodTotal());
-                nodeVo.setExecuteMethodTotal(executeMethodTotal);
-                ArrayList<Integer> methodTotalList = TypeConvert.parseToIntList(n.getMethodTotal());
-                nodeVo.setMethodTotal(methodTotalList);
-                nodeVo.setExecuteBranch(executeBranchList);
-                Map<String, List<String>> executeConditionMap = TypeConvert.convertStringToMap(n.getExecuteCondition());
-                nodeVo.setExecuteCondition(executeConditionMap);
-                nodeVo.setExecBranchConditionIsTrue(n.getExecBranchConditionIsTrue().toString());
-                ArrayList<Integer> branchTotalList = TypeConvert.parseToIntList(n.getBranchTotal());
-                nodeVo.setBranchTotal(branchTotalList);
 
-                String execCyclo;
-                if (executeBranchList.isEmpty()) {
-                    execCyclo = "0";
-                } else {
-                    execCyclo = String.valueOf(executeBranchList.size());
+                // 为每个方法生成 StackNodeVo
+                int methodOrder = 0;
+                for (Map.Entry<Integer, List<Integer>> methodEntry : methodEntryToProbeIndices.entrySet()) {
+                    int methodEntryIdx = methodEntry.getKey();
+                    List<Integer> executedProbeIndices = methodEntry.getValue();
+
+                    String methodNameDesc = probeInfo.getMethodEntryToName().get(methodEntryIdx);
+                    if (methodNameDesc == null) continue;
+
+                    StackNodeVo nodeVo = new StackNodeVo();
+                    nodeVo.setId("0." + (nodeIdx + 1));
+                    nodeVo.setClassId(classId);
+
+                    String originClassName = probeInfo.getClassName();
+                    nodeVo.setClassName(javaNames.getQualifiedClassName(originClassName));
+
+                    // Parse method name and desc from methodNameDesc (format: "methodName desc")
+                    int spaceIdx = methodNameDesc.indexOf(' ');
+                    String mName = spaceIdx > 0 ? methodNameDesc.substring(0, spaceIdx) : methodNameDesc;
+                    String mDesc = spaceIdx > 0 ? methodNameDesc.substring(spaceIdx + 1) : "";
+                    nodeVo.setMethodName(javaNames.getMethodName(originClassName, mName, mDesc, null));
+                    nodeVo.setMethodDescriptor(mDesc);
+
+                    // Line coverage: executed lines (from executed probes that are NOT branch probes)
+                    ArrayList<Integer> doLines = new ArrayList<>();
+                    Set<Integer> executedBranchLines = new HashSet<>();
+                    for (int probeIdx : executedProbeIndices) {
+                        boolean isBranch = probeIdx < probeInfo.getProbeIsBranch().length
+                                && probeInfo.getProbeIsBranch()[probeIdx];
+                        if (isBranch) {
+                            Integer branchLine = probeInfo.getBranchProbeToLine().get(probeIdx);
+                            if (branchLine != null) {
+                                executedBranchLines.add(branchLine);
+                            }
+                        } else {
+                            int line = probeInfo.getProbeLineNumbers()[probeIdx];
+                            if (line > 0) {
+                                doLines.add(line);
+                            }
+                        }
+                    }
+                    // Remove branch lines from doLines (branch lines are tracked separately)
+                    doLines.removeAll(executedBranchLines);
+                    nodeVo.setDoLines(doLines);
+
+                    // Line totals
+                    int[] lineTotals = probeInfo.getMethodEntryToLineTotals().get(methodEntryIdx);
+                    if (lineTotals != null) {
+                        ArrayList<Integer> lineTotalList = new ArrayList<>(lineTotals.length);
+                        for (int l : lineTotals) lineTotalList.add(l);
+                        nodeVo.setLineTotal(lineTotalList);
+                    }
+
+                    // Method coverage
+                    ArrayList<Integer> execMethodList = new ArrayList<>(1);
+                    int methodEntryLine = probeInfo.getProbeLineNumbers()[methodEntryIdx];
+                    if (methodEntryLine > 0) execMethodList.add(methodEntryLine);
+                    nodeVo.setExecuteMethodTotal(execMethodList);
+
+                    // Branch coverage
+                    int[] branchTotalArr = probeInfo.getMethodEntryToBranchTotals().get(methodEntryIdx);
+                    if (branchTotalArr != null) {
+                        ArrayList<Integer> branchTotalList = new ArrayList<>(branchTotalArr.length);
+                        for (int b : branchTotalArr) branchTotalList.add(b);
+                        nodeVo.setBranchTotal(branchTotalList);
+                    }
+                    nodeVo.setExecuteBranch(new ArrayList<>(executedBranchLines));
+
+                    // MC/DC coverage
+                    Map<String, List<List<String>>> mcdcData = buildMcdcCoverage(executedProbeIndices, probeInfo);
+                    nodeVo.setMcdcCoverage(mcdcData);
+
+                    // Cyclomatic complexity
+                    Integer cycloVal = probeInfo.getMethodEntryToCyclo().get(methodEntryIdx);
+                    nodeVo.setCyclo(cycloVal != null ? cycloVal : 0);
+                    nodeVo.setExecCyclo(String.valueOf(executedBranchLines.size()));
+
+                    // Recursive/Async
+                    Boolean recursive = probeInfo.getMethodEntryToRecursive().get(methodEntryIdx);
+                    Boolean async = probeInfo.getMethodEntryToAsync().get(methodEntryIdx);
+                    nodeVo.setRecursive(recursive != null && recursive);
+                    nodeVo.setAsync(async != null && async);
+
+                    nodeVo.setDone(true);
+                    nodeVo.setSize(1);
+
+                    resultList.add(nodeVo);
+                    methodOrder++;
                 }
-                nodeVo.setExecCyclo(execCyclo);
-                nodeVo.setCyclo(n.getCyclo());
-                nodeVo.setRecursive(n.isRecursive());
-                nodeVo.setAsync(n.isAsync());
-                nodeVo.setSize(n.getSize());
-                nodeVo.setDone(n.isDone());
-                result[i++] = nodeVo;
+
+                if (!methodEntryToProbeIndices.isEmpty()) {
+                    nodeIdx++;
+                }
             }
-            logger.debug("[Agent-debug]结束构建代码采集节点数: " + result.length);
-            return result;
+
+            return resultList.toArray(new StackNodeVo[0]);
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             return new StackNodeVo[0];
         }
+    }
+
+    /**
+     * 构建 MC/DC 覆盖率数据。
+     * <p>
+     * 对于每个分支行，检查 true/false 探针对是否都被执行过。
+     * MC/DC 的核心要求是：每个条件必须独立影响判定结果。
+     * 通过分析 true 和 false 探针的执行情况来生成条件组合数据。
+     * </p>
+     *
+     * @param executedProbeIndices 本次执行中被触发的探针索引
+     * @param probeInfo            类探针元信息
+     * @return MC/DC 覆盖数据 Map<branchLine, List<List<String>>>
+     */
+    private Map<String, List<List<String>>> buildMcdcCoverage(List<Integer> executedProbeIndices,
+                                                               ClassProbeInfo probeInfo) {
+        Map<String, List<List<String>>> mcdc = new LinkedHashMap<>();
+        Map<Integer, Integer> branchTrueToFalse = probeInfo.getBranchTrueToFalseProbe();
+        Map<Integer, Integer> branchConditionCounts = probeInfo.getBranchLineToConditionCount();
+
+        // Group executed branch probes by branch line
+        Map<Integer, boolean[]> branchLineExecStatus = new LinkedHashMap<>();
+        for (int probeIdx : executedProbeIndices) {
+            Integer branchLine = probeInfo.getBranchProbeToLine().get(probeIdx);
+            if (branchLine == null) continue;
+
+            boolean[] status = branchLineExecStatus.computeIfAbsent(branchLine, k -> new boolean[2]); // [falseExecuted, trueExecuted]
+            Integer falseProbeIdx = branchTrueToFalse.get(probeIdx);
+            if (falseProbeIdx != null) {
+                // This is a true probe
+                status[1] = true;
+            } else {
+                // This is a false probe
+                status[0] = true;
+            }
+        }
+
+        // Build MC/DC data for each branch line
+        for (Map.Entry<Integer, boolean[]> entry : branchLineExecStatus.entrySet()) {
+            int branchLine = entry.getKey();
+            boolean[] status = entry.getValue();
+            int conditionCount = branchConditionCounts.getOrDefault(branchLine, 1);
+
+            List<List<String>> combinations = new ArrayList<>();
+
+            // Both true and false executed: full MC/DC pair for this branch
+            if (status[0] && status[1]) {
+                List<String> combo = new ArrayList<>(conditionCount);
+                for (int i = 0; i < conditionCount; i++) {
+                    combo.add("true");
+                }
+                combinations.add(combo);
+                combo = new ArrayList<>(conditionCount);
+                for (int i = 0; i < conditionCount; i++) {
+                    combo.add("false");
+                }
+                combinations.add(combo);
+            } else if (status[1]) {
+                // Only true branch executed
+                List<String> combo = new ArrayList<>(conditionCount);
+                for (int i = 0; i < conditionCount; i++) {
+                    combo.add("true");
+                }
+                combinations.add(combo);
+            } else if (status[0]) {
+                // Only false branch executed
+                List<String> combo = new ArrayList<>(conditionCount);
+                for (int i = 0; i < conditionCount; i++) {
+                    combo.add("false");
+                }
+                combinations.add(combo);
+            }
+
+            if (!combinations.isEmpty()) {
+                mcdc.put(String.valueOf(branchLine), combinations);
+            }
+        }
+
+        return mcdc;
     }
 }

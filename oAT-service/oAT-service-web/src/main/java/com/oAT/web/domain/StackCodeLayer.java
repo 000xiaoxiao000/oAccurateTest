@@ -92,11 +92,6 @@ public class StackCodeLayer implements ImageLayer {
     private ImageElement buildNode(StackNodeVo node) {
         String className = ClassUtil.toClassName(node.getClassName());
         String methodName = node.getMethodName();
-//        if (node.getMethodName().split(" ").length > 1) {
-//            methodName = node.getMethodName().split(" ")[1];
-//        } else {
-//            methodName = node.getMethodName().split(" ")[0];
-//        }
         String classSimpleName = ClassUtil.getClassSimpleName(className);
         ImageData imageData = new ImageData(className + " " + node.getMethodName());
 
@@ -213,7 +208,6 @@ public class StackCodeLayer implements ImageLayer {
             ImageElement element = buildDefaultEdge(edgeData);
             element.classes = new String[]{"invoke"};
             return element;
-            //  基于 id 去重处理
         }).collect(Collectors.toList());
     }
 

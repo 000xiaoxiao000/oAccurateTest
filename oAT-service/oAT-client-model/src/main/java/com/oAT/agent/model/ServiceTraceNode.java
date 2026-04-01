@@ -1,6 +1,7 @@
 package com.oAT.agent.model;
 
 import java.io.Serializable;
+import java.util.Map;
 
 public class ServiceTraceNode extends TraceNode implements CodeNodeBean, StatementError, Serializable {
     private static final long serialVersionUID = -7156032079009497957L;
@@ -14,8 +15,18 @@ public class ServiceTraceNode extends TraceNode implements CodeNodeBean, Stateme
 
     private Error error;
 
-    // 代码堆栈
+    /**
+     * 代码覆盖率报告数据（由 agent-core 端 StackNodeVoBuilder 从探针快照构建）。
+     */
     private StackNodeVo[] codeNodes;
+
+    /**
+     * 覆盖率探针快照数据：classId -> boolean[]
+     * <p>
+     * 运行时仅收集 boolean[] 探针数组快照，在 agent 端结合 ClassProbeInfo 元信息构建 codeNodes。
+     * </p>
+     */
+    private Map<Long, boolean[]> coverageSnapshots;
 
     public String getServiceName() {
         return serviceName;
@@ -48,6 +59,14 @@ public class ServiceTraceNode extends TraceNode implements CodeNodeBean, Stateme
 
     public void setCodeNodes(StackNodeVo[] codeNodes) {
         this.codeNodes = codeNodes;
+    }
+
+    public Map<Long, boolean[]> getCoverageSnapshots() {
+        return coverageSnapshots;
+    }
+
+    public void setCoverageSnapshots(Map<Long, boolean[]> coverageSnapshots) {
+        this.coverageSnapshots = coverageSnapshots;
     }
 
     public void setError(Error error) {
