@@ -99,10 +99,10 @@
             </div>
         </div>
         <div class="ui error message"></div>
-        <div class="ui fluid primary  button " style="margin-top: 20px" onclick="doSaveUsecase()">
+        <div class="ui fluid primary button" style="margin-top: 20px" onclick="doSaveUsecase()">
             新增用例
         </div>
-        <div class="ui fluid secondary button " style="margin-top: 20px" onclick="doCancelUsecase()">
+        <div class="ui fluid secondary button" style="margin-top: 20px" onclick="doCancelUsecase()">
             取消用例
         </div>
     </form>

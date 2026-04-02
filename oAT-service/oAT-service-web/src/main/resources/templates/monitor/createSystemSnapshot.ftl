@@ -102,7 +102,7 @@
     <div class="ui black deny button">
         算啦
     </div>
-    <div class="ui positive right labeled icon save button "
+    <div class="ui positive right labeled icon save button"
          onclick="doSaveSystemSnapshot('${projectId}')">
         是的，帮我保存
         <i class="checkmark icon"></i>

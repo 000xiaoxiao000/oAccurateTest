@@ -114,7 +114,7 @@
                     <textarea rows="3" name="properties">${app.properties!}</textarea>
                 </div>
                 <#if loginNameRole != "visitor">
-                    <div class="ui button positive  " type="submit">
+                    <div class="ui button positive" type="submit">
                         保存
                     </div>
                 </#if>
