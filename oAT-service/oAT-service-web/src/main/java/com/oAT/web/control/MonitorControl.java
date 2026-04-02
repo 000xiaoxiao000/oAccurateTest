@@ -13,7 +13,6 @@ import org.springframework.ui.Model;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpSession;
 import java.util.*;
 
 @Controller
@@ -99,43 +98,34 @@ public class MonitorControl {
 
     @RequestMapping("/getTraceGraph")
     @ResponseBody
-    public GraphView getTraceGraph(String traceId, HttpSession session) {
-        return new TraceGraphParse(getTraceNode(traceId, session)).getGraphView();
+    public GraphView getTraceGraph(String traceId) {
+        return new TraceGraphParse(getTraceNode(traceId)).getGraphView();
     }
 
     /**
      * 基于TraceId 查找 TraceNode ，查找顺序为：
-     * 1 Session
-     * 2 clientSessionService
-     * 3 snapshotService
-     * TODO 保存在会话中 有消耗大量内存的风险,统一由 clientSessionService 保存会更恰当
+     * 1 clientSessionService
+     * 2 snapshotService
      *
      * @param traceId
-     * @param session
      * @return
      */
-    private Map<String, TraceNode> getTraceNode(String traceId, HttpSession session) {
-        Map<String, TraceNode> nodes = (Map<String, TraceNode>) session.getAttribute("model-" + traceId);
-        if (nodes == null) {
-            nodes = clientSessionService.getTraceNodes(traceId);
-//            Assert.notNull(traceNodes, "not found model data traceId：" + traceId);
-            // 保存访问历史记录
-            session.setAttribute("model-" + traceId, nodes);
-        }
-        if (nodes == null) {
+    private Map<String, TraceNode> getTraceNode(String traceId) {
+        Map<String, TraceNode> nodes = clientSessionService.getTraceNodes(traceId);
+        if (nodes == null || nodes.isEmpty()) {
             Collection<TraceNode> list = snapshotService.getTraceNodes(traceId);
             nodes = new HashMap<>();
             for (TraceNode node : list) {
                 nodes.put(node.getTraceNodeId(), node);
             }
         }
-        Assert.notNull(nodes, "找不到traceNode traceId=" + traceId + "");
+        Assert.notNull(nodes, "找不到traceNode traceId=" + traceId);
         return nodes;
     }
 
     @RequestMapping("/{traceId}/{nodeId}.html")
-    public String getNodeDetailView(@PathVariable String traceId, @PathVariable String nodeId, HttpSession session, Model model) {
-        TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId, session));
+    public String getNodeDetailView(@PathVariable String traceId, @PathVariable String nodeId, Model model) {
+        TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId));
         GraphNode node = parse.getGraphNode(nodeId);
         Assert.notNull(node, "not found GraphNode: " + nodeId);
 
@@ -173,11 +163,10 @@ public class MonitorControl {
 
     @RequestMapping("/openSystemSnapshot")
     public String openSystemSnapshot(@PathVariable String projectId, String traceId, @SessionAttribute UserVo user,
-                                           HttpSession session,
                                            Model model) {
         model.addAttribute("projectId", projectId);
         // 所属应用
-        Map<String, TraceNode> nodes = getTraceNode(traceId, session);
+        Map<String, TraceNode> nodes = getTraceNode(traceId);
         Application app = nodes.get("0").getApp();
         model.addAttribute("app", app);
 
@@ -199,13 +188,13 @@ public class MonitorControl {
 
     @RequestMapping("/doSaveSystemSnapshot")
     @ResponseBody
-    public ResultNotified doSaveSystemSnapshot(SystemSnapshot snapshot, @PathVariable String projectId,
-                                                @SessionAttribute UserVo user,
-                                               String traceId, HttpSession session, Model model) {
-        Map<String, TraceNode> nodes = getTraceNode(traceId, session);
+    public ResultNotified<String> doSaveSystemSnapshot(SystemSnapshot snapshot, @PathVariable String projectId,
+                                                       @SessionAttribute UserVo user,
+                                                       String traceId) {
+        Map<String, TraceNode> nodes = getTraceNode(traceId);
         snapshot.setSubTitle(((HttpTraceNode) nodes.get("0")).getRequestUrl());
         systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
-        return new ResultNotified(true, "保存成功");
+        return new ResultNotified<>(true, "保存成功");
     }
 
 }

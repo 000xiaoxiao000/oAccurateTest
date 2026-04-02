@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>代码覆盖率 - ${className}</title>
+    <title>代码覆盖率 - ${displayClassName!className}</title>
     <#include "../common.ftl">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; }
@@ -57,7 +57,7 @@
                 <h3 class="ui header" style="margin: 0;">
                     <i class="file code outline icon"></i>
                     <div class="content">
-                        ${className}
+                        ${displayClassName!className}
                         <div class="sub header">应用: ${appName!appId} | 版本: ${versionNumber!}</div>
                     </div>
                 </h3>

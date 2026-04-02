@@ -329,7 +329,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         index = centerRepository.save(index);
         String currentId = index.getId();
         if (!"root".equalsIgnoreCase(parentId)) {
-            index = centerRepository.findById(parentId).orElseThrow(() -> new IllegalArgumentException("找不到应用 parentId=" + parentId + ""));
+            index = centerRepository.findById(parentId).orElseThrow(() -> new IllegalArgumentException("找不到应用 parentId=" + parentId));
             String[] s1 = index.getDirectory().getChildId();
             int length1 = s1.length;
             String[] s2 = new String[length1 + 1];

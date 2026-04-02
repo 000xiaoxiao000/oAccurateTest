@@ -71,11 +71,11 @@ public class AppServiceImpl implements AppService {
      */
     @Override
     public SnapshotDirectory saveSnapshotDirectory(String projectId, String appId, SnapshotDirectory dir) {
-        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId + ""));
+        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId));
         App app = appIndex.getApp();
         //TODO 判断当前项目是否有权限 对该目录进行修改
        /* Project project = systemRepository.findById(projectId)
-                .orElseThrow(() -> new IllegalArgumentException("找不到项目 id=" + projectId + ""))
+                .orElseThrow(() -> new IllegalArgumentException("找不到项目 id=" + projectId))
                 .getProject();*/
 //        Assert.isTrue(app.getCreateProjectId().equalsIgnoreCase(projectId), String.format("当前项目(projectId=%s)没有权限修改该应用(appId=%s)", project, appId));
 
@@ -102,7 +102,7 @@ public class AppServiceImpl implements AppService {
      */
     @Override
     public void deleteSnapshotDirectory(String projectId, String appId, Integer directoryId) throws BusinessException {
-        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId + ""));
+        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId));
         App app = appIndex.getApp();
         SnapshotDirectory[] dirs = Optional.ofNullable(app.getSnapshotDirs()).orElse(new SnapshotDirectory[0]);
         Assert.isTrue(Arrays.stream(dirs).anyMatch(a -> Objects.equals(a.getId(), directoryId)), String.format("指定目录不存在 app=%s,directoryId=%s",
@@ -120,7 +120,7 @@ public class AppServiceImpl implements AppService {
 
     @Override
     public List<SnapshotDirectory> getDirectoryTiers(String appId, String directoryId) {
-        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId + ""));
+        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId));
         if ("root".equals(directoryId)) {
             return new ArrayList<>();
         }
@@ -160,14 +160,14 @@ public class AppServiceImpl implements AppService {
             return convertApp(systemIndex.get());
         } else {
             // 处理找不到应用的情况，例如返回 null 或者抛出异常
-            throw new IllegalArgumentException("找不到应用 id=" + appId + "");
+            throw new IllegalArgumentException("找不到应用 id=" + appId);
         }
     }
 
 
     @Override
     public List<Directory> getAppSnapshotDirs(String appId) {
-        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId + ""));
+        SystemIndex appIndex = systemRepository.findById(appId).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + appId));
         SnapshotDirectory[] dirs = appIndex.getApp().getSnapshotDirs();
         dirs = Optional.ofNullable(dirs).orElse(new SnapshotDirectory[0]);
         Map<String, SnapshotDirectory> map = Arrays.stream(dirs).collect(Collectors.toMap(k -> k.getId().toString(), v -> v));
@@ -218,7 +218,7 @@ public class AppServiceImpl implements AppService {
     @Override
     public void addDescribe(String id, String userId, String content) {
         SystemSnapshot systemSnapshotIndex =
-                systemSnapshotRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + id + ""));
+                systemSnapshotRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + id));
 
         Comment[] comments = systemSnapshotIndex.getComments();
         int length = comments.length;
@@ -242,7 +242,7 @@ public class AppServiceImpl implements AppService {
     @Override
     public void delDescribe(String id, String userId, String content, String dateTime) {
         SystemSnapshot systemSnapshotIndex =
-                systemSnapshotRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + id + ""));
+                systemSnapshotRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("找不到应用 id=" + id));
         Comment[] comments = systemSnapshotIndex.getComments();
         List<Comment> comments1 = new ArrayList<>(Arrays.asList(comments));
         for (Comment c : comments1) {
