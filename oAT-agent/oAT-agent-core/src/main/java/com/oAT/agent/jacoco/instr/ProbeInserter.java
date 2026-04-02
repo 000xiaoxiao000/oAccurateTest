@@ -40,12 +40,6 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     private final ClassInstrumenter classInstrumenter;
 
     /**
-     * <code>true</code> if method is a class or interface initialization
-     * method.
-     */
-    private final boolean clinit;
-
-    /**
      * Position of the inserted variable (boolean[] for probe array).
      */
     private final int variable;
@@ -57,6 +51,7 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     private final String methodName;
     private final String methodDesc;
     private final String methodNameDescCombined;
+    private final boolean compilerGeneratedMethod;
 
     private final Map<String, Set<Integer>> methodLineNumberMap;
     private final Map<String, Boolean> recursiveMap;
@@ -160,10 +155,10 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     ProbeInserter(final int access, final String name, final String desc, final String signature,
                   final MethodVisitor mv, final ClassInfo classInfo, final ClassInstrumenter classInstrumenter) {
         super(InstrSupport.ASM_API_VERSION, mv);
-        this.clinit = InstrSupport.CLINIT_NAME.equals(name);
         this.classInstrumenter = classInstrumenter;
         this.clazzName = classInfo.getClassName();
         this.methodName = name;
+        this.compilerGeneratedMethod = ClassInfo.isCompilerGeneratedMethod(access);
         if (signature == null || desc != null) {
             this.methodNameDescCombined = name + " " + desc;
             this.methodDesc = desc;
@@ -204,6 +199,9 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     }
 
     private boolean codeStackMethodExclude() {
+        if (compilerGeneratedMethod) {
+            return true;
+        }
         if ("<init>".equals(this.methodName) && this.methodDesc.contains("(") && !this.methodDesc.contains("()")) {
             return false;
         }
