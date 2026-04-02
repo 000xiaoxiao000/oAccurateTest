@@ -86,6 +86,14 @@ public class ClassInfo {
     // 类级别的 URI
     private String classUri = "";
 
+    private static boolean isAnonymousClassName(String internalClassName) {
+        int dollarPosition = internalClassName == null ? -1 : internalClassName.lastIndexOf('$');
+        if (dollarPosition < 0 || dollarPosition + 1 >= internalClassName.length()) {
+            return false;
+        }
+        return Character.isDigit(internalClassName.charAt(dollarPosition + 1));
+    }
+
     public ClassInfo(final ClassReader reader) {
         className = reader.getClassName();
         methodName = "";
@@ -188,12 +196,14 @@ public class ClassInfo {
                                                  String[] exceptions) {
                     final Set<Integer> lineNumberSet = new HashSet<Integer>();
                     Set<String> skipMethods = new HashSet<String>(Arrays.asList("<init>", InstrSupport.CLINIT_NAME,
-                            "equals", "canEqual", "hashCode", "toString", "clone"));
+                            InstrSupport.INITMETHOD_NAME, "equals", "canEqual", "hashCode", "toString", "clone"));
                     boolean isInitWithParams = "<init>".equals(name) &&
                             ((descriptor != null && descriptor.contains("(") && !descriptor.contains("()")) ||
                                     (signature != null && signature.contains("(") && !signature.contains("()")));
+                    boolean isAnonymousConstructor = "<init>".equals(name) && isAnonymousClassName(className);
 
-                    if ((!skipMethods.contains(name) || isInitWithParams) && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE | Opcodes.ACC_INTERFACE)) == 0) {
+                    if ((!skipMethods.contains(name) || isInitWithParams) && !isAnonymousConstructor
+                            && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE | Opcodes.ACC_INTERFACE)) == 0) {
                         if (signature == null || descriptor != null) {
                             methodName = name;
                             methodDesc = descriptor;
