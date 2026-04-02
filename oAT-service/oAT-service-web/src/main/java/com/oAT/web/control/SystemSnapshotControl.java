@@ -4,6 +4,7 @@ import com.alibaba.druid.sql.SQLUtils;
 import com.oAT.agent.model.*;
 import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.*;
+import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.service.*;
@@ -47,6 +48,9 @@ public class SystemSnapshotControl {
 
     @Autowired
     CoverageService coverageService;
+
+    @Autowired
+    StaticInfoRepository staticInfoRepository;
 
     // 打开系统快照列表
     @RequestMapping("/list")
@@ -324,26 +328,35 @@ public class SystemSnapshotControl {
                     codeRelationships.put(requestUrl, childNodes);
 
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getLineTotal() == null || node.getLineTotal().isEmpty()) continue;
                         if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
 
-                        String methodKey = node.getClassName() + "#" + node.getMethodName() + node.getMethodDescriptor();
+                        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 
-                        methodTotalLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getLineTotal());
                         if (node.getDoLines() != null) {
                             methodCoveredLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getDoLines());
                         }
 
-                        methodComplexity.put(methodKey, node.getCyclo());
-
-                        if (node.getBranchTotal() != null) {
-                            methodTotalBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getBranchTotal());
-                        }
                         if (node.getExecuteBranch() != null) {
                             methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
                         }
                     }
+                }
+            }
+        }
+
+        // 从全量静态数据补充总数
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+            for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                if (methodCoveredLines.containsKey(mKey) || methodCoveredBranches.containsKey(mKey)) {
+                    methodTotalLines.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getMethodLineNumberMap() != null ? mInfo.getMethodLineNumberMap() : Collections.emptyList());
+                    methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
+                    methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
                 }
             }
         }
@@ -419,6 +432,19 @@ public class SystemSnapshotControl {
         aggregatedClassCov.setClassName(className);
         aggregatedClassCov.setAppId(appId);
 
+        // 加载该类的全量静态数据
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        Map<String, StaticSourceMethodInfo> classStaticMethods = new HashMap<>();
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() != null && className.equals(si.getClassInfo().getClassName()) && si.getClassInfo().getMethodMaps() != null) {
+                for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                    String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                    classStaticMethods.put(mKey, mInfo);
+                }
+                break;
+            }
+        }
+
         Map<String, ClassCoverageIndex.MethodCoverageDetail> methodMap = new HashMap<>();
 
         for (TraceNode node : traceNodes) {
@@ -434,9 +460,14 @@ public class SystemSnapshotControl {
                             ClassCoverageIndex.MethodCoverageDetail newMd = new ClassCoverageIndex.MethodCoverageDetail();
                             newMd.setMethodName(sn.getMethodName());
                             newMd.setMethodDesc(sn.getMethodDescriptor());
-                            newMd.setTotalLineNumbers(sn.getLineTotal());
-                            newMd.setTotalLines(sn.getLineTotal() != null ? sn.getLineTotal().size() : 0);
-                            newMd.setComplexity(sn.getCyclo());
+                            // 从全量静态数据获取总数
+                            StaticSourceMethodInfo staticMethod = classStaticMethods.get(methodKey);
+                            List<Integer> totalLines = staticMethod != null && staticMethod.getMethodLineNumberMap() != null
+                                    ? staticMethod.getMethodLineNumberMap() : Collections.emptyList();
+                            newMd.setTotalLineNumbers(new ArrayList<>(totalLines));
+                            newMd.setTotalLines(totalLines.size());
+                            newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
+                                    ? staticMethod.getCyclomaticComplexityMap() : 0);
                             newMd.setCoveredLineNumbers(new ArrayList<>());
                             return newMd;
                         });

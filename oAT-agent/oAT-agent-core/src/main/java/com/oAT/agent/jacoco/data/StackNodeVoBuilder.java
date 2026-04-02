@@ -107,14 +107,6 @@ public class StackNodeVoBuilder {
                     doLines.removeAll(executedBranchLines);
                     nodeVo.setDoLines(doLines);
 
-                    // Line totals
-                    int[] lineTotals = probeInfo.getMethodEntryToLineTotals().get(methodEntryIdx);
-                    if (lineTotals != null) {
-                        ArrayList<Integer> lineTotalList = new ArrayList<>(lineTotals.length);
-                        for (int l : lineTotals) lineTotalList.add(l);
-                        nodeVo.setLineTotal(lineTotalList);
-                    }
-
                     // Method coverage
                     ArrayList<Integer> execMethodList = new ArrayList<>(1);
                     int methodEntryLine = probeInfo.getProbeLineNumbers()[methodEntryIdx];
@@ -122,12 +114,6 @@ public class StackNodeVoBuilder {
                     nodeVo.setExecuteMethodTotal(execMethodList);
 
                     // Branch coverage
-                    int[] branchTotalArr = probeInfo.getMethodEntryToBranchTotals().get(methodEntryIdx);
-                    if (branchTotalArr != null) {
-                        ArrayList<Integer> branchTotalList = new ArrayList<>(branchTotalArr.length);
-                        for (int b : branchTotalArr) branchTotalList.add(b);
-                        nodeVo.setBranchTotal(branchTotalList);
-                    }
                     nodeVo.setExecuteBranch(new ArrayList<>(executedBranchLines));
 
                     // MC/DC coverage
@@ -135,8 +121,6 @@ public class StackNodeVoBuilder {
                     nodeVo.setMcdcCoverage(mcdcData);
 
                     // Cyclomatic complexity
-                    Integer cycloVal = probeInfo.getMethodEntryToCyclo().get(methodEntryIdx);
-                    nodeVo.setCyclo(cycloVal != null ? cycloVal : 0);
                     nodeVo.setExecCyclo(String.valueOf(executedBranchLines.size()));
 
                     // Recursive/Async
