@@ -199,13 +199,13 @@ public class MonitorControl {
 
     @RequestMapping("/doSaveSystemSnapshot")
     @ResponseBody
-    public ResultNotified doSaveSystemSnapshot(SystemSnapshot snapshot, @PathVariable String projectId, @SessionAttribute UserVo user,
+    public ResultNotified doSaveSystemSnapshot(SystemSnapshot snapshot, @PathVariable String projectId,
+                                                @SessionAttribute UserVo user,
                                                String traceId, HttpSession session, Model model) {
         Map<String, TraceNode> nodes = getTraceNode(traceId, session);
         snapshot.setSubTitle(((HttpTraceNode) nodes.get("0")).getRequestUrl());
         systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
-        ResultNotified notified = new ResultNotified(true, "保存成功");
-        return notified;
+        return new ResultNotified(true, "保存成功");
     }
 
 }
