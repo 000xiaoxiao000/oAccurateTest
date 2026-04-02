@@ -3,7 +3,6 @@ package com.oAT.agent.jacoco.data;
 import com.oAT.agent.common.Decompiler.ILanguageNames;
 import com.oAT.agent.common.Decompiler.JavaNames;
 import com.oAT.agent.common.StackTraceFormatter;
-import com.oAT.agent.common.TypeConvert;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.jacoco.ClassProbeInfo;
@@ -63,7 +62,7 @@ public class StackNodeVoBuilder {
                 }
 
                 // 为每个方法生成 StackNodeVo
-                int methodOrder = 0;
+                boolean addedNodeForCurrentClass = false;
                 for (Map.Entry<Integer, List<Integer>> methodEntry : methodEntryToProbeIndices.entrySet()) {
                     int methodEntryIdx = methodEntry.getKey();
                     List<Integer> executedProbeIndices = methodEntry.getValue();
@@ -76,13 +75,17 @@ public class StackNodeVoBuilder {
                     nodeVo.setClassId(classId);
 
                     String originClassName = probeInfo.getClassName();
-                    nodeVo.setClassName(javaNames.getQualifiedClassName(originClassName));
+                    nodeVo.setClassName(CoverageNamingSupport.toOwnerQualifiedClassName(originClassName));
 
                     // Parse method name and desc from methodNameDesc (format: "methodName desc")
                     int spaceIdx = methodNameDesc.indexOf(' ');
                     String mName = spaceIdx > 0 ? methodNameDesc.substring(0, spaceIdx) : methodNameDesc;
                     String mDesc = spaceIdx > 0 ? methodNameDesc.substring(spaceIdx + 1) : "";
-                    nodeVo.setMethodName(javaNames.getMethodName(originClassName, mName, mDesc, null));
+                    String displayMethodName = javaNames.getMethodName(originClassName, mName, mDesc, null);
+                    if (CoverageNamingSupport.shouldIgnoreMethod(mName, displayMethodName)) {
+                        continue;
+                    }
+                    nodeVo.setMethodName(displayMethodName);
                     nodeVo.setMethodDescriptor(mDesc);
 
                     // Line coverage: executed lines (from executed probes that are NOT branch probes)
@@ -133,10 +136,10 @@ public class StackNodeVoBuilder {
                     nodeVo.setSize(1);
 
                     resultList.add(nodeVo);
-                    methodOrder++;
+                    addedNodeForCurrentClass = true;
                 }
 
-                if (!methodEntryToProbeIndices.isEmpty()) {
+                if (addedNodeForCurrentClass) {
                     nodeIdx++;
                 }
             }
