@@ -4,6 +4,7 @@ import com.alibaba.excel.EasyExcel;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
+import com.oAT.web.common.CoverageSourceClassUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.esDao.*;
 import com.oAT.web.esDao.entity.*;
@@ -202,9 +203,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                     boolean exists;
 
                     if (entrySet != null) {
-                        // 转换类名为可能的路径格式进行匹配
-                        String pathLike = className.replace('.', '/') + ".java";
-                        exists = entrySet.stream().anyMatch(e -> e.endsWith(pathLike));
+                        exists = hasSourceEntry(entrySet, className);
                     } else {
                         // 兜底方案：如果没找到 zip，再尝试调用 git
                         String content = gitService.getFileContent(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), commitId, className);
@@ -240,18 +239,22 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         for (StaticSourceInfo staticInfo : appStaticInfos) {
             StaticSourceClassInfo classInfo = staticInfo.getClassInfo();
             if (classInfo == null) continue;
+            String ownerClassName = resolveCoverageOwnerClassName(classInfo.getClassName());
 
             // If incremental report, only include classes that have changes
             if (reportType == 1) {
-                if (incrementalDiffMap == null || !incrementalDiffMap.containsKey(classInfo.getClassName())) {
+                if (incrementalDiffMap == null || getChangedLinesForClass(incrementalDiffMap, ownerClassName) == null) {
                     continue;
                 }
             }
 
-            ClassCoverageIndex classCov = createInitialClassCoverage(appId, classInfo, incrementalDiffMap);
-            if (classCov.getTotalLines() > 0 || reportType == 0) {
-                 coverageMap.put(classCov.getClassName(), classCov);
-            }
+            ClassCoverageIndex classCov = coverageMap.computeIfAbsent(ownerClassName,
+                    key -> createInitialClassCoverage(appId, ownerClassName));
+            appendStaticClassCoverage(classCov, classInfo, incrementalDiffMap);
+        }
+
+        if (reportType != 0) {
+            coverageMap.entrySet().removeIf(entry -> entry.getValue().getTotalLines() <= 0);
         }
 
         if (coverageMap.isEmpty()) {
@@ -431,25 +434,24 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         }
 
         for (StackNodeVo sn : codeNodes) {
-            ClassCoverageIndex classCov = coverageMap.get(sn.getClassName());
+            ClassCoverageIndex classCov = coverageMap.get(resolveCoverageOwnerClassName(sn.getClassName()));
             if (classCov != null) {
                 mergeStackNode(classCov, sn);
             }
         }
     }
 
-    private ClassCoverageIndex createInitialClassCoverage(String appId, StaticSourceClassInfo classInfo, Map<String, List<Integer>> incrementalDiffMap) {
+    private ClassCoverageIndex createInitialClassCoverage(String appId, String className) {
         ClassCoverageIndex classCov = new ClassCoverageIndex();
         classCov.setAppId(appId);
-        classCov.setClassName(classInfo.getClassName());
+        classCov.setClassName(className);
+        classCov.setMethods(new ArrayList<>());
+        return classCov;
+    }
 
-        List<MethodCoverageDetail> methodDetails = new ArrayList<>();
-        int totalLines = 0;
-        int totalBranches = 0;
-        int totalComplexity = 0;
-
-        List<Integer> changedLinesInClass = incrementalDiffMap != null ? incrementalDiffMap.get(classInfo.getClassName()) : null;
-
+    private void appendStaticClassCoverage(ClassCoverageIndex classCov, StaticSourceClassInfo classInfo,
+                                           Map<String, List<Integer>> incrementalDiffMap) {
+        List<Integer> changedLinesInClass = getChangedLinesForClass(incrementalDiffMap, classCov.getClassName());
         if (classInfo.getMethodMaps() != null) {
             for (StaticSourceMethodInfo mInfo : classInfo.getMethodMaps().values()) {
                 MethodCoverageDetail md = new MethodCoverageDetail();
@@ -505,20 +507,13 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 md.setComplexity(mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
                 md.setCoveredLineNumbers(new ArrayList<>());
                 md.setCoveredBranchIds(new ArrayList<>());
-                methodDetails.add(md);
-
-                totalLines += md.getTotalLines();
-                totalBranches += md.getTotalBranches();
-                totalComplexity += md.getComplexity();
+                classCov.getMethods().add(md);
+                classCov.setTotalLines(classCov.getTotalLines() + md.getTotalLines());
+                classCov.setTotalBranches(classCov.getTotalBranches() + md.getTotalBranches());
+                classCov.setTotalComplexity(classCov.getTotalComplexity() + md.getComplexity());
             }
         }
-
-        classCov.setTotalMethods(methodDetails.size());
-        classCov.setTotalLines(totalLines);
-        classCov.setTotalBranches(totalBranches);
-        classCov.setTotalComplexity(totalComplexity);
-        classCov.setMethods(methodDetails);
-        return classCov;
+        classCov.setTotalMethods(classCov.getMethods().size());
     }
 
     private void saveAndCalculateSummary(CoverageReportIndex report, Map<String, ClassCoverageIndex> coverageMap, Map<String, List<Integer>> diffMap) {
@@ -587,9 +582,13 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 incTotalBranches += classCov.getTotalBranches();
                 incCoveredBranches += classCov.getCoveredBranches();
                 incTotalComplexity += classCov.getTotalComplexity();
-            } else if (diffMap != null && diffMap.containsKey(classCov.getClassName())) {
+            } else {
                 // For full report, calculate inc stats vs diffMap (comparison with previous)
-                List<Integer> changedLines = diffMap.get(classCov.getClassName());
+                List<Integer> changedLines = getChangedLinesForClass(diffMap, classCov.getClassName());
+                if (changedLines == null) {
+                    toSave.add(classCov);
+                    continue;
+                }
                 Set<Integer> changedLineSet = new HashSet<>(changedLines);
 
                 boolean classHasChanges = !changedLineSet.isEmpty();
@@ -1136,7 +1135,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
     }
 
     private void reuseMatchedCoverageData(ClassCoverageIndex currentCc, ClassCoverageIndex lastCc, Map<String, List<Integer>> diffMap) {
-        List<Integer> changedLines = diffMap != null ? diffMap.get(currentCc.getClassName()) : null;
+        List<Integer> changedLines = getChangedLinesForClass(diffMap, currentCc.getClassName());
 
         for (MethodCoverageDetail currentMd : currentCc.getMethods()) {
             lastCc.getMethods().stream()
@@ -1176,9 +1175,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
     }
 
     private void mergeStackNode(ClassCoverageIndex classCov, StackNodeVo sn) {
-        Optional<MethodCoverageDetail> methodOpt = classCov.getMethods().stream()
-                .filter(m -> m.getMethodName().equals(sn.getMethodName()) && m.getMethodDesc().equals(sn.getMethodDescriptor()))
-                .findFirst();
+        Optional<MethodCoverageDetail> methodOpt = findBestMethodCoverage(classCov, sn);
 
         if (methodOpt.isPresent()) {
             MethodCoverageDetail md = methodOpt.get();
@@ -1220,6 +1217,42 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         classCov.setCoveredBranches(classCoveredBranches);
     }
 
+    private Optional<MethodCoverageDetail> findBestMethodCoverage(ClassCoverageIndex classCov, StackNodeVo sn) {
+        List<MethodCoverageDetail> candidates = classCov.getMethods().stream()
+                .filter(m -> m.getMethodName().equals(sn.getMethodName()) && m.getMethodDesc().equals(sn.getMethodDescriptor()))
+                .collect(java.util.stream.Collectors.toList());
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        if (candidates.size() == 1) {
+            return Optional.of(candidates.get(0));
+        }
+
+        Set<Integer> executedLines = new HashSet<>(sn.getDoLines() != null ? sn.getDoLines() : Collections.emptyList());
+        Set<Integer> executedBranches = new HashSet<>(sn.getExecuteBranch() != null ? sn.getExecuteBranch() : Collections.emptyList());
+
+        MethodCoverageDetail best = null;
+        int bestScore = Integer.MIN_VALUE;
+        for (MethodCoverageDetail candidate : candidates) {
+            int score = 0;
+            if (candidate.getTotalLineNumbers() != null) {
+                for (Integer line : candidate.getTotalLineNumbers()) {
+                    if (executedLines.contains(line)) {
+                        score += 2;
+                    }
+                    if (executedBranches.contains(line)) {
+                        score += 1;
+                    }
+                }
+            }
+            if (best == null || score > bestScore) {
+                best = candidate;
+                bestScore = score;
+            }
+        }
+        return Optional.ofNullable(best);
+    }
+
     @Override
     public String getColoredSource(String appId, String reportId, String className) {
         ClassCoverageIndex classCov = getClassCoverage(reportId, className);
@@ -1231,6 +1264,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
     @Override
     public String getColoredSource(String appId, ClassCoverageIndex classCov) {
         String className = classCov.getClassName();
+        List<String> sourcePathCandidates = CoverageSourceClassUtil.buildSourcePathCandidates(className);
         VersionCenterIndex vIndex = null;
 
         String reportId = classCov.getReportId();
@@ -1287,7 +1321,6 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             return "Code file not found at " + codeFile.getAbsolutePath();
         }
 
-        String sourcePath = className.replace('.', '/') + ".java";
         String content = null;
 
         try {
@@ -1297,12 +1330,17 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
 
                 try (ZipFile zip = new ZipFile(codeFile)) {
                     String[] prefixes = {"", "src/main/java/", "src/test/java/", "src/"};
-                    for (String prefix : prefixes) {
-                        ZipEntry entry = zip.getEntry(prefix + sourcePath);
-                        if (entry != null) {
-                            try (InputStream is = zip.getInputStream(entry)) {
-                                content = new String(readAllBytes(is), java.nio.charset.StandardCharsets.UTF_8);
+                    for (String sourcePath : sourcePathCandidates) {
+                        for (String prefix : prefixes) {
+                            ZipEntry entry = zip.getEntry(prefix + sourcePath);
+                            if (entry != null) {
+                                try (InputStream is = zip.getInputStream(entry)) {
+                                    content = new String(readAllBytes(is), java.nio.charset.StandardCharsets.UTF_8);
+                                }
+                                break;
                             }
+                        }
+                        if (content != null) {
                             break;
                         }
                     }
@@ -1321,13 +1359,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                         String bestMatch = null;
                         for (String entryName : entries) {
                             String normalizedName = entryName.replace('\\', '/');
-                            if (normalizedName.endsWith("/" + sourcePath) || normalizedName.equals(sourcePath)) {
-                                if (bestMatch == null) {
-                                    bestMatch = entryName;
-                                } else if (normalizedName.contains("/src/main/java/") && !bestMatch.contains("/src/main/java/")) {
-                                    bestMatch = entryName;
-                                } else if (normalizedName.contains("/src/test/java/") && !bestMatch.contains("/src/main/java/") && !bestMatch.contains("/src/test/java/")) {
-                                    bestMatch = entryName;
+                            for (String sourcePath : sourcePathCandidates) {
+                                if (normalizedName.endsWith("/" + sourcePath) || normalizedName.equals(sourcePath)) {
+                                    if (bestMatch == null) {
+                                        bestMatch = entryName;
+                                    } else if (normalizedName.contains("/src/main/java/") && !bestMatch.contains("/src/main/java/")) {
+                                        bestMatch = entryName;
+                                    } else if (normalizedName.contains("/src/test/java/") && !bestMatch.contains("/src/main/java/") && !bestMatch.contains("/src/test/java/")) {
+                                        bestMatch = entryName;
+                                    }
+                                    break;
                                 }
                             }
                         }
@@ -1344,10 +1385,15 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 }
             } else if (codeFile.isDirectory()) {
                 String[] prefixes = {"", "src/main/java/", "src/test/java/", "src/"};
-                for (String prefix : prefixes) {
-                    File f = new File(codeFile, prefix + sourcePath);
-                    if (f.exists()) {
-                        content = new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                for (String sourcePath : sourcePathCandidates) {
+                    for (String prefix : prefixes) {
+                        File f = new File(codeFile, prefix + sourcePath);
+                        if (f.exists()) {
+                            content = new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                            break;
+                        }
+                    }
+                    if (content != null) {
                         break;
                     }
                 }
@@ -1358,7 +1404,12 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                                 .filter(p -> !java.nio.file.Files.isDirectory(p))
                                 .filter(p -> {
                                     String pathStr = p.toString().replace('\\', '/');
-                                    return pathStr.endsWith("/" + sourcePath) || pathStr.equals(sourcePath);
+                                    for (String sourcePath : sourcePathCandidates) {
+                                        if (pathStr.endsWith("/" + sourcePath) || pathStr.equals(sourcePath)) {
+                                            return true;
+                                        }
+                                    }
+                                    return false;
                                 })
                                 .sorted((p1, p2) -> {
                                     String s1 = p1.toString().replace('\\', '/');
@@ -1443,6 +1494,38 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         sb.append("</pre>");
 
         return sb.toString();
+    }
+
+    private boolean hasSourceEntry(Set<String> entrySet, String className) {
+        if (entrySet == null || entrySet.isEmpty()) {
+            return false;
+        }
+        for (String sourcePath : CoverageSourceClassUtil.buildSourcePathCandidates(className)) {
+            for (String entryName : entrySet) {
+                String normalizedName = entryName.replace('\\', '/');
+                if (normalizedName.endsWith("/" + sourcePath) || normalizedName.equals(sourcePath)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private List<Integer> getChangedLinesForClass(Map<String, List<Integer>> diffMap, String className) {
+        if (diffMap == null || diffMap.isEmpty() || !StringUtils.hasText(className)) {
+            return null;
+        }
+        for (String candidateClassName : CoverageSourceClassUtil.buildSourceClassCandidates(className)) {
+            List<Integer> changedLines = diffMap.get(candidateClassName);
+            if (changedLines != null) {
+                return changedLines;
+            }
+        }
+        return null;
+    }
+
+    private String resolveCoverageOwnerClassName(String className) {
+        return CoverageSourceClassUtil.resolveSourceOwnerClassName(className);
     }
 
     private byte[] readAllBytes(InputStream is) throws IOException {
@@ -1573,6 +1656,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
 
         SourceFilter sourceFilter = new FetchSourceFilter(null, new String[]{"methods"});
         Map<String, CoverageTreeNode> nodesMap = new HashMap<>();
+        Set<String> exactClassNames = new HashSet<>();
 
         int page = 0;
         Page<ClassCoverageIndex> classPage;
@@ -1585,47 +1669,61 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
 
             classPage = classCoverageRepository.search(queryBuilder.build());
             for (ClassCoverageIndex cc : classPage.getContent()) {
-                String className = cc.getClassName();
-                if (!className.startsWith(prefix)) {
+                String classFullName = cc.getClassName();
+                if (!classFullName.startsWith(prefix)) {
+                    continue;
+                }
+                exactClassNames.add(classFullName);
+            }
+            page++;
+        } while (classPage.hasNext());
+
+        page = 0;
+        do {
+            NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
+                    .withQuery(boolQuery)
+                    .withSourceFilter(sourceFilter)
+                    .withSort(SortBuilders.fieldSort("className").order(SortOrder.ASC))
+                    .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE));
+
+            classPage = classCoverageRepository.search(queryBuilder.build());
+            for (ClassCoverageIndex cc : classPage.getContent()) {
+                String classFullName = cc.getClassName();
+                if (!classFullName.startsWith(prefix)) {
                     continue;
                 }
 
-                String remaining = className.substring(prefix.length());
-                int dotIdx = remaining.indexOf('.');
+                String remaining = classFullName.substring(prefix.length());
+                TreeNodeIdentity identity = resolveImmediateTreeNode(prefix, remaining, classFullName);
 
-                String nodeName;
-                String type;
-                String fullName;
-
-                if (dotIdx == -1) {
-                    nodeName = remaining;
-                    type = "class";
-                    fullName = className;
-                } else {
-                    nodeName = remaining.substring(0, dotIdx);
-                    type = "package";
-                    fullName = prefix + nodeName;
-                }
-
-                CoverageTreeNode node = nodesMap.get(fullName);
+                CoverageTreeNode node = nodesMap.get(identity.fullName);
                 if (node == null) {
                     node = new CoverageTreeNode();
-                    node.setFullName(fullName);
-                    node.setName(nodeName);
-                    node.setType(type);
+                    node.setFullName(identity.fullName);
+                    node.setName(identity.nodeName);
+                    node.setType(identity.type);
                     node.setParentId(normalizedParent);
-                    node.setId(reportId + ":" + fullName);
-                    nodesMap.put(fullName, node);
+                    node.setId(reportId + ":" + identity.fullName);
+                    nodesMap.put(identity.fullName, node);
                 }
 
-                node.setTotalMethods(node.getTotalMethods() + cc.getTotalMethods());
-                node.setCoveredMethods(node.getCoveredMethods() + cc.getCoveredMethods());
-                node.setTotalBranches(node.getTotalBranches() + cc.getTotalBranches());
-                node.setCoveredBranches(node.getCoveredBranches() + cc.getCoveredBranches());
-                node.setTotalLines(node.getTotalLines() + cc.getTotalLines());
-                node.setCoveredLines(node.getCoveredLines() + cc.getCoveredLines());
-                node.setTotalComplexity(node.getTotalComplexity() + cc.getTotalComplexity());
-                node.setHasChildren("package".equals(type));
+                boolean hasChildren = classFullName.startsWith(identity.fullName + ".");
+                if (hasChildren) {
+                    node.setHasChildren(true);
+                }
+
+                boolean aggregateStats = "package".equals(identity.type)
+                        || classFullName.equals(identity.fullName)
+                        || !exactClassNames.contains(identity.fullName);
+                if (aggregateStats) {
+                    node.setTotalMethods(node.getTotalMethods() + cc.getTotalMethods());
+                    node.setCoveredMethods(node.getCoveredMethods() + cc.getCoveredMethods());
+                    node.setTotalBranches(node.getTotalBranches() + cc.getTotalBranches());
+                    node.setCoveredBranches(node.getCoveredBranches() + cc.getCoveredBranches());
+                    node.setTotalLines(node.getTotalLines() + cc.getTotalLines());
+                    node.setCoveredLines(node.getCoveredLines() + cc.getCoveredLines());
+                    node.setTotalComplexity(node.getTotalComplexity() + cc.getTotalComplexity());
+                }
             }
             page++;
         } while (classPage.hasNext());
@@ -1648,6 +1746,35 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         });
 
         return result;
+    }
+
+    private TreeNodeIdentity resolveImmediateTreeNode(String prefix, String remaining, String classFullName) {
+        String[] segments = remaining.split("\\.");
+        if (segments.length == 0) {
+            return new TreeNodeIdentity(classFullName, classFullName, "class");
+        }
+
+        int firstTypeSegment = CoverageSourceClassUtil.findFirstTypeSegmentIndex(segments);
+        if (firstTypeSegment <= 0) {
+            String nodeName = CoverageSourceClassUtil.toTreeDisplayName(segments[0], "class");
+            return new TreeNodeIdentity(nodeName, prefix + segments[0], "class");
+        }
+
+        String nodeName = segments[0];
+        String fullName = prefix + nodeName;
+        return new TreeNodeIdentity(nodeName, fullName, "package");
+    }
+
+    private static class TreeNodeIdentity {
+        private final String nodeName;
+        private final String fullName;
+        private final String type;
+
+        private TreeNodeIdentity(String nodeName, String fullName, String type) {
+            this.nodeName = nodeName;
+            this.fullName = fullName;
+            this.type = type;
+        }
     }
 
     @Override
