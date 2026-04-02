@@ -2,6 +2,7 @@ package com.oAT.web.domain;
 
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.web.common.ClassUtil;
+import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.util.*;
@@ -12,10 +13,12 @@ public class StackCodeLayer implements ImageLayer {
     StackNodeVo[] codeNodes;
     String snapshotId;
     Map<String, List<StackNodeVo>> childNodes;
+    Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup;
 
-    public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId) {
+    public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId, Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup) {
         this.codeNodes = codeNodes;
         this.snapshotId = snapshotId;
+        this.staticMethodLookup = staticMethodLookup != null ? staticMethodLookup : Collections.emptyMap();
         childNodes = Arrays.stream(codeNodes).collect(Collectors.groupingBy(StackNodeVo::parentId));
     }
 
@@ -97,21 +100,35 @@ public class StackCodeLayer implements ImageLayer {
 
         // 计算总执行行数和总行数
         float doLinesSum = node.getDoLines() == null ? 0 : node.getDoLines().stream().mapToInt(Integer::intValue).sum();
-        float lineTotalSum = node.getLineTotal() == null ? 0 :
-                node.getLineTotal().stream().mapToInt(Integer::intValue).sum();
+
+        // 从全量静态数据获取总数
+        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
+        Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(node.getClassName());
+        List<Integer> lineTotalList = Collections.emptyList();
+        int cycloVal = 0;
+        List<Integer> branchTotalList = Collections.emptyList();
+        if (classMethodMap != null) {
+            StaticSourceMethodInfo staticMethod = classMethodMap.get(methodKey);
+            if (staticMethod != null) {
+                lineTotalList = staticMethod.getMethodLineNumberMap() != null ? staticMethod.getMethodLineNumberMap() : Collections.emptyList();
+                cycloVal = staticMethod.getCyclomaticComplexityMap() != null ? staticMethod.getCyclomaticComplexityMap() : 0;
+                branchTotalList = staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList();
+            }
+        }
+        float lineTotalSum = lineTotalList.stream().mapToInt(Integer::intValue).sum();
         int coveragePercent = lineTotalSum == 0 ? 0 : (int) (doLinesSum * 100.0 / lineTotalSum);
 
         imageData.name = classSimpleName + " " + methodName + " " + coveragePercent + "%";
         imageData.doLines = node.getDoLines();
-        imageData.lineTotal = node.getLineTotal();
+        imageData.lineTotal = new ArrayList<>(lineTotalList);
 
         // 避免除以0
         imageData.coverageRate = lineTotalSum == 0 ? 0 : doLinesSum / lineTotalSum;
         imageData.executeMethodTotal = node.getExecuteMethodTotal();
-        imageData.methodTotal = node.getMethodTotal();
+        imageData.methodTotal = null; // 总数来自全量静态数据，此处不再从 StackNodeVo 获取
         imageData.executebranch = node.getExecuteBranch();
-        imageData.branchTotal = node.getBranchTotal();
-        imageData.cyclo = node.getCyclo();
+        imageData.branchTotal = new ArrayList<>(branchTotalList);
+        imageData.cyclo = cycloVal;
 
         // 新的节点权重判断逻辑
         String[] classNamePathWords = className.substring(0, className.lastIndexOf('.')).split("\\.");

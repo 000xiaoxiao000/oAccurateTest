@@ -6,10 +6,13 @@ import com.oAT.web.control.entity.GraphView;
 import com.oAT.web.control.entity.Param;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.control.entity.StackItem;
+import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.LabelGroup;
 import com.oAT.web.esDao.entity.Snapshot;
+import com.oAT.web.esDao.entity.StaticSourceInfo;
+import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.*;
 import org.apache.commons.lang3.ArrayUtils;
@@ -58,6 +61,9 @@ public class SnapshotControl {
 
     @Autowired
     private CoverageService coverageService;
+
+    @Autowired
+    private StaticInfoRepository staticInfoRepository;
 
     @RequestMapping("/save")
     @ResponseBody
@@ -177,38 +183,58 @@ public class SnapshotControl {
                             Arrays.stream(codeNodes).collect(Collectors.groupingBy(StackNodeVo::parentId));
                     codeRelationships.put(requestUrl, childNodes);
 
+                    // 获取 appId
+                    String currentAppId = snapshot.getAppId();
+                    if (!StringUtils.hasText(currentAppId) && traceNode.getApp() != null) {
+                        currentAppId = traceNode.getApp().getAppId();
+                    }
+
+                    // 加载该 appId 的全量静态数据
+                    Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup = Collections.emptyMap();
+                    if (StringUtils.hasText(currentAppId)) {
+                        classToAppId.putIfAbsent(null, currentAppId); // 用于后续静态数据加载标记
+                    }
+
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getLineTotal() == null || node.getLineTotal().isEmpty()) continue;
                         if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
 
-                        String methodKey = node.getClassName() + "#" + node.getMethodName() + node.getMethodDescriptor();
+                        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 
-                        // 优先从快照对象取 appId，取不到则从链路追踪节点取 fallback
-                        String currentAppId = snapshot.getAppId();
-                        if (!StringUtils.hasText(currentAppId) && traceNode.getApp() != null) {
-                            currentAppId = traceNode.getApp().getAppId();
-                        }
                         if (StringUtils.hasText(currentAppId)) {
                             classToAppId.putIfAbsent(node.getClassName(), currentAppId);
                         }
 
                         // 行覆盖
-                        methodTotalLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getLineTotal());
                         if (node.getDoLines() != null) {
                             methodCoveredLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getDoLines());
                         }
 
-                        // 圈复杂度 (取最大值或假定一致)
-                        methodComplexity.put(methodKey, node.getCyclo());
-
                         // 分支覆盖
-                        if (node.getBranchTotal() != null) {
-                            methodTotalBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getBranchTotal());
-                        }
                         if (node.getExecuteBranch() != null) {
                             methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
                         }
+                    }
+                }
+            }
+        }
+
+        // 从全量静态数据补充总数
+        for (String appId : new HashSet<>(classToAppId.values())) {
+            if (!StringUtils.hasText(appId)) continue;
+            List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+            for (StaticSourceInfo si : staticInfos) {
+                if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+                for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                    String className = si.getClassInfo().getClassName();
+                    String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                    // 只统计被覆盖过的方法的总数
+                    if (methodCoveredLines.containsKey(mKey) || methodCoveredBranches.containsKey(mKey)) {
+                        methodTotalLines.computeIfAbsent(mKey, k -> new HashSet<>())
+                                .addAll(mInfo.getMethodLineNumberMap() != null ? mInfo.getMethodLineNumberMap() : Collections.emptyList());
+                        methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
+                        methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
+                                .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
                     }
                 }
             }
@@ -302,6 +328,19 @@ public class SnapshotControl {
         aggregatedClassCov.setClassName(className);
         aggregatedClassCov.setAppId(appId);
 
+        // 加载该类的全量静态数据
+        List<StaticSourceInfo> staticInfos = StringUtils.hasText(appId) ? staticInfoRepository.findByAppId(appId) : Collections.emptyList();
+        Map<String, StaticSourceMethodInfo> classStaticMethods = new HashMap<>();
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() != null && className.equals(si.getClassInfo().getClassName()) && si.getClassInfo().getMethodMaps() != null) {
+                for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                    String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                    classStaticMethods.put(mKey, mInfo);
+                }
+                break;
+            }
+        }
+
         Map<String, ClassCoverageIndex.MethodCoverageDetail> methodMap = new HashMap<>(); // name#desc -> detail
 
         for (SnapshotVo snap : snapshots) {
@@ -324,9 +363,14 @@ public class SnapshotControl {
                             ClassCoverageIndex.MethodCoverageDetail newMd = new ClassCoverageIndex.MethodCoverageDetail();
                             newMd.setMethodName(sn.getMethodName());
                             newMd.setMethodDesc(sn.getMethodDescriptor());
-                            newMd.setTotalLineNumbers(sn.getLineTotal());
-                            newMd.setTotalLines(sn.getLineTotal() != null ? sn.getLineTotal().size() : 0);
-                            newMd.setComplexity(sn.getCyclo());
+                            // 从全量静态数据获取总数
+                            StaticSourceMethodInfo staticMethod = classStaticMethods.get(methodKey);
+                            List<Integer> totalLines = staticMethod != null && staticMethod.getMethodLineNumberMap() != null
+                                    ? staticMethod.getMethodLineNumberMap() : Collections.emptyList();
+                            newMd.setTotalLineNumbers(new ArrayList<>(totalLines));
+                            newMd.setTotalLines(totalLines.size());
+                            newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
+                                    ? staticMethod.getCyclomaticComplexityMap() : 0);
                             newMd.setCoveredLineNumbers(new ArrayList<>());
                             return newMd;
                         });

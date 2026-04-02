@@ -5,6 +5,7 @@ import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.control.entity.ResultNotified;
+import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.*;
@@ -57,6 +58,9 @@ public class VersionItemControl {
 
     @Autowired
     private CoverageService coverageService;
+
+    @Autowired
+    StaticInfoRepository staticInfoRepository;
 
     @Autowired
     SystemLogService systemLogService;
@@ -493,31 +497,39 @@ public class VersionItemControl {
                     codeRelationships.put(requestUrl, childNodes);
 
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getLineTotal() == null || node.getLineTotal().isEmpty()) continue;
                         if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
 
-                        String methodKey = node.getClassName() + "#" + node.getMethodName() + node.getMethodDescriptor();
+                        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 
                         classToAppId.putIfAbsent(node.getClassName(), appId);
 
                         // 行覆盖
-                        methodTotalLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getLineTotal());
                         if (node.getDoLines() != null) {
                             methodCoveredLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getDoLines());
                         }
 
-                        // 圈复杂度 (取最大值或假定一致)
-                        methodComplexity.put(methodKey, node.getCyclo());
-
                         // 分支覆盖
-                        if (node.getBranchTotal() != null) {
-                            methodTotalBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getBranchTotal());
-                        }
                         if (node.getExecuteBranch() != null) {
                             methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
                         }
                     }
+                }
+            }
+        }
+
+        // 从全量静态数据补充总数
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+            for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                if (methodCoveredLines.containsKey(mKey) || methodCoveredBranches.containsKey(mKey)) {
+                    methodTotalLines.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getMethodLineNumberMap() != null ? mInfo.getMethodLineNumberMap() : Collections.emptyList());
+                    methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
+                    methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
                 }
             }
         }

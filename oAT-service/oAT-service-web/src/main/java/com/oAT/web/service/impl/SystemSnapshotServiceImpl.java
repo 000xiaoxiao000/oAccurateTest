@@ -2,6 +2,7 @@ package com.oAT.web.service.impl;
 
 import com.oAT.agent.model.*;
 import com.oAT.web.common.SqlStatParse;
+import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
 import com.oAT.web.esDao.entity.*;
@@ -28,6 +29,9 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
     @Autowired
     TraceNodeRepository traceNodeRepository;
+
+    @Autowired
+    StaticInfoRepository staticInfoRepository;
 
     @Autowired
     com.oAT.web.service.SnapshotService snapshotService;
@@ -255,6 +259,23 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
             Collection<TraceNode> traceNodes = snapshotService.getTraceNodes(snapshot.getTraceId());
 
+            // 加载全量静态数据，作为总数的数据源
+            List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(snapshot.getAppId());
+            // 构建 className -> (methodKey -> StaticSourceMethodInfo) 的查找表
+            // methodKey = methodName + "#" + methodDesc
+            Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup = new HashMap<>();
+            for (StaticSourceInfo si : staticInfos) {
+                if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+                String className = si.getClassInfo().getClassName();
+                Map<String, StaticSourceMethodInfo> methodMap = new HashMap<>();
+                for (Map.Entry<String, StaticSourceMethodInfo> entry : si.getClassInfo().getMethodMaps().entrySet()) {
+                    StaticSourceMethodInfo mInfo = entry.getValue();
+                    String methodKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                    methodMap.put(methodKey, mInfo);
+                }
+                staticMethodLookup.put(className, methodMap);
+            }
+
             long totalLines = 0;
             long coveredLines = 0;
             long totalMethods = 0;
@@ -275,22 +296,29 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                     StackNodeVo[] codeNodes = ((HttpTraceNode) node).getCodeNodes();
                     if (codeNodes != null) {
                         for (StackNodeVo sn : codeNodes) {
-                            if (sn.getLineTotal() == null || sn.getLineTotal().isEmpty()) continue;
                             if (sn.getDoLines() != null && sn.getDoLines().contains(-1)) continue;
 
-                            String methodKey = sn.getClassName() + "#" + sn.getMethodName() + sn.getMethodDescriptor();
+                            String methodKey = sn.getMethodName() + "#" + sn.getMethodDescriptor();
+                            Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(sn.getClassName());
+                            if (classMethodMap == null) continue;
+
+                            StaticSourceMethodInfo staticMethod = classMethodMap.get(methodKey);
+                            if (staticMethod == null) continue;
+
                             classMethods.add(sn.getClassName());
 
-                            methodTotalLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getLineTotal());
+                            // 从全量静态数据获取总数
+                            methodTotalLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
+                                    .addAll(staticMethod.getMethodLineNumberMap() != null ? staticMethod.getMethodLineNumberMap() : Collections.emptyList());
                             if (sn.getDoLines() != null) {
                                 methodCoveredLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getDoLines());
                             }
 
-                            methodComplexityMap.put(methodKey, sn.getCyclo());
+                            methodComplexityMap.put(methodKey,
+                                    staticMethod.getCyclomaticComplexityMap() != null ? staticMethod.getCyclomaticComplexityMap() : 0);
 
-                            if (sn.getBranchTotal() != null) {
-                                methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getBranchTotal());
-                            }
+                            methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
+                                    .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
                             if (sn.getExecuteBranch() != null) {
                                 methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
                             }

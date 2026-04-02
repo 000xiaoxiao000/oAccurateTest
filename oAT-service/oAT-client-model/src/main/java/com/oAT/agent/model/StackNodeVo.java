@@ -18,22 +18,14 @@ public class StackNodeVo implements java.io.Serializable {
      * 执行到的代码行数
      */
     private ArrayList<Integer> doLines = new ArrayList<>(8);
-    /**
-     * 代码行数，某个方法的代码总行数
-     */
-    private ArrayList<Integer> lineTotal = new ArrayList<>(4);
 
     //方法覆盖率
     //执行到的方法数
     private ArrayList<Integer> executeMethodTotal = new ArrayList<>(1);
-    //方法总数
-    private ArrayList<Integer> methodTotal = new ArrayList<>(4);
 
     //分支覆盖率
     //执行到的分支数
     private ArrayList<Integer> executeBranch = new ArrayList<>(4);
-    //分支总数
-    private ArrayList<Integer> branchTotal = new ArrayList<>(4);
 
     //条件覆盖率
     //执行到的条件数,map<分支行，第几个条件>
@@ -58,7 +50,6 @@ public class StackNodeVo implements java.io.Serializable {
      * 圈复杂度
      */
     private String execCyclo = "0";  //方法中执行的圈复杂度
-    private int cyclo = 0;  //方法中的圈复杂度
 
     /**
      * 是否是递归方法
@@ -134,28 +125,12 @@ public class StackNodeVo implements java.io.Serializable {
         this.doLines = doLines;
     }
 
-    public ArrayList<Integer> getLineTotal() {
-        return lineTotal;
-    }
-
-    public void setLineTotal(ArrayList<Integer> lineTotal) {
-        this.lineTotal = lineTotal;
-    }
-
     public boolean isDone() {
         return done;
     }
 
     public void setDone(boolean done) {
         this.done = done;
-    }
-
-    public int getCyclo() {
-        return cyclo;
-    }
-
-    public void setCyclo(int cyclo) {
-        this.cyclo = cyclo;
     }
 
     public String getExecCyclo() {
@@ -205,28 +180,12 @@ public class StackNodeVo implements java.io.Serializable {
         this.executeMethodTotal = executeMethodTotal;
     }
 
-    public ArrayList<Integer> getMethodTotal() {
-        return methodTotal;
-    }
-
-    public void setMethodTotal(ArrayList<Integer> methodTotal) {
-        this.methodTotal = methodTotal;
-    }
-
     public ArrayList<Integer> getExecuteBranch() {
         return executeBranch;
     }
 
     public void setExecuteBranch(ArrayList<Integer> executeBranch) {
         this.executeBranch = executeBranch;
-    }
-
-    public ArrayList<Integer> getBranchTotal() {
-        return branchTotal;
-    }
-
-    public void setBranchTotal(ArrayList<Integer> branchTotal) {
-        this.branchTotal = branchTotal;
     }
 
     public Map<String, List<String>> getExecuteCondition() {

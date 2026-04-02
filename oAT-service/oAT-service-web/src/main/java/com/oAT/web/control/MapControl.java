@@ -5,7 +5,8 @@ import com.oAT.agent.model.TraceNode;
 import com.oAT.web.common.ClassStructure;
 import com.oAT.web.common.ClassUtil;
 import com.oAT.web.domain.*;
-import com.oAT.web.esDao.entity.SystemSnapshot;
+import com.oAT.web.esDao.StaticInfoRepository;
+import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.*;
@@ -45,6 +46,9 @@ public class MapControl {
 
     @Autowired
     ProjectService projectService;
+
+    @Autowired
+    StaticInfoRepository staticInfoRepository;
 
     @Value("${rmi.server.port}")
     private int rmiPort;
@@ -142,7 +146,7 @@ public class MapControl {
             List<ImageElement> imageElements = new ArrayList<>();
             imageElements.add(element);
 
-            StackCodeLayer codeLayer = new StackCodeLayer(((HttpTraceNode) traceNode).getCodeNodes(), snapshotId);
+            StackCodeLayer codeLayer = new StackCodeLayer(((HttpTraceNode) traceNode).getCodeNodes(), snapshotId, null);
             imageElements.addAll(codeLayer.elements());
 
             return imageElements;
@@ -210,7 +214,8 @@ public class MapControl {
         SystemSnapshot snapshot = systemSnapshotService.getById(snapshotId);
         TraceNode traceNode = snapshotService.getTraceNode(snapshot.getTraceId(), "0");
         if (traceNode instanceof HttpTraceNode) {
-            StackCodeLayer codeLayer = new StackCodeLayer(((HttpTraceNode) traceNode).getCodeNodes(), snapshotId);
+            StackCodeLayer codeLayer = new StackCodeLayer(((HttpTraceNode) traceNode).getCodeNodes(), snapshotId,
+                    buildStaticMethodLookup(snapshot.getAppId()));
             return codeLayer.elements();
         } else {
             throw new RuntimeException(String.format("暂不支持 %s 类型获取源码堆栈", traceNode.getClass().getSimpleName()));
@@ -262,6 +267,25 @@ public class MapControl {
             searchResult.addResult(result);
         });
         return searchResult;
+    }
+
+    private Map<String, Map<String, StaticSourceMethodInfo>> buildStaticMethodLookup(String appId) {
+        Map<String, Map<String, StaticSourceMethodInfo>> lookup = new HashMap<>();
+        if (!StringUtils.hasText(appId)) {
+            return lookup;
+        }
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+            String className = si.getClassInfo().getClassName();
+            Map<String, StaticSourceMethodInfo> methodMap = new HashMap<>();
+            for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                methodMap.put(mKey, mInfo);
+            }
+            lookup.put(className, methodMap);
+        }
+        return lookup;
     }
 
 }

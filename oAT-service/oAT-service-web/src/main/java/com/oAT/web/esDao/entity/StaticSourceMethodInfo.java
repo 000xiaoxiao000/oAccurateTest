@@ -1,9 +1,20 @@
 package com.oAT.web.esDao.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.databind.JsonNode;
+
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class StaticSourceMethodInfo implements Serializable {
     private String methodName;
     private String methodDesc;
@@ -52,8 +63,14 @@ public class StaticSourceMethodInfo implements Serializable {
         return branchLineAndConditionNumberMap;
     }
 
+    @JsonIgnore
     public void setBranchLineAndConditionNumberMap(Map<String, List<Integer>> branchLineAndConditionNumberMap) {
         this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap;
+    }
+
+    @JsonSetter("branchLineAndConditionNumberMap")
+    public void setBranchLineAndConditionNumberMapNode(JsonNode branchLineAndConditionNumberMapNode) {
+        this.branchLineAndConditionNumberMap = normalizeBranchLineAndConditionNumberMap(branchLineAndConditionNumberMapNode);
     }
 
     public Integer getTotalBranchCount() {
@@ -94,5 +111,76 @@ public class StaticSourceMethodInfo implements Serializable {
 
     public void setMethodUri(String methodUri) {
         this.methodUri = methodUri;
+    }
+
+    private Map<String, List<Integer>> normalizeBranchLineAndConditionNumberMap(JsonNode node) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (!node.isObject()) {
+            return Collections.emptyMap();
+        }
+        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
+        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fields.next();
+            normalized.put(entry.getKey(), extractIntegerList(entry.getValue()));
+        }
+        return normalized;
+    }
+
+    private List<Integer> extractIntegerList(JsonNode node) {
+        TreeSet<Integer> values = new TreeSet<>();
+        collectIntegerValues(node, values);
+        return new ArrayList<>(values);
+    }
+
+    private void collectIntegerValues(JsonNode node, TreeSet<Integer> values) {
+        if (node == null || node.isNull()) {
+            return;
+        }
+        if (node.isInt() || node.isLong()) {
+            values.add(node.asInt());
+            return;
+        }
+        if (node.isTextual()) {
+            try {
+                values.add(Integer.parseInt(node.asText()));
+            } catch (NumberFormatException ignore) {
+            }
+            return;
+        }
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                collectIntegerValues(item, values);
+            }
+            return;
+        }
+        if (node.isObject()) {
+            if (node.has("@items")) {
+                collectIntegerValues(node.get("@items"), values);
+                return;
+            }
+            if (node.has("@e")) {
+                collectIntegerValues(node.get("@e"), values);
+                return;
+            }
+            int beforeSize = values.size();
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            boolean allNumericFieldNames = true;
+            List<Integer> numericFieldNames = new ArrayList<>();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fields.next();
+                collectIntegerValues(entry.getValue(), values);
+                try {
+                    numericFieldNames.add(Integer.parseInt(entry.getKey()));
+                } catch (NumberFormatException ex) {
+                    allNumericFieldNames = false;
+                }
+            }
+            if (values.size() == beforeSize && allNumericFieldNames) {
+                values.addAll(numericFieldNames);
+            }
+        }
     }
 }
