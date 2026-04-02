@@ -18,9 +18,9 @@ import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.trace.TraceContext;
 import com.oAT.server.model.ClientSessionVo;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -68,15 +68,13 @@ public class CompactDataOutput {
                 logger.warn("[Agent-warn]静态代码信息上报: sessionId 为空，仍尝试发送");
             }
 
-            // 构造，上传路径/参数
-            final String uploadUrl = remote + "/client/uploadStaticData"; // 复用现有服务端处理逻辑
-            Map<String, String> params = new HashMap<String, String>(4);
-            params.put("appId", appId);
-            params.put("data", json);
+            // 构造，上传路径/参数 — appId 通过 query param 传递，data 通过 raw body 发送避免 form-urlencoded 大小限制
+            String uploadUrl = remote + "/client/uploadStaticData?appId=" + URLEncoder.encode(appId, "UTF-8");
+            byte[] bodyBytes = json.getBytes(StandardCharsets.UTF_8);
 
             logger.info(String.format("[Agent-info]开始上报静态代码信息: dataSize=%.4f MB, classCount=%d, url=%s", mbSize, CompactDataInput.getAllClassStaticInfo().size(), uploadUrl));
 
-            String resp  = HttpClient.execHttp(uploadUrl, params).get(30, TimeUnit.SECONDS);
+            String resp  = HttpClient.execHttpRawBody(uploadUrl, "application/json; charset=UTF-8", bodyBytes).get(30, TimeUnit.SECONDS);
             logger.info(String.format("[Agent-succeed]静态代码信息上报成功: resp=%s, size=%.4fMB", resp, mbSize));
         } catch (Throwable t) {
             // 捕获所有异常，防止影响原有写流程

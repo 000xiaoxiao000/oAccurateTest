@@ -17,7 +17,9 @@ import org.springframework.stereotype.Controller;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.IOException;
@@ -101,7 +103,8 @@ public class ClientSessionControl {
 
     @PostMapping("/uploadStaticData")
     @ResponseBody
-    public String uploadStaticData(String appId, String data) {
+    public String uploadStaticData(@RequestParam("appId") String appId,
+                                   @RequestBody String data) {
         Assert.notNull(appId, "param 'appId' must be not null");
         Assert.notNull(data, "param 'data' must be not null");
         ObjectMapper mapper = new ObjectMapper();
