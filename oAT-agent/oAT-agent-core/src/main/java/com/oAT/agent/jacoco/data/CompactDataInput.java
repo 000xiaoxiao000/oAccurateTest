@@ -4,6 +4,7 @@ import com.oAT.agent.common.Decompiler.ILanguageNames;
 import com.oAT.agent.common.Decompiler.JavaNames;
 import com.oAT.agent.common.JsonUtil;
 import com.oAT.agent.jacoco.instr.ClassInfo;
+import com.oAT.agent.model.McdcCoverageSupport;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,7 @@ public class CompactDataInput {
         public final Set<Integer> methodLineNumberMap;   // 行号集合（过滤负数）
         public final Map<Integer, Set<Integer>> branchLineAndConditionNumberMap; // 分支行 -> 条件个数集合
         public final Set<Integer> branchLineNumberSet;   // 该方法所有分支行号集合（来自 totalBranchMap）
+        public final Map<String, List<List<String>>> mcdcCoverage; // 分支行 -> 所有可能的 MC/DC 取值组合
         public final int totalBranchCount;               // 分支总数（= branchLineNumberSet.size()）
         public final int cyclomaticComplexityMap;   // 圈复杂度
         public final boolean recursiveMap;          // 是否递归
@@ -46,8 +48,16 @@ public class CompactDataInput {
             this.methodName = methodName;
             this.methodDesc = methodDesc;
             this.methodLineNumberMap = (lineNumbers == null ? Collections.emptySet() : Collections.unmodifiableSet(filterLines(lineNumbers)));
-            this.branchLineNumberSet = branchLineNumberSet == null ? Collections.emptySet() : Collections.unmodifiableSet(new LinkedHashSet<>(branchLineNumberSet));
-            this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(branchLineAndConditionNumberMap));
+            this.branchLineNumberSet = branchLineNumberSet == null
+                    ? Collections.emptySet()
+                    : Collections.unmodifiableSet(filterBranchLines(branchLineNumberSet));
+            this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap == null
+                    ? Collections.emptyMap()
+                    : Collections.unmodifiableMap(filterBranchLineConditionMap(branchLineAndConditionNumberMap));
+            Map<String, List<List<String>>> staticMcdcCoverage = this.branchLineNumberSet.isEmpty()
+                    ? null
+                    : McdcCoverageSupport.buildAllCoverageFromConditionSets(this.branchLineAndConditionNumberMap);
+            this.mcdcCoverage = staticMcdcCoverage == null ? null : Collections.unmodifiableMap(staticMcdcCoverage);
             this.totalBranchCount = this.branchLineNumberSet.size();
             this.cyclomaticComplexityMap = cyclomaticComplexity;
             this.recursiveMap = recursive;
@@ -58,6 +68,25 @@ public class CompactDataInput {
             Set<Integer> r = new HashSet<>();
             for (Integer i : src) { if (i != null && i >= 0) r.add(i); }
             return r;
+        }
+        private static Set<Integer> filterBranchLines(Set<Integer> src) {
+            Set<Integer> r = new LinkedHashSet<>();
+            for (Integer i : src) {
+                if (i != null && i > 0) {
+                    r.add(i);
+                }
+            }
+            return r;
+        }
+        private static Map<Integer, Set<Integer>> filterBranchLineConditionMap(Map<Integer, Set<Integer>> src) {
+            Map<Integer, Set<Integer>> filtered = new LinkedHashMap<>();
+            for (Map.Entry<Integer, Set<Integer>> entry : src.entrySet()) {
+                Integer branchLine = entry.getKey();
+                if (branchLine != null && branchLine > 0) {
+                    filtered.put(branchLine, entry.getValue() == null ? Collections.emptySet() : new LinkedHashSet<>(entry.getValue()));
+                }
+            }
+            return filtered;
         }
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -72,6 +101,9 @@ public class CompactDataInput {
                 }
             }
             m.put("branchLineAndConditionNumberMap", branchMapStr);
+            if (mcdcCoverage != null && !mcdcCoverage.isEmpty()) {
+                m.put("mcdcCoverage", mcdcCoverage);
+            }
             m.put("totalBranchCount", totalBranchCount);
             m.put("cyclomaticComplexityMap", cyclomaticComplexityMap);
             m.put("recursiveMap", recursiveMap);
@@ -207,7 +239,7 @@ public class CompactDataInput {
                         String methodNameDescPart = key.substring(0, lastSpace); // methodName + desc
                         if (shortMethodKey.equals(methodNameDescPart)) {
                             Integer branchLine = bEntry.getValue();
-                            if (branchLine != null && branchLine >= 0) {
+                            if (branchLine != null && branchLine > 0) {
                                 methodBranchLines.add(branchLine);
                             }
                         }

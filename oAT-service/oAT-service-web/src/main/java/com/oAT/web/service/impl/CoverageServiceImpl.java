@@ -2,8 +2,10 @@ package com.oAT.web.service.impl;
 
 import com.alibaba.excel.EasyExcel;
 import com.oAT.agent.model.HttpTraceNode;
+import com.oAT.agent.model.McdcCoverageSupport;
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
+import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.CoverageSourceClassUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.esDao.*;
@@ -507,6 +509,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 md.setComplexity(mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
                 md.setCoveredLineNumbers(new ArrayList<>());
                 md.setCoveredBranchIds(new ArrayList<>());
+                md.setMcdcCoverage(McdcCoverageSupport.deepCopy(mInfo.getMcdcCoverage()));
+                md.setCoveredMcdcCoverage(null);
                 classCov.getMethods().add(md);
                 classCov.setTotalLines(classCov.getTotalLines() + md.getTotalLines());
                 classCov.setTotalBranches(classCov.getTotalBranches() + md.getTotalBranches());
@@ -933,7 +937,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
     }
 
     private String buildMethodKey(String className, MethodCoverageDetail method) {
-        return String.valueOf(className) + "#" + String.valueOf(method.getMethodName()) + "#" + String.valueOf(method.getMethodDesc());
+        return String.valueOf(className) + "#" + buildMethodKey(method.getMethodName(), method.getMethodDesc());
+    }
+
+    private String buildMethodKey(String methodName, String methodDesc) {
+        return CoverageMethodKeyUtil.buildMethodKey(methodName, methodDesc);
     }
 
     private boolean isMethodCoveredForComparison(MethodCoverageDetail method) {
@@ -1204,6 +1212,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 md.setCoveredBranchIds(new ArrayList<>(coveredBranchIds));
                 md.setCoveredBranches(md.getCoveredBranchIds().size());
             }
+
+            md.setCoveredMcdcCoverage(McdcCoverageSupport.mergeCoverage(
+                    md.getCoveredMcdcCoverage(), sn.getMcdcCoverage()));
 
             md.setCovered(md.getCoveredLines() > 0);
         }

@@ -2,6 +2,7 @@ package com.oAT.web.control;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.oAT.agent.model.*;
+import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.*;
 import com.oAT.web.esDao.StaticInfoRepository;
@@ -21,6 +22,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.Serializable;
 import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -106,13 +108,13 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/directory", method = RequestMethod.POST)
     @ResponseBody
-    public ResultNotified saveDirectory(@PathVariable String projectId, @PathVariable String appId, SnapshotDirectory dir) {
+    public ResultNotified<Serializable> saveDirectory(@PathVariable String projectId, @PathVariable String appId, SnapshotDirectory dir) {
         //参数directory不能为空
-        Assert.isTrue(dir != null, "路径不能为空");
+        Assert.notNull(dir, "路径不能为空");
         //参数dir.name不能为空
         Assert.hasText(dir.getName(), "快照名称不能为空");
         appService.saveSnapshotDirectory(projectId, appId, dir);
-        return new ResultNotified(true, "目录保存成功");
+        return new ResultNotified<>(true, "目录保存成功");
     }
 
     /**
@@ -125,16 +127,16 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/directory", method = RequestMethod.DELETE)
     @ResponseBody
-    public ResultNotified deleteDirectory(@PathVariable String projectId, @PathVariable String appId, Integer directoryId) {
+    public ResultNotified<Serializable> deleteDirectory(@PathVariable String projectId, @PathVariable String appId, Integer directoryId) {
         //参数directoryId不能为空
         Assert.isTrue(directoryId != null, "路径不能为空");
         try {
             appService.deleteSnapshotDirectory(projectId, appId, directoryId);
         } catch (BusinessException e) {
             logger.info("删除目录失败", e);
-            return new ResultNotified(false, e.getMessage());
+            return new ResultNotified<>(false, e.getMessage());
         }
-        return new ResultNotified(true, "目录删除成功");
+        return new ResultNotified<>(true, "目录删除成功");
     }
 
     /**
@@ -258,9 +260,9 @@ public class SystemSnapshotControl {
      */
     @RequestMapping("/update")
     @ResponseBody
-    public ResultNotified update(@PathVariable String projectId, @SessionAttribute UserVo user, SystemSnapshot snapshot) {
+    public ResultNotified<Serializable> update(@PathVariable String projectId, @SessionAttribute UserVo user, SystemSnapshot snapshot) {
         systemSnapshotService.saveBasic(projectId, user.getId(), snapshot);
-        return new ResultNotified(true, "保存成功");
+        return new ResultNotified<>(true, "保存成功");
     }
 
     /**
@@ -268,9 +270,9 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/addDescribe", method = RequestMethod.POST)
     @ResponseBody
-    public ResultNotified addDescribe(@SessionAttribute UserVo user, String id, String content) {
+    public ResultNotified<Serializable> addDescribe(@SessionAttribute UserVo user, String id, String content) {
         appService.addDescribe(id, user.getId(), content);
-        return new ResultNotified(true, "添加成功");
+        return new ResultNotified<>(true, "添加成功");
     }
 
     /**
@@ -278,9 +280,9 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/delDescribe")
     @ResponseBody
-    public ResultNotified delDescribe(@SessionAttribute UserVo user, String id, String content, String dateTime) {
+    public ResultNotified<Serializable> delDescribe(@SessionAttribute UserVo user, String id, String content, String dateTime) {
         appService.delDescribe(id, user.getId(), content, dateTime);
-        return new ResultNotified(true, "评论删除成功");
+        return new ResultNotified<>(true, "评论删除成功");
     }
 
     /**
@@ -288,10 +290,10 @@ public class SystemSnapshotControl {
      */
     @RequestMapping("/doDelete")
     @ResponseBody
-    public ResultNotified deleteSystemSnapshot(String id) {
+    public ResultNotified<Serializable> deleteSystemSnapshot(String id) {
         //当前快照id
         appService.deleteSnapshot(id);
-        return new ResultNotified(true, "删除快照成功");
+        return new ResultNotified<>(true, "删除快照成功");
     }
 
     /**
@@ -328,8 +330,6 @@ public class SystemSnapshotControl {
                     codeRelationships.put(requestUrl, childNodes);
 
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
-
                         String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 
@@ -411,9 +411,9 @@ public class SystemSnapshotControl {
 
     @RequestMapping("/report/calculate/{id}")
     @ResponseBody
-    public ResultNotified calculateReport(@PathVariable String id) {
+    public ResultNotified<Serializable> calculateReport(@PathVariable String id) {
         systemSnapshotService.asyncCalculateCoverage(id);
-        return new ResultNotified(true, "覆盖率计算任务已启动");
+        return new ResultNotified<>(true, "覆盖率计算任务已启动");
     }
 
     @RequestMapping("/report/status/{id}")
@@ -438,7 +438,7 @@ public class SystemSnapshotControl {
         for (StaticSourceInfo si : staticInfos) {
             if (si.getClassInfo() != null && className.equals(si.getClassInfo().getClassName()) && si.getClassInfo().getMethodMaps() != null) {
                 for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
-                    String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                    String mKey = CoverageMethodKeyUtil.buildMethodKey(mInfo.getMethodName(), mInfo.getMethodDesc());
                     classStaticMethods.put(mKey, mInfo);
                 }
                 break;
@@ -453,9 +453,8 @@ public class SystemSnapshotControl {
                 if (codeNodes != null) {
                     for (StackNodeVo sn : codeNodes) {
                         if (!sn.getClassName().equals(className)) continue;
-                        if (sn.getDoLines() != null && sn.getDoLines().contains(-1)) continue;
 
-                        String methodKey = sn.getMethodName() + sn.getMethodDescriptor();
+                        String methodKey = CoverageMethodKeyUtil.buildMethodKey(sn.getMethodName(), sn.getMethodDescriptor());
                         ClassCoverageIndex.MethodCoverageDetail md = methodMap.computeIfAbsent(methodKey, k -> {
                             ClassCoverageIndex.MethodCoverageDetail newMd = new ClassCoverageIndex.MethodCoverageDetail();
                             newMd.setMethodName(sn.getMethodName());
@@ -469,6 +468,9 @@ public class SystemSnapshotControl {
                             newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
                                     ? staticMethod.getCyclomaticComplexityMap() : 0);
                             newMd.setCoveredLineNumbers(new ArrayList<>());
+                            newMd.setMcdcCoverage(McdcCoverageSupport.deepCopy(
+                                    staticMethod != null ? staticMethod.getMcdcCoverage() : null));
+                            newMd.setCoveredMcdcCoverage(null);
                             return newMd;
                         });
 
@@ -479,6 +481,8 @@ public class SystemSnapshotControl {
                             md.setCoveredLines(md.getCoveredLineNumbers().size());
                             md.setCovered(md.getCoveredLines() > 0);
                         }
+                        md.setCoveredMcdcCoverage(McdcCoverageSupport.mergeCoverage(
+                                md.getCoveredMcdcCoverage(), sn.getMcdcCoverage()));
                     }
                 }
             }

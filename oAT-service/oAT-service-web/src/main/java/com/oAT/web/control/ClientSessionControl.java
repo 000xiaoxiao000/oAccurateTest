@@ -1,8 +1,6 @@
 package com.oAT.web.control;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientInfoVo;
 import com.oAT.server.model.ClientSessionVo;
@@ -107,14 +105,7 @@ public class ClientSessionControl {
                                    @RequestBody String data) {
         Assert.notNull(appId, "param 'appId' must be not null");
         Assert.notNull(data, "param 'data' must be not null");
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode staticDataJson = null;
-        try {
-            staticDataJson = mapper.readTree(data);
-        } catch (JsonProcessingException e) {
-            logger.error("[processFrontEndCodeNodes]Failed to parse frontend coverage data: ", e);
-        }
-        sessionService.saveStaticData(appId, staticDataJson);
+        sessionService.saveStaticData(appId, data);
         return "succeed";
     }
 }
