@@ -4,14 +4,22 @@
     <title>代码覆盖率 - ${displayClassName!className}</title>
     <#include "../common.ftl">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; }
+        html, body { max-width: 100%; overflow-x: hidden; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; box-sizing: border-box; }
+        body .ui.container { width: calc(100vw - 40px) !important; max-width: calc(100vw - 40px) !important; margin: 0 auto !important; box-sizing: border-box; }
+        .page-breadcrumb { margin-bottom: 20px; max-width: 100%; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
+        .header-segment { background-color: #f9f9f9; margin-top: 10px; border-top: 2px solid #2185d0; overflow: hidden; }
+        .header-title { margin: 0; min-width: 0; }
+        .header-title .content { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
         .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .method-list { margin-bottom: 25px; }
         /* 进度条样式优化 */
         .ui.progress { margin: 0; min-width: 80px; }
+        .method-table { width: 100%; table-layout: fixed; }
+        .method-table th, .method-table td { overflow-wrap: anywhere; word-break: break-word; }
         .method-table td { vertical-align: middle !important; }
         .method-table .method-name { font-weight: 600; color: #1e70bf; }
-        .method-table .stat-txt { font-size: 0.9em; white-space: nowrap; }
+        .method-table .stat-txt { font-size: 0.9em; white-space: normal; }
         /* 回到顶部按钮 */
         #backToTop {
             position: fixed;
@@ -38,15 +46,13 @@
         .col-jump { width: 8%; }
         .col-status { width: 8%; }
         .mcdc-cell { font-size: 12px; line-height: 1.6; }
-        .mcdc-summary { color: #666; margin-bottom: 6px; }
-        .mcdc-summary strong { color: #333; }
-        .mcdc-progress { margin: 4px 0 8px !important; min-width: 120px; }
-        .mcdc-details summary { cursor: pointer; color: #1e70bf; outline: none; }
-        .mcdc-details[open] summary { margin-bottom: 6px; }
-        .mcdc-entry + .mcdc-entry { margin-top: 6px; }
-        .mcdc-line { font-weight: 600; color: #1e70bf; }
-        .mcdc-group { margin-top: 2px; }
-        .mcdc-group .ui.label { margin-bottom: 4px; }
+        .mcdc-summary-label { display:inline-block; padding:1px 6px; border-radius:10px; font-size:11px; cursor:pointer; }
+        .mcdc-popup { display:none; position:absolute; right:0; top:calc(100% + 4px); z-index:20; background:#fff; border:1px solid #d9d9d9; border-radius:8px; padding:8px 10px; box-shadow:0 4px 12px rgba(0,0,0,0.15); white-space:normal; min-width:220px; max-width:min(420px, calc(100vw - 80px)); box-sizing:border-box; }
+        .mcdc-popup-title { font-size:12px; color:#666; margin-bottom:6px; }
+        .mcdc-group + .mcdc-group { margin-top:6px; }
+        .mcdc-group .ui.label { margin-bottom:4px; }
+        .mcdc-line-row { margin-top: 4px; }
+        .mcdc-line-row .ui.label { margin-bottom: 4px; }
     </style>
 </head>
 <body>
@@ -71,46 +77,49 @@
                 <#assign coveredComboCount = coveredComboCount + ((coveredMap??)?then(coveredMap[branchLine]![], []))?size>
             </#list>
             <#assign comboPct = (totalComboCount > 0)?then(coveredComboCount * 100.0 / totalComboCount, 0)>
-            <div class="mcdc-summary">
-                分支行 <strong>${coveredSize}/${totalSize}</strong>，
-                组合 <strong>${coveredComboCount}/${totalComboCount}</strong>
-                (${comboPct?string("0.0")}%)，
-                组合使用 <code>T/F</code> 简写
-            </div>
-            <div class="ui tiny progress mcdc-progress <#if comboPct == 100>success<#elseif comboPct gt 0>warning<#else>error</#if>" data-percent="${comboPct?string("0.0")}">
-                <div class="bar" style="width: ${comboPct?string("0.0")}%"></div>
-            </div>
-            <details class="mcdc-details">
-                <summary>查看 MC/DC 明细</summary>
-                <#list totalMap?keys as branchLine>
-                    <#assign staticCombos = totalMap[branchLine]![]>
-                    <#assign coveredCombos = (coveredMap??)?then(coveredMap[branchLine]![], [])>
-                    <div class="mcdc-entry">
-                        <div class="mcdc-line">L${branchLine} (${coveredCombos?size}/${staticCombos?size})</div>
-                        <div class="mcdc-group">
-                            <span class="ui mini teal basic label">静态</span>
-                            <#list staticCombos as combo>
-                                <span class="ui mini basic label">${mcdcComboText(combo)}</span>
-                            </#list>
-                        </div>
-                        <div class="mcdc-group">
-                            <span class="ui mini olive basic label">已命中</span>
-                            <#if coveredCombos?size gt 0>
-                                <#list coveredCombos as combo>
+            <#assign summaryStyle = (comboPct == 100)?then("background-color:#d4edda;color:#155724;border:1px solid #9fd5ad;",
+                (comboPct > 0)?then("background-color:#ffe5b4;color:#8a5a00;border:1px solid #f0c36d;",
+                "background-color:#f8d7da;color:#721c24;border:1px solid #f1aeb5;"))>
+            <span style="display:inline-block;position:relative;">
+                <span class="mcdc-summary-label" style="${summaryStyle}" title="点击显示/隐藏 MC/DC 明细"
+                      onclick="var detail=this.nextElementSibling;if(detail){detail.style.display=detail.style.display==='none'?'block':'none';}">
+                    MC/DC ${coveredComboCount}/${totalComboCount}
+                </span>
+                <span class="mcdc-popup">
+                    <div class="mcdc-popup-title">组合明细，使用 <code>T/F</code> 简写</div>
+                    <div class="mcdc-group">
+                        <span class="ui mini teal basic label">静态组合</span>
+                        <#list totalMap?keys as branchLine>
+                            <div class="mcdc-line-row">
+                                <span class="ui mini blue basic label">L${branchLine}</span>
+                                <#list totalMap[branchLine]![] as combo>
                                     <span class="ui mini basic label">${mcdcComboText(combo)}</span>
                                 </#list>
-                            <#else>
-                                <span class="ui mini basic label">无</span>
-                            </#if>
-                        </div>
+                            </div>
+                        </#list>
                     </div>
-                </#list>
-            </details>
+                    <div class="mcdc-group">
+                        <span class="ui mini olive basic label">已命中组合</span>
+                        <#if coveredSize gt 0>
+                            <#list coveredMap?keys as branchLine>
+                                <div class="mcdc-line-row">
+                                    <span class="ui mini blue basic label">L${branchLine}</span>
+                                    <#list coveredMap[branchLine]![] as combo>
+                                        <span class="ui mini basic label">${mcdcComboText(combo)}</span>
+                                    </#list>
+                                </div>
+                            </#list>
+                        <#else>
+                            <span class="ui mini basic label">无</span>
+                        </#if>
+                    </div>
+                </span>
+            </span>
         </#if>
     </div>
 </#macro>
 <div class="ui container" style="width: 95%;">
-    <div class="ui breadcrumb" style="margin-bottom: 20px;">
+    <div class="ui breadcrumb page-breadcrumb">
         <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
         <i class="right angle icon divider"></i>
         <a class="section" href="/p/${project.id}/${appId}/version/list">${appName!appId}</a>
@@ -121,10 +130,11 @@
             <a class="section" href="/p/${project.id}/coverage/details?reportId=${reportId}">详细数据</a>
             <i class="right angle icon divider"></i>
         </#if>
-        <div class="ui segment" style="background-color: #f9f9f9; margin-top: 10px; border-top: 2px solid #2185d0;">
+    </div>
+    <div class="ui segment header-segment">
         <div class="ui grid">
             <div class="twelve wide column">
-                <h3 class="ui header" style="margin: 0;">
+                <h3 class="ui header header-title">
                     <i class="file code outline icon"></i>
                     <div class="content">
                         ${displayClassName!className}

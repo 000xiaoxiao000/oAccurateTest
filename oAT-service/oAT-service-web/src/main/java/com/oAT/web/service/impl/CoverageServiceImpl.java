@@ -1456,6 +1456,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
 
         Map<Integer, String> lineColors = new HashMap<>();
         Map<String, Integer> methodStartLines = new HashMap<>();
+        Map<Integer, McdcLineInfo> mcdcLineInfoMap = new HashMap<>();
 
         if (classCov.getMethods() != null) {
             for (int i = 0; i < classCov.getMethods().size(); i++) {
@@ -1476,6 +1477,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                         }
                     }
                 }
+
+                mergeMcdcLineInfo(mcdcLineInfoMap, md.getMcdcCoverage(), md.getCoveredMcdcCoverage());
             }
         }
 
@@ -1490,21 +1493,140 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             }
 
             String color = lineColors.get(lineNum);
-            String style = "";
+            String style = "position:relative;";
             if ("green".equals(color)) {
-                style = "background-color: #ace1af;";
+                style += "background-color: #ace1af;";
             } else if ("red".equals(color)) {
-                style = "background-color: #f5c6cb;";
+                style += "background-color: #f5c6cb;";
+            }
+            if (mcdcLineInfoMap.containsKey(lineNum)) {
+                style += "padding-right:280px;";
             }
 
+            McdcLineInfo mcdcLineInfo = mcdcLineInfoMap.get(lineNum);
             sb.append("<div style='").append(style).append("'>")
                     .append("<span style='color: #999; margin-right: 10px;'>").append(lineNum).append("</span>")
+                    .append(buildMcdcLineBadge(mcdcLineInfo))
                     .append(escapeHtml(lines[i]))
                     .append("</div>");
         }
         sb.append("</pre>");
 
         return sb.toString();
+    }
+
+    private void mergeMcdcLineInfo(Map<Integer, McdcLineInfo> lineInfoMap,
+                                   Map<String, List<List<String>>> totalCoverage,
+                                   Map<String, List<List<String>>> coveredCoverage) {
+        if (totalCoverage == null || totalCoverage.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, List<List<String>>> entry : totalCoverage.entrySet()) {
+            Integer lineNum = parsePositiveInt(entry.getKey());
+            if (lineNum == null) {
+                continue;
+            }
+            McdcLineInfo info = lineInfoMap.computeIfAbsent(lineNum, key -> new McdcLineInfo());
+            info.addTotalCombos(entry.getValue());
+            if (coveredCoverage != null) {
+                info.addCoveredCombos(coveredCoverage.get(entry.getKey()));
+            }
+        }
+    }
+
+    private Integer parsePositiveInt(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private String buildMcdcLineBadge(McdcLineInfo info) {
+        if (info == null || info.totalComboKeys.isEmpty()) {
+            return "";
+        }
+        int total = info.totalComboKeys.size();
+        int covered = info.coveredComboKeys.size();
+        String summaryStyle;
+        if (covered >= total) {
+            summaryStyle = "background-color:#d4edda;color:#155724;border:1px solid #9fd5ad;";
+        } else if (covered > 0) {
+            summaryStyle = "background-color:#ffe5b4;color:#8a5a00;border:1px solid #f0c36d;";
+        } else {
+            summaryStyle = "background-color:#f8d7da;color:#721c24;border:1px solid #f1aeb5;";
+        }
+
+        StringBuilder badge = new StringBuilder();
+        badge.append("<span style='position:absolute;right:12px;top:1px;z-index:5;'>");
+        badge.append("<span style='display:inline-block;padding:1px 6px;border-radius:10px;font-size:11px;")
+                .append(summaryStyle)
+                .append("cursor:pointer;' title='点击显示/隐藏 MC/DC 明细' ")
+                .append("onclick=\"var detail=this.nextElementSibling;if(detail){detail.style.display=detail.style.display==='none'?'block':'none';}\">")
+                .append("MC/DC ")
+                .append(covered)
+                .append("/")
+                .append(total)
+                .append("</span>");
+
+        badge.append("<span style='display:none;position:absolute;right:0;top:calc(100% + 4px);z-index:20;")
+                .append("background:#fff;border:1px solid #d9d9d9;border-radius:8px;padding:8px 10px;")
+                .append("box-shadow:0 4px 12px rgba(0,0,0,0.15);white-space:normal;min-width:220px;max-width:420px;'>");
+        for (String comboKey : info.totalComboKeys) {
+            boolean comboCovered = info.coveredComboKeys.contains(comboKey);
+            String comboStyle = comboCovered
+                    ? "background-color:#d4edda;color:#155724;border:1px solid #9fd5ad;"
+                    : "background-color:#f8d7da;color:#721c24;border:1px solid #f1aeb5;";
+            badge.append("<span style='display:inline-block;margin-right:4px;padding:0 5px;border-radius:8px;font-size:11px;")
+                    .append(comboStyle)
+                    .append("'>")
+                    .append(escapeHtml(formatMcdcCombo(comboKey)))
+                    .append("</span>");
+        }
+        badge.append("</span>");
+        badge.append("</span>");
+        return badge.toString();
+    }
+
+    private String formatMcdcCombo(String comboKey) {
+        if (!StringUtils.hasText(comboKey)) {
+            return "";
+        }
+        String[] values = comboKey.split("\\|", -1);
+        List<String> tokens = new ArrayList<>(values.length);
+        for (String value : values) {
+            tokens.add("true".equalsIgnoreCase(value) ? "T" : "F");
+        }
+        return String.join("/", tokens);
+    }
+
+    private static final class McdcLineInfo {
+        private final LinkedHashSet<String> totalComboKeys = new LinkedHashSet<>();
+        private final LinkedHashSet<String> coveredComboKeys = new LinkedHashSet<>();
+
+        private void addTotalCombos(List<List<String>> combos) {
+            addCombos(totalComboKeys, combos);
+        }
+
+        private void addCoveredCombos(List<List<String>> combos) {
+            addCombos(coveredComboKeys, combos);
+        }
+
+        private void addCombos(LinkedHashSet<String> target, List<List<String>> combos) {
+            if (combos == null || combos.isEmpty()) {
+                return;
+            }
+            for (List<String> combo : combos) {
+                if (combo == null || combo.isEmpty()) {
+                    continue;
+                }
+                target.add(String.join("|", combo));
+            }
+        }
     }
 
     private boolean hasSourceEntry(Set<String> entrySet, String className) {
