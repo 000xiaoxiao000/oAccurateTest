@@ -234,21 +234,38 @@
 
         var $sourceContainer = $('.source-container');
 
+        function isSourceContainerVisible() {
+            if (!$sourceContainer.length) {
+                return false;
+            }
+
+            var rect = $sourceContainer[0].getBoundingClientRect();
+            var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+            return rect.top < viewportHeight && rect.bottom > 0;
+        }
+
         function checkBackToTopVisible() {
-            if ($sourceContainer.length && $(window).scrollTop() > $sourceContainer.offset().top - $(window).height() * 0.5) {
+            if (isSourceContainerVisible()) {
                 $('#backToTop').addClass('visible');
             } else {
                 $('#backToTop').removeClass('visible');
             }
         }
 
-        // 滚动监听
-        $(window).on('scroll.backToTop hashchange.backToTop', function() {
+        // 滚动或窗口变化时，源码区域进入视口就显示按钮
+        $(window).on('scroll.backToTop resize.backToTop hashchange.backToTop', function() {
             checkBackToTopVisible();
         });
 
-        // 点击"查看代码"锚点跳转后也要显示
+        // 点击"查看代码"时先立即显示，跳转完成后再按实际位置校准
         $('a[href^="#method_"]').on('click.backToTop', function() {
+            $('#backToTop').addClass('visible');
+            setTimeout(checkBackToTopVisible, 50);
+        });
+
+        // 鼠标滚轮进入源码区域时立即显示按钮
+        $sourceContainer.on('wheel.backToTop mousewheel.backToTop DOMMouseScroll.backToTop', function() {
+            $('#backToTop').addClass('visible');
             setTimeout(checkBackToTopVisible, 50);
         });
 
@@ -257,7 +274,9 @@
 
         $('#backToTop').on('click', function(e) {
             e.preventDefault();
-            $('html, body').stop().animate({scrollTop: 0}, 400);
+            $('html, body').stop().animate({scrollTop: 0}, 400, function() {
+                $('#backToTop').removeClass('visible');
+            });
             return false;
         });
 
