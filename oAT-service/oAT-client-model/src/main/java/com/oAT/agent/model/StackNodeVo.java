@@ -1,7 +1,6 @@
 package com.oAT.agent.model;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,10 +26,6 @@ public class StackNodeVo implements java.io.Serializable {
     //执行到的分支数
     private ArrayList<Integer> executeBranch = new ArrayList<>(4);
 
-    //条件覆盖率
-    //执行到的条件数,map<分支行，第几个条件>
-    private Map<String, List<String>> executeCondition = new HashMap<>(8);   //分支中的执行到的条件
-
     /**
      * MC/DC（修订的条件/判定覆盖）覆盖率数据
      * <p>
@@ -44,7 +39,7 @@ public class StackNodeVo implements java.io.Serializable {
      * <p>
      * 替代旧的 execBranchConditionIsTrue 字段。
      */
-    private Map<String, List<List<String>>> mcdcCoverage = new HashMap<>(8);
+    private Map<String, List<List<String>>> mcdcCoverage;
 
     /**
      * 圈复杂度
@@ -186,14 +181,6 @@ public class StackNodeVo implements java.io.Serializable {
 
     public void setExecuteBranch(ArrayList<Integer> executeBranch) {
         this.executeBranch = executeBranch;
-    }
-
-    public Map<String, List<String>> getExecuteCondition() {
-        return executeCondition;
-    }
-
-    public void setExecuteCondition(Map<String, List<String>> executeCondition) {
-        this.executeCondition = executeCondition;
     }
 
     public Map<String, List<List<String>>> getMcdcCoverage() {

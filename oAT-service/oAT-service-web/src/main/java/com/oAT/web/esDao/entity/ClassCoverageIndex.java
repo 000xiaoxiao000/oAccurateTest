@@ -9,6 +9,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 
 @Document(indexName = "class_coverage", type = "doc", shards = 2)
 public class ClassCoverageIndex implements Serializable {
@@ -70,6 +71,10 @@ public class ClassCoverageIndex implements Serializable {
         private List<Integer> totalLineNumbers;
         // Covered branch identifiers for idempotency
         private List<Integer> coveredBranchIds;
+        // All possible MC/DC combinations from static code
+        private Map<String, List<List<String>>> mcdcCoverage;
+        // MC/DC combinations observed in trace data
+        private Map<String, List<List<String>>> coveredMcdcCoverage;
 
         public String getMethodName() { return methodName; }
         public void setMethodName(String methodName) { this.methodName = methodName; }
@@ -93,6 +98,10 @@ public class ClassCoverageIndex implements Serializable {
         public void setTotalLineNumbers(List<Integer> totalLineNumbers) { this.totalLineNumbers = totalLineNumbers; }
         public List<Integer> getCoveredBranchIds() { return coveredBranchIds; }
         public void setCoveredBranchIds(List<Integer> coveredBranchIds) { this.coveredBranchIds = coveredBranchIds; }
+        public Map<String, List<List<String>>> getMcdcCoverage() { return mcdcCoverage; }
+        public void setMcdcCoverage(Map<String, List<List<String>>> mcdcCoverage) { this.mcdcCoverage = mcdcCoverage; }
+        public Map<String, List<List<String>>> getCoveredMcdcCoverage() { return coveredMcdcCoverage; }
+        public void setCoveredMcdcCoverage(Map<String, List<List<String>>> coveredMcdcCoverage) { this.coveredMcdcCoverage = coveredMcdcCoverage; }
     }
 
     public String getId() { return id; }

@@ -497,8 +497,6 @@ public class VersionItemControl {
                     codeRelationships.put(requestUrl, childNodes);
 
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
-
                         String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 

@@ -2,6 +2,7 @@ package com.oAT.web.control;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.oAT.agent.model.*;
+import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.control.entity.GraphView;
 import com.oAT.web.control.entity.Param;
 import com.oAT.web.control.entity.ResultNotified;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
+import java.io.Serializable;
 import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -67,17 +69,27 @@ public class SnapshotControl {
 
     @RequestMapping("/save")
     @ResponseBody
-    public ResultNotified doSave(@PathVariable String projectId, @SessionAttribute UserVo user, HttpSession session, Snapshot snapshot) {
+    public ResultNotified<SnapshotVo> doSave(@PathVariable String projectId, @SessionAttribute UserVo user, HttpSession session, Snapshot snapshot) {
         Assert.notNull(snapshot, "参数snapshot不能为空");
         Assert.notNull(snapshot.getTraceId(), "参数'traceId 不能为空'");
         Assert.notNull(snapshot.getProjectId(), "参数'projectId 不能为空'");
         snapshot.setProjectId(projectId);
         snapshot.setCreateUser(user.getId());
-        Map<String, TraceNode> nodes = (Map<String, TraceNode>) session.getAttribute("model-" + snapshot.getTraceId());
+        Object sessionNodes = session.getAttribute("model-" + snapshot.getTraceId());
+        Map<String, TraceNode> nodes = new LinkedHashMap<>();
+        if (sessionNodes instanceof Map) {
+            Map<?, ?> rawNodes = (Map<?, ?>) sessionNodes;
+            for (Map.Entry<?, ?> entry : rawNodes.entrySet()) {
+                if (entry.getKey() instanceof String && entry.getValue() instanceof TraceNode) {
+                    nodes.put((String) entry.getKey(), (TraceNode) entry.getValue());
+                }
+            }
+        }
         Assert.notNull(nodes, "参数'traceId 找不到'");
+        Assert.isTrue(!nodes.isEmpty(), "参数'traceId 找不到'");
 
         SnapshotVo vo = snapshotService.addSnapshot(snapshot, nodes.values());
-        ResultNotified result = new ResultNotified(true, "快照保存成功");
+        ResultNotified<SnapshotVo> result = new ResultNotified<>(true, "快照保存成功");
         result.setData(vo);
         return result;
     }
@@ -189,15 +201,11 @@ public class SnapshotControl {
                         currentAppId = traceNode.getApp().getAppId();
                     }
 
-                    // 加载该 appId 的全量静态数据
-                    Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup = Collections.emptyMap();
                     if (StringUtils.hasText(currentAppId)) {
                         classToAppId.putIfAbsent(null, currentAppId); // 用于后续静态数据加载标记
                     }
 
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
-
                         String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 
@@ -226,7 +234,6 @@ public class SnapshotControl {
             for (StaticSourceInfo si : staticInfos) {
                 if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
                 for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
-                    String className = si.getClassInfo().getClassName();
                     String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
                     // 只统计被覆盖过的方法的总数
                     if (methodCoveredLines.containsKey(mKey) || methodCoveredBranches.containsKey(mKey)) {
@@ -334,7 +341,7 @@ public class SnapshotControl {
         for (StaticSourceInfo si : staticInfos) {
             if (si.getClassInfo() != null && className.equals(si.getClassInfo().getClassName()) && si.getClassInfo().getMethodMaps() != null) {
                 for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
-                    String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                    String mKey = CoverageMethodKeyUtil.buildMethodKey(mInfo.getMethodName(), mInfo.getMethodDesc());
                     classStaticMethods.put(mKey, mInfo);
                 }
                 break;
@@ -351,14 +358,13 @@ public class SnapshotControl {
                 if (codeNodes != null) {
                     for (StackNodeVo sn : codeNodes) {
                         if (!sn.getClassName().equals(className)) continue;
-                        if (sn.getDoLines() != null && sn.getDoLines().contains(-1)) continue;
 
                         // 如果进入页面时 appId 为空（如历史快照未记录 appId），则从当前包含该类的链路节点中推断 appId
                         if (!StringUtils.hasText(appId) && traceNode.getApp() != null) {
                             appId = traceNode.getApp().getAppId();
                         }
 
-                        String methodKey = sn.getMethodName() + sn.getMethodDescriptor();
+                        String methodKey = CoverageMethodKeyUtil.buildMethodKey(sn.getMethodName(), sn.getMethodDescriptor());
                         ClassCoverageIndex.MethodCoverageDetail md = methodMap.computeIfAbsent(methodKey, k -> {
                             ClassCoverageIndex.MethodCoverageDetail newMd = new ClassCoverageIndex.MethodCoverageDetail();
                             newMd.setMethodName(sn.getMethodName());
@@ -372,6 +378,9 @@ public class SnapshotControl {
                             newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
                                     ? staticMethod.getCyclomaticComplexityMap() : 0);
                             newMd.setCoveredLineNumbers(new ArrayList<>());
+                            newMd.setMcdcCoverage(McdcCoverageSupport.deepCopy(
+                                    staticMethod != null ? staticMethod.getMcdcCoverage() : null));
+                            newMd.setCoveredMcdcCoverage(null);
                             return newMd;
                         });
 
@@ -382,6 +391,8 @@ public class SnapshotControl {
                             md.setCoveredLines(md.getCoveredLineNumbers().size());
                             md.setCovered(md.getCoveredLines() > 0);
                         }
+                        md.setCoveredMcdcCoverage(McdcCoverageSupport.mergeCoverage(
+                                md.getCoveredMcdcCoverage(), sn.getMcdcCoverage()));
                     }
                 }
             }
@@ -515,17 +526,17 @@ public class SnapshotControl {
 
     @RequestMapping("/doDelete")
     @ResponseBody
-    public ResultNotified doDelete(@PathVariable String projectId, @SessionAttribute UserVo user, String id) {
+    public ResultNotified<Serializable> doDelete(@PathVariable String projectId, @SessionAttribute UserVo user, String id) {
         snapshotService.deleteById(id);
-        return new ResultNotified(true, "快照删除成功");
+        return new ResultNotified<>(true, "快照删除成功");
     }
 
 
     @RequestMapping("/doUpdate")
     @ResponseBody
-    public ResultNotified doUpdate(@PathVariable String projectId, String id, Snapshot snapshot) {
+    public ResultNotified<Serializable> doUpdate(@PathVariable String projectId, String id, Snapshot snapshot) {
         snapshotService.doUpdate(id, snapshot);
-        return new ResultNotified(true, "快照更新成功");
+        return new ResultNotified<>(true, "快照更新成功");
     }
 
     @RequestMapping("/getTraceGraph")
@@ -533,7 +544,9 @@ public class SnapshotControl {
     public GraphView getTraceGraph(String traceId, HttpSession session) {
         HashMap<String, TraceNode> nodes = new HashMap<>();
         Collection<TraceNode> list = snapshotService.getTraceNodes(traceId);
-        Assert.isTrue(list != null && !list.isEmpty(), "未找到Trace Node traceId=" + traceId);
+        if (list == null || list.isEmpty()) {
+            throw new IllegalArgumentException("未找到Trace Node traceId=" + traceId);
+        }
         for (TraceNode node : list) {
             nodes.put(node.getTraceNodeId(), node);
         }
@@ -544,17 +557,17 @@ public class SnapshotControl {
     // 共享快照，开启
     @RequestMapping("openShare/{id}")
     @ResponseBody
-    public ResultNotified doShareSnapshot(@SessionAttribute UserVo user, @PathVariable String id) {
+    public ResultNotified<Serializable> doShareSnapshot(@SessionAttribute UserVo user, @PathVariable String id) {
         snapshotService.setShareState(user.getId(), id, true);
-        return new ResultNotified(true);
+        return new ResultNotified<>(true);
     }
 
     // 共享快照，关闭
     @RequestMapping("closeShare/{id}")
     @ResponseBody
-    public ResultNotified doCloseSnapshot(@SessionAttribute UserVo user, @PathVariable String id) {
+    public ResultNotified<Serializable> doCloseSnapshot(@SessionAttribute UserVo user, @PathVariable String id) {
         snapshotService.setShareState(user.getId(), id, false);
-        return new ResultNotified(true);
+        return new ResultNotified<>(true);
     }
 
 }

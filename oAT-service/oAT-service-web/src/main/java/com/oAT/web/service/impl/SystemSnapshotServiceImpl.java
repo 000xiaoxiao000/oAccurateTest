@@ -296,8 +296,6 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                     StackNodeVo[] codeNodes = ((HttpTraceNode) node).getCodeNodes();
                     if (codeNodes != null) {
                         for (StackNodeVo sn : codeNodes) {
-                            if (sn.getDoLines() != null && sn.getDoLines().contains(-1)) continue;
-
                             String methodKey = sn.getMethodName() + "#" + sn.getMethodDescriptor();
                             Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(sn.getClassName());
                             if (classMethodMap == null) continue;

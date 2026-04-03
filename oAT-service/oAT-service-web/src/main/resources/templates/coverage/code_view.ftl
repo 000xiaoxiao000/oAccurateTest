@@ -32,13 +32,83 @@
         /* 调整源码显示样式 */
         .source-container pre { margin: 0; font-size: 13px; line-height: 18px; }
         /* 表格列宽 */
-        .col-name { width: 30%; }
-        .col-pct { width: 20%; }
-        .col-jump { width: 15%; }
-        .col-status { width: 15%; }
+        .col-name { width: 24%; }
+        .col-pct { width: 16%; }
+        .col-mcdc { width: 28%; }
+        .col-jump { width: 8%; }
+        .col-status { width: 8%; }
+        .mcdc-cell { font-size: 12px; line-height: 1.6; }
+        .mcdc-summary { color: #666; margin-bottom: 6px; }
+        .mcdc-summary strong { color: #333; }
+        .mcdc-progress { margin: 4px 0 8px !important; min-width: 120px; }
+        .mcdc-details summary { cursor: pointer; color: #1e70bf; outline: none; }
+        .mcdc-details[open] summary { margin-bottom: 6px; }
+        .mcdc-entry + .mcdc-entry { margin-top: 6px; }
+        .mcdc-line { font-weight: 600; color: #1e70bf; }
+        .mcdc-group { margin-top: 2px; }
+        .mcdc-group .ui.label { margin-bottom: 4px; }
     </style>
 </head>
 <body>
+<#function mcdcComboText combo>
+    <#assign values = []>
+    <#list combo as item>
+        <#assign values = values + [(((item!"")?lower_case) == "true")?then("T", "F")]>
+    </#list>
+    <#return values?join("/")>
+</#function>
+<#macro renderMcdcCell totalMap coveredMap>
+    <#assign totalSize = (totalMap??)?then(totalMap?size, 0)>
+    <#assign coveredSize = (coveredMap??)?then(coveredMap?size, 0)>
+    <div class="mcdc-cell">
+        <#if totalSize == 0>
+            <span class="ui tiny basic label">无分支</span>
+        <#else>
+            <#assign totalComboCount = 0>
+            <#assign coveredComboCount = 0>
+            <#list totalMap?keys as branchLine>
+                <#assign totalComboCount = totalComboCount + (totalMap[branchLine]![])?size>
+                <#assign coveredComboCount = coveredComboCount + ((coveredMap??)?then(coveredMap[branchLine]![], []))?size>
+            </#list>
+            <#assign comboPct = (totalComboCount > 0)?then(coveredComboCount * 100.0 / totalComboCount, 0)>
+            <div class="mcdc-summary">
+                分支行 <strong>${coveredSize}/${totalSize}</strong>，
+                组合 <strong>${coveredComboCount}/${totalComboCount}</strong>
+                (${comboPct?string("0.0")}%)，
+                组合使用 <code>T/F</code> 简写
+            </div>
+            <div class="ui tiny progress mcdc-progress <#if comboPct == 100>success<#elseif comboPct gt 0>warning<#else>error</#if>" data-percent="${comboPct?string("0.0")}">
+                <div class="bar" style="width: ${comboPct?string("0.0")}%"></div>
+            </div>
+            <details class="mcdc-details">
+                <summary>查看 MC/DC 明细</summary>
+                <#list totalMap?keys as branchLine>
+                    <#assign staticCombos = totalMap[branchLine]![]>
+                    <#assign coveredCombos = (coveredMap??)?then(coveredMap[branchLine]![], [])>
+                    <div class="mcdc-entry">
+                        <div class="mcdc-line">L${branchLine} (${coveredCombos?size}/${staticCombos?size})</div>
+                        <div class="mcdc-group">
+                            <span class="ui mini teal basic label">静态</span>
+                            <#list staticCombos as combo>
+                                <span class="ui mini basic label">${mcdcComboText(combo)}</span>
+                            </#list>
+                        </div>
+                        <div class="mcdc-group">
+                            <span class="ui mini olive basic label">已命中</span>
+                            <#if coveredCombos?size gt 0>
+                                <#list coveredCombos as combo>
+                                    <span class="ui mini basic label">${mcdcComboText(combo)}</span>
+                                </#list>
+                            <#else>
+                                <span class="ui mini basic label">无</span>
+                            </#if>
+                        </div>
+                    </div>
+                </#list>
+            </details>
+        </#if>
+    </div>
+</#macro>
 <div class="ui container" style="width: 95%;">
     <div class="ui breadcrumb" style="margin-bottom: 20px;">
         <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
@@ -128,6 +198,7 @@
                     <th class="col-name">方法名称</th>
                     <th class="col-pct">代码行覆盖率</th>
                     <th class="col-pct">分支覆盖率</th>
+                    <th class="col-mcdc">MC/DC</th>
                     <th class="col-jump">跳转</th>
                     <th class="col-status">覆盖状态</th>
                 </tr>
@@ -153,6 +224,9 @@
                         </div>
                     </td>
                     <td>
+                        <@renderMcdcCell totalMap=(m.mcdcCoverage!{}) coveredMap=(m.coveredMcdcCoverage!{}) />
+                    </td>
+                    <td>
                         <a href="#method_${m?index}" class="ui mini blue basic button">查看代码</a>
                     </td>
                     <td>
@@ -165,7 +239,7 @@
                 </tr>
             </#list>
             <#else>
-                <tr><td colspan="5" class="center aligned">暂无方法覆盖数据</td></tr>
+                <tr><td colspan="6" class="center aligned">暂无方法覆盖数据</td></tr>
             </#if>
             </tbody>
         </table>

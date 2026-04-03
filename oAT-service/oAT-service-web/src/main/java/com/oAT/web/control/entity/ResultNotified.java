@@ -67,7 +67,7 @@ public class ResultNotified<T extends Serializable> implements Serializable {
         this.errorStack = errorStack;
     }
 
-    public Serializable getData() {
+    public T getData() {
         return data;
     }
 
