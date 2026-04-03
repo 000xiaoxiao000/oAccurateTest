@@ -38,7 +38,7 @@ public class GraphViewHelp {
         rootGraphNode.setTitle("浏览器");
         rootGraphNode.setSubTitle(httpRootNode.getClientIp() != null ? httpRootNode.getClientIp() : "unknown");
         rootGraphNode.setType("browser");
-        rootGraphNode.setState("200".equalsIgnoreCase(httpRootNode.getResponseCode()) ? "ok" : "error");
+        rootGraphNode.setState(isSuccessfulResponseCode(httpRootNode.getResponseCode()) ? "ok" : "error");
         rootGraphNode.setTips(httpRootNode.getRequestUrl());
         nodes.add(rootGraphNode);
         graphView.setShowDefaultNode(rootGraphNode);
@@ -128,6 +128,13 @@ public class GraphViewHelp {
             edge = null;
         }
         return edge;
+    }
+
+    private boolean isSuccessfulResponseCode(String responseCode) {
+        if (!StringUtils.hasText(responseCode)) {
+            return false;
+        }
+        return responseCode.trim().matches("2\\d\\d");
     }
 
     private TraceNode getTraceNode(String nodeId) {

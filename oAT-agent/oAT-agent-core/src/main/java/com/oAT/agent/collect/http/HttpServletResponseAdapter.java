@@ -16,8 +16,11 @@ public class HttpServletResponseAdapter {
         try {
             Method m = response.getClass().getMethod("getStatus");
             Object status = m.invoke(response);
-            if (status instanceof Integer) {
-                return (Integer) status;
+            if (status instanceof Number) {
+                return ((Number) status).intValue();
+            }
+            if (status instanceof String) {
+                return Integer.parseInt((String) status);
             }
         } catch (Throwable e) {
             // ignore
