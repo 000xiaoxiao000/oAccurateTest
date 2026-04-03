@@ -299,8 +299,10 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
             assignment.probeToMethodEntry.put(falseProbeIdx, methodEntryProbeIdx);
         }
 
-        // Store branch metadata for coverage aggregation
+        // Both branch probes belong to the same source line, so either path
+        // should count the conditional line as executed branch coverage.
         assignment.branchMetaMap.put(trueProbeIdx, new BranchMeta(currentLine));
+        assignment.branchMetaMap.put(falseProbeIdx, new BranchMeta(currentLine));
 
         // Generate instrumented branch code:
         // Original jump -> jumpTaken (true branch probe)
