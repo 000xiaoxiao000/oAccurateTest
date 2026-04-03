@@ -121,15 +121,46 @@ function doSelect(t) {
     $(t).toggleClass("focus");//设定当前行为选中行
 }
 
-function doSaveSnapshot(projectid) {
-    var resultInform = $.ajax({
-        url: "/p/" + projectid + "/snapshot/save", data: $("#newSnapshotForm").serialize() + "&traceId=" + selectTraceId, async: false
-    }).responseJSON;
-    if (resultInform.result) {
-        showToast(resultInform.message, 'success');
-    } else {
-        showToast(resultInform.errorMessage, 'error');
+function buildEncodedFormData($form, extraFields) {
+    var formArray = $form.serializeArray();
+    $.each(extraFields || {}, function (name, value) {
+        formArray.push({
+            name: name,
+            value: value == null ? '' : value
+        });
+    });
+    return $.param(formArray, true);
+}
+
+function doSaveSnapshot(projectid, onSuccess) {
+    if (!selectTraceId) {
+        showToast('请选择一条监控记录后再保存快照', 'error');
+        return $.Deferred().reject().promise();
     }
+
+    var $form = $("#newSnapshotForm");
+    return $.ajax({
+        url: "/p/" + projectid + "/snapshot/save",
+        type: "POST",
+        dataType: "json",
+        data: buildEncodedFormData($form, {traceId: selectTraceId})
+    }).done(function (resultInform) {
+        if (resultInform && resultInform.result) {
+            showToast(resultInform.message || '快照保存成功', 'success');
+            if (typeof onSuccess === 'function') {
+                onSuccess(resultInform);
+            }
+            return;
+        }
+
+        showToast((resultInform && (resultInform.errorMessage || resultInform.message)) || '快照保存失败', 'error');
+    }).fail(function (xhr) {
+        var errorMessage = '网络请求失败';
+        if (xhr && xhr.responseJSON) {
+            errorMessage = xhr.responseJSON.errorMessage || xhr.responseJSON.message || errorMessage;
+        }
+        showToast('快照保存失败: ' + errorMessage, 'error');
+    });
 }
 
 function openCreateSnapshot() {

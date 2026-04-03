@@ -186,15 +186,21 @@ public class MonitorControl {
         return "/monitor/createSystemSnapshot";
     }
 
-    @RequestMapping("/doSaveSystemSnapshot")
+    @PostMapping("/doSaveSystemSnapshot")
     @ResponseBody
     public ResultNotified<String> doSaveSystemSnapshot(SystemSnapshot snapshot, @PathVariable String projectId,
                                                        @SessionAttribute UserVo user,
                                                        String traceId) {
-        Map<String, TraceNode> nodes = getTraceNode(traceId);
-        snapshot.setSubTitle(((HttpTraceNode) nodes.get("0")).getRequestUrl());
-        systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
-        return new ResultNotified<>(true, "保存成功");
+        try {
+            Map<String, TraceNode> nodes = getTraceNode(traceId);
+            snapshot.setSubTitle(((HttpTraceNode) nodes.get("0")).getRequestUrl());
+            systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
+            return new ResultNotified<>(true, "保存成功");
+        } catch (Exception e) {
+            ResultNotified<String> result = new ResultNotified<>(false, "系统快照保存失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
     }
 
 }

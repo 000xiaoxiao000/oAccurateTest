@@ -1198,6 +1198,35 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         return result;
     }
 
+    private Map<String, List<Integer>> normalizeCoveredBranchConditionNumbers(Map<String, List<Integer>> total,
+                                                                              Map<String, List<Integer>> covered) {
+        if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
+            List<Integer> totalValues = entry.getValue();
+            if (totalValues == null || totalValues.isEmpty()) {
+                continue;
+            }
+            Set<Integer> allowed = new LinkedHashSet<>(totalValues);
+            List<Integer> coveredValues = covered.get(entry.getKey());
+            if (coveredValues == null || coveredValues.isEmpty()) {
+                continue;
+            }
+            LinkedHashSet<Integer> matched = new LinkedHashSet<>();
+            for (Integer value : coveredValues) {
+                if (value != null && allowed.contains(value)) {
+                    matched.add(value);
+                }
+            }
+            if (!matched.isEmpty()) {
+                normalized.put(entry.getKey(), new ArrayList<>(matched));
+            }
+        }
+        return normalized;
+    }
+
     private void appendBranchConditionNumbers(Map<String, LinkedHashSet<Integer>> target, Map<String, List<Integer>> source) {
         if (source == null || source.isEmpty()) {
             return;
@@ -1305,6 +1334,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             }
             Map<String, List<Integer>> coveredBranchConditionNumbers = mergeBranchConditionNumbers(
                     md.getCoveredBranchConditionNumbers(), sn.getExecuteBranchConditionMap());
+            coveredBranchConditionNumbers = normalizeCoveredBranchConditionNumbers(
+                    md.getTotalBranchConditionNumbers(), coveredBranchConditionNumbers);
             md.setCoveredBranchConditionNumbers(coveredBranchConditionNumbers);
             md.setCoveredBranchConditions(countBranchConditions(coveredBranchConditionNumbers));
             md.setBranchRate(calculateBranchRate(md.getCoveredBranchConditions(), md.getTotalBranchConditions()));
