@@ -362,7 +362,7 @@ public class VersionItemControl {
                             @PathVariable String appId,
                             String sourceFile,
                             String targetFile, String packageName,
-                            Model model) throws UnsupportedEncodingException {
+                            Model model) {
         AppVo appInfo = appService.getApp(appId);
         String jobId = versionService.startCompareJob(projectId, appInfo, packageName, sourceFile, targetFile);
         if (jobId == null || jobId.isEmpty()) {
@@ -462,7 +462,7 @@ public class VersionItemControl {
         List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId, appId);
 
         // 用于计算聚合指标
-        long totalMethods = 0;
+        long totalMethods;
         long coveredMethods = 0;
         long totalLines = 0;
         long coveredLines = 0;
@@ -775,14 +775,14 @@ public class VersionItemControl {
         if (diffs != null) {
             for (VersionCompareReport.Difference difference : diffs) {
                 if (difference == null) continue;
-                if (difference.getType().equals("class")) {
+                if ("class".equals(difference.getType())) {
                     if (differenceClass.containsKey(difference.getValue())) {
                         continue;
                     }
                     CompareResult r = new CompareResult(difference.getValue(),
                             CompareResult.Model.valueOf(difference.getModel()));
                     differenceClass.put(r.getClassName(), r);
-                } else if (difference.getType().equals("method")) {
+                } else if ("method".equals(difference.getType())) {
                     String raw = difference.getValue();
                     String className = null, methodName = null, desc = "";
                     if (raw != null) {
