@@ -5,21 +5,11 @@
     <#include "../common.ftl">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; }
-        .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; max-width: 100%; overflow-x: auto; overflow-y: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .method-list { margin-bottom: 25px; }
         .ui.progress { margin: 0; min-width: 80px; }
         .method-table td { vertical-align: middle !important; }
         .method-table .method-name { font-weight: 600; color: #1e70bf; }
-        .mcdc-cell { font-size: 12px; line-height: 1.6; }
-        .mcdc-summary { color: #666; margin-bottom: 6px; }
-        .mcdc-summary strong { color: #333; }
-        .mcdc-progress { margin: 4px 0 8px !important; min-width: 120px; }
-        .mcdc-details summary { cursor: pointer; color: #1e70bf; outline: none; }
-        .mcdc-details[open] summary { margin-bottom: 6px; }
-        .mcdc-entry + .mcdc-entry { margin-top: 6px; }
-        .mcdc-line { font-weight: 600; color: #1e70bf; }
-        .mcdc-group { margin-top: 2px; }
-        .mcdc-group .ui.label { margin-bottom: 4px; }
         #backToTop {
             position: fixed;
             bottom: 40px;
@@ -35,69 +25,11 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
         #backToTop:hover { background-color: #1678c2; }
-        .source-container pre { margin: 0; font-size: 13px; line-height: 18px; }
+        .source-container pre { margin: 0; font-size: 13px; line-height: 18px; min-width: 100%; }
+        .source-container pre > div { min-width: max-content; }
     </style>
 </head>
 <body>
-<#function mcdcComboText combo>
-    <#assign values = []>
-    <#list combo as item>
-        <#assign values = values + [(((item!"")?lower_case) == "true")?then("T", "F")]>
-    </#list>
-    <#return values?join("/")>
-</#function>
-<#macro renderMcdcCell totalMap coveredMap>
-    <#assign totalSize = (totalMap??)?then(totalMap?size, 0)>
-    <#assign coveredSize = (coveredMap??)?then(coveredMap?size, 0)>
-    <div class="mcdc-cell">
-        <#if totalSize == 0>
-            <span class="ui tiny basic label">无分支</span>
-        <#else>
-            <#assign totalComboCount = 0>
-            <#assign coveredComboCount = 0>
-            <#list totalMap?keys as branchLine>
-                <#assign totalComboCount = totalComboCount + (totalMap[branchLine]![])?size>
-                <#assign coveredComboCount = coveredComboCount + ((coveredMap??)?then(coveredMap[branchLine]![], []))?size>
-            </#list>
-            <#assign comboPct = (totalComboCount > 0)?then(coveredComboCount * 100.0 / totalComboCount, 0)>
-            <div class="mcdc-summary">
-                分支行 <strong>${coveredSize}/${totalSize}</strong>，
-                组合 <strong>${coveredComboCount}/${totalComboCount}</strong>
-                (${comboPct?string("0.0")}%)，
-                组合使用 <code>T/F</code> 简写
-            </div>
-            <div class="ui tiny progress mcdc-progress <#if comboPct == 100>success<#elseif comboPct gt 0>warning<#else>error</#if>" data-percent="${comboPct?string("0.0")}">
-                <div class="bar" style="width: ${comboPct?string("0.0")}%"></div>
-            </div>
-            <details class="mcdc-details">
-                <summary>查看 MC/DC 明细</summary>
-                <#list totalMap?keys as branchLine>
-                    <#assign staticCombos = totalMap[branchLine]![]>
-                    <#assign coveredCombos = (coveredMap??)?then(coveredMap[branchLine]![], [])>
-                    <div class="mcdc-entry">
-                        <div class="mcdc-line">L${branchLine} (${coveredCombos?size}/${staticCombos?size})</div>
-                        <div class="mcdc-group">
-                            <span class="ui mini teal basic label">静态</span>
-                            <#list staticCombos as combo>
-                                <span class="ui mini basic label">${mcdcComboText(combo)}</span>
-                            </#list>
-                        </div>
-                        <div class="mcdc-group">
-                            <span class="ui mini olive basic label">已命中</span>
-                            <#if coveredCombos?size gt 0>
-                                <#list coveredCombos as combo>
-                                    <span class="ui mini basic label">${mcdcComboText(combo)}</span>
-                                </#list>
-                            <#else>
-                                <span class="ui mini basic label">无</span>
-                            </#if>
-                        </div>
-                    </div>
-                </#list>
-            </details>
-        </#if>
-    </div>
-</#macro>
 <div class="ui container" style="width: 95%;">
     <div class="ui breadcrumb" style="margin-bottom: 20px;">
         <a class="section" href="/p/${project.id}/snapshot/my">我的快照</a>
@@ -126,7 +58,6 @@
                 <tr>
                     <th>方法名称</th>
                     <th class="center aligned">代码行覆盖率</th>
-                    <th>MC/DC</th>
                     <th class="center aligned">跳转</th>
                     <th class="center aligned">覆盖状态</th>
                 </tr>
@@ -143,9 +74,6 @@
                             <div class="label" style="font-size: 0.85em;">${m.coveredLines} / ${m.totalLines} (${linePct?string("0.00")}%)</div>
                         </div>
                     </td>
-                    <td>
-                        <@renderMcdcCell totalMap=(m.mcdcCoverage!{}) coveredMap=(m.coveredMcdcCoverage!{}) />
-                    </td>
                     <td class="center aligned">
                         <a href="#method_${m_index}" class="ui mini compact basic blue button">查看代码</a>
                     </td>
@@ -161,7 +89,7 @@
                 </tr>
             </#list>
             <#else>
-                <tr><td colspan="5" class="center aligned">暂无方法覆盖数据</td></tr>
+                <tr><td colspan="4" class="center aligned">暂无方法覆盖数据</td></tr>
             </#if>
             </tbody>
         </table>

@@ -4,8 +4,6 @@ import com.oAT.agent.common.Decompiler.ILanguageNames;
 import com.oAT.agent.common.Decompiler.JavaNames;
 import com.oAT.agent.common.JsonUtil;
 import com.oAT.agent.jacoco.instr.ClassInfo;
-import com.oAT.agent.model.McdcCoverageSupport;
-
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,7 +25,6 @@ public class CompactDataInput {
         public final Set<Integer> methodLineNumberMap;   // 行号集合（过滤负数）
         public final Map<Integer, Set<Integer>> branchLineAndConditionNumberMap; // 分支行 -> 条件个数集合
         public final Set<Integer> branchLineNumberSet;   // 该方法所有分支行号集合（来自 totalBranchMap）
-        public final Map<String, List<List<String>>> mcdcCoverage; // 分支行 -> 所有可能的 MC/DC 取值组合
         public final int totalBranchCount;               // 分支总数（= branchLineNumberSet.size()）
         public final int cyclomaticComplexityMap;   // 圈复杂度
         public final boolean recursiveMap;          // 是否递归
@@ -54,10 +51,6 @@ public class CompactDataInput {
             this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap == null
                     ? Collections.emptyMap()
                     : Collections.unmodifiableMap(filterBranchLineConditionMap(branchLineAndConditionNumberMap));
-            Map<String, List<List<String>>> staticMcdcCoverage = this.branchLineNumberSet.isEmpty()
-                    ? null
-                    : McdcCoverageSupport.buildAllCoverageFromConditionSets(this.branchLineAndConditionNumberMap);
-            this.mcdcCoverage = staticMcdcCoverage == null ? null : Collections.unmodifiableMap(staticMcdcCoverage);
             this.totalBranchCount = this.branchLineNumberSet.size();
             this.cyclomaticComplexityMap = cyclomaticComplexity;
             this.recursiveMap = recursive;
@@ -101,9 +94,6 @@ public class CompactDataInput {
                 }
             }
             m.put("branchLineAndConditionNumberMap", branchMapStr);
-            if (mcdcCoverage != null && !mcdcCoverage.isEmpty()) {
-                m.put("mcdcCoverage", mcdcCoverage);
-            }
             m.put("totalBranchCount", totalBranchCount);
             m.put("cyclomaticComplexityMap", cyclomaticComplexityMap);
             m.put("recursiveMap", recursiveMap);

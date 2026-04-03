@@ -468,9 +468,6 @@ public class SystemSnapshotControl {
                             newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
                                     ? staticMethod.getCyclomaticComplexityMap() : 0);
                             newMd.setCoveredLineNumbers(new ArrayList<>());
-                            newMd.setMcdcCoverage(McdcCoverageSupport.deepCopy(
-                                    staticMethod != null ? staticMethod.getMcdcCoverage() : null));
-                            newMd.setCoveredMcdcCoverage(null);
                             return newMd;
                         });
 
@@ -481,8 +478,6 @@ public class SystemSnapshotControl {
                             md.setCoveredLines(md.getCoveredLineNumbers().size());
                             md.setCovered(md.getCoveredLines() > 0);
                         }
-                        md.setCoveredMcdcCoverage(McdcCoverageSupport.mergeCoverage(
-                                md.getCoveredMcdcCoverage(), sn.getMcdcCoverage()));
                     }
                 }
             }

@@ -11,7 +11,7 @@
         .header-segment { background-color: #f9f9f9; margin-top: 10px; border-top: 2px solid #2185d0; overflow: hidden; }
         .header-title { margin: 0; min-width: 0; }
         .header-title .content { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
-        .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; max-width: 100%; overflow-x: auto; overflow-y: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .method-list { margin-bottom: 25px; }
         /* 进度条样式优化 */
         .ui.progress { margin: 0; min-width: 80px; }
@@ -38,86 +38,16 @@
         }
         #backToTop:hover { background-color: #1678c2; }
         /* 调整源码显示样式 */
-        .source-container pre { margin: 0; font-size: 13px; line-height: 18px; }
+        .source-container pre { margin: 0; font-size: 13px; line-height: 18px; min-width: 100%; }
+        .source-container pre > div { min-width: max-content; }
         /* 表格列宽 */
         .col-name { width: 24%; }
         .col-pct { width: 16%; }
-        .col-mcdc { width: 28%; }
         .col-jump { width: 8%; }
         .col-status { width: 8%; }
-        .mcdc-cell { font-size: 12px; line-height: 1.6; }
-        .mcdc-summary-label { display:inline-block; padding:1px 6px; border-radius:10px; font-size:11px; cursor:pointer; }
-        .mcdc-popup { display:none; position:absolute; right:0; top:calc(100% + 4px); z-index:20; background:#fff; border:1px solid #d9d9d9; border-radius:8px; padding:8px 10px; box-shadow:0 4px 12px rgba(0,0,0,0.15); white-space:normal; min-width:220px; max-width:min(420px, calc(100vw - 80px)); box-sizing:border-box; }
-        .mcdc-popup-title { font-size:12px; color:#666; margin-bottom:6px; }
-        .mcdc-group + .mcdc-group { margin-top:6px; }
-        .mcdc-group .ui.label { margin-bottom:4px; }
-        .mcdc-line-row { margin-top: 4px; }
-        .mcdc-line-row .ui.label { margin-bottom: 4px; }
     </style>
 </head>
 <body>
-<#function mcdcComboText combo>
-    <#assign values = []>
-    <#list combo as item>
-        <#assign values = values + [(((item!"")?lower_case) == "true")?then("T", "F")]>
-    </#list>
-    <#return values?join("/")>
-</#function>
-<#macro renderMcdcCell totalMap coveredMap>
-    <#assign totalSize = (totalMap??)?then(totalMap?size, 0)>
-    <#assign coveredSize = (coveredMap??)?then(coveredMap?size, 0)>
-    <div class="mcdc-cell">
-        <#if totalSize == 0>
-            <span class="ui tiny basic label">无分支</span>
-        <#else>
-            <#assign totalComboCount = 0>
-            <#assign coveredComboCount = 0>
-            <#list totalMap?keys as branchLine>
-                <#assign totalComboCount = totalComboCount + (totalMap[branchLine]![])?size>
-                <#assign coveredComboCount = coveredComboCount + ((coveredMap??)?then(coveredMap[branchLine]![], []))?size>
-            </#list>
-            <#assign comboPct = (totalComboCount > 0)?then(coveredComboCount * 100.0 / totalComboCount, 0)>
-            <#assign summaryStyle = (comboPct == 100)?then("background-color:#d4edda;color:#155724;border:1px solid #9fd5ad;",
-                (comboPct > 0)?then("background-color:#ffe5b4;color:#8a5a00;border:1px solid #f0c36d;",
-                "background-color:#f8d7da;color:#721c24;border:1px solid #f1aeb5;"))>
-            <span style="display:inline-block;position:relative;">
-                <span class="mcdc-summary-label" style="${summaryStyle}" title="点击显示/隐藏 MC/DC 明细"
-                      onclick="var detail=this.nextElementSibling;if(detail){detail.style.display=detail.style.display==='none'?'block':'none';}">
-                    MC/DC ${coveredComboCount}/${totalComboCount}
-                </span>
-                <span class="mcdc-popup">
-                    <div class="mcdc-popup-title">组合明细，使用 <code>T/F</code> 简写</div>
-                    <div class="mcdc-group">
-                        <span class="ui mini teal basic label">静态组合</span>
-                        <#list totalMap?keys as branchLine>
-                            <div class="mcdc-line-row">
-                                <span class="ui mini blue basic label">L${branchLine}</span>
-                                <#list totalMap[branchLine]![] as combo>
-                                    <span class="ui mini basic label">${mcdcComboText(combo)}</span>
-                                </#list>
-                            </div>
-                        </#list>
-                    </div>
-                    <div class="mcdc-group">
-                        <span class="ui mini olive basic label">已命中组合</span>
-                        <#if coveredSize gt 0>
-                            <#list coveredMap?keys as branchLine>
-                                <div class="mcdc-line-row">
-                                    <span class="ui mini blue basic label">L${branchLine}</span>
-                                    <#list coveredMap[branchLine]![] as combo>
-                                        <span class="ui mini basic label">${mcdcComboText(combo)}</span>
-                                    </#list>
-                                </div>
-                            </#list>
-                        <#else>
-                            <span class="ui mini basic label">无</span>
-                        </#if>
-                    </div>
-                </span>
-            </span>
-        </#if>
-    </div>
-</#macro>
 <div class="ui container" style="width: 95%;">
     <div class="ui breadcrumb page-breadcrumb">
         <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
@@ -208,7 +138,6 @@
                     <th class="col-name">方法名称</th>
                     <th class="col-pct">代码行覆盖率</th>
                     <th class="col-pct">分支覆盖率</th>
-                    <th class="col-mcdc">MC/DC</th>
                     <th class="col-jump">跳转</th>
                     <th class="col-status">覆盖状态</th>
                 </tr>
@@ -234,9 +163,6 @@
                         </div>
                     </td>
                     <td>
-                        <@renderMcdcCell totalMap=(m.mcdcCoverage!{}) coveredMap=(m.coveredMcdcCoverage!{}) />
-                    </td>
-                    <td>
                         <a href="#method_${m?index}" class="ui mini blue basic button">查看代码</a>
                     </td>
                     <td>
@@ -249,7 +175,7 @@
                 </tr>
             </#list>
             <#else>
-                <tr><td colspan="6" class="center aligned">暂无方法覆盖数据</td></tr>
+                <tr><td colspan="5" class="center aligned">暂无方法覆盖数据</td></tr>
             </#if>
             </tbody>
         </table>

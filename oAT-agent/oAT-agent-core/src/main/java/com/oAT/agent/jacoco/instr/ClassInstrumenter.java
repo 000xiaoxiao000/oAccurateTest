@@ -36,11 +36,7 @@ public class ClassInstrumenter extends ClassProbesVisitor {
     private final ClassInfo probeArrayStrategy;
     private String className;
     private int classAccess;
-    private int probeCount;
-    // Track which probe indices belong to which method, and which are branches
-    // These are populated during method visiting via ProbeInserter callbacks
     private int currentProbeIdx = 0;
-    private int currentMethodEntryProbeIdx = -1;
 
     /**
      * Emits an instrumented version of this class to the given class visitor.
@@ -87,8 +83,6 @@ public class ClassInstrumenter extends ClassProbesVisitor {
 
     @Override
     public void visitTotalProbeCount(final int count) {
-        this.probeCount = count;
-
         if (count == 0) {
             return;
         }
@@ -171,10 +165,7 @@ public class ClassInstrumenter extends ClassProbesVisitor {
             }
             for (Map.Entry<Integer, ProbeInserter.BranchMeta> entry : assignment.branchMetaMap.entrySet()) {
                 ProbeInserter.BranchMeta meta = entry.getValue();
-                probeInfo.setBranchInfo(entry.getKey(), meta.branchLine, meta.falseProbeIdx);
-            }
-            for (Map.Entry<Integer, Integer> entry : assignment.branchConditionCounts.entrySet()) {
-                probeInfo.setBranchConditionCount(entry.getKey(), entry.getValue());
+                probeInfo.setBranchInfo(entry.getKey(), meta.branchLine);
             }
 
             ClassProbeInfoRegistry.register(probeArrayStrategy.getClassId(), probeInfo);

@@ -64,9 +64,6 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 
     // Branch tracking (for metadata only, not for runtime recording)
     private final Set<Integer> branchLines = new HashSet<>();
-    private final Map<Integer, Integer> branchLineConditionCounter = new HashMap<>();
-    private final Map<Integer, Set<Integer>> execBranchLineAndConditionNumberMap = new HashMap<>();
-
     // Probe index for the current method's entry probe
     private int methodEntryProbeIdx = -1;
 
@@ -77,9 +74,6 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     private boolean isRecursive;
     private boolean isAsync;
     private int execMethodLineNumber = -1;
-
-    // Branch probe pair tracking for MC/DC
-    private final Map<Integer, BranchMeta> currentBranchMetaMap = new LinkedHashMap<>();
 
     // ========== Static probe assignment storage (per-class) ==========
     // Cleared by ClassInstrumenter.visitTotalProbeCount() after registration
@@ -107,15 +101,13 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     }
 
     /**
-     * Branch metadata for ClassProbeInfo registration (MC/DC support).
+     * Branch metadata for ClassProbeInfo registration.
      */
     static class BranchMeta {
         final int branchLine;
-        final int falseProbeIdx;
 
-        BranchMeta(int branchLine, int falseProbeIdx) {
+        BranchMeta(int branchLine) {
             this.branchLine = branchLine;
-            this.falseProbeIdx = falseProbeIdx;
         }
     }
 
@@ -128,7 +120,6 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
         final Map<Integer, Integer> probeToMethodEntry = new LinkedHashMap<>();
         final Map<Integer, MethodMeta> methodMetaMap = new LinkedHashMap<>();
         final Map<Integer, BranchMeta> branchMetaMap = new LinkedHashMap<>();
-        final Map<Integer, Integer> branchConditionCounts = new LinkedHashMap<>();
     }
 
     /**
@@ -261,16 +252,13 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     }
 
     /**
-     * Insert branch probes for MC/DC coverage.
+     * Insert branch probes for branch coverage.
      * <p>
      * For each branch (if/else), we insert TWO probes:
      * <ul>
      *   <li>True branch probe: executed when condition is true</li>
      *   <li>False branch probe: executed when condition is false</li>
      * </ul>
-     * These two probes at the same branch line form a MC/DC pair.
-     * MC/DC requires that each condition independently affects the outcome,
-     * which is determined by analyzing multiple test runs on the service side.
      * </p>
      */
     @Override
@@ -292,17 +280,6 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 
         // Record branch line
         this.branchLines.add(currentLine);
-        this.execBranchLineAndConditionNumberMap.computeIfAbsent(currentLine, v -> {
-            return new HashSet<>();
-        });
-
-        // Track condition count for this branch line (for MC/DC metadata)
-        Set<Integer> conds = this.clazzInfo.getBranchLineAndConditionNumberMap().get(currentLine);
-        int totalConds = (conds != null) ? conds.size() : 0;
-        if (totalConds == 0) totalConds = 1;
-
-        int conditionIdx = branchLineConditionCounter.getOrDefault(currentLine, 0) + 1;
-        branchLineConditionCounter.put(currentLine, conditionIdx);
 
         ProbeAssignment assignment = PROBE_ASSIGNMENT.get();
 
@@ -322,12 +299,8 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
             assignment.probeToMethodEntry.put(falseProbeIdx, methodEntryProbeIdx);
         }
 
-        // Store branch metadata (true -> false pair)
-        currentBranchMetaMap.put(trueProbeIdx, new BranchMeta(currentLine, falseProbeIdx));
-        assignment.branchMetaMap.put(trueProbeIdx, new BranchMeta(currentLine, falseProbeIdx));
-
-        // Record branch condition count for MC/DC
-        assignment.branchConditionCounts.put(currentLine, totalConds);
+        // Store branch metadata for coverage aggregation
+        assignment.branchMetaMap.put(trueProbeIdx, new BranchMeta(currentLine));
 
         // Generate instrumented branch code:
         // Original jump -> jumpTaken (true branch probe)

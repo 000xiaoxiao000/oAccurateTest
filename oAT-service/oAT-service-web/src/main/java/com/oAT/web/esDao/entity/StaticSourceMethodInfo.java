@@ -21,7 +21,6 @@ public class StaticSourceMethodInfo implements Serializable {
     private List<Integer> methodLineNumberMap;
     private List<Integer> branchLineNumberSet;
     private Map<String, List<Integer>> branchLineAndConditionNumberMap;
-    private Map<String, List<List<String>>> mcdcCoverage;
     private Integer totalBranchCount;
     private Integer cyclomaticComplexityMap;
     private Boolean recursiveMap;
@@ -76,14 +75,6 @@ public class StaticSourceMethodInfo implements Serializable {
 
     public Integer getTotalBranchCount() {
         return totalBranchCount;
-    }
-
-    public Map<String, List<List<String>>> getMcdcCoverage() {
-        return mcdcCoverage;
-    }
-
-    public void setMcdcCoverage(Map<String, List<List<String>>> mcdcCoverage) {
-        this.mcdcCoverage = mcdcCoverage;
     }
 
     public void setTotalBranchCount(Integer totalBranchCount) {
