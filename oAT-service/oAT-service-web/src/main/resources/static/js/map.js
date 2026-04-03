@@ -103,10 +103,10 @@ function buildMap(data) {
             }
             previousTapStamp = currentTapStamp;
 
-            //隐藏节点信息框
-            document.getElementById('bottom_nodeInfo').style.display = 'none';
-            //隐藏代码详情框
-            document.getElementById('codemirror-container').style.display = 'none';
+            // 只在点击空白画布时隐藏底部信息框
+            if (event.target === cy) {
+                document.getElementById('bottom_nodeInfo').style.display = 'none';
+            }
         });
 
         // 选中节点后

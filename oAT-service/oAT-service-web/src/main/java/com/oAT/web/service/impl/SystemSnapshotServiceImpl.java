@@ -217,13 +217,10 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     private void saveTraceNode(Collection<TraceNode> nodes) {
         List<TraceNodeIndex> list = new ArrayList<>();
         for (TraceNode node : nodes) {
-            TraceNodeIndex nodeIndex = new TraceNodeIndex(node);
-            if (!traceNodeRepository.existsById(nodeIndex.getId())) {
-                list.add(nodeIndex);
-            }
+            list.add(new TraceNodeIndex(node));
         }
 
-        // 批量保存 TraceNode
+        // 批量保存 TraceNode。对同一个 traceId_nodeId 执行覆盖保存，避免旧节点缺失请求参数等字段。
         if (!list.isEmpty()) {
             traceNodeRepository.saveAll(list);
         }

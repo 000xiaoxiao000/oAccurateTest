@@ -98,9 +98,6 @@ public class StackCodeLayer implements ImageLayer {
         String classSimpleName = ClassUtil.getClassSimpleName(className);
         ImageData imageData = new ImageData(className + " " + node.getMethodName());
 
-        // 计算总执行行数和总行数
-        float doLinesSum = node.getDoLines() == null ? 0 : node.getDoLines().stream().mapToInt(Integer::intValue).sum();
-
         // 从全量静态数据获取总数
         String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
         Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(node.getClassName());
@@ -115,15 +112,17 @@ public class StackCodeLayer implements ImageLayer {
                 branchTotalList = staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList();
             }
         }
-        float lineTotalSum = lineTotalList.stream().mapToInt(Integer::intValue).sum();
-        int coveragePercent = lineTotalSum == 0 ? 0 : (int) (doLinesSum * 100.0 / lineTotalSum);
 
-        imageData.name = classSimpleName + " " + methodName + " " + coveragePercent + "%";
-        imageData.doLines = node.getDoLines();
+        List<Integer> executedLines = node.getDoLines() == null ? Collections.emptyList() : node.getDoLines();
+        int executedLineCount = new LinkedHashSet<>(executedLines).size();
+        int totalLineCount = new LinkedHashSet<>(lineTotalList).size();
+        float coveragePercent = totalLineCount == 0 ? 0 : (float) executedLineCount * 100 / totalLineCount;
+
+        imageData.name = classSimpleName + " " + methodName + " " + Math.round(coveragePercent) + "%";
+        imageData.doLines = new ArrayList<>(executedLines);
         imageData.lineTotal = new ArrayList<>(lineTotalList);
 
-        // 避免除以0
-        imageData.coverageRate = lineTotalSum == 0 ? 0 : doLinesSum / lineTotalSum;
+        imageData.coverageRate = coveragePercent;
         imageData.executeMethodTotal = node.getExecuteMethodTotal();
         imageData.methodTotal = null; // 总数来自全量静态数据，此处不再从 StackNodeVo 获取
         imageData.executebranch = node.getExecuteBranch();

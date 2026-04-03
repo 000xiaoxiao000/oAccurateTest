@@ -146,7 +146,9 @@ public class MapControl {
             List<ImageElement> imageElements = new ArrayList<>();
             imageElements.add(element);
 
-            StackCodeLayer codeLayer = new StackCodeLayer(((HttpTraceNode) traceNode).getCodeNodes(), snapshotId, null);
+            String appId = traceNode.getApp() != null ? traceNode.getApp().getAppId() : null;
+            StackCodeLayer codeLayer = new StackCodeLayer(((HttpTraceNode) traceNode).getCodeNodes(), snapshotId,
+                    buildStaticMethodLookup(appId));
             imageElements.addAll(codeLayer.elements());
 
             return imageElements;

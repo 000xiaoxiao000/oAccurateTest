@@ -315,7 +315,7 @@
                 <td>${item.type}</td>
                 <td>${item.serverName}
                     <#if item.nodeId=="0">
-                        <i class="ui icon code" onclick="openCodeMap('${item.traceId}')" title="代码关系图层"></i>
+                        <i class="ui icon code" onclick="event.stopPropagation(); openCodeMap('${item.traceId}'); return false;" title="代码关系图层"></i>
                     </#if></td>
                 <#if item.appName=='redis'>
                     <td>0 ms</td>
