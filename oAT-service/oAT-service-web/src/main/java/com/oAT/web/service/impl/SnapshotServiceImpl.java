@@ -29,16 +29,12 @@ public class SnapshotServiceImpl implements SnapshotService{
     @Override
     public SnapshotVo addSnapshot(Snapshot snapshot, Collection<TraceNode> nodes) {
 
-        // 判断 TraceNode 是否已经存在？
         List<TraceNodeIndex> list = new ArrayList<>();
         for (TraceNode node : nodes) {
-            TraceNodeIndex nodeIndex = new TraceNodeIndex(node);
-            if (!traceNodeRepository.existsById(nodeIndex.getId())) {
-                list.add(nodeIndex);
-            }
+            list.add(new TraceNodeIndex(node));
         }
 
-        // 批量保存 TraceNode
+        // 批量保存 TraceNode。对同一个 traceId_nodeId 执行覆盖保存，避免旧节点缺失请求参数等字段。
         if (!list.isEmpty()) {
             traceNodeRepository.saveAll(list);
         }

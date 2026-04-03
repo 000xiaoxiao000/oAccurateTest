@@ -25,9 +25,11 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -37,6 +39,7 @@ import java.io.StringReader;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
+import java.nio.charset.StandardCharsets;
 
 import org.springframework.data.redis.core.RedisTemplate;
 import java.util.stream.Collectors;
@@ -60,6 +63,8 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
     private RedisTemplate<String, Object> redisTemplate;
 
     private static final String SESSIONS_KEY_PREFIX = "oAT:sessions:";
+    private static final String STATIC_DATA_CACHE_KEY_PREFIX = "oAT:static-data:";
+    private static final long STATIC_DATA_CACHE_VALIDITY_MILLIS = TimeUnit.MINUTES.toMillis(30);
 
     @Autowired
     AppService appService;
@@ -77,6 +82,10 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    @Qualifier("coverageExecutor")
+    private Executor coverageExecutor;
 
     @Override
     public void afterPropertiesSet() {
@@ -272,24 +281,72 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
     }
 
     @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+    public void setApplicationContext(@NonNull ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
     }
 
     @Override
     public void heartbeat(String sessionId, String appId, Long timesTamp) {
         ClientSessionVo vo = getClientSession(sessionId);
-        Assert.isTrue(vo != null, "找不到指定客户端session id=" + sessionId);
+        Assert.notNull(vo, "找不到指定客户端session id=" + sessionId);
         vo.setLastHeartbeatTime(System.currentTimeMillis());
         redisTemplate.opsForValue().set(SESSIONS_KEY_PREFIX + sessionId, vo, sessionClearValidity, TimeUnit.MILLISECONDS);
     }
 
     @Override
-    public void saveStaticData(String appId, JsonNode data) {
-        if (org.apache.commons.lang3.StringUtils.isBlank(appId) || data == null) {
+    public void saveStaticData(String appId, String data) {
+        if (org.apache.commons.lang3.StringUtils.isBlank(appId) || org.apache.commons.lang3.StringUtils.isBlank(data)) {
+            return;
+        }
+        String cacheKey = cacheStaticData(appId, data);
+        int payloadBytes = data.getBytes(StandardCharsets.UTF_8).length;
+        logger.info("静态源码缓存写入成功, appId={}, cacheKey={}, payloadBytes={}, ttlMinutes={}",
+                appId, cacheKey, payloadBytes, TimeUnit.MILLISECONDS.toMinutes(STATIC_DATA_CACHE_VALIDITY_MILLIS));
+        coverageExecutor.execute(() -> persistStaticDataFromCache(appId, cacheKey));
+        logger.info("静态源码异步落 ES 已投递, appId={}, cacheKey={}", appId, cacheKey);
+    }
+
+    private String cacheStaticData(String appId, String data) {
+        String cacheKey = STATIC_DATA_CACHE_KEY_PREFIX + appId + ":" + System.currentTimeMillis() + ":" + UUID.randomUUID();
+        redisTemplate.opsForValue().set(Objects.requireNonNull(cacheKey), Objects.requireNonNull(data),
+                STATIC_DATA_CACHE_VALIDITY_MILLIS, TimeUnit.MILLISECONDS);
+        return cacheKey;
+    }
+
+    private void persistStaticDataFromCache(String appId, String cacheKey) {
+        long startTime = System.currentTimeMillis();
+        Object cachedPayload = redisTemplate.opsForValue().get(Objects.requireNonNull(cacheKey));
+        if (!(cachedPayload instanceof String) || !StringUtils.hasText((String) cachedPayload)) {
+            logger.warn("静态源码缓存不存在或为空, appId={}, cacheKey={}", appId, cacheKey);
             return;
         }
 
+        String payload = (String) cachedPayload;
+        JsonNode data;
+        try {
+            data = objectMapper.readTree(payload);
+        } catch (Exception e) {
+            logger.error("解析静态源码缓存失败, appId={}, cacheKey={}", appId, cacheKey, e);
+            return;
+        }
+
+        int classCount = data.size();
+        logger.info("静态源码开始落 ES, appId={}, cacheKey={}, classCount={}, payloadBytes={}",
+                appId, cacheKey, classCount, payload.getBytes(StandardCharsets.UTF_8).length);
+        try {
+            StaticDataPersistStats stats = persistStaticDataToEs(appId, data);
+            redisTemplate.delete(Objects.requireNonNull(cacheKey));
+            logger.info("静态源码落 ES 完成, appId={}, cacheKey={}, classCount={}, created={}, updated={}, skipped={}, failed={}, elapsedMs={}",
+                    appId, cacheKey, classCount, stats.createdCount, stats.updatedCount, stats.skippedCount,
+                    stats.failedCount, System.currentTimeMillis() - startTime);
+        } catch (Exception e) {
+            logger.error("静态源码缓存落库 ES 失败, appId={}, cacheKey={}, classCount={}, elapsedMs={}",
+                    appId, cacheKey, classCount, System.currentTimeMillis() - startTime, e);
+        }
+    }
+
+    private StaticDataPersistStats persistStaticDataToEs(String appId, JsonNode data) {
+        StaticDataPersistStats stats = new StaticDataPersistStats();
         Iterator<Map.Entry<String, JsonNode>> fields = data.fields();
         while (fields.hasNext()) {
             Map.Entry<String, JsonNode> entry = fields.next();
@@ -302,16 +359,29 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
                         index = list.get(0);
                         index.setClassInfo(classInfo);
                         index.setUpdateTime(index.currentTimeToString());
+                        stats.updatedCount++;
                     } else {
                         index = new StaticSourceInfo(classInfo);
                         index.setAppId(appId);
+                        stats.createdCount++;
                     }
                     staticInfoRepository.save(index);
+                } else {
+                    stats.skippedCount++;
                 }
             } catch (Exception e) {
+                stats.failedCount++;
                 logger.error("保存静态源码信息失败 key:{}", entry.getKey(), e);
             }
         }
+        return stats;
+    }
+
+    private static final class StaticDataPersistStats {
+        private int createdCount;
+        private int updatedCount;
+        private int skippedCount;
+        private int failedCount;
     }
 
 }

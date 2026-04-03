@@ -139,11 +139,11 @@
                         <div class="description center aligned">
                             <div class="stat-value">${report.coveredBranches} / ${report.totalBranches}</div>
                             <div class="ui orange progress"
-                                 data-percent="<#if (report.totalBranches > 0)>${(report.coveredBranches / report.totalBranches * 100)?string("0.00")}<#else>0</#if>">
+                                 data-percent="<#if ((report.totalBranchConditions!0) > 0)>${((report.coveredBranchConditions!0) / (report.totalBranchConditions!0) * 100)?string("0.00")}<#else>0</#if>">
                                 <div class="bar"
-                                     style="width: <#if (report.totalBranches > 0)>${(report.coveredBranches / report.totalBranches * 100)?string("0.00")}<#else>0</#if>%"></div>
+                                     style="width: <#if ((report.totalBranchConditions!0) > 0)>${((report.coveredBranchConditions!0) / (report.totalBranchConditions!0) * 100)?string("0.00")}<#else>0</#if>%"></div>
                                 <div class="label">
-                                    覆盖率: <#if (report.totalBranches > 0)>${(report.coveredBranches / report.totalBranches * 100)?string("0.00")}%<#else>N/A</#if></div>
+                                    覆盖率: <#if ((report.totalBranchConditions!0) > 0)>${((report.coveredBranchConditions!0) / (report.totalBranchConditions!0) * 100)?string("0.00")}%<#else>N/A</#if></div>
                             </div>
                             <div>未覆盖数: ${report.totalBranches - report.coveredBranches}</div>
                         </div>
@@ -243,11 +243,11 @@
                             <div class="stat-value" style="color: #f2711c">${incReport.incCoveredBranches}
                                 / ${incReport.incTotalBranches}</div>
                             <div class="ui orange progress"
-                                 data-percent="<#if (incReport.incTotalBranches > 0)>${(incReport.incCoveredBranches / incReport.incTotalBranches * 100)?string("0.00")}<#else>0</#if>">
+                                 data-percent="<#if ((incReport.incTotalBranchConditions!0) > 0)>${((incReport.incCoveredBranchConditions!0) / (incReport.incTotalBranchConditions!0) * 100)?string("0.00")}<#else>0</#if>">
                                 <div class="bar"
-                                     style="width: <#if (incReport.incTotalBranches > 0)>${(incReport.incCoveredBranches / incReport.incTotalBranches * 100)?string("0.00")}<#else>0</#if>%"></div>
+                                     style="width: <#if ((incReport.incTotalBranchConditions!0) > 0)>${((incReport.incCoveredBranchConditions!0) / (incReport.incTotalBranchConditions!0) * 100)?string("0.00")}<#else>0</#if>%"></div>
                                 <div class="label">
-                                    覆盖率: <#if (incReport.incTotalBranches > 0)>${(incReport.incCoveredBranches / incReport.incTotalBranches * 100)?string("0.00")}%<#else>N/A</#if></div>
+                                    覆盖率: <#if ((incReport.incTotalBranchConditions!0) > 0)>${((incReport.incCoveredBranchConditions!0) / (incReport.incTotalBranchConditions!0) * 100)?string("0.00")}%<#else>N/A</#if></div>
                             </div>
                             <div>未覆盖数: ${incReport.incTotalBranches - incReport.incCoveredBranches}</div>
                         </div>

@@ -67,7 +67,7 @@
                 <div class="content">
                     <div class="header center aligned">分支覆盖率</div>
                     <div class="description center aligned">
-                        <#assign branchPct = (report.totalBranches > 0)?then(report.coveredBranches * 100.0 / report.totalBranches, 0)>
+                        <#assign branchPct = ((report.totalBranchConditions!0) > 0)?then((report.coveredBranchConditions!0) * 100.0 / (report.totalBranchConditions!0), 0)>
                         <div class="stat-value">${report.coveredBranches} / ${report.totalBranches}</div>
                         <div class="ui orange progress" data-percent="${branchPct?string("0")}">
                             <div class="bar" style="width: ${branchPct?string("0.00")}%"></div>
@@ -224,7 +224,7 @@
                     <b>${mPct?string("0.00")}%</b>
                 </td>
                 <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
-                <#assign bPct = (item.totalBranches > 0)?then(item.coveredBranches * 100.0 / item.totalBranches, 0)>
+                <#assign bPct = item.branchRate!0>
                 <td class="center aligned <#if bPct gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>">
                     <#if (item.totalBranches > 0)><b>${bPct?string("0.00")}%</b><#else>N/A</#if>
                 </td>

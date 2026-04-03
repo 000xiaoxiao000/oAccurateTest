@@ -1,8 +1,6 @@
 package com.oAT.web.control;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientInfoVo;
 import com.oAT.server.model.ClientSessionVo;
@@ -17,7 +15,9 @@ import org.springframework.stereotype.Controller;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.IOException;
@@ -75,8 +75,7 @@ public class ClientSessionControl {
         try {
             info = mapper.readValue(clientInfo, ClientInfoVo.class);
         } catch (IOException e) {
-            // TODO 编写ClientException
-            throw new RuntimeException("参数'clientInfo', json格式错误: ", e);
+            throw new IllegalArgumentException("参数'clientInfo' json格式错误", e);
         }
         result = sessionService.doLogin(info);
         return JsonWriter.objectToJson(result);
@@ -101,17 +100,11 @@ public class ClientSessionControl {
 
     @PostMapping("/uploadStaticData")
     @ResponseBody
-    public String uploadStaticData(String appId, String data) {
+    public String uploadStaticData(@RequestParam("appId") String appId,
+                                   @RequestBody String data) {
         Assert.notNull(appId, "param 'appId' must be not null");
         Assert.notNull(data, "param 'data' must be not null");
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode staticDataJson = null;
-        try {
-            staticDataJson = mapper.readTree(data);
-        } catch (JsonProcessingException e) {
-            logger.error("[processFrontEndCodeNodes]Failed to parse frontend coverage data: ", e);
-        }
-        sessionService.saveStaticData(appId, staticDataJson);
+        sessionService.saveStaticData(appId, data);
         return "succeed";
     }
 }

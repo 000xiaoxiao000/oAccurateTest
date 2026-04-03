@@ -8,9 +8,6 @@
     <script src="/js/cytoscape.min.js"></script>
     <script src="/js/map.js?v=${.now}"></script>
 
-    <link rel="stylesheet" href="/css/codemirror.min.css"/>
-    <script src="/js/codemirror.min.js"></script>
-    <script src="/js/xml.min.js"></script>
 </head>
 <body>
 
@@ -38,27 +35,6 @@
         z-index: 2;
         margin: 0px;
         padding: 7px 15px;
-    }
-
-    #codemirror-container {
-        position: absolute;
-        left: auto;
-        bottom: 0px;
-        top: 50px;
-        right: 0px;
-        z-index: 2;
-        margin: 5px;
-        padding: 0px 5px;
-    }
-
-    .CodeMirror {
-        height: 100%; /* 确保CodeMirror的高度充满其父容器 */
-        width: 100%; /* 确保宽度充满 */
-        /*overflow: auto; !* 如果内容过长，显示滚动条 *!*/
-    }
-
-    .highlighted-line {
-        background-color: #01fa16 !important;
     }
 
     #find_element {
@@ -169,20 +145,15 @@
     </div>
 </div>
 
-<div id="codemirror-container" class="ui label">
-</div>
-
 <script>
     // 初始化画布
     fetch("${dataUrl}").then(function (res) {
         //隐藏节点信息框
         document.getElementById('bottom_nodeInfo').style.display = 'none';
-        //隐藏代码详情框
-        document.getElementById('codemirror-container').style.display = 'none';
         return res.json();
     }).then(buildMap).then(function (cy) {
         // 点击节点显示详情
-        cy.on('select', 'node,edge', showDetail, showCodeTips);
+        cy.on('select', 'node,edge', showDetail);
         // 设置
         if (typeof isShowUnion != 'undefined') {
             cy.settings.subSelectUnionNode = isShowUnion;
@@ -200,6 +171,10 @@
     });
 
     // 显示概要信息
+    function getUniqueCount(value) {
+        return Array.isArray(value) ? new Set(value).size : 0;
+    }
+
     function showDetail(event) {
         var _styleWidth = document.body.clientWidth / 2 + 'px';
         document.getElementById('bottom_nodeInfo').style.display = 'inline-block';
@@ -218,24 +193,36 @@
             if (ele === cy) {
                 ele = cy.$(":selected")[0];
             }
+            var doLineCount = getUniqueCount(ele.data('doLines'));
+            var totalLineCount = getUniqueCount(ele.data('lineTotal'));
+            var executeBranchCount = getUniqueCount(ele.data('executebranch'));
+            var totalBranchCount = getUniqueCount(ele.data('branchTotal'));
+            var coverageRate = totalLineCount > 0 ? (doLineCount * 100.0 / totalLineCount).toFixed(2) + "%" : "0.00%";
+
             files[0] = {file: "id：", value: ele.id()};
-            if (ele.data.hasOwnProperty('name') && ele.data('name') != null) {
+            if (ele.data('name') != null) {
                 files[1] = {file: "名称：", value: ele.data('name')};
             }
-            if (ele.data.hasOwnProperty('describe') && ele.data('describe') != null) {
+            if (ele.data('describe') != null) {
                 files[2] = {file: "描述：", value: ele.data('describe')};
             }
             if (ele.data('doLines') != null) {
-                files[3] = {file: "执行到的代码行数：", value: ele.data('doLines')};
+                files[3] = {file: "执行到的代码行数：", value: doLineCount + " 行"};
             }
-            if (ele.data('lines') != null) {
-                files[4] = {file: "代码行数：", value: ele.data('lines')};
+            if (ele.data('lineTotal') != null) {
+                files[4] = {file: "代码总行数：", value: totalLineCount + " 行"};
             }
-            if (ele.data('coverageRate') != null) {
-                files[5] = {file: "代码覆盖率：", value: ele.data('coverageRate') + "%"};
+            if (ele.data('lineTotal') != null || ele.data('doLines') != null) {
+                files[5] = {file: "代码覆盖率：", value: coverageRate};
+            }
+            if (ele.data('executebranch') != null) {
+                files[6] = {file: "执行分支数：", value: executeBranchCount};
+            }
+            if (ele.data('branchTotal') != null) {
+                files[7] = {file: "分支总数：", value: totalBranchCount};
             }
             if (ele.data('cyclo') != null) {
-                files[6] = {file: "圈复杂度V(G)：", value: ele.data('cyclo')};
+                files[8] = {file: "圈复杂度V(G)：", value: ele.data('cyclo')};
             }
         }
         files.forEach(function (a) {
@@ -244,8 +231,6 @@
                 '<div class="header">' + a.file +
                 '</div>' + a.value + '</div>');
         });
-
-        showCodeTips(ele.id(), ele.data('doLines'));
     }
 
     // 显示右键菜单
@@ -260,16 +245,13 @@
             cy.elements(":selected").unselect();
             $("#content_menu .menu [targetElement='.context']").show();
         } else {
-            //如果当前节点未选中 切换选中状态
-            /*if (!e.target.selected()) {
-            }*/
             cy.elements(":selected").unselect();
-            e.target.select();
             $("#content_menu")[0].data = e.target.data();
             $("#content_menu .menu [targetElement]").filter(function (i, ele) {
                 const select = $(ele).attr('targetElement');
                 return e.target.is(select);
             }).show();
+            showDetail({target: e.target});
         }
 
         $("#content_menu .dropdown").dropdown('show');
@@ -300,76 +282,8 @@
                 e.preventDefault();
                 cy.nodes().select();
             }
-        } else if (e.ctrlKey && e.key.toLowerCase() === 'c') {
-            showCodeTips();
         }
     });
-
-    // 显示代码详情
-    function showCodeTips(id, doLines) {
-        if (id == null) {
-            return;
-        }
-        if (!Array.isArray(doLines) || doLines.length === 0) {
-            console.error('doLines is not a valid array or is empty');
-            return;
-        }
-        var _id = id
-        // 找到第一个空格的位置
-        const spaceIndex = _id.indexOf(' ');
-        // 分割字符串
-        const siClassName = _id.substring(0, spaceIndex);
-        const siMethodSignature = _id.substring(spaceIndex + 1);
-        var _className = siClassName;
-        var _methodName = siMethodSignature;
-        if (_className == null || _methodName == null) {
-            return;
-        }
-        var resultCode = $.ajax({
-            url: "/p/${project.id}/map/codeSearch",
-            type: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({className: _className, methodName: _methodName}),
-            async: false
-        }).responseText;
-        // console.log(resultCode);
-
-        var _styleWidth = document.body.clientWidth / 2 + 'px';
-        document.getElementById('codemirror-container').style.display = 'inline-block';
-        document.getElementById('codemirror-container').style.position = 'fixed';
-        document.getElementById('codemirror-container').style.width = _styleWidth;
-
-        $('#codemirror-container').empty();
-        var textArea = document.getElementById('codemirror-container');
-        var editor = CodeMirror(textArea, {
-            value: resultCode,
-            mode: "x-java",
-            theme: 'default',
-            lineNumbers: false,
-            readOnly: true,  // 不编辑代码，可以设置为 true
-            height: 'auto',
-            matchBrackets: true,    //括号匹配
-            lineWrapping: true, //代码折叠
-        });
-
-        // 高亮行的范围
-        var highlightLines = Array.from(doLines);
-
-        // 为每一行添加高亮
-        highlightLines.forEach(function (lineNumber) {
-            // 获取特定行的行号
-            var line = editor.getLineHandle(lineNumber);
-            // console.log(line, lineNumber);
-
-            // 确保 CodeMirror 实例在调用 addLineClass 之前已经初始化
-            // if (editor) {
-            //     // 添加高亮
-            //     editor.addLineClass(line, 'background', 'highlighted-line');
-            // } else {
-            //     console.error('editor is undefined');
-            // }
-        });
-    }
 
     function showNodeTips() {
         var node = $("#content_tips")[0].target;

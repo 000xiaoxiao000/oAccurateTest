@@ -3,84 +3,218 @@ package com.oAT.agent.jacoco.data;
 import com.oAT.agent.common.Decompiler.ILanguageNames;
 import com.oAT.agent.common.Decompiler.JavaNames;
 import com.oAT.agent.common.StackTraceFormatter;
-import com.oAT.agent.common.TypeConvert;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
-import com.oAT.agent.jacoco.StackNode;
-import com.oAT.agent.jacoco.StackSession;
+import com.oAT.agent.jacoco.ClassProbeInfo;
+import com.oAT.agent.jacoco.ClassProbeInfoRegistry;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.model.StackNodeVo;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
+/**
+ * 构建 StackNodeVo[] 数组，从 CoverageCollector 的探针快照 + ClassProbeInfo 元信息生成覆盖率报告。
+ * <p>
+ * 替代旧的从 StackSession + StackNode 树构建的方式。
+ * 新方案在服务端（oAT-service-web）端合并，减轻目标系统运行时压力。
+ * </p>
+ */
 public class StackNodeVoBuilder {
     private final static Log logger = LogFactory.getLog(StackNodeVoBuilder.class);
 
-    public StackNodeVo[] buildCodeNodes(StackSession stackSession) {
+    /**
+     * 从 CoverageCollector 的探针快照构建 codeNodes。
+     * <p>
+     * 遍历所有有覆盖率数据的 classId，结合 ClassProbeInfo 元信息，
+     * 将 boolean[] 探针数据转换为结构化的 StackNodeVo 数组。
+     * </p>
+     *
+     * @param collector 请求结束时收集的覆盖率数据聚合器
+     * @return StackNodeVo[] 覆盖率节点数组
+     */
+    public StackNodeVo[] buildCodeNodes(CoverageCollector collector) {
         try {
-            List<StackNode> allNodes = stackSession.getAllNodes();
-            int size = allNodes.size();
-            logger.debug("[Agent-debug]开始构建代码采集节点数: " + size);
-            StackNodeVo[] result = new StackNodeVo[size];
-            StackNodeVo nodeVo;
-            int i = 0;
-            ILanguageNames javaNames = new JavaNames();
-            for (StackNode n : allNodes) {
-                String originClassName = n.getClassName();
-                String originMethodName = n.getMethodName();
-                String originMethodDesc = n.getMethodDesc();
-
-                nodeVo = new StackNodeVo();
-                nodeVo.setId(n.getId());
-                nodeVo.setClassId(n.getClassId());
-                String className = javaNames.getQualifiedClassName(originClassName);
-                nodeVo.setClassName(className);
-                String methodName = javaNames.getMethodName(originClassName, originMethodName, originMethodDesc, null);
-                nodeVo.setMethodName(methodName);
-                nodeVo.setMethodDescriptor(originMethodDesc);
-                nodeVo.setUseTime(n.getUseTime());
-
-                ArrayList<Integer> executeBranchList = TypeConvert.parseToIntList(n.getExecuteBranch());
-                ArrayList<Integer> doLines = new ArrayList<>(n.getDoLines());
-                if (!doLines.isEmpty()) {
-                    for (Integer branch : executeBranchList) {
-                        doLines.remove(branch);
-                    }
-                }
-                nodeVo.setDoLines(doLines);
-                ArrayList<Integer> lineTotalList = TypeConvert.parseToIntList(n.getLineTotal());
-                nodeVo.setLineTotal(lineTotalList);
-                ArrayList<Integer> executeMethodTotal = new ArrayList<>(n.getExecuteMethodTotal());
-                nodeVo.setExecuteMethodTotal(executeMethodTotal);
-                ArrayList<Integer> methodTotalList = TypeConvert.parseToIntList(n.getMethodTotal());
-                nodeVo.setMethodTotal(methodTotalList);
-                nodeVo.setExecuteBranch(executeBranchList);
-                Map<String, List<String>> executeConditionMap = TypeConvert.convertStringToMap(n.getExecuteCondition());
-                nodeVo.setExecuteCondition(executeConditionMap);
-                nodeVo.setExecBranchConditionIsTrue(n.getExecBranchConditionIsTrue().toString());
-                ArrayList<Integer> branchTotalList = TypeConvert.parseToIntList(n.getBranchTotal());
-                nodeVo.setBranchTotal(branchTotalList);
-
-                String execCyclo;
-                if (executeBranchList.isEmpty()) {
-                    execCyclo = "0";
-                } else {
-                    execCyclo = String.valueOf(executeBranchList.size());
-                }
-                nodeVo.setExecCyclo(execCyclo);
-                nodeVo.setCyclo(n.getCyclo());
-                nodeVo.setRecursive(n.isRecursive());
-                nodeVo.setAsync(n.isAsync());
-                nodeVo.setSize(n.getSize());
-                nodeVo.setDone(n.isDone());
-                result[i++] = nodeVo;
+            Map<Long, boolean[]> snapshots = collector.getProbeSnapshots();
+            if (snapshots == null || snapshots.isEmpty()) {
+                return new StackNodeVo[0];
             }
-            logger.debug("[Agent-debug]结束构建代码采集节点数: " + result.length);
-            return result;
+
+            ILanguageNames javaNames = new JavaNames();
+            List<StackNodeVo> resultList = new ArrayList<>();
+
+            int nodeIdx = 0;
+            for (Map.Entry<Long, boolean[]> entry : snapshots.entrySet()) {
+                long classId = entry.getKey();
+                boolean[] probes = entry.getValue();
+
+                ClassProbeInfo probeInfo = ClassProbeInfoRegistry.get(classId);
+                if (probeInfo == null) {
+                    continue;
+                }
+
+                Map<Integer, List<Integer>> methodEntryToProbeIndices = groupExecutedProbesByMethod(probes, probeInfo);
+                if (methodEntryToProbeIndices.isEmpty()) {
+                    continue;
+                }
+
+                boolean addedNodeForCurrentClass = false;
+                String originClassName = probeInfo.getClassName();
+                for (Map.Entry<Integer, List<Integer>> methodEntry : methodEntryToProbeIndices.entrySet()) {
+                    int methodEntryIdx = methodEntry.getKey();
+                    List<Integer> executedProbeIndices = methodEntry.getValue();
+                    StackNodeVo nodeVo = buildMethodNode(classId, nodeIdx, methodEntryIdx, executedProbeIndices,
+                            probeInfo, originClassName, javaNames);
+                    if (nodeVo == null) {
+                        continue;
+                    }
+
+                    resultList.add(nodeVo);
+                    addedNodeForCurrentClass = true;
+                }
+
+                if (addedNodeForCurrentClass) {
+                    nodeIdx++;
+                }
+            }
+
+            return resultList.toArray(new StackNodeVo[0]);
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             return new StackNodeVo[0];
         }
     }
+
+    private Map<Integer, List<Integer>> groupExecutedProbesByMethod(boolean[] probes, ClassProbeInfo probeInfo) {
+        Map<Integer, List<Integer>> methodEntryToProbeIndices = new LinkedHashMap<>();
+        for (int i = 0; i < probes.length; i++) {
+            if (!probes[i]) {
+                continue;
+            }
+            int methodEntryIdx = probeInfo.getProbeMethodEntryIndex()[i];
+            methodEntryToProbeIndices.computeIfAbsent(methodEntryIdx, k -> new ArrayList<>()).add(i);
+        }
+        return methodEntryToProbeIndices;
+    }
+
+    private StackNodeVo buildMethodNode(long classId, int nodeIdx, int methodEntryIdx, List<Integer> executedProbeIndices,
+                                        ClassProbeInfo probeInfo, String originClassName, ILanguageNames javaNames) {
+        String methodNameDesc = probeInfo.getMethodEntryToName().get(methodEntryIdx);
+        if (methodNameDesc == null) {
+            return null;
+        }
+
+        MethodSignature methodSignature = parseMethodSignature(methodNameDesc);
+        String displayMethodName = javaNames.getMethodName(originClassName, methodSignature.methodName,
+                methodSignature.methodDesc, null);
+        if (CoverageNamingSupport.shouldIgnoreMethod(methodSignature.methodName, displayMethodName)) {
+            return null;
+        }
+
+        CoverageLines coverageLines = collectCoverageLines(executedProbeIndices, probeInfo);
+
+        StackNodeVo nodeVo = new StackNodeVo();
+        nodeVo.setId("0." + (nodeIdx + 1));
+        nodeVo.setClassId(classId);
+        nodeVo.setClassName(CoverageNamingSupport.toOwnerQualifiedClassName(originClassName));
+        nodeVo.setMethodName(displayMethodName);
+        nodeVo.setMethodDescriptor(methodSignature.methodDesc);
+        nodeVo.setDoLines(new ArrayList<>(coverageLines.executedLines));
+        nodeVo.setExecuteMethodTotal(buildExecutedMethodEntries(methodEntryIdx, probeInfo));
+        nodeVo.setExecuteBranch(new ArrayList<>(coverageLines.executedBranchLines));
+        nodeVo.setExecuteBranchConditionMap(coverageLines.executedBranchConditionMap);
+        nodeVo.setExecCyclo(String.valueOf(coverageLines.executedBranchLines.size()));
+        nodeVo.setRecursive(Boolean.TRUE.equals(probeInfo.getMethodEntryToRecursive().get(methodEntryIdx)));
+        nodeVo.setAsync(Boolean.TRUE.equals(probeInfo.getMethodEntryToAsync().get(methodEntryIdx)));
+        nodeVo.setDone(true);
+        nodeVo.setSize(1);
+        return nodeVo;
+    }
+
+    private ArrayList<Integer> buildExecutedMethodEntries(int methodEntryIdx, ClassProbeInfo probeInfo) {
+        ArrayList<Integer> execMethodList = new ArrayList<>(1);
+        int methodEntryLine = probeInfo.getProbeLineNumbers()[methodEntryIdx];
+        if (methodEntryLine > 0) {
+            execMethodList.add(methodEntryLine);
+        }
+        return execMethodList;
+    }
+
+    private CoverageLines collectCoverageLines(List<Integer> executedProbeIndices, ClassProbeInfo probeInfo) {
+        LinkedHashSet<Integer> executedLines = new LinkedHashSet<>();
+        LinkedHashSet<Integer> executedBranchLines = new LinkedHashSet<>();
+        Map<String, LinkedHashSet<Integer>> executedBranchConditionSets = new LinkedHashMap<>();
+        boolean[] branchFlags = probeInfo.getProbeIsBranch();
+        int[] probeLineNumbers = probeInfo.getProbeLineNumbers();
+
+        for (int probeIdx : executedProbeIndices) {
+            boolean isBranch = probeIdx < branchFlags.length && branchFlags[probeIdx];
+            if (isBranch) {
+                Integer branchLine = probeInfo.getBranchProbeToLine().get(probeIdx);
+                if (branchLine != null && branchLine > 0) {
+                    executedBranchLines.add(branchLine);
+                    Integer conditionNumber = probeInfo.getBranchProbeToConditionNumber().get(probeIdx);
+                    if (conditionNumber != null && conditionNumber > 0) {
+                        executedBranchConditionSets
+                                .computeIfAbsent(String.valueOf(branchLine), key -> new LinkedHashSet<>())
+                                .add(conditionNumber);
+                    }
+                }
+                continue;
+            }
+
+            int line = probeLineNumbers[probeIdx];
+            if (line > 0) {
+                executedLines.add(line);
+            }
+        }
+
+        executedLines.removeAll(executedBranchLines);
+        return new CoverageLines(executedLines, executedBranchLines,
+                toConditionMap(executedBranchConditionSets));
+    }
+
+    private Map<String, List<Integer>> toConditionMap(Map<String, LinkedHashSet<Integer>> source) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        Map<String, List<Integer>> result = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashSet<Integer>> entry : source.entrySet()) {
+            if (!entry.getValue().isEmpty()) {
+                result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+            }
+        }
+        return result.isEmpty() ? null : result;
+    }
+
+    private MethodSignature parseMethodSignature(String methodNameDesc) {
+        int spaceIdx = methodNameDesc.indexOf(' ');
+        String methodName = spaceIdx > 0 ? methodNameDesc.substring(0, spaceIdx) : methodNameDesc;
+        String methodDesc = spaceIdx > 0 ? methodNameDesc.substring(spaceIdx + 1) : "";
+        return new MethodSignature(methodName, methodDesc);
+    }
+
+    private static final class MethodSignature {
+        private final String methodName;
+        private final String methodDesc;
+
+        private MethodSignature(String methodName, String methodDesc) {
+            this.methodName = methodName;
+            this.methodDesc = methodDesc;
+        }
+    }
+
+    private static final class CoverageLines {
+        private final LinkedHashSet<Integer> executedLines;
+        private final LinkedHashSet<Integer> executedBranchLines;
+        private final Map<String, List<Integer>> executedBranchConditionMap;
+
+        private CoverageLines(LinkedHashSet<Integer> executedLines,
+                              LinkedHashSet<Integer> executedBranchLines,
+                              Map<String, List<Integer>> executedBranchConditionMap) {
+            this.executedLines = executedLines;
+            this.executedBranchLines = executedBranchLines;
+            this.executedBranchConditionMap = executedBranchConditionMap;
+        }
+    }
+
 }

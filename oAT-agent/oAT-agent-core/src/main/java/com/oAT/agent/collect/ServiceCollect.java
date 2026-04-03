@@ -5,9 +5,10 @@ import com.oAT.agent.common.StringUtils;
 import com.oAT.agent.common.WildcardMatcher;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
-import com.oAT.agent.jacoco.StackSession;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.jacoco.data.StackNodeVoBuilder;
 import com.oAT.agent.model.ServiceTraceNode;
+import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
 import com.oAT.agent.trace.TraceContext;
@@ -191,7 +192,7 @@ public class ServiceCollect extends AbstractByteTransformCollect implements ICol
             ServiceTraceNodeWrapper nodeWrapper = new ServiceTraceNodeWrapper(traceSession, node);
             if (StringUtils.hasText(this.traceContext.getConfig("codeStack.include"))
                     || StringUtils.hasText(this.traceContext.getConfig("conf_codeStack.include"))) {
-                nodeWrapper.stackSession = new StackSession(className, methodName, nodeWrapper);
+                nodeWrapper.coverageCollector = CoverageCollector.begin();
             }
 
             return nodeWrapper;
@@ -217,13 +218,19 @@ public class ServiceCollect extends AbstractByteTransformCollect implements ICol
             } else {
                 node.setStatus(TraceNode.Status.succeed.toString());
             }
-            if (nodeWrapper.stackSession != null) {
-                nodeWrapper.stackSession.doneSession();
-                StackNodeVoBuilder stackNodeVoBuilder = new StackNodeVoBuilder();
-                node.setCodeNodes(stackNodeVoBuilder.buildCodeNodes(nodeWrapper.stackSession));
+            if (nodeWrapper.coverageCollector != null) {
+                nodeWrapper.coverageCollector = CoverageCollector.end();
+                if (nodeWrapper.coverageCollector != null && !nodeWrapper.coverageCollector.getProbeSnapshots().isEmpty()) {
+                    try {
+                        StackNodeVo[] codeNodes = new StackNodeVoBuilder()
+                                .buildCodeNodes(nodeWrapper.coverageCollector);
+                        node.setCodeNodes(codeNodes);
+                    } catch (Throwable t) {
+                        logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                    }
+                }
             }
-            // 保证 codeNodes 有代码覆盖率
-            if (node.getCodeNodes().length > 1) {
+            if (node.getCodeNodes() != null && node.getCodeNodes().length > 0) {
                 traceSession.saveNode(node);
             }
         } catch (Throwable t) {
@@ -256,7 +263,7 @@ public class ServiceCollect extends AbstractByteTransformCollect implements ICol
     public class ServiceTraceNodeWrapper implements ISessionDestroy {
         private final TraceSession traceSession;
         private final ServiceTraceNode node;
-        private StackSession stackSession;
+        private CoverageCollector coverageCollector;
         private OutputStream logOut;
 
         public ServiceTraceNodeWrapper(TraceSession traceSession, ServiceTraceNode node) {
@@ -267,8 +274,8 @@ public class ServiceCollect extends AbstractByteTransformCollect implements ICol
         @Override
         public void doDestroy() {
             try {
-                if (stackSession != null) {
-                    stackSession.close();
+                if (coverageCollector != null) {
+                    CoverageCollector.remove();
                 }
                 if (logOut != null) {
                     SystemLogCollect.INSTANCE.removeOutput(logOut);

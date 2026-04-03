@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.common.CoverageSourceClassUtil;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.SystemLog;
@@ -272,6 +273,7 @@ public class CoverageControl {
     public String viewCode(@PathVariable String projectId, String appId, String reportId, String className, Model model) {
         // 先获取 classCov 并按页面显示的规则排序，再传入 getColoredSource 的重载方法
         ClassCoverageIndex classCov = coverageService.getClassCoverage(reportId, className);
+        String displayClassName = toDisplayClassName(className);
 
         if (classCov != null && classCov.getMethods() != null) {
             classCov.getMethods().sort((a, b) -> {
@@ -280,8 +282,8 @@ public class CoverageControl {
                 if (rateA != rateB) {
                     return Double.compare(rateB, rateA); // Descending
                 }
-                double bRateA = a.getTotalBranches() > 0 ? (double) a.getCoveredBranches() / a.getTotalBranches() : 0;
-                double bRateB = b.getTotalBranches() > 0 ? (double) b.getCoveredBranches() / b.getTotalBranches() : 0;
+                double bRateA = a.getBranchRate() != null ? a.getBranchRate() : 0;
+                double bRateB = b.getBranchRate() != null ? b.getBranchRate() : 0;
                 return Double.compare(bRateB, bRateA); // Descending
             });
         }
@@ -292,6 +294,8 @@ public class CoverageControl {
         model.addAttribute("coloredSource", coloredSource);
         model.addAttribute("classCov", classCov);
         model.addAttribute("className", className);
+        model.addAttribute("rawClassName", className);
+        model.addAttribute("displayClassName", displayClassName);
         model.addAttribute("reportId", reportId);
 
         // 为面包屑补充信息
@@ -316,6 +320,21 @@ public class CoverageControl {
         }
 
         return "coverage/code_view";
+    }
+
+    private String toDisplayClassName(String className) {
+        if (!StringUtils.hasText(className)) {
+            return className;
+        }
+        String normalizedClassName = className.replace('$', '.');
+        int lastDot = normalizedClassName.lastIndexOf('.');
+        if (lastDot < 0 || lastDot >= normalizedClassName.length() - 1) {
+            return normalizedClassName;
+        }
+
+        String prefix = normalizedClassName.substring(0, lastDot + 1);
+        String tail = normalizedClassName.substring(lastDot + 1);
+        return prefix + CoverageSourceClassUtil.toTreeDisplayName(tail, "class");
     }
 
     /**

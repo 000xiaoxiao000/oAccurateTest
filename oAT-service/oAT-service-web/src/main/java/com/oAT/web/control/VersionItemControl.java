@@ -5,6 +5,7 @@ import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.control.entity.ResultNotified;
+import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.*;
@@ -57,6 +58,9 @@ public class VersionItemControl {
 
     @Autowired
     private CoverageService coverageService;
+
+    @Autowired
+    StaticInfoRepository staticInfoRepository;
 
     @Autowired
     SystemLogService systemLogService;
@@ -358,7 +362,7 @@ public class VersionItemControl {
                             @PathVariable String appId,
                             String sourceFile,
                             String targetFile, String packageName,
-                            Model model) throws UnsupportedEncodingException {
+                            Model model) {
         AppVo appInfo = appService.getApp(appId);
         String jobId = versionService.startCompareJob(projectId, appInfo, packageName, sourceFile, targetFile);
         if (jobId == null || jobId.isEmpty()) {
@@ -458,7 +462,7 @@ public class VersionItemControl {
         List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId, appId);
 
         // 用于计算聚合指标
-        long totalMethods = 0;
+        long totalMethods;
         long coveredMethods = 0;
         long totalLines = 0;
         long coveredLines = 0;
@@ -473,6 +477,8 @@ public class VersionItemControl {
         Map<String, Integer> methodComplexity = new HashMap<>();
         Map<String, Set<Integer>> methodTotalBranches = new HashMap<>();
         Map<String, Set<Integer>> methodCoveredBranches = new HashMap<>();
+        Map<String, Set<String>> methodTotalBranchConditions = new HashMap<>();
+        Map<String, Set<String>> methodCoveredBranchConditions = new HashMap<>();
 
         // 用于类级汇总
         Map<String, Set<String>> classMethods = new HashMap<>();
@@ -493,30 +499,44 @@ public class VersionItemControl {
                     codeRelationships.put(requestUrl, childNodes);
 
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getLineTotal() == null || node.getLineTotal().isEmpty()) continue;
-                        if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
-
-                        String methodKey = node.getClassName() + "#" + node.getMethodName() + node.getMethodDescriptor();
+                        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 
                         classToAppId.putIfAbsent(node.getClassName(), appId);
 
                         // 行覆盖
-                        methodTotalLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getLineTotal());
                         if (node.getDoLines() != null) {
                             methodCoveredLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getDoLines());
                         }
 
-                        // 圈复杂度 (取最大值或假定一致)
-                        methodComplexity.put(methodKey, node.getCyclo());
-
                         // 分支覆盖
-                        if (node.getBranchTotal() != null) {
-                            methodTotalBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getBranchTotal());
-                        }
                         if (node.getExecuteBranch() != null) {
                             methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
                         }
+                        addBranchConditionKeys(methodCoveredBranchConditions, methodKey, node.getExecuteBranchConditionMap());
+                    }
+                }
+            }
+        }
+
+        // 从全量静态数据补充总数
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+            for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                if (methodCoveredLines.containsKey(mKey) || methodCoveredBranches.containsKey(mKey)) {
+                    methodTotalLines.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getMethodLineNumberMap() != null ? mInfo.getMethodLineNumberMap() : Collections.emptyList());
+                    methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
+                    methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
+                    addBranchConditionKeys(methodTotalBranchConditions, mKey, mInfo.getBranchLineAndConditionNumberMap());
+                    if (methodCoveredBranchConditions.containsKey(mKey)) {
+                        Set<String> normalizedKeys = new LinkedHashSet<>();
+                        addBranchConditionKeysToSet(normalizedKeys, mInfo.getBranchLineAndConditionNumberMap(),
+                                decodeBranchConditionKeys(methodCoveredBranchConditions.get(mKey)));
+                        methodCoveredBranchConditions.put(mKey, normalizedKeys);
                     }
                 }
             }
@@ -524,6 +544,8 @@ public class VersionItemControl {
 
         // 计算汇总
         totalMethods = methodTotalLines.size();
+        long totalBranchConditions = 0;
+        long coveredBranchConditions = 0;
         for (String mKey : methodTotalLines.keySet()) {
             totalLines += methodTotalLines.get(mKey).size();
             coveredLines += methodCoveredLines.getOrDefault(mKey, Collections.emptySet()).size();
@@ -533,6 +555,8 @@ public class VersionItemControl {
             totalComplexity += methodComplexity.getOrDefault(mKey, 0);
             totalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
             coveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
+            totalBranchConditions += methodTotalBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
+            coveredBranchConditions += methodCoveredBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
         }
 
         // 生成类级详细统计
@@ -548,6 +572,8 @@ public class VersionItemControl {
             long cCoveredLines = 0;
             long cTotalBranches = 0;
             long cCoveredBranches = 0;
+            long cTotalBranchConditions = 0;
+            long cCoveredBranchConditions = 0;
             int cTotalComplexity = 0;
 
             for (String mKey : methods) {
@@ -559,6 +585,8 @@ public class VersionItemControl {
                 cTotalComplexity += methodComplexity.getOrDefault(mKey, 0);
                 cTotalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
                 cCoveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
+                cTotalBranchConditions += methodTotalBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
+                cCoveredBranchConditions += methodCoveredBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
             }
 
             Map<String, Object> cStat = new HashMap<>();
@@ -570,6 +598,7 @@ public class VersionItemControl {
             cStat.put("coveredLines", cCoveredLines);
             cStat.put("totalBranches", cTotalBranches);
             cStat.put("coveredBranches", cCoveredBranches);
+            cStat.put("branchRate", calculateBranchRate(cCoveredBranchConditions, cTotalBranchConditions));
             cStat.put("totalComplexity", cTotalComplexity);
             classStats.add(cStat);
         }
@@ -581,6 +610,8 @@ public class VersionItemControl {
         summary.setCoveredLines(coveredLines);
         summary.setTotalBranches(totalBranches);
         summary.setCoveredBranches(coveredBranches);
+        summary.setTotalBranchConditions(totalBranchConditions);
+        summary.setCoveredBranchConditions(coveredBranchConditions);
         summary.setTotalComplexity(totalComplexity);
         summary.setTotalClasses(classMethods.size());
         summary.setCoveredClasses(summary.getTotalClasses());
@@ -594,6 +625,97 @@ public class VersionItemControl {
         model.addAttribute("fromVersionCenter", true); // 用于模板识别来源
 
         return "/snapshot/mySnapshotsCodeReport";
+    }
+
+    private double calculateBranchRate(long coveredBranchConditions, long totalBranchConditions) {
+        return totalBranchConditions > 0 ? (double) coveredBranchConditions / totalBranchConditions * 100 : 0.0;
+    }
+
+    private void addBranchConditionKeys(Map<String, Set<String>> target,
+                                        String methodKey,
+                                        Map<String, List<Integer>> branchConditionNumbers) {
+        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return;
+        }
+        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
+        for (Map.Entry<String, List<Integer>> entry : branchConditionNumbers.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (Integer conditionNumber : entry.getValue()) {
+                if (conditionNumber != null) {
+                    keys.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
+        }
+    }
+
+    private Map<String, List<Integer>> normalizeCoveredBranchConditionNumbers(Map<String, List<Integer>> total,
+                                                                              Map<String, List<Integer>> covered) {
+        if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
+            List<Integer> totalValues = entry.getValue();
+            if (totalValues == null || totalValues.isEmpty()) {
+                continue;
+            }
+            Set<Integer> allowed = new LinkedHashSet<>(totalValues);
+            List<Integer> coveredValues = covered.get(entry.getKey());
+            if (coveredValues == null || coveredValues.isEmpty()) {
+                continue;
+            }
+            LinkedHashSet<Integer> matched = new LinkedHashSet<>();
+            for (Integer value : coveredValues) {
+                if (value != null && allowed.contains(value)) {
+                    matched.add(value);
+                }
+            }
+            if (!matched.isEmpty()) {
+                normalized.put(entry.getKey(), new ArrayList<>(matched));
+            }
+        }
+        return normalized;
+    }
+
+    private void addBranchConditionKeysToSet(Set<String> target,
+                                             Map<String, List<Integer>> allowedBranchConditionNumbers,
+                                             Map<String, List<Integer>> branchConditionNumbers) {
+        Map<String, List<Integer>> effective = normalizeCoveredBranchConditionNumbers(
+                allowedBranchConditionNumbers, branchConditionNumbers);
+        for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (Integer conditionNumber : entry.getValue()) {
+                if (conditionNumber != null) {
+                    target.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
+        }
+    }
+
+    private Map<String, List<Integer>> decodeBranchConditionKeys(Set<String> keys) {
+        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
+        if (keys == null || keys.isEmpty()) {
+            return decoded;
+        }
+        for (String key : keys) {
+            if (!StringUtils.hasText(key)) {
+                continue;
+            }
+            int split = key.lastIndexOf('#');
+            if (split <= 0 || split >= key.length() - 1) {
+                continue;
+            }
+            try {
+                int conditionNumber = Integer.parseInt(key.substring(split + 1));
+                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(conditionNumber);
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        return decoded;
     }
 
     // 支持 AJAX POST 删除，返回 JSON
@@ -653,14 +775,14 @@ public class VersionItemControl {
         if (diffs != null) {
             for (VersionCompareReport.Difference difference : diffs) {
                 if (difference == null) continue;
-                if (difference.getType().equals("class")) {
+                if ("class".equals(difference.getType())) {
                     if (differenceClass.containsKey(difference.getValue())) {
                         continue;
                     }
                     CompareResult r = new CompareResult(difference.getValue(),
                             CompareResult.Model.valueOf(difference.getModel()));
                     differenceClass.put(r.getClassName(), r);
-                } else if (difference.getType().equals("method")) {
+                } else if ("method".equals(difference.getType())) {
                     String raw = difference.getValue();
                     String className = null, methodName = null, desc = "";
                     if (raw != null) {

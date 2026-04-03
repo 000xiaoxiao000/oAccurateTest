@@ -74,6 +74,29 @@ public class HttpClient {
 
     /**
      * 非阻塞的异步执行 HTTP POST 请求，返回 Future，调用方可选择等待或异步处理结果。
+     * body 以 raw 字节方式发送，适用于大数据量（如 JSON），不受 form-urlencoded 编码限制。
+     */
+    public static Future<String> execHttpRawBody(final String url, final String contentType,
+                                                 final byte[] body) {
+        final FutureTask<String> task = new FutureTask<>(new Callable<String>() {
+            @Override
+            public String call() throws Exception {
+                return executeHttpRequestRawBody(url, contentType, body);
+            }
+        });
+        try {
+            ASYNC_EXECUTOR.execute(task);
+        } catch (final RejectedExecutionException rex) {
+            logger.warn(String.format("[Agent-warn]异步HTTP任务被拒绝: url=%s, reason=%s", url, rex.getMessage()));
+            return new FailedFuture(rex);
+        } catch (final Throwable t) {
+            return new FailedFuture(t);
+        }
+        return task;
+    }
+
+    /**
+     * 非阻塞的异步执行 HTTP POST 请求，返回 Future，调用方可选择等待或异步处理结果。
      */
     public static Future<String> execHttp(final String url, final Map<String, String> params) {
         final FutureTask<String> task = new FutureTask<String>(new Callable<String>() {
@@ -124,6 +147,45 @@ public class HttpClient {
              if (callback != null) {
                  callback.onComplete(null, t);
              }
+        }
+    }
+
+    private static String executeHttpRequestRawBody(String url, String contentType,
+                                                     byte[] body) throws IOException {
+        HttpURLConnection conn = null;
+        try {
+            URL realUrl = new URL(url);
+            conn = (HttpURLConnection) realUrl.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", contentType);
+            conn.setRequestProperty("accept", "*/*");
+            conn.setRequestProperty("connection", "close");
+            conn.setUseCaches(false);
+            conn.setDoOutput(true);
+            conn.setDoInput(true);
+            int timeout = BASE_TIMEOUT_MS + READ_TIMEOUT_EXTRA_MS + 30000;
+            conn.setConnectTimeout(timeout);
+            conn.setReadTimeout(timeout);
+
+            try (OutputStream out = new BufferedOutputStream(conn.getOutputStream())) {
+                out.write(body);
+                out.flush();
+            }
+
+            int responseCode = conn.getResponseCode();
+            String resp = readResponse(conn, responseCode);
+            if (responseCode >= 200 && responseCode < 400) {
+                return resp;
+            } else {
+                throw new IOException("HTTP " + responseCode + ": " + resp);
+            }
+        } finally {
+            if (conn != null) {
+                try {
+                    conn.disconnect();
+                } catch (Throwable ignore) {
+                }
+            }
         }
     }
 

@@ -164,7 +164,7 @@
                         </div>
                     </div>
                     <#if loginNameRole != "visitor">
-                        <button class="ui small positive button " type="submit" style="margin-left: 10px">添加</button>
+                        <button class="ui small positive button" type="submit" style="margin-left: 10px">添加</button>
                     </#if>
                 </form>
             </div>

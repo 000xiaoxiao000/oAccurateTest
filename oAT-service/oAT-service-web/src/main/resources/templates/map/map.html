@@ -35,17 +35,6 @@
         margin: 0px;
         padding: 7px 15px;
     }
-    #codemirror-container {
-        position: absolute;
-        left: auto;
-        bottom: 0px;
-        top: 50px;
-        right: 30px;
-        z-index: 2;
-        margin: 5px;
-        padding: 0px 5px;
-    }
-
     #find_element {
         position: absolute;
         top: 55px;
@@ -147,14 +136,11 @@
     <div class="ui horizontal list">
     </div>
 </div>
-<div id="codemirror-container" class="ui label"></div>
 <script>
     // 初始化画布
     fetch("test1.json").then(function (res) {
         //隐藏节点信息框
         document.getElementById('bottom_nodeInfo').style.display = 'none';
-        //隐藏代码详情框
-        document.getElementById('codemirror-container').style.display = 'none';
         return res.json();
     }).then(buildMap).then(function (cy) {
         // 点击节点显示详情
@@ -262,31 +248,9 @@
                 e.preventDefault();
                 cy.nodes().select();
             }
-        }else if (e.ctrlKey && e.key.toLowerCase() === 'c') {
-            showCodeTips();
         }
 
     });
-
-    function showCodeTips() {
-        // var resultCode = $.ajax({
-        //     url: "/p/${project.id}/map/codeSearch",
-        //     type: 'POST',
-        //     contentType: 'application/json',
-        //     data: JSON.stringify({ className: 'com.company.project.service.impl.RolePermissionServiceImpl', methodName: 'addRolePermission' }),
-        //     async: false
-        // }).responseJSON;
-        // console.log(resultCode);
-
-        var _styleWidth = document.body.clientWidth / 2 + 'px';
-        document.getElementById('codemirror-container').style.display = 'inline-block';
-        document.getElementById('codemirror-container').style.position = 'fixed';
-        document.getElementById('codemirror-container').style.width = _styleWidth;
-        document.getElementById('codemirror-container').style.overflow = 'auto';
-
-        $('#codemirror-container').empty();
-        code.buildCodeBlock(resultCode, $('#codemirror-container'));
-    }
 
     function showNodeTips() {
         var node = $("#content_tips")[0].target;

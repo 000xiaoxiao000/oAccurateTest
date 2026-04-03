@@ -1,6 +1,5 @@
 package com.oAT.web.service;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.server.model.ClientInfoVo;
 import com.oAT.server.model.ClientSessionVo;
@@ -39,5 +38,5 @@ public interface ClientSessionService {
 
     void heartbeat(String sessionId, String appId, Long timesTamp);
 
-    void saveStaticData(String appId, JsonNode data);
+    void saveStaticData(String appId, String data);
 }

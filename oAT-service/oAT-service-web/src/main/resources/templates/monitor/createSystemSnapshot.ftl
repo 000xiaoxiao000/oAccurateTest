@@ -102,7 +102,7 @@
     <div class="ui black deny button">
         算啦
     </div>
-    <div class="ui positive right labeled icon save button "
+    <div class="ui positive right labeled icon save button"
          onclick="doSaveSystemSnapshot('${projectId}')">
         是的，帮我保存
         <i class="checkmark icon"></i>
@@ -172,18 +172,26 @@
         if (!$('#systemSnapshotForm').form('is valid')) {
             return false;
         }
-        var resultInform = $.ajax({
+        $.ajax({
             url: "/p/" + projectid + "/monitor/doSaveSystemSnapshot",
-            data: $("#systemSnapshotForm").serialize(),
-            async: false
-        }).responseJSON;
-        if (resultInform.result) {
-            // 关闭当前模型
-            $("#systemSnapshotForm").parents(".modal").modal('hide');
-            showToast(resultInform.message, 'success');
-        } else {
-            showToast(resultInform.errorMessage, 'error');
-        }
+            type: "POST",
+            dataType: "json",
+            data: $("#systemSnapshotForm").serialize()
+        }).done(function (resultInform) {
+            if (resultInform && resultInform.result) {
+                $("#systemSnapshotForm").parents(".modal").modal('hide');
+                showToast(resultInform.message || '保存成功', 'success');
+                return;
+            }
+
+            showToast((resultInform && (resultInform.errorMessage || resultInform.message)) || '系统快照保存失败', 'error');
+        }).fail(function (xhr) {
+            var errorMessage = '网络请求失败';
+            if (xhr && xhr.responseJSON) {
+                errorMessage = xhr.responseJSON.errorMessage || xhr.responseJSON.message || errorMessage;
+            }
+            showToast('系统快照保存失败: ' + errorMessage, 'error');
+        });
     }
 
 </script>

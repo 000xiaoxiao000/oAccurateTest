@@ -5,27 +5,30 @@
     <#include "../common.ftl">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; }
-        .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; max-width: 100%; overflow-x: auto; overflow-y: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .method-list { margin-bottom: 25px; }
         .ui.progress { margin: 0; min-width: 80px; }
         .method-table td { vertical-align: middle !important; }
         .method-table .method-name { font-weight: 600; color: #1e70bf; }
         #backToTop {
-            position: fixed;
-            bottom: 40px;
-            right: 40px;
-            display: none;
-            z-index: 999;
-            padding: 10px 15px;
-            background-color: #2185d0;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            position: fixed !important;
+            bottom: 40px !important;
+            right: 40px !important;
+            display: none !important;
+            z-index: 9999 !important;
+            padding: 10px 16px !important;
+            background-color: #2185d0 !important;
+            color: #fff !important;
+            border: none !important;
+            border-radius: 4px !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+            font-size: 14px !important;
         }
-        #backToTop:hover { background-color: #1678c2; }
-        .source-container pre { margin: 0; font-size: 13px; line-height: 18px; }
+        #backToTop.visible { display: block !important; }
+        #backToTop:hover { background-color: #1678c2 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.35) !important; }
+        .source-container pre { margin: 0; font-size: 13px; line-height: 18px; min-width: 100%; }
+        .source-container pre > div { min-width: max-content; }
     </style>
 </head>
 <body>
@@ -87,6 +90,8 @@
                     </td>
                 </tr>
             </#list>
+            <#else>
+                <tr><td colspan="4" class="center aligned">暂无方法覆盖数据</td></tr>
             </#if>
             </tbody>
         </table>
@@ -102,15 +107,51 @@
 
 <script>
     $(document).ready(function() {
-        $(window).scroll(function() {
-            if ($(this).scrollTop() > 200) {
-                $('#backToTop').fadeIn();
-            } else {
-                $('#backToTop').fadeOut();
+        var $sourceContainer = $('.source-container');
+
+        function isSourceContainerVisible() {
+            if (!$sourceContainer.length) {
+                return false;
             }
+
+            var rect = $sourceContainer[0].getBoundingClientRect();
+            var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+            return rect.top < viewportHeight && rect.bottom > 0;
+        }
+
+        function checkBackToTopVisible() {
+            if (isSourceContainerVisible()) {
+                $('#backToTop').addClass('visible');
+            } else {
+                $('#backToTop').removeClass('visible');
+            }
+        }
+
+        // 滚动或窗口变化时，源码区域进入视口就显示按钮
+        $(window).on('scroll.backToTop resize.backToTop hashchange.backToTop', function() {
+            checkBackToTopVisible();
         });
-        $('#backToTop').click(function() {
-            $('html, body').animate({scrollTop : 0}, 400);
+
+        // 点击"查看代码"时先立即显示，跳转完成后再按实际位置校准
+        $('a[href^="#method_"]').on('click.backToTop', function() {
+            $('#backToTop').addClass('visible');
+            setTimeout(checkBackToTopVisible, 50);
+        });
+
+        // 鼠标滚轮进入源码区域时立即显示按钮
+        $sourceContainer.on('wheel.backToTop mousewheel.backToTop DOMMouseScroll.backToTop', function() {
+            $('#backToTop').addClass('visible');
+            setTimeout(checkBackToTopVisible, 50);
+        });
+
+        // 初始化
+        setTimeout(checkBackToTopVisible, 100);
+
+        $('#backToTop').on('click', function(e) {
+            e.preventDefault();
+            $('html, body').stop().animate({scrollTop: 0}, 400, function() {
+                $('#backToTop').removeClass('visible');
+            });
             return false;
         });
     });
