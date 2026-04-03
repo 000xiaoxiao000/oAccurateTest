@@ -52,6 +52,9 @@ public class SystemSnapshotControl {
     CoverageService coverageService;
 
     @Autowired
+    ClientSessionService clientSessionService;
+
+    @Autowired
     StaticInfoRepository staticInfoRepository;
 
     // 打开系统快照列表
@@ -221,12 +224,9 @@ public class SystemSnapshotControl {
     public String openNodeDetail(@PathVariable String snapshotId, String traceId, String nodeId, Model model) {
         TraceNode node = snapshotService.getTraceNode(traceId, nodeId);
         if (node instanceof HttpTraceNode) {
-            model.addAttribute("node", node);
-            HttpTraceNode httpNode = (HttpTraceNode) node;
-            List<Param> params = Stream.iterate(0, i -> i + 1).limit(httpNode.getRequestParamNames().length)// 生成队列数组
-                    .map(i -> new Param(httpNode.getRequestParamNames()[i], httpNode.getRequestParamValues()[i])) // 转换成Param对象
-                    .collect(Collectors.toList());
-            model.addAttribute("params", params);
+            HttpTraceNode httpNode = resolveHttpNodeWithLiveFallback(traceId, (HttpTraceNode) node);
+            model.addAttribute("node", httpNode);
+            model.addAttribute("params", buildHttpParams(httpNode));
             return "snapshot/webNodeDetail";
         } else if (node instanceof SqlTraceNode) {
             model.addAttribute("node", node);
@@ -253,6 +253,48 @@ public class SystemSnapshotControl {
             return "snapshot/redisNodeDetail";
         }
         return null;
+    }
+
+    private List<Param> buildHttpParams(HttpTraceNode httpNode) {
+        String[] names = httpNode.getRequestParamNames();
+        if (names == null || names.length == 0) {
+            return Collections.emptyList();
+        }
+
+        String[] values = httpNode.getRequestParamValues();
+        return Stream.iterate(0, i -> i + 1)
+                .limit(names.length)
+                .map(i -> new Param(names[i], values != null && i < values.length ? values[i] : null))
+                .collect(Collectors.toList());
+    }
+
+    private HttpTraceNode resolveHttpNodeWithLiveFallback(String traceId, HttpTraceNode snapshotNode) {
+        if (hasCompleteRequestParams(snapshotNode)) {
+            return snapshotNode;
+        }
+        Map<String, TraceNode> cachedNodes = clientSessionService.getTraceNodes(traceId);
+        if (cachedNodes == null || cachedNodes.isEmpty()) {
+            return snapshotNode;
+        }
+        TraceNode cachedNode = cachedNodes.get(snapshotNode.getTraceNodeId());
+        if (cachedNode instanceof HttpTraceNode && hasAnyRequestParams((HttpTraceNode) cachedNode)) {
+            return (HttpTraceNode) cachedNode;
+        }
+        return snapshotNode;
+    }
+
+    private boolean hasCompleteRequestParams(HttpTraceNode httpNode) {
+        String[] names = httpNode.getRequestParamNames();
+        if (names == null || names.length == 0) {
+            return false;
+        }
+        String[] values = httpNode.getRequestParamValues();
+        return values != null && values.length >= names.length;
+    }
+
+    private boolean hasAnyRequestParams(HttpTraceNode httpNode) {
+        String[] names = httpNode.getRequestParamNames();
+        return names != null && names.length > 0;
     }
 
     /**

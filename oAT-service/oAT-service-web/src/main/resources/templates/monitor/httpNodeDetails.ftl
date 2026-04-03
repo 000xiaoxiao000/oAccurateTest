@@ -67,7 +67,16 @@
                 <#list node.requestParamNames as paramName>
                     <div class="item">
                         <span class="listHeader">${paramName}:</span>
-                        ${(node.requestParamValues[paramName_index])!'null'}
+                        <#if node.requestParamValues?? && (node.requestParamValues?size > paramName_index)>
+                            <#assign paramValue = node.requestParamValues[paramName_index]>
+                            <#if paramValue?has_content>
+                                ${paramValue}
+                            <#else>
+                                <span style="color: #999;">(空值)</span>
+                            </#if>
+                        <#else>
+                            <span style="color: #999;">null</span>
+                        </#if>
                     </div>
                 </#list>
             <#else>
