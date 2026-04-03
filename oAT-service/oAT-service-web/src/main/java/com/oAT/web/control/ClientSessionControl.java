@@ -75,8 +75,7 @@ public class ClientSessionControl {
         try {
             info = mapper.readValue(clientInfo, ClientInfoVo.class);
         } catch (IOException e) {
-            // TODO 编写ClientException
-            throw new RuntimeException("参数'clientInfo', json格式错误: ", e);
+            throw new IllegalArgumentException("参数'clientInfo' json格式错误", e);
         }
         result = sessionService.doLogin(info);
         return JsonWriter.objectToJson(result);
