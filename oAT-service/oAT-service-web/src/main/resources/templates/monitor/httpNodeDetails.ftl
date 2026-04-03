@@ -19,7 +19,8 @@
             </div>
             <div class="item">
                 <span class="listHeader">状态码：</span>
-                <#if (node.responseCode!'') == '200'>
+                <#assign responseCode = (node.responseCode!'')?trim>
+                <#if responseCode?matches('2\\d\\d')>
                     <i class="ui green circle icon" style="display: inline"></i>
                 <#else>
                     <i class="ui red circle icon" style="display: inline"></i>
@@ -62,21 +63,32 @@
             请求参数
         </div>
         <div class="ui list content active" style="margin:0px 0px 0px 25px">
-            <#if node.requestParamNames??>
+            <#if node.requestParamNames?? && (node.requestParamNames?size > 0)>
                 <#list node.requestParamNames as paramName>
                     <div class="item">
                         <span class="listHeader">${paramName}:</span>
-                        ${node.requestParamValues[paramName_index]}
+                        <#if node.requestParamValues?? && (node.requestParamValues?size > paramName_index)>
+                            <#assign paramValue = node.requestParamValues[paramName_index]>
+                            <#if paramValue?has_content>
+                                ${paramValue}
+                            <#else>
+                                <span style="color: #999;">(空值)</span>
+                            </#if>
+                        <#else>
+                            <span style="color: #999;">null</span>
+                        </#if>
                     </div>
                 </#list>
+            <#else>
+                <div class="item">无 URL/Form 参数</div>
             </#if>
-            <#if node.requestParamValues??>
-                <#list node.requestParamValues as paramName>
-                    <div class="item">
-                        <span class="listHeader">${paramName!"null"}</span>
-                    </div>
-                </#list>
-            </#if>
+            <div class="ui fitted divider"></div>
+            <div class="item">
+                <span class="listHeader">请求体:</span>
+            </div>
+            <div class="item">
+                <pre style="white-space: pre-wrap; word-break: break-all; margin: 8px 0 0 0;">${(node.requestBody)!'无请求体'}</pre>
+            </div>
         </div>
     </div>
 </div>

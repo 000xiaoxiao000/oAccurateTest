@@ -313,9 +313,9 @@
 
         $('#saveSnapshotButton').on('click', function() {
             if ($('#newSnapshotForm').form('is valid')) {
-                doSaveSnapshot('${projectId}');
-                // 关闭当前模型
-                $("#newSnapshotForm").parents(".modal").modal('hide');
+                doSaveSnapshot('${projectId}', function () {
+                    $("#newSnapshotForm").parents(".modal").modal('hide');
+                });
             }
         });
     });

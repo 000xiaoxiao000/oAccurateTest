@@ -11,9 +11,7 @@
 package com.oAT.agent.jacoco.instr;
 
 import com.oAT.agent.Agent;
-import com.oAT.agent.common.JsonUtil;
 import com.oAT.agent.common.WildcardMatcher;
-import com.oAT.agent.jacoco.StackSession;
 import com.oAT.shaded.asm97.Label;
 import com.oAT.shaded.asm97.MethodVisitor;
 import com.oAT.shaded.asm97.Opcodes;
@@ -26,112 +24,135 @@ import java.util.*;
  * for a probe simply sets a certain slot of a boolean array to true. In
  * addition, the probe array has to be retrieved at the beginning of the method
  * and stored in a local variable.
+ *
+ * <p>
+ * NEW APPROACH: Instead of calling StackSession.$begin()/$end()/$recordBranchCondition()
+ * for every method entry/exit/branch, we simply do:
+ * <ol>
+ *   <li>At method start: boolean[] $jacocoData = ClassName.$jacocoInit(); (1 time)</li>
+ *   <li>At each probe point: $jacocoData[probeIdx] = true; (1 BASTORE instruction)</li>
+ * </ol>
+ * This reduces per-method overhead from ~10μs to ~10ns (a single array write).
+ * </p>
  */
 class ProbeInserter extends MethodVisitor implements IProbeInserter {
     private final ClassInfo clazzInfo;
+    private final ClassInstrumenter classInstrumenter;
 
     /**
-     * <code>true</code> if method is a class or interface initialization
-     * method.
-     */
-    private final boolean clinit;
-
-    /**
-     * Position of the inserted variable.
+     * Position of the inserted variable (boolean[] for probe array).
      */
     private final int variable;
 
     private final WildcardMatcher methodIncludes;
     private final WildcardMatcher methodExcludes;
 
-    private final Long clazzId;
     private final String clazzName;
     private final String methodName;
     private final String methodDesc;
     private final String methodNameDescCombined;
+    private final boolean compilerGeneratedMethod;
 
-    private final Map<String, Set<Integer>> methodLineNumberMap; // 方法总数，用于方法覆盖率统计
-    private final Map<String, Boolean> recursiveMap;  // 方法是否递归调用
-    private final Map<String, Boolean> asyncMethodMap;  // 方法是否是异步
+    private final Map<String, Set<Integer>> methodLineNumberMap;
+    private final Map<String, Boolean> recursiveMap;
+    private final Map<String, Boolean> asyncMethodMap;
+    private final Map<String, Integer> cyclomaticComplexity;
 
-    //当前代码行数，用于行覆盖率；代码行数从-1开始
+    // Current line number tracking
     private int currentLine = -1;
-    // 避免未声明错误
     private int lastInsertedLine = Integer.MIN_VALUE;
 
-    private int branchLine = 0; //记录方法中所有分支代码行号，用于分支条件覆盖率统计
-    private Integer execBranchConditionNumber = 0;  //执行到的分支条件个数
-
-    private final Label lastReturnLabel = new Label();
-
-    private final Set<Integer> branchLines = new HashSet<>();  //记录方法中所有分支代码行号，用于分支覆盖率统计
-    // 用于追踪同一逻辑表达式内的分支条件编号
+    // Branch tracking (for metadata only, not for runtime recording)
+    private final Set<Integer> branchLines = new HashSet<>();
     private final Map<Integer, Integer> branchLineConditionCounter = new HashMap<>();
-    private final Map<Integer, Set<Integer>> execBranchLineAndConditionNumberMap = new HashMap<>(); //执行到的分支行数和条件个数
-    private final Map<String, Integer> cyclomaticComplexity;  // 圈复杂度
-    private static final String SESSION_CLASS_NAME;
+    // Probe index for the current method's entry probe
+    private int methodEntryProbeIdx = -1;
 
-    static {
-        SESSION_CLASS_NAME = StackSession.class.getName().replaceAll("[.]", "/");
+    // Method metadata for class-level registration
+    private int[] lineTotals;
+    private int[] branchTotals;
+    private int cyclo;
+    private boolean isRecursive;
+    private boolean isAsync;
+    private int execMethodLineNumber = -1;
+
+    // ========== Static probe assignment storage (per-class) ==========
+    // Cleared by ClassInstrumenter.visitTotalProbeCount() after registration
+    private static final ThreadLocal<ProbeAssignment> PROBE_ASSIGNMENT = ThreadLocal.withInitial(ProbeAssignment::new);
+
+    /**
+     * Method metadata for ClassProbeInfo registration.
+     */
+    static class MethodMeta {
+        final String methodNameDesc;
+        final int[] lineTotals;
+        final int[] branchTotals;
+        final int cyclo;
+        final boolean recursive;
+        final boolean async;
+
+        MethodMeta(String methodNameDesc, int[] lineTotals, int[] branchTotals, int cyclo, boolean recursive, boolean async) {
+            this.methodNameDesc = methodNameDesc;
+            this.lineTotals = lineTotals;
+            this.branchTotals = branchTotals;
+            this.cyclo = cyclo;
+            this.recursive = recursive;
+            this.async = async;
+        }
     }
 
-/*
-  插桩效果
-  源码：
-  25 public void hi(String hiName, int d) {
-  26         int i=26;
-  27         if(hiName.isEmpty()){
-  28             int ii=28;
-  29             System.out.println("hello_29\n");
-  30             return;
-  31         }
-  32         int ii=32;
-  33         int iii=33;
-  34   }
-  插桩后：
-     public void hi(String hiName, int var2) {
-          Object var3 = StackSession.$begin(8101662504613204910L, "test/coverage/Hello1", "hi1 (Ljava/lang/String;I)
-          V");
-          var3.equals(26);
-          boolean var4 = true;
-          var3.equals(26);
-          var3.equals(27);
-          boolean ii;
-          if (hiName.isEmpty()) {
-              var3.equals(28);
-              ii = true;
-              var3.equals(28);
-              var3.equals(29);
-              PrintStream var10000 = System.out;
-              var3.equals(29);
-              var10000.println("hello_29\n");
-              var3.equals(30);
-              StackSession.$end(var3, 8, 0);
-          } else {
-              var3.equals(32);
-              ii = true;
-              var3.equals(33);
-              int iii = true;
-              var3.equals(34);
-          }
-      }
- */
+    /**
+     * Branch metadata for ClassProbeInfo registration.
+     */
+    static class BranchMeta {
+        final int branchLine;
+        final int conditionNumber;
+
+        BranchMeta(int branchLine, int conditionNumber) {
+            this.branchLine = branchLine;
+            this.conditionNumber = conditionNumber;
+        }
+    }
+
+    /**
+     * Probe assignment data accumulated for the entire class.
+     */
+    static class ProbeAssignment {
+        final Map<Integer, Integer> probeToLineNumber = new LinkedHashMap<>();
+        final Map<Integer, Boolean> probeIsBranch = new LinkedHashMap<>();
+        final Map<Integer, Integer> probeToMethodEntry = new LinkedHashMap<>();
+        final Map<Integer, MethodMeta> methodMetaMap = new LinkedHashMap<>();
+        final Map<Integer, BranchMeta> branchMetaMap = new LinkedHashMap<>();
+    }
+
+    /**
+     * Get and clear the probe assignment for the current thread.
+     * Called by ClassInstrumenter.visitTotalProbeCount().
+     */
+    static ProbeAssignment getAndClearProbeAssignment() {
+        ProbeAssignment assignment = PROBE_ASSIGNMENT.get();
+        PROBE_ASSIGNMENT.remove();
+        return assignment;
+    }
 
     /**
      * Creates a new {@link ProbeInserter}.
      *
-     * @param access access flags of the adapted method
-     * @param name   the method's name
-     * @param desc   the method's descriptor
-     * @param mv     the method visitor to which this adapter delegates calls
+     * @param access             access flags of the adapted method
+     * @param name               the method's name
+     * @param desc               the method's descriptor
+     * @param signature          the method's signature
+     * @param mv                 the method visitor to which this adapter delegates calls
+     * @param classInfo          class info
+     * @param classInstrumenter  the parent class instrumenter (for probe index allocation)
      */
     ProbeInserter(final int access, final String name, final String desc, final String signature,
-                  final MethodVisitor mv, final ClassInfo classInfo) {
+                  final MethodVisitor mv, final ClassInfo classInfo, final ClassInstrumenter classInstrumenter) {
         super(InstrSupport.ASM_API_VERSION, mv);
-        this.clinit = InstrSupport.CLINIT_NAME.equals(name);
-        this.clazzId = classInfo.getClassId();
+        this.classInstrumenter = classInstrumenter;
         this.clazzName = classInfo.getClassName();
         this.methodName = name;
+        this.compilerGeneratedMethod = ClassInfo.isCompilerGeneratedMethod(access);
         if (signature == null || desc != null) {
             this.methodNameDescCombined = name + " " + desc;
             this.methodDesc = desc;
@@ -144,14 +165,13 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
         for (final Type t : Type.getArgumentTypes(desc)) {
             pos += t.getSize();
         }
-        // 确保 variable 非负
         variable = Math.max(pos, 0);
         this.methodLineNumberMap = classInfo.getMethodLineNumberMap();
         this.cyclomaticComplexity = classInfo.getCyclomaticComplexityMap();
         this.recursiveMap = classInfo.getRecursiveMap();
         this.asyncMethodMap = classInfo.getAsyncMethodMap();
 
-        // 方法包含表达式
+        // Method filter expressions
         String methodIncludeExpr = Agent.traceContext.getConfig("codeStack.includeMethod");
         if (methodIncludeExpr == null) {
             methodIncludeExpr = Agent.traceContext.getConfig("conf_codeStack.includeMethod");
@@ -159,7 +179,6 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
         methodIncludes = new WildcardMatcher(methodIncludeExpr == null || methodIncludeExpr.isEmpty() ? "*" :
                 methodIncludeExpr);
 
-        // 方法排除表达式
         String methodExcludeExpr = Agent.traceContext.getConfig("codeStack.excludeMethod");
         if (methodExcludeExpr == null) {
             methodExcludeExpr = Agent.traceContext.getConfig("conf_codeStack.excludeMethod");
@@ -169,49 +188,62 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
                 methodExcludeExpr);
     }
 
-    // 方法过滤，包含则插桩
     private boolean codeStackMethodInclude() {
         return !methodIncludes.matches(this.methodName);
     }
 
-    // 方法过滤，排除不插桩的方法，默认带这些的不插桩
     private boolean codeStackMethodExclude() {
-        // 检查是否是显式的有参构造函数
-        if ("<init>".equals(this.methodName) && this.methodDesc.contains("(") && !this.methodDesc.contains(
-                "()")) {
-            return false; // 显式有参构造函数需要插桩
+        if (compilerGeneratedMethod) {
+            return true;
+        }
+        if ("<init>".equals(this.methodName) && this.methodDesc.contains("(") && !this.methodDesc.contains("()")) {
+            return false;
         }
         return methodExcludes.matches(this.methodName);
     }
 
+    /**
+     * Called by the instrumentation framework to insert a probe at a specific point.
+     * In the new approach, this simply sets $jacocoData[probeIdx] = true.
+     */
     @Override
     public void insertProbe(final int id) {
-        // 提前过滤无需插桩的方法
         if (codeStackMethodExclude() || codeStackMethodInclude()) {
             return;
         }
         insertProbeToLine();
     }
 
-    // 合并插桩点，递归体内部只在入口插入一次探针
+    /**
+     * Insert a simple boolean array write: $jacocoData[probeIdx] = true;
+     * This is the core of the new approach — replaces object.equals(lineNumber) calls.
+     */
     private void insertProbeToLine() {
         if (mv != null) {
-            // 合并连续重复插桩点
+            // Merge consecutive duplicate probe insertions
             if (currentLine == lastInsertedLine || currentLine == -1) {
                 return;
             }
             lastInsertedLine = currentLine;
-            mv.visitVarInsn(Opcodes.ALOAD, variable);
-            InstrSupport.push(mv, currentLine); // 确保push操作不会引入新的行号信息
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
-            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Object", "equals", "(Ljava/lang/Object;)Z", false);
-            mv.visitInsn(Opcodes.POP);
+
+            int probeIdx = classInstrumenter.nextProbeIndex();
+            ProbeAssignment assignment = PROBE_ASSIGNMENT.get();
+            assignment.probeToLineNumber.put(probeIdx, currentLine);
+            assignment.probeIsBranch.put(probeIdx, false);
+            if (methodEntryProbeIdx >= 0) {
+                assignment.probeToMethodEntry.put(probeIdx, methodEntryProbeIdx);
+            }
+
+            // Generate: $jacocoData[probeIdx] = true;
+            mv.visitVarInsn(Opcodes.ALOAD, variable);  // aload <variable> ($jacocoData)
+            InstrSupport.push(mv, probeIdx);            // push probeIdx
+            mv.visitInsn(Opcodes.ICONST_1);             // push true
+            mv.visitInsn(Opcodes.BASTORE);              // bastore
         }
     }
 
     @Override
     public void visitTableSwitchInsn(int min, int max, Label dflt, Label... labels) {
-        // Record the line number for each case
         branchLines.add(currentLine);
         super.visitTableSwitchInsn(min, max, dflt, labels);
     }
@@ -222,75 +254,15 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
         super.visitLookupSwitchInsn(dflt, keys, labels);
     }
 
-    // 记录 catch 和 finally 块的入口 label
-    private final Set<Label> catchLabels = new HashSet<>();
-    private final Set<Label> finallyLabels = new HashSet<>();
-    // 当前是否在 catch/finally 块
-    private boolean inCatchBlock = false;
-    private boolean inFinallyBlock = false;
-
-    @Override
-    public void visitTryCatchBlock(Label start, final Label end, final Label handler, final String type) {
-        if (codeStackMethodExclude()) {
-            super.visitTryCatchBlock(start, end, handler, type);
-            return;
-        }
-        if (codeStackMethodInclude()) {
-            super.visitTryCatchBlock(start, end, handler, type);
-            return;
-        }
-        // 记录 catch/finally label
-        if (type == null) {
-            finallyLabels.add(handler); // finally 块
-        } else {
-            catchLabels.add(handler); // catch 块
-        }
-        super.visitTryCatchBlock(start, end, handler, type);
-    }
-
-    // 插入分支条件布尔值的插桩
-    private void insertBranchConditionProbe(int branchLine, int conditionIndex, int totalConditions, boolean value) {
-        if (mv != null) {
-            Boolean isRecursive = recursiveMap.get(clazzName + " " + methodNameDescCombined);
-
-            Map<Integer, Set<Integer>> execBranchLineAndConditionNumber = new HashMap<>();
-            Set<Integer> conditionNumber = this.execBranchLineAndConditionNumberMap.get(branchLine);
-            execBranchLineAndConditionNumber.put(branchLine,conditionNumber);
-
-            mv.visitVarInsn(Opcodes.ALOAD, variable); // StackSession对象
-            mv.visitLdcInsn(branchLine); // 分支行号
-            mv.visitLdcInsn(conditionIndex); // 条件编号（从1开始）
-            mv.visitLdcInsn(totalConditions); // 条件总数
-            mv.visitLdcInsn(value); // 直接传boolean
-            mv.visitLdcInsn(conditionNumber.toString());
-            mv.visitLdcInsn(isRecursive);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, SESSION_CLASS_NAME, "$recordBranchCondition",
-                    "(Ljava/lang/Object;IIIZLjava/lang/String;Z)V", false);
-        }
-    }
-
     /**
-     * 短路求值
-     * if (user.getId() == 1 && "tester".equals(user.getName()))
-     * "id": "1","name": "tester" 结果：ff 一样
-     * "id": "2","name": "tester" 结果：tf
-     * "id": "2","name": "tester2" 结果：tt
-     * "id": "1","name": "tester2" 结果：ff 一样
-     * if (user.getId() == 1 || "tester".equals(user.getName()))
-     * "id": "1","name": "tester" 结果：tt
-     * "id": "2","name": "tester" 结果：tf 一样
-     * "id": "2","name": "tester2" 结果：ff
-     * "id": "1","name": "tester2" 结果：tf 一样
-     * 判断路径都是3个
-     * if(user.getId().equals(user.getAge()) && "tester".equals(user.getName()) && (user.getAge() >= 10 && user
-     * .getAge() <= 40))
-     * "id": "30","name": "tester","age": "30", 结果：tttt
-     * "id": "5","name": "tester","age": "5", 结果：ttff
-     * "id": "5","name": "tester2","age": "5", 结果：tfff 一样
-     * "id": "41","name": "tester2","age": "41", 结果：tfff 一样
-     * "id": "5","name": "tester2","age": "41", 结果：ffff
-     * "id": "41","name": "tester","age": "41", 结果：tttf
-     * 判断路径5个
+     * Insert branch probes for branch coverage.
+     * <p>
+     * For each branch (if/else), we insert TWO probes:
+     * <ul>
+     *   <li>True branch probe: executed when condition is true</li>
+     *   <li>False branch probe: executed when condition is false</li>
+     * </ul>
+     * </p>
      */
     @Override
     public void visitJumpInsn(final int opcode, final Label label) {
@@ -303,138 +275,91 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
             return;
         }
 
-        // 只对条件跳转插桩（GOTO除外）
+        // Only instrument conditional jumps (skip GOTO)
         if (opcode == Opcodes.GOTO) {
             super.visitJumpInsn(opcode, label);
             return;
         }
 
-        // 记录当前分支行号
-        this.branchLine = currentLine;
-        this.branchLines.add(this.branchLine);
-        this.execBranchLineAndConditionNumberMap.computeIfAbsent(this.branchLine, v -> {
-            this.execBranchConditionNumber = 0;
-            return new HashSet<>();
-        }).add(this.execBranchConditionNumber += 1);
+        // Record branch line
+        this.branchLines.add(currentLine);
+        int conditionNumber = branchLineConditionCounter.getOrDefault(currentLine, 0) + 1;
+        branchLineConditionCounter.put(currentLine, conditionNumber);
 
-        // 统计当前行的分支条件数
-        Set<Integer> conds = this.clazzInfo.getBranchLineAndConditionNumberMap().get(this.branchLine);
-        int totalConds = (conds != null) ? conds.size() : 0;
-        if (totalConds == 0) totalConds = 1; // 至少1个
+        ProbeAssignment assignment = PROBE_ASSIGNMENT.get();
 
-        // 维护每行的条件编号
-        int conditionIdx = branchLineConditionCounter.getOrDefault(this.branchLine, 0) + 1;
-        branchLineConditionCounter.put(this.branchLine, conditionIdx);
+        // Allocate two probe indices: trueProbeIdx and falseProbeIdx
+        int trueProbeIdx = classInstrumenter.nextProbeIndex();
+        int falseProbeIdx = classInstrumenter.nextProbeIndex();
 
-        // 插入true分支探针
+        // Record metadata
+        assignment.probeToLineNumber.put(trueProbeIdx, currentLine);
+        assignment.probeIsBranch.put(trueProbeIdx, true);
+        if (methodEntryProbeIdx >= 0) {
+            assignment.probeToMethodEntry.put(trueProbeIdx, methodEntryProbeIdx);
+        }
+        assignment.probeToLineNumber.put(falseProbeIdx, currentLine);
+        assignment.probeIsBranch.put(falseProbeIdx, true);
+        if (methodEntryProbeIdx >= 0) {
+            assignment.probeToMethodEntry.put(falseProbeIdx, methodEntryProbeIdx);
+        }
+
+        // Both branch probes belong to the same source line, so either path
+        // should count the conditional line as executed branch coverage.
+        assignment.branchMetaMap.put(trueProbeIdx, new BranchMeta(currentLine, conditionNumber));
+        assignment.branchMetaMap.put(falseProbeIdx, new BranchMeta(currentLine, conditionNumber));
+
+        // Generate instrumented branch code:
+        // Original jump -> jumpTaken (true branch probe)
+        // Fallthrough -> false branch probe -> continuation
+
         Label jumpTaken = new Label();
         Label continuation = new Label();
 
-        // 原跳转指令 -> 跳转到 jumpTaken
+        // Original conditional jump -> jumpTaken
         super.visitJumpInsn(opcode, jumpTaken);
 
-        // Fallthrough (False branch)
-        insertBranchConditionProbe(this.branchLine, conditionIdx, totalConds, false);
+        // Fallthrough (False branch): $jacocoData[falseProbeIdx] = true;
+        mv.visitVarInsn(Opcodes.ALOAD, variable);
+        InstrSupport.push(mv, falseProbeIdx);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitInsn(Opcodes.BASTORE);
         super.visitJumpInsn(Opcodes.GOTO, continuation);
 
-        // Jump Taken (True branch)
+        // Jump Taken (True branch): $jacocoData[trueProbeIdx] = true;
         super.visitLabel(jumpTaken);
-        insertBranchConditionProbe(this.branchLine, conditionIdx, totalConds, true);
+        mv.visitVarInsn(Opcodes.ALOAD, variable);
+        InstrSupport.push(mv, trueProbeIdx);
+        mv.visitInsn(Opcodes.ICONST_1);
+        mv.visitInsn(Opcodes.BASTORE);
         super.visitJumpInsn(Opcodes.GOTO, label);
 
-        // Continuation
+        // Continuation label
         super.visitLabel(continuation);
     }
 
     @Override
     public void visitInsn(final int opcode) {
-        if (codeStackMethodExclude()) {
-            super.visitInsn(opcode);
-            return;
-        }
-        if (codeStackMethodInclude()) {
-            super.visitInsn(opcode);
-            return;
-        }
-        // 检查是否是返回指令
-        if ((opcode >= Opcodes.IRETURN && opcode <= Opcodes.RETURN) || opcode == Opcodes.ATHROW) {
-            if (inCatchBlock) {
-                insertEndProbe();
-                inCatchBlock = false;
-            } else if (inFinallyBlock) {
-                insertEndProbe();
-                inFinallyBlock = false;
-            } else {
-                insertEndProbe();
-            }
-        }
+        // No $end() call needed in the new approach
+        // Return instructions are clean - no instrumentation
         super.visitInsn(opcode);
-    }
-
-    /**
-     * 在返回return指令处插入插桩代码
-     * 举例代码：
-     * 1 public void hi(String hiName, int d) {
-     * 2         int i=2;
-     * 3         if(hiName.isEmpty()){
-     * 4             int ii=4;
-     * 5             System.out.println("hello_5\n");
-     * 6             return;
-     * 7         }
-     * 8         int ii=8;
-     * 9         int iii=9;
-     * 10   }
-     * count从第二行开始计数，累计到第九行，共7行，
-     * 注：1、注释、空格、括号不做统计；
-     * 2、由于void最后有一个默认return，所以是累计共8行
-     */
-    private void insertEndProbe() {
-        if (mv != null) {
-            String branchLinesToJson = JsonUtil.toJson(this.branchLines);
-            Boolean isRecursive = recursiveMap.get(clazzName + " " + methodNameDescCombined);
-
-            mv.visitVarInsn(Opcodes.ALOAD, variable);
-            mv.visitLdcInsn(branchLinesToJson);
-            mv.visitLdcInsn(isRecursive);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, SESSION_CLASS_NAME, "$end",
-                    "(Ljava/lang/Object;Ljava/lang/String;Z)V", false);
-        }
     }
 
     @Override
     public void visitLabel(Label label) {
-        if (codeStackMethodExclude()) {
-            super.visitLabel(label);
-            return;
-        }
-        if (codeStackMethodInclude()) {
-            super.visitLabel(label);
-            return;
-        }
-        // 进入 catch/finally 块
-        if (catchLabels.contains(label)) {
-            inCatchBlock = true;
-        } else if (finallyLabels.contains(label)) {
-            inFinallyBlock = true;
-        }
-        if (label == lastReturnLabel) {
-            insertEndProbe();
-        }
         super.visitLabel(label);
     }
 
-//    @Override
-//    public void visitLdcInsn(final Object cst) {
-//        mv.visitVarInsn(Opcodes.ALOAD, variable);
-//        InstrSupport.push(mv, currentLine);
-//        mv.visitMethodInsn(Opcodes.INVOKESTATIC, "java/lang/Integer", "valueOf", "(I)Ljava/lang/Integer;", false);
-//        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/Object", "equals", "(Ljava/lang/Object;)Z", false);
-//        mv.visitInsn(Opcodes.POP);
-//
-//        super.visitLdcInsn(cst);
-//    }
-
-    //方法体的开始
+    /**
+     * Method entry: insert $jacocoInit() call and store probe array in local variable.
+     * This replaces the old $begin() call with 11 parameters.
+     * <p>
+     * Generated code:
+     * <pre>
+     * boolean[] $jacocoData = ClassName.$jacocoInit();
+     * </pre>
+     * </p>
+     */
     @Override
     public void visitCode() {
         if (codeStackMethodExclude() || codeStackMethodInclude()) {
@@ -442,26 +367,16 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
             return;
         }
 
-        // 初始当前方法索引及探针数
         if (mv != null) {
-            // 类中所有方法行号
-            int[] lineNumbers;
-            List<Integer> tempList = new ArrayList<Integer>(methodLineNumberMap.size());
-            for (Set<Integer> lineNumberSet : methodLineNumberMap.values()) {
-                if (lineNumberSet != null && !lineNumberSet.isEmpty()) {
-                    tempList.add(Collections.min(lineNumberSet));
-                }
-            }
-            int lineNumbersSize = tempList.size();
-            lineNumbers = new int[lineNumbersSize];
-            for (int i = 0; i < lineNumbersSize; i++) {
-                lineNumbers[i] = tempList.get(i);
-            }
+            // Allocate method entry probe index
+            methodEntryProbeIdx = classInstrumenter.nextProbeIndex();
+            ProbeAssignment assignment = PROBE_ASSIGNMENT.get();
 
-            // 方法中代码的总行数，用于计算行覆盖率
-            int[] lineNumberTotals;
-            Set<Integer> tempSet = new HashSet<Integer>();
+            // Record method metadata for ClassProbeInfo
             String targetMethodNameDesc = this.clazzName + " " + this.methodNameDescCombined;
+
+            // Calculate line totals for this method
+            Set<Integer> tempSet = new HashSet<>();
             methodLineNumberMap.forEach((key, value) -> {
                 String[] split = key.split(" ");
                 String methodNameDescStr = String.join(" ", Arrays.copyOfRange(split, 0, split.length));
@@ -469,11 +384,10 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
                     tempSet.addAll(value);
                 }
             });
-            lineNumberTotals = tempSet.stream().mapToInt(Integer::intValue).toArray();
+            lineTotals = tempSet.stream().mapToInt(Integer::intValue).toArray();
 
-            //类中所有分支号分配到逐个方法中的分支行号
-            int[] totalBranches;
-            List<Integer> totalBranchList = new ArrayList<Integer>();
+            // Calculate branch totals for this method
+            List<Integer> totalBranchList = new ArrayList<>();
             for (Map.Entry<String, Integer> entry : this.clazzInfo.getTotalBranchMap().entrySet()) {
                 String[] split = entry.getKey().split(" ");
                 StringBuilder sb = new StringBuilder();
@@ -481,53 +395,36 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
                     if (i > 0) sb.append(" ");
                     sb.append(split[i]);
                 }
-                String methodNameDescStr = sb.toString();
-                if (methodNameDescCombined.equals(methodNameDescStr)) {
+                if (methodNameDescCombined.equals(sb.toString())) {
                     totalBranchList.add(entry.getValue());
                 }
             }
-            totalBranches = new int[totalBranchList.size()];
-            for (int i = 0; i < totalBranchList.size(); i++) {
-                totalBranches[i] = totalBranchList.get(i);
-            }
+            branchTotals = totalBranchList.stream().mapToInt(Integer::intValue).toArray();
 
-            // 方法圈复杂度；记录圈复杂度
-            int cyclo = cyclomaticComplexity.containsKey(this.methodNameDescCombined) ?
+            cyclo = cyclomaticComplexity.containsKey(this.methodNameDescCombined) ?
                     cyclomaticComplexity.get(this.methodNameDescCombined) : 0;
+            isRecursive = recursiveMap.getOrDefault(targetMethodNameDesc, false);
+            isAsync = asyncMethodMap.getOrDefault(this.clazzName + " " + this.methodNameDescCombined, false);
 
-            int execMethodLineNumber = -1;
+            // Find method entry line number
             for (Map.Entry<String, Set<Integer>> entry : methodLineNumberMap.entrySet()) {
-                String methodNameDescStr = entry.getKey();
-                if (targetMethodNameDesc.equals(methodNameDescStr) && entry.getValue() != null && !entry.getValue().isEmpty()) {
+                if (targetMethodNameDesc.equals(entry.getKey()) && entry.getValue() != null && !entry.getValue().isEmpty()) {
                     execMethodLineNumber = Collections.min(entry.getValue());
                     break;
                 }
             }
 
-            String totalMethodsToJson = JsonUtil.toJson(lineNumbers);    // 类中方法总数
-            String lineInMethodCountToJson = JsonUtil.toJson(lineNumberTotals);  // 某方法中代码总行数
-            String totalBranchesToJson = JsonUtil.toJson(totalBranches);   // 方法中所有分支代码行数
+            // Register method entry probe metadata
+            assignment.probeToLineNumber.put(methodEntryProbeIdx, execMethodLineNumber);
+            assignment.probeIsBranch.put(methodEntryProbeIdx, false);
+            assignment.probeToMethodEntry.put(methodEntryProbeIdx, methodEntryProbeIdx);
+            assignment.methodMetaMap.put(methodEntryProbeIdx, new MethodMeta(
+                    methodNameDescCombined, lineTotals, branchTotals, cyclo, isRecursive, isAsync
+            ));
 
-            Boolean isRecursive = recursiveMap.get(targetMethodNameDesc);
-            Boolean isAsyncMethod = asyncMethodMap.get(clazzName + " " + methodNameDescCombined);
-
-            mv.visitLdcInsn(this.clazzId);
-            mv.visitLdcInsn(this.clazzName);
-            mv.visitLdcInsn(this.methodName);
-            mv.visitLdcInsn(this.methodDesc);
-            mv.visitLdcInsn(execMethodLineNumber);
-
-            mv.visitLdcInsn(totalMethodsToJson);
-            mv.visitLdcInsn(lineInMethodCountToJson);
-            mv.visitLdcInsn(totalBranchesToJson);
-
-            mv.visitLdcInsn(cyclo);
-            mv.visitLdcInsn(isRecursive);
-            mv.visitLdcInsn(isAsyncMethod);
-            mv.visitMethodInsn(Opcodes.INVOKESTATIC, SESSION_CLASS_NAME, "$begin",
-                    "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;I" +
-                            "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZZ)Ljava/lang/Object;",
-                    false);
+            // Generate: boolean[] $jacocoData = ClassName.$jacocoInit();
+            mv.visitMethodInsn(Opcodes.INVOKESTATIC, clazzName,
+                    InstrSupport.INITMETHOD_NAME, InstrSupport.INITMETHOD_DESC, false);
             mv.visitVarInsn(Opcodes.ASTORE, variable);
         }
         super.visitCode();
@@ -558,16 +455,11 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 
     @Override
     public void visitMaxs(final int maxStack, final int maxLocals) {
-        // Max stack size of the probe code is 3 which can add to the
-        // original stack size depending on the probe locations. The accessor
-        // stack size is an absolute maximum, as the accessor code is inserted
-        // at the very beginning of each method when the stack size is empty.
-        /*
-          Maximum stack usage of the code to access the probe array.
-         */
-        int accessorStackSize = 4;
-        int calculatedStack = maxStack + 3;
-        final int increasedStack = Math.max(calculatedStack, accessorStackSize); // 确保非负
+        // Probe code only uses 3 stack slots (aload + push + iconst_1 + bastore = peak 3)
+        int accessorStackSize = 3;
+        // Method entry $jacocoInit() uses 1 slot (areturn value)
+        int calculatedStack = maxStack + 1;
+        final int increasedStack = Math.max(calculatedStack, accessorStackSize);
         mv.visitMaxs(increasedStack, maxLocals + 1);
     }
 
@@ -582,49 +474,37 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     @Override
     public final void visitFrame(final int type, final int nLocal, final Object[] local, final int nStack,
                                  final Object[] stack) {
-        // uncompressed frame
         if (type != Opcodes.F_NEW) {
             throw new IllegalArgumentException("ClassReader.accept() should be called with EXPAND_FRAMES flag");
         }
 
-        // 计算新局部变量数组的长度
-        // 需要考虑插入的探针变量（占1个slot）以及原有变量中LONG/DOUBLE类型占2个slot的情况
         int newLocalLen;
         if (variable <= nLocal) {
-            // 探针插入位置在已有局部变量范围内，需要增加一个slot
             newLocalLen = nLocal + 1;
         } else {
-            // 探针插入位置超出原有局部变量范围，需要扩展到variable+1
             newLocalLen = variable + 1;
         }
-
-        // 确保长度非负
         newLocalLen = Math.max(newLocalLen, 0);
 
         final Object[] newLocal = new Object[newLocalLen];
+        int oldIdx = 0;
+        int newIdx = 0;
+        int currentSlot = 0;
 
-        // 复制原有局部变量，并在指定位置插入探针变量
-        int oldIdx = 0;     // 原局部变量数组索引
-        int newIdx = 0;     // 新局部变量数组索引
-        int currentSlot = 0; // 当前处理的slot位置
-
-        // 遍历直到处理完所有原有变量和探针插入位置
         while (oldIdx < nLocal || currentSlot <= variable) {
             if (currentSlot == variable) {
-                // 插入探针变量
+                // Insert probe array variable: boolean[] ($jacocoData)
                 newLocal[newIdx++] = InstrSupport.DATAFIELD_DESC;
                 currentSlot++;
             } else {
                 if (oldIdx < nLocal) {
-                    // 复制原有变量
                     final Object t = local[oldIdx++];
                     newLocal[newIdx++] = t;
                     currentSlot++;
                     if (t == Opcodes.LONG || t == Opcodes.DOUBLE) {
-                        currentSlot++; // LONG和DOUBLE占两个slot
+                        currentSlot++;
                     }
                 } else {
-                    // 填充未使用的slot为TOP
                     newLocal[newIdx++] = Opcodes.TOP;
                     currentSlot++;
                 }

@@ -2,8 +2,10 @@ package com.oAT.web.control;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.oAT.agent.model.*;
+import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.*;
+import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.service.*;
@@ -20,6 +22,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.Serializable;
 import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -47,6 +50,12 @@ public class SystemSnapshotControl {
 
     @Autowired
     CoverageService coverageService;
+
+    @Autowired
+    ClientSessionService clientSessionService;
+
+    @Autowired
+    StaticInfoRepository staticInfoRepository;
 
     // 打开系统快照列表
     @RequestMapping("/list")
@@ -102,13 +111,13 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/directory", method = RequestMethod.POST)
     @ResponseBody
-    public ResultNotified saveDirectory(@PathVariable String projectId, @PathVariable String appId, SnapshotDirectory dir) {
+    public ResultNotified<Serializable> saveDirectory(@PathVariable String projectId, @PathVariable String appId, SnapshotDirectory dir) {
         //参数directory不能为空
-        Assert.isTrue(dir != null, "路径不能为空");
+        Assert.notNull(dir, "路径不能为空");
         //参数dir.name不能为空
         Assert.hasText(dir.getName(), "快照名称不能为空");
         appService.saveSnapshotDirectory(projectId, appId, dir);
-        return new ResultNotified(true, "目录保存成功");
+        return new ResultNotified<>(true, "目录保存成功");
     }
 
     /**
@@ -121,16 +130,16 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/directory", method = RequestMethod.DELETE)
     @ResponseBody
-    public ResultNotified deleteDirectory(@PathVariable String projectId, @PathVariable String appId, Integer directoryId) {
+    public ResultNotified<Serializable> deleteDirectory(@PathVariable String projectId, @PathVariable String appId, Integer directoryId) {
         //参数directoryId不能为空
         Assert.isTrue(directoryId != null, "路径不能为空");
         try {
             appService.deleteSnapshotDirectory(projectId, appId, directoryId);
         } catch (BusinessException e) {
             logger.info("删除目录失败", e);
-            return new ResultNotified(false, e.getMessage());
+            return new ResultNotified<>(false, e.getMessage());
         }
-        return new ResultNotified(true, "目录删除成功");
+        return new ResultNotified<>(true, "目录删除成功");
     }
 
     /**
@@ -215,12 +224,9 @@ public class SystemSnapshotControl {
     public String openNodeDetail(@PathVariable String snapshotId, String traceId, String nodeId, Model model) {
         TraceNode node = snapshotService.getTraceNode(traceId, nodeId);
         if (node instanceof HttpTraceNode) {
-            model.addAttribute("node", node);
-            HttpTraceNode httpNode = (HttpTraceNode) node;
-            List<Param> params = Stream.iterate(0, i -> i + 1).limit(httpNode.getRequestParamNames().length)// 生成队列数组
-                    .map(i -> new Param(httpNode.getRequestParamNames()[i], httpNode.getRequestParamValues()[i])) // 转换成Param对象
-                    .collect(Collectors.toList());
-            model.addAttribute("params", params);
+            HttpTraceNode httpNode = resolveHttpNodeWithLiveFallback(traceId, (HttpTraceNode) node);
+            model.addAttribute("node", httpNode);
+            model.addAttribute("params", buildHttpParams(httpNode));
             return "snapshot/webNodeDetail";
         } else if (node instanceof SqlTraceNode) {
             model.addAttribute("node", node);
@@ -249,14 +255,56 @@ public class SystemSnapshotControl {
         return null;
     }
 
+    private List<Param> buildHttpParams(HttpTraceNode httpNode) {
+        String[] names = httpNode.getRequestParamNames();
+        if (names == null || names.length == 0) {
+            return Collections.emptyList();
+        }
+
+        String[] values = httpNode.getRequestParamValues();
+        return Stream.iterate(0, i -> i + 1)
+                .limit(names.length)
+                .map(i -> new Param(names[i], values != null && i < values.length ? values[i] : null))
+                .collect(Collectors.toList());
+    }
+
+    private HttpTraceNode resolveHttpNodeWithLiveFallback(String traceId, HttpTraceNode snapshotNode) {
+        if (hasCompleteRequestParams(snapshotNode)) {
+            return snapshotNode;
+        }
+        Map<String, TraceNode> cachedNodes = clientSessionService.getTraceNodes(traceId);
+        if (cachedNodes == null || cachedNodes.isEmpty()) {
+            return snapshotNode;
+        }
+        TraceNode cachedNode = cachedNodes.get(snapshotNode.getTraceNodeId());
+        if (cachedNode instanceof HttpTraceNode && hasAnyRequestParams((HttpTraceNode) cachedNode)) {
+            return (HttpTraceNode) cachedNode;
+        }
+        return snapshotNode;
+    }
+
+    private boolean hasCompleteRequestParams(HttpTraceNode httpNode) {
+        String[] names = httpNode.getRequestParamNames();
+        if (names == null || names.length == 0) {
+            return false;
+        }
+        String[] values = httpNode.getRequestParamValues();
+        return values != null && values.length >= names.length;
+    }
+
+    private boolean hasAnyRequestParams(HttpTraceNode httpNode) {
+        String[] names = httpNode.getRequestParamNames();
+        return names != null && names.length > 0;
+    }
+
     /**
      * 更新快照标题
      */
     @RequestMapping("/update")
     @ResponseBody
-    public ResultNotified update(@PathVariable String projectId, @SessionAttribute UserVo user, SystemSnapshot snapshot) {
+    public ResultNotified<Serializable> update(@PathVariable String projectId, @SessionAttribute UserVo user, SystemSnapshot snapshot) {
         systemSnapshotService.saveBasic(projectId, user.getId(), snapshot);
-        return new ResultNotified(true, "保存成功");
+        return new ResultNotified<>(true, "保存成功");
     }
 
     /**
@@ -264,9 +312,9 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/addDescribe", method = RequestMethod.POST)
     @ResponseBody
-    public ResultNotified addDescribe(@SessionAttribute UserVo user, String id, String content) {
+    public ResultNotified<Serializable> addDescribe(@SessionAttribute UserVo user, String id, String content) {
         appService.addDescribe(id, user.getId(), content);
-        return new ResultNotified(true, "添加成功");
+        return new ResultNotified<>(true, "添加成功");
     }
 
     /**
@@ -274,9 +322,9 @@ public class SystemSnapshotControl {
      */
     @RequestMapping(value = "/delDescribe")
     @ResponseBody
-    public ResultNotified delDescribe(@SessionAttribute UserVo user, String id, String content, String dateTime) {
+    public ResultNotified<Serializable> delDescribe(@SessionAttribute UserVo user, String id, String content, String dateTime) {
         appService.delDescribe(id, user.getId(), content, dateTime);
-        return new ResultNotified(true, "评论删除成功");
+        return new ResultNotified<>(true, "评论删除成功");
     }
 
     /**
@@ -284,10 +332,10 @@ public class SystemSnapshotControl {
      */
     @RequestMapping("/doDelete")
     @ResponseBody
-    public ResultNotified deleteSystemSnapshot(String id) {
+    public ResultNotified<Serializable> deleteSystemSnapshot(String id) {
         //当前快照id
         appService.deleteSnapshot(id);
-        return new ResultNotified(true, "删除快照成功");
+        return new ResultNotified<>(true, "删除快照成功");
     }
 
     /**
@@ -311,6 +359,8 @@ public class SystemSnapshotControl {
         Map<String, Integer> methodComplexity = new HashMap<>();
         Map<String, Set<Integer>> methodTotalBranches = new HashMap<>();
         Map<String, Set<Integer>> methodCoveredBranches = new HashMap<>();
+        Map<String, Set<String>> methodTotalBranchConditions = new HashMap<>();
+        Map<String, Set<String>> methodCoveredBranchConditions = new HashMap<>();
 
         for (TraceNode traceNode : traceNodes) {
             if (traceNode instanceof HttpTraceNode) {
@@ -324,25 +374,40 @@ public class SystemSnapshotControl {
                     codeRelationships.put(requestUrl, childNodes);
 
                     for (StackNodeVo node : codeNodes) {
-                        if (node.getLineTotal() == null || node.getLineTotal().isEmpty()) continue;
-                        if (node.getDoLines() != null && node.getDoLines().contains(-1)) continue;
-
-                        String methodKey = node.getClassName() + "#" + node.getMethodName() + node.getMethodDescriptor();
+                        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
                         classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
 
-                        methodTotalLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getLineTotal());
                         if (node.getDoLines() != null) {
                             methodCoveredLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getDoLines());
                         }
 
-                        methodComplexity.put(methodKey, node.getCyclo());
-
-                        if (node.getBranchTotal() != null) {
-                            methodTotalBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getBranchTotal());
-                        }
                         if (node.getExecuteBranch() != null) {
                             methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
                         }
+                        addBranchConditionKeys(methodCoveredBranchConditions, methodKey, node.getExecuteBranchConditionMap());
+                    }
+                }
+            }
+        }
+
+        // 从全量静态数据补充总数
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+            for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                if (methodCoveredLines.containsKey(mKey) || methodCoveredBranches.containsKey(mKey)) {
+                    methodTotalLines.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getMethodLineNumberMap() != null ? mInfo.getMethodLineNumberMap() : Collections.emptyList());
+                    methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
+                    methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
+                            .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
+                    addBranchConditionKeys(methodTotalBranchConditions, mKey, mInfo.getBranchLineAndConditionNumberMap());
+                    if (methodCoveredBranchConditions.containsKey(mKey)) {
+                        Set<String> normalizedKeys = new LinkedHashSet<>();
+                        addBranchConditionKeysToSet(normalizedKeys, mInfo.getBranchLineAndConditionNumberMap(),
+                                decodeBranchConditionKeys(methodCoveredBranchConditions.get(mKey)));
+                        methodCoveredBranchConditions.put(mKey, normalizedKeys);
                     }
                 }
             }
@@ -360,6 +425,8 @@ public class SystemSnapshotControl {
             long cCoveredLines = 0;
             long cTotalBranches = 0;
             long cCoveredBranches = 0;
+            long cTotalBranchConditions = 0;
+            long cCoveredBranchConditions = 0;
             int cTotalComplexity = 0;
 
             for (String mKey : methods) {
@@ -371,6 +438,8 @@ public class SystemSnapshotControl {
                 cTotalComplexity += methodComplexity.getOrDefault(mKey, 0);
                 cTotalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
                 cCoveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
+                cTotalBranchConditions += methodTotalBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
+                cCoveredBranchConditions += methodCoveredBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
             }
 
             Map<String, Object> cStat = new HashMap<>();
@@ -381,6 +450,7 @@ public class SystemSnapshotControl {
             cStat.put("coveredLines", cCoveredLines);
             cStat.put("totalBranches", cTotalBranches);
             cStat.put("coveredBranches", cCoveredBranches);
+            cStat.put("branchRate", cTotalBranchConditions > 0 ? cCoveredBranchConditions * 100.0 / cTotalBranchConditions : 0);
             cStat.put("totalComplexity", cTotalComplexity);
             classStats.add(cStat);
         }
@@ -398,9 +468,9 @@ public class SystemSnapshotControl {
 
     @RequestMapping("/report/calculate/{id}")
     @ResponseBody
-    public ResultNotified calculateReport(@PathVariable String id) {
+    public ResultNotified<Serializable> calculateReport(@PathVariable String id) {
         systemSnapshotService.asyncCalculateCoverage(id);
-        return new ResultNotified(true, "覆盖率计算任务已启动");
+        return new ResultNotified<>(true, "覆盖率计算任务已启动");
     }
 
     @RequestMapping("/report/status/{id}")
@@ -419,6 +489,19 @@ public class SystemSnapshotControl {
         aggregatedClassCov.setClassName(className);
         aggregatedClassCov.setAppId(appId);
 
+        // 加载该类的全量静态数据
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        Map<String, StaticSourceMethodInfo> classStaticMethods = new HashMap<>();
+        for (StaticSourceInfo si : staticInfos) {
+            if (si.getClassInfo() != null && className.equals(si.getClassInfo().getClassName()) && si.getClassInfo().getMethodMaps() != null) {
+                for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
+                    String mKey = CoverageMethodKeyUtil.buildMethodKey(mInfo.getMethodName(), mInfo.getMethodDesc());
+                    classStaticMethods.put(mKey, mInfo);
+                }
+                break;
+            }
+        }
+
         Map<String, ClassCoverageIndex.MethodCoverageDetail> methodMap = new HashMap<>();
 
         for (TraceNode node : traceNodes) {
@@ -427,17 +510,30 @@ public class SystemSnapshotControl {
                 if (codeNodes != null) {
                     for (StackNodeVo sn : codeNodes) {
                         if (!sn.getClassName().equals(className)) continue;
-                        if (sn.getDoLines() != null && sn.getDoLines().contains(-1)) continue;
 
-                        String methodKey = sn.getMethodName() + sn.getMethodDescriptor();
+                        String methodKey = CoverageMethodKeyUtil.buildMethodKey(sn.getMethodName(), sn.getMethodDescriptor());
                         ClassCoverageIndex.MethodCoverageDetail md = methodMap.computeIfAbsent(methodKey, k -> {
                             ClassCoverageIndex.MethodCoverageDetail newMd = new ClassCoverageIndex.MethodCoverageDetail();
                             newMd.setMethodName(sn.getMethodName());
                             newMd.setMethodDesc(sn.getMethodDescriptor());
-                            newMd.setTotalLineNumbers(sn.getLineTotal());
-                            newMd.setTotalLines(sn.getLineTotal() != null ? sn.getLineTotal().size() : 0);
-                            newMd.setComplexity(sn.getCyclo());
+                            // 从全量静态数据获取总数
+                            StaticSourceMethodInfo staticMethod = classStaticMethods.get(methodKey);
+                            List<Integer> totalLines = staticMethod != null && staticMethod.getMethodLineNumberMap() != null
+                                    ? staticMethod.getMethodLineNumberMap() : Collections.emptyList();
+                            newMd.setTotalLineNumbers(new ArrayList<>(totalLines));
+                            newMd.setTotalLines(totalLines.size());
+                            newMd.setTotalBranches(staticMethod != null && staticMethod.getTotalBranchCount() != null
+                                    ? staticMethod.getTotalBranchCount() : 0);
+                            newMd.setTotalBranchConditionNumbers(staticMethod != null
+                                    ? staticMethod.getBranchLineAndConditionNumberMap() : null);
+                            newMd.setTotalBranchConditions(countBranchConditions(newMd.getTotalBranchConditionNumbers()));
+                            newMd.setCoveredBranchConditionNumbers(new LinkedHashMap<>());
+                            newMd.setCoveredBranchConditions(0);
+                            newMd.setBranchRate(0.0);
+                            newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
+                                    ? staticMethod.getCyclomaticComplexityMap() : 0);
                             newMd.setCoveredLineNumbers(new ArrayList<>());
+                            newMd.setCoveredBranchIds(new ArrayList<>());
                             return newMd;
                         });
 
@@ -447,6 +543,21 @@ public class SystemSnapshotControl {
                             md.setCoveredLineNumbers(new ArrayList<>(covered));
                             md.setCoveredLines(md.getCoveredLineNumbers().size());
                             md.setCovered(md.getCoveredLines() > 0);
+                        }
+                        if (sn.getExecuteBranch() != null) {
+                            Set<Integer> coveredBranchIds = new LinkedHashSet<>(md.getCoveredBranchIds());
+                            coveredBranchIds.addAll(sn.getExecuteBranch());
+                            md.setCoveredBranchIds(new ArrayList<>(coveredBranchIds));
+                            md.setCoveredBranches(md.getCoveredBranchIds().size());
+                        }
+                        if (sn.getExecuteBranchConditionMap() != null) {
+                            Map<String, List<Integer>> coveredBranchConditionNumbers = mergeBranchConditionNumbers(
+                                    md.getCoveredBranchConditionNumbers(), sn.getExecuteBranchConditionMap());
+                            coveredBranchConditionNumbers = normalizeCoveredBranchConditionNumbers(
+                                    md.getTotalBranchConditionNumbers(), coveredBranchConditionNumbers);
+                            md.setCoveredBranchConditionNumbers(coveredBranchConditionNumbers);
+                            md.setCoveredBranchConditions(countBranchConditions(coveredBranchConditionNumbers));
+                            md.setBranchRate(calculateBranchRate(md.getCoveredBranchConditions(), md.getTotalBranchConditions()));
                         }
                     }
                 }
@@ -460,6 +571,133 @@ public class SystemSnapshotControl {
         model.addAttribute("className", className);
 
         return "/snapshot/snapshotCodeView";
+    }
+
+    private Map<String, List<Integer>> mergeBranchConditionNumbers(Map<String, List<Integer>> current,
+                                                                   Map<String, List<Integer>> incoming) {
+        Map<String, LinkedHashSet<Integer>> merged = new LinkedHashMap<>();
+        appendBranchConditionNumbers(merged, current);
+        appendBranchConditionNumbers(merged, incoming);
+        Map<String, List<Integer>> result = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashSet<Integer>> entry : merged.entrySet()) {
+            result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        return result;
+    }
+
+    private void appendBranchConditionNumbers(Map<String, LinkedHashSet<Integer>> target,
+                                              Map<String, List<Integer>> source) {
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
+            LinkedHashSet<Integer> values = target.computeIfAbsent(entry.getKey(), key -> new LinkedHashSet<>());
+            if (entry.getValue() != null) {
+                values.addAll(entry.getValue());
+            }
+        }
+    }
+
+    private int countBranchConditions(Map<String, List<Integer>> branchConditionNumbers) {
+        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (List<Integer> values : branchConditionNumbers.values()) {
+            total += values == null ? 0 : new LinkedHashSet<>(values).size();
+        }
+        return total;
+    }
+
+    private Map<String, List<Integer>> normalizeCoveredBranchConditionNumbers(Map<String, List<Integer>> total,
+                                                                              Map<String, List<Integer>> covered) {
+        if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
+            List<Integer> totalValues = entry.getValue();
+            if (totalValues == null || totalValues.isEmpty()) {
+                continue;
+            }
+            Set<Integer> allowed = new LinkedHashSet<>(totalValues);
+            List<Integer> coveredValues = covered.get(entry.getKey());
+            if (coveredValues == null || coveredValues.isEmpty()) {
+                continue;
+            }
+            LinkedHashSet<Integer> matched = new LinkedHashSet<>();
+            for (Integer value : coveredValues) {
+                if (value != null && allowed.contains(value)) {
+                    matched.add(value);
+                }
+            }
+            if (!matched.isEmpty()) {
+                normalized.put(entry.getKey(), new ArrayList<>(matched));
+            }
+        }
+        return normalized;
+    }
+
+    private double calculateBranchRate(int coveredBranchConditions, int totalBranchConditions) {
+        return totalBranchConditions > 0 ? (double) coveredBranchConditions / totalBranchConditions * 100 : 0.0;
+    }
+
+    private void addBranchConditionKeys(Map<String, Set<String>> target,
+                                        String methodKey,
+                                        Map<String, List<Integer>> branchConditionNumbers) {
+        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return;
+        }
+        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
+        for (Map.Entry<String, List<Integer>> entry : branchConditionNumbers.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (Integer conditionNumber : entry.getValue()) {
+                if (conditionNumber != null) {
+                    keys.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
+        }
+    }
+
+    private void addBranchConditionKeysToSet(Set<String> target,
+                                             Map<String, List<Integer>> allowedBranchConditionNumbers,
+                                             Map<String, List<Integer>> branchConditionNumbers) {
+        Map<String, List<Integer>> effective = normalizeCoveredBranchConditionNumbers(
+                allowedBranchConditionNumbers, branchConditionNumbers);
+        for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (Integer conditionNumber : entry.getValue()) {
+                if (conditionNumber != null) {
+                    target.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
+        }
+    }
+
+    private Map<String, List<Integer>> decodeBranchConditionKeys(Set<String> keys) {
+        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
+        if (keys == null || keys.isEmpty()) {
+            return decoded;
+        }
+        for (String key : keys) {
+            if (!StringUtils.hasText(key)) {
+                continue;
+            }
+            int split = key.lastIndexOf('#');
+            if (split <= 0 || split >= key.length() - 1) {
+                continue;
+            }
+            try {
+                int conditionNumber = Integer.parseInt(key.substring(split + 1));
+                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(conditionNumber);
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        return decoded;
     }
 
 }

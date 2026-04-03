@@ -1,5 +1,6 @@
 package com.oAT.web.service.impl;
 
+import com.oAT.web.common.CoverageSourceClassUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.service.GitService;
 import com.oAT.web.service.ResourceService;
@@ -762,10 +763,11 @@ public class GitServiceImpl implements GitService {
                     candidates.add(filePath);
                     // if filePath looks like a dotted class name, try source paths
                     if (!filePath.contains("/") && filePath.contains(".")) {
-                        String pathLike = filePath.replace('.', '/') + ".java";
-                        candidates.add("src/main/java/" + pathLike);
-                        candidates.add("src/test/java/" + pathLike);
-                        candidates.add(pathLike);
+                        for (String pathLike : CoverageSourceClassUtil.buildSourcePathCandidates(filePath)) {
+                            candidates.add("src/main/java/" + pathLike);
+                            candidates.add("src/test/java/" + pathLike);
+                            candidates.add(pathLike);
+                        }
                     } else {
                         // if provided path is like com/xxx/YYY.java or src/... keep variants
                         if (filePath.endsWith(".java")) {

@@ -2,6 +2,7 @@ package com.oAT.web.domain;
 
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.web.common.ClassUtil;
+import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import org.apache.commons.lang3.ArrayUtils;
 
 import java.util.*;
@@ -12,10 +13,12 @@ public class StackCodeLayer implements ImageLayer {
     StackNodeVo[] codeNodes;
     String snapshotId;
     Map<String, List<StackNodeVo>> childNodes;
+    Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup;
 
-    public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId) {
+    public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId, Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup) {
         this.codeNodes = codeNodes;
         this.snapshotId = snapshotId;
+        this.staticMethodLookup = staticMethodLookup != null ? staticMethodLookup : Collections.emptyMap();
         childNodes = Arrays.stream(codeNodes).collect(Collectors.groupingBy(StackNodeVo::parentId));
     }
 
@@ -75,8 +78,8 @@ public class StackCodeLayer implements ImageLayer {
             );
         });
 
-        // 添加根节点关系
-        results.add(buildRootEdge());
+        // 添加入口到顶层代码节点的关系
+        results.addAll(buildRootEdges());
         return results;
     }
 
@@ -92,31 +95,39 @@ public class StackCodeLayer implements ImageLayer {
     private ImageElement buildNode(StackNodeVo node) {
         String className = ClassUtil.toClassName(node.getClassName());
         String methodName = node.getMethodName();
-//        if (node.getMethodName().split(" ").length > 1) {
-//            methodName = node.getMethodName().split(" ")[1];
-//        } else {
-//            methodName = node.getMethodName().split(" ")[0];
-//        }
         String classSimpleName = ClassUtil.getClassSimpleName(className);
         ImageData imageData = new ImageData(className + " " + node.getMethodName());
 
-        // 计算总执行行数和总行数
-        float doLinesSum = node.getDoLines() == null ? 0 : node.getDoLines().stream().mapToInt(Integer::intValue).sum();
-        float lineTotalSum = node.getLineTotal() == null ? 0 :
-                node.getLineTotal().stream().mapToInt(Integer::intValue).sum();
-        int coveragePercent = lineTotalSum == 0 ? 0 : (int) (doLinesSum * 100.0 / lineTotalSum);
+        // 从全量静态数据获取总数
+        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
+        Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(node.getClassName());
+        List<Integer> lineTotalList = Collections.emptyList();
+        int cycloVal = 0;
+        List<Integer> branchTotalList = Collections.emptyList();
+        if (classMethodMap != null) {
+            StaticSourceMethodInfo staticMethod = classMethodMap.get(methodKey);
+            if (staticMethod != null) {
+                lineTotalList = staticMethod.getMethodLineNumberMap() != null ? staticMethod.getMethodLineNumberMap() : Collections.emptyList();
+                cycloVal = staticMethod.getCyclomaticComplexityMap() != null ? staticMethod.getCyclomaticComplexityMap() : 0;
+                branchTotalList = staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList();
+            }
+        }
 
-        imageData.name = classSimpleName + " " + methodName + " " + coveragePercent + "%";
-        imageData.doLines = node.getDoLines();
-        imageData.lineTotal = node.getLineTotal();
+        List<Integer> executedLines = node.getDoLines() == null ? Collections.emptyList() : node.getDoLines();
+        int executedLineCount = new LinkedHashSet<>(executedLines).size();
+        int totalLineCount = new LinkedHashSet<>(lineTotalList).size();
+        float coveragePercent = totalLineCount == 0 ? 0 : (float) executedLineCount * 100 / totalLineCount;
 
-        // 避免除以0
-        imageData.coverageRate = lineTotalSum == 0 ? 0 : doLinesSum / lineTotalSum;
+        imageData.name = classSimpleName + " " + methodName + " " + Math.round(coveragePercent) + "%";
+        imageData.doLines = new ArrayList<>(executedLines);
+        imageData.lineTotal = new ArrayList<>(lineTotalList);
+
+        imageData.coverageRate = coveragePercent;
         imageData.executeMethodTotal = node.getExecuteMethodTotal();
-        imageData.methodTotal = node.getMethodTotal();
+        imageData.methodTotal = null; // 总数来自全量静态数据，此处不再从 StackNodeVo 获取
         imageData.executebranch = node.getExecuteBranch();
-        imageData.branchTotal = node.getBranchTotal();
-        imageData.cyclo = node.getCyclo();
+        imageData.branchTotal = new ArrayList<>(branchTotalList);
+        imageData.cyclo = cycloVal;
 
         // 新的节点权重判断逻辑
         String[] classNamePathWords = className.substring(0, className.lastIndexOf('.')).split("\\.");
@@ -179,17 +190,42 @@ public class StackCodeLayer implements ImageLayer {
         return element;
     }
 
-    private ImageElement buildRootEdge() {
-        StackNodeVo rootNode =
-                Arrays.stream(codeNodes).filter(a -> a.getId().equals("0")).findAny().orElseThrow(() -> new IllegalStateException(
-                        "代码堆栈中找不到根节点"));
-        ImageData edgeData = new ImageData(generateTempId());
-        edgeData.source = snapshotId;
-        edgeData.target = ClassUtil.toClassName(rootNode.getClassName()) + " " + rootNode.getMethodName();
-        edgeData.name = "invoke";
-        ImageElement element = buildDefaultEdge(edgeData);
-        element.classes = new String[]{"start_invoke", "invoke"};
-        return element;
+    private List<ImageElement> buildRootEdges() {
+        if (ArrayUtils.isEmpty(codeNodes)) {
+            return Collections.emptyList();
+        }
+
+        Set<String> nodeIds = Arrays.stream(codeNodes)
+                .map(StackNodeVo::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        List<StackNodeVo> rootNodes = Arrays.stream(codeNodes)
+                .filter(Objects::nonNull)
+                .filter(node -> {
+                    String parentId = node.parentId();
+                    return "0".equals(parentId) || "ROOT".equals(parentId) || !nodeIds.contains(parentId);
+                })
+                .sorted(Comparator.comparing(StackNodeVo::getId, Comparator.nullsLast(String::compareTo)))
+                .collect(Collectors.toList());
+
+        if (rootNodes.isEmpty()) {
+            rootNodes = Arrays.stream(codeNodes)
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(StackNodeVo::getId, Comparator.nullsLast(String::compareTo)))
+                    .limit(1)
+                    .collect(Collectors.toList());
+        }
+
+        return rootNodes.stream().map(rootNode -> {
+            ImageData edgeData = new ImageData(generateTempId());
+            edgeData.source = snapshotId;
+            edgeData.target = ClassUtil.toClassName(rootNode.getClassName()) + " " + rootNode.getMethodName();
+            edgeData.name = "invoke";
+            ImageElement element = buildDefaultEdge(edgeData);
+            element.classes = new String[]{"start_invoke", "invoke"};
+            return element;
+        }).collect(Collectors.toList());
     }
 
     private List<ImageElement> buildEdges(StackNodeVo node, String nodeId) {
@@ -213,7 +249,6 @@ public class StackCodeLayer implements ImageLayer {
             ImageElement element = buildDefaultEdge(edgeData);
             element.classes = new String[]{"invoke"};
             return element;
-            //  基于 id 去重处理
         }).collect(Collectors.toList());
     }
 

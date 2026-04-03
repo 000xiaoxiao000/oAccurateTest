@@ -2,6 +2,7 @@ package com.oAT.web.service.impl;
 
 import com.oAT.agent.model.*;
 import com.oAT.web.common.SqlStatParse;
+import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
 import com.oAT.web.esDao.entity.*;
@@ -28,6 +29,9 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
     @Autowired
     TraceNodeRepository traceNodeRepository;
+
+    @Autowired
+    StaticInfoRepository staticInfoRepository;
 
     @Autowired
     com.oAT.web.service.SnapshotService snapshotService;
@@ -213,13 +217,10 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     private void saveTraceNode(Collection<TraceNode> nodes) {
         List<TraceNodeIndex> list = new ArrayList<>();
         for (TraceNode node : nodes) {
-            TraceNodeIndex nodeIndex = new TraceNodeIndex(node);
-            if (!traceNodeRepository.existsById(nodeIndex.getId())) {
-                list.add(nodeIndex);
-            }
+            list.add(new TraceNodeIndex(node));
         }
 
-        // 批量保存 TraceNode
+        // 批量保存 TraceNode。对同一个 traceId_nodeId 执行覆盖保存，避免旧节点缺失请求参数等字段。
         if (!list.isEmpty()) {
             traceNodeRepository.saveAll(list);
         }
@@ -255,6 +256,23 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
             Collection<TraceNode> traceNodes = snapshotService.getTraceNodes(snapshot.getTraceId());
 
+            // 加载全量静态数据，作为总数的数据源
+            List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(snapshot.getAppId());
+            // 构建 className -> (methodKey -> StaticSourceMethodInfo) 的查找表
+            // methodKey = methodName + "#" + methodDesc
+            Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup = new HashMap<>();
+            for (StaticSourceInfo si : staticInfos) {
+                if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
+                String className = si.getClassInfo().getClassName();
+                Map<String, StaticSourceMethodInfo> methodMap = new HashMap<>();
+                for (Map.Entry<String, StaticSourceMethodInfo> entry : si.getClassInfo().getMethodMaps().entrySet()) {
+                    StaticSourceMethodInfo mInfo = entry.getValue();
+                    String methodKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
+                    methodMap.put(methodKey, mInfo);
+                }
+                staticMethodLookup.put(className, methodMap);
+            }
+
             long totalLines = 0;
             long coveredLines = 0;
             long totalMethods = 0;
@@ -268,6 +286,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             Map<String, Set<Integer>> methodCoveredLinesMap = new HashMap<>();
             Map<String, Set<Integer>> methodTotalBranchesMap = new HashMap<>();
             Map<String, Set<Integer>> methodCoveredBranchesMap = new HashMap<>();
+            Map<String, Set<String>> methodTotalBranchConditionsMap = new HashMap<>();
+            Map<String, Set<String>> methodCoveredBranchConditionsMap = new HashMap<>();
             Map<String, Integer> methodComplexityMap = new HashMap<>();
 
             for (TraceNode node : traceNodes) {
@@ -275,30 +295,45 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                     StackNodeVo[] codeNodes = ((HttpTraceNode) node).getCodeNodes();
                     if (codeNodes != null) {
                         for (StackNodeVo sn : codeNodes) {
-                            if (sn.getLineTotal() == null || sn.getLineTotal().isEmpty()) continue;
-                            if (sn.getDoLines() != null && sn.getDoLines().contains(-1)) continue;
+                            String methodKey = sn.getMethodName() + "#" + sn.getMethodDescriptor();
+                            Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(sn.getClassName());
+                            if (classMethodMap == null) continue;
 
-                            String methodKey = sn.getClassName() + "#" + sn.getMethodName() + sn.getMethodDescriptor();
+                            StaticSourceMethodInfo staticMethod = classMethodMap.get(methodKey);
+                            if (staticMethod == null) continue;
+
                             classMethods.add(sn.getClassName());
 
-                            methodTotalLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getLineTotal());
+                            // 从全量静态数据获取总数
+                            methodTotalLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
+                                    .addAll(staticMethod.getMethodLineNumberMap() != null ? staticMethod.getMethodLineNumberMap() : Collections.emptyList());
                             if (sn.getDoLines() != null) {
                                 methodCoveredLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getDoLines());
                             }
 
-                            methodComplexityMap.put(methodKey, sn.getCyclo());
+                            methodComplexityMap.put(methodKey,
+                                    staticMethod.getCyclomaticComplexityMap() != null ? staticMethod.getCyclomaticComplexityMap() : 0);
 
-                            if (sn.getBranchTotal() != null) {
-                                methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getBranchTotal());
-                            }
+                            methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
+                                    .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
+                            addBranchConditionKeys(methodTotalBranchConditionsMap, methodKey, staticMethod.getBranchLineAndConditionNumberMap());
                             if (sn.getExecuteBranch() != null) {
                                 methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
+                            }
+                            addBranchConditionKeys(methodCoveredBranchConditionsMap, methodKey, sn.getExecuteBranchConditionMap());
+                            if (methodCoveredBranchConditionsMap.containsKey(methodKey)) {
+                                Set<String> normalizedKeys = new LinkedHashSet<>();
+                                addBranchConditionKeysToSet(normalizedKeys, staticMethod.getBranchLineAndConditionNumberMap(),
+                                        decodeBranchConditionKeys(methodCoveredBranchConditionsMap.get(methodKey)));
+                                methodCoveredBranchConditionsMap.put(methodKey, normalizedKeys);
                             }
                         }
                     }
                 }
             }
 
+            long totalBranchConditions = 0;
+            long coveredBranchConditions = 0;
             totalMethods = methodTotalLinesMap.size();
             for (String mKey : methodTotalLinesMap.keySet()) {
                 totalLines += methodTotalLinesMap.get(mKey).size();
@@ -309,6 +344,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                 totalComplexity += methodComplexityMap.getOrDefault(mKey, 0);
                 totalBranches += methodTotalBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
                 coveredBranches += methodCoveredBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
+                totalBranchConditions += methodTotalBranchConditionsMap.getOrDefault(mKey, Collections.emptySet()).size();
+                coveredBranchConditions += methodCoveredBranchConditionsMap.getOrDefault(mKey, Collections.emptySet()).size();
             }
 
             CoverageReportIndex report = new CoverageReportIndex();
@@ -322,6 +359,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             report.setCoveredLines(coveredLines);
             report.setTotalBranches(totalBranches);
             report.setCoveredBranches(coveredBranches);
+            report.setTotalBranchConditions(totalBranchConditions);
+            report.setCoveredBranchConditions(coveredBranchConditions);
             report.setTotalComplexity(totalComplexity);
 
             snapshot.setCoverageReport(report);
@@ -332,5 +371,67 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             snapshot.setReportStatus(3); // 失败
             repository.save(snapshot);
         }
+    }
+    private void addBranchConditionKeys(Map<String, Set<String>> target,
+                                        String methodKey,
+                                        Map<String, List<Integer>> branchConditionNumbers) {
+        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return;
+        }
+        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
+        for (Map.Entry<String, List<Integer>> entry : branchConditionNumbers.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (Integer conditionNumber : entry.getValue()) {
+                if (conditionNumber != null) {
+                    keys.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
+        }
+    }
+
+    private void addBranchConditionKeysToSet(Set<String> target,
+                                             Map<String, List<Integer>> allowedBranchConditionNumbers,
+                                             Map<String, List<Integer>> branchConditionNumbers) {
+        if (allowedBranchConditionNumbers == null || allowedBranchConditionNumbers.isEmpty()
+                || branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, List<Integer>> entry : allowedBranchConditionNumbers.entrySet()) {
+            List<Integer> allowedValues = entry.getValue();
+            List<Integer> coveredValues = branchConditionNumbers.get(entry.getKey());
+            if (allowedValues == null || allowedValues.isEmpty() || coveredValues == null || coveredValues.isEmpty()) {
+                continue;
+            }
+            Set<Integer> allowed = new LinkedHashSet<>(allowedValues);
+            for (Integer conditionNumber : coveredValues) {
+                if (conditionNumber != null && allowed.contains(conditionNumber)) {
+                    target.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
+        }
+    }
+
+    private Map<String, List<Integer>> decodeBranchConditionKeys(Set<String> keys) {
+        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
+        if (keys == null || keys.isEmpty()) {
+            return decoded;
+        }
+        for (String key : keys) {
+            if (!StringUtils.hasText(key)) {
+                continue;
+            }
+            int split = key.lastIndexOf('#');
+            if (split <= 0 || split >= key.length() - 1) {
+                continue;
+            }
+            try {
+                int conditionNumber = Integer.parseInt(key.substring(split + 1));
+                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(conditionNumber);
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        return decoded;
     }
 }

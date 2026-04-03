@@ -16,6 +16,8 @@ public class CoverageTreeNode implements Serializable {
     private int coveredMethods;
     private int totalBranches;
     private int coveredBranches;
+    private int totalBranchConditions;
+    private int coveredBranchConditions;
     private int totalLines;
     private int coveredLines;
     private int totalComplexity;
@@ -48,6 +50,10 @@ public class CoverageTreeNode implements Serializable {
     public void setTotalBranches(int totalBranches) { this.totalBranches = totalBranches; }
     public int getCoveredBranches() { return coveredBranches; }
     public void setCoveredBranches(int coveredBranches) { this.coveredBranches = coveredBranches; }
+    public int getTotalBranchConditions() { return totalBranchConditions; }
+    public void setTotalBranchConditions(int totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
+    public int getCoveredBranchConditions() { return coveredBranchConditions; }
+    public void setCoveredBranchConditions(int coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
     public int getTotalLines() { return totalLines; }
     public void setTotalLines(int totalLines) { this.totalLines = totalLines; }
     public int getCoveredLines() { return coveredLines; }

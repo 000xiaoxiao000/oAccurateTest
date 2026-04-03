@@ -172,7 +172,7 @@
                     <td class="center aligned">${item.coveredMethods} / ${item.totalMethods}</td>
                     <td class="center aligned <#if item.coveredMethods gt 0>positive<#else>negative</#if>"><#if (item.totalMethods > 0)>${(item.coveredMethods / item.totalMethods * 100)?string("0.00")}%<#else>0.00%</#if></td>
                     <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
-                    <td class="center aligned <#if item.coveredBranches gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.coveredBranches / item.totalBranches * 100)?string("0.00")}%<#else>N/A</#if></td>
+                    <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
                     <td class="center aligned">${item.coveredLines} / ${item.totalLines}</td>
                     <td class="center aligned <#if item.coveredLines gt 0>positive<#else>negative</#if>"><#if (item.totalLines > 0)>${(item.coveredLines / item.totalLines * 100)?string("0.00")}%<#else>0.00%</#if></td>
                     <td class="center aligned">${item.totalComplexity}</td>
@@ -236,18 +236,17 @@
 
 <#macro renderNode item parentId>
     <tr nodeId="${item.fullName}" parentId="${parentId}" class="${(item.type=='package')?then('package-row', 'class-row')}"
-        data-type="${item.type}" data-loaded="${(item.type=='class')?then('true', 'false')}">
+        data-type="${item.type}" data-loaded="${(item.hasChildren)?then('false', 'true')}">
         <td title="${item.fullName}" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <#if item.hasChildren>
+                <i class='fold small plus square outline link icon '></i>
+            <#else>
+                <i class='mini grey minus icon'></i>
+            </#if>
             <#if item.type == 'package'>
-                <#if item.hasChildren>
-                    <i class='fold small plus square outline link icon '></i>
-                <#else>
-                    <i class='mini grey minus icon'></i>
-                </#if>
                 <i class="folder outline icon"></i>
                 ${item.name}
             <#else>
-                <i class='mini grey minus icon'></i>
                 <i class="file code outline icon"></i>
                 ${item.name}
                 <a href="/p/${projectId}/coverage/code?reportId=${reportId}&className=${item.fullName}&appId=${appId}" target="_blank" style="margin-left: 10px"><i class="code icon"></i>代码</a>
@@ -256,7 +255,7 @@
         <td class="center aligned">${item.coveredMethods} / ${item.totalMethods}</td>
         <td class="center aligned <#if item.coveredMethods gt 0>positive<#else>negative</#if>">${item.methodRate?string("0.00")}%</td>
         <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
-        <td class="center aligned <#if item.coveredBranches gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${item.branchRate?string("0.00")}%<#else>N/A</#if></td>
+        <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
         <td class="center aligned">${item.coveredLines} / ${item.totalLines}</td>
         <td class="center aligned <#if item.coveredLines gt 0>positive<#else>negative</#if>">${item.lineRate?string("0.00")}%</td>
         <td class="center aligned">${item.totalComplexity}</td>
@@ -356,19 +355,15 @@
 
                     var icon = isPackage ? 'folder outline' : 'file code outline';
                     var rowClass = isPackage ? 'package-row' : 'class-row';
-                    var hasChildren = isPackage;
+                    var hasChildren = !!item.hasChildren;
                     var rowNodeId = item.fullName;
 
                     html += '<tr nodeId="' + rowNodeId + '" parentId="' + nodeId + '" class="' + rowClass + ' hidden" data-type="' + item.type + '" data-loaded="' + (hasChildren ? 'false' : 'true') + '">';
                     html += '<td title="' + item.fullName + '" style="padding-left: ' + nextLevel + '; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">';
-                    if (isPackage) {
-                        if (item.hasChildren) {
-                            html += '<i class="fold small plus square outline link icon "></i>';
-                        } else {
-                            html += '<i class="mini grey minus icon"></i>';
-                        }
+                    if (hasChildren) {
+                        html += '<i class="fold small plus square outline link icon "></i>';
                     } else {
-                         html += '<i class="mini grey minus icon"></i>';
+                        html += '<i class="mini grey minus icon"></i>';
                     }
                     html += '<i class="' + icon + ' icon"></i>' + item.name;
                     if (isClass) {
@@ -378,7 +373,7 @@
                     html += '<td class="center aligned">' + item.coveredMethods + ' / ' + item.totalMethods + '</td>';
                     html += '<td class="center aligned ' + (item.coveredMethods > 0 ? 'positive' : 'negative') + '">' + item.methodRate.toFixed(2) + '%</td>';
                     html += '<td class="center aligned">' + item.coveredBranches + ' / ' + item.totalBranches + '</td>';
-                    html += '<td class="center aligned ' + (item.coveredBranches > 0 ? 'positive' : (item.totalBranches > 0 ? 'negative' : '')) + '">' + (item.totalBranches > 0 ? item.branchRate.toFixed(2) + '%' : 'N/A') + '</td>';
+                    html += '<td class="center aligned ' + ((item.branchRate || 0) > 0 ? 'positive' : (item.totalBranches > 0 ? 'negative' : '')) + '">' + (item.totalBranches > 0 ? (item.branchRate || 0).toFixed(2) + '%' : 'N/A') + '</td>';
                     html += '<td class="center aligned">' + item.coveredLines + ' / ' + item.totalLines + '</td>';
                     html += '<td class="center aligned ' + (item.coveredLines > 0 ? 'positive' : 'negative') + '">' + item.lineRate.toFixed(2) + '%</td>';
                     html += '<td class="center aligned">' + item.totalComplexity + '</td>';

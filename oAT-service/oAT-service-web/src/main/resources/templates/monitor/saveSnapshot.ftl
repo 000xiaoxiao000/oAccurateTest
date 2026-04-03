@@ -81,9 +81,9 @@
 
         $('#saveSnapshotButton').on('click', function() {
             if ($('#newSnapshotForm').form('validate form')) {
-                doSaveSnapshot('${project.id}');
-                // 关闭当前模型
-                $("#newSnapshotForm").parents(".modal").modal('hide');
+                doSaveSnapshot('${project.id}', function () {
+                    $("#newSnapshotForm").parents(".modal").modal('hide');
+                });
             }
         });
     });
@@ -92,9 +92,9 @@
         $("#newSnapshotForm").submit(function(e){
             e.preventDefault();
             if ($(this).form('validate form')) {
-                doSaveSnapshot('${project.id}');
-                // 关闭当前模型
-                $("#newSnapshotForm").parents(".modal").modal('hide');
+                doSaveSnapshot('${project.id}', function () {
+                    $("#newSnapshotForm").parents(".modal").modal('hide');
+                });
             }
             return false;
         });

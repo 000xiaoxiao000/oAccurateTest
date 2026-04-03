@@ -1,6 +1,7 @@
 package com.oAT.agent.model;
 
 import java.io.Serializable;
+import java.util.Map;
 
 public class SofaRpcRemoteTraceNode extends TraceNode implements CodeNodeBean, Serializable, StatementError {
     private static final long serialVersionUID = -7156032079009497957L;
@@ -11,8 +12,16 @@ public class SofaRpcRemoteTraceNode extends TraceNode implements CodeNodeBean, S
     private Object[] methodArgs;
 
     private Error error;
-    // 代码堆栈
+
+    /**
+     * 代码覆盖率报告数据（由 agent-core 端 StackNodeVoBuilder 从探针快照构建）。
+     */
     private StackNodeVo[] codeNodes;
+
+    /**
+     * 覆盖率探针快照数据：classId -> boolean[]
+     */
+    private Map<Long, boolean[]> coverageSnapshots;
 
     public String getTargetServiceUniqueName() {
         return targetServiceUniqueName;
@@ -67,5 +76,13 @@ public class SofaRpcRemoteTraceNode extends TraceNode implements CodeNodeBean, S
     @Override
     public String toType() {
         return "sofaRPC-remote";
+    }
+
+    public Map<Long, boolean[]> getCoverageSnapshots() {
+        return coverageSnapshots;
+    }
+
+    public void setCoverageSnapshots(Map<Long, boolean[]> coverageSnapshots) {
+        this.coverageSnapshots = coverageSnapshots;
     }
 }

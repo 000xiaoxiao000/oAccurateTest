@@ -4,7 +4,6 @@ import com.oAT.agent.common.Decompiler.ILanguageNames;
 import com.oAT.agent.common.Decompiler.JavaNames;
 import com.oAT.agent.common.JsonUtil;
 import com.oAT.agent.jacoco.instr.ClassInfo;
-
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,6 +19,7 @@ public class CompactDataInput {
      * 方法静态结构
      */
     public static class MethodStaticInfo {
+        private final String mergeKey;            // 用于去重合并的稳定标识（不对外输出）
         public final String methodName;          // 转换后的方法名（含参数列表）
         public final String methodDesc;          // JVM 描述符/签名
         public final Set<Integer> methodLineNumberMap;   // 行号集合（过滤负数）
@@ -31,7 +31,8 @@ public class CompactDataInput {
         public final boolean asyncMethodMap;        // 是否异步
         public final String methodUri;              // 接口URI
 
-        public MethodStaticInfo(String methodName,
+        public MethodStaticInfo(String mergeKey,
+                                String methodName,
                                 String methodDesc,
                                 Set<Integer> lineNumbers,
                                 Map<Integer, Set<Integer>> branchLineAndConditionNumberMap,
@@ -40,11 +41,16 @@ public class CompactDataInput {
                                 boolean recursive,
                                 boolean async,
                                 String methodUri) {
+            this.mergeKey = mergeKey;
             this.methodName = methodName;
             this.methodDesc = methodDesc;
             this.methodLineNumberMap = (lineNumbers == null ? Collections.emptySet() : Collections.unmodifiableSet(filterLines(lineNumbers)));
-            this.branchLineNumberSet = branchLineNumberSet == null ? Collections.emptySet() : Collections.unmodifiableSet(new LinkedHashSet<>(branchLineNumberSet));
-            this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap == null ? Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(branchLineAndConditionNumberMap));
+            this.branchLineNumberSet = branchLineNumberSet == null
+                    ? Collections.emptySet()
+                    : Collections.unmodifiableSet(filterBranchLines(branchLineNumberSet));
+            this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap == null
+                    ? Collections.emptyMap()
+                    : Collections.unmodifiableMap(filterBranchLineConditionMap(branchLineAndConditionNumberMap));
             this.totalBranchCount = this.branchLineNumberSet.size();
             this.cyclomaticComplexityMap = cyclomaticComplexity;
             this.recursiveMap = recursive;
@@ -55,6 +61,25 @@ public class CompactDataInput {
             Set<Integer> r = new HashSet<>();
             for (Integer i : src) { if (i != null && i >= 0) r.add(i); }
             return r;
+        }
+        private static Set<Integer> filterBranchLines(Set<Integer> src) {
+            Set<Integer> r = new LinkedHashSet<>();
+            for (Integer i : src) {
+                if (i != null && i > 0) {
+                    r.add(i);
+                }
+            }
+            return r;
+        }
+        private static Map<Integer, Set<Integer>> filterBranchLineConditionMap(Map<Integer, Set<Integer>> src) {
+            Map<Integer, Set<Integer>> filtered = new LinkedHashMap<>();
+            for (Map.Entry<Integer, Set<Integer>> entry : src.entrySet()) {
+                Integer branchLine = entry.getKey();
+                if (branchLine != null && branchLine > 0) {
+                    filtered.put(branchLine, entry.getValue() == null ? Collections.emptySet() : new LinkedHashSet<>(entry.getValue()));
+                }
+            }
+            return filtered;
         }
         public Map<String, Object> toMap() {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -88,7 +113,7 @@ public class CompactDataInput {
             boolean recursive = recursiveMap || other.recursiveMap;
             boolean async = asyncMethodMap || other.asyncMethodMap;
             String uri = (methodUri != null && !methodUri.isEmpty()) ? methodUri : other.methodUri;
-            return new MethodStaticInfo(methodName, methodDesc, mergedLines, mergedBranch, mergedBranchLines, complexity, recursive, async, uri);
+            return new MethodStaticInfo(mergeKey, methodName, methodDesc, mergedLines, mergedBranch, mergedBranchLines, complexity, recursive, async, uri);
         }
     }
 
@@ -106,10 +131,10 @@ public class CompactDataInput {
             this.className = className;
         }
         public synchronized void addOrMergeMethod(MethodStaticInfo info) {
-            // 尝试按 methodName+methodDesc 查找已存在方法进行合并
+            // 仅合并同一个真实方法，避免匿名类/内部类归并到外部类后出现同名方法误合并。
             for (Map.Entry<String, MethodStaticInfo> e : methods.entrySet()) {
                 MethodStaticInfo exist = e.getValue();
-                if (exist.methodName.equals(info.methodName) && exist.methodDesc.equals(info.methodDesc)) {
+                if (exist.mergeKey.equals(info.mergeKey)) {
                     methods.put(e.getKey(), exist.merge(info));
                     return;
                 }
@@ -144,9 +169,7 @@ public class CompactDataInput {
         if (info == null) return;
         ILanguageNames javaNames = new JavaNames();
         String originClassName = info.getClassName(); // VM 格式
-        String finalClassName = javaNames.getQualifiedClassName(originClassName);
-
-        ClassStaticInfo cInfo = CLASS_STATIC_INFO.computeIfAbsent(finalClassName, k -> new ClassStaticInfo(info.getClassId(), finalClassName));
+        String finalClassName = CoverageNamingSupport.toOwnerQualifiedClassName(originClassName);
 
         Map<String, Set<Integer>> methodLineNumberMap = info.getMethodLineNumberMap();
         Map<String, Integer> branchMap = info.getTotalBranchMap(); // 新增：类中所有分支行号映射
@@ -181,6 +204,12 @@ public class CompactDataInput {
 
             // 使用 JavaNames 生成展示方法名（含参数列表）
             String displayMethodName = javaNames.getMethodName(originClassName, methodName, methodDesc, null);
+            if (CoverageNamingSupport.shouldIgnoreMethod(methodName, displayMethodName)) {
+                continue;
+            }
+
+            ClassStaticInfo cInfo = CLASS_STATIC_INFO.computeIfAbsent(finalClassName,
+                    k -> new ClassStaticInfo(info.getClassId(), finalClassName));
 
             Map<Integer, Set<Integer>> methodBranchCond = new LinkedHashMap<>();
             for (Map.Entry<Integer, Set<Integer>> bEntry : branchCondMap.entrySet()) {
@@ -200,7 +229,7 @@ public class CompactDataInput {
                         String methodNameDescPart = key.substring(0, lastSpace); // methodName + desc
                         if (shortMethodKey.equals(methodNameDescPart)) {
                             Integer branchLine = bEntry.getValue();
-                            if (branchLine != null && branchLine >= 0) {
+                            if (branchLine != null && branchLine > 0) {
                                 methodBranchLines.add(branchLine);
                             }
                         }
@@ -208,7 +237,9 @@ public class CompactDataInput {
                 }
             }
 
-            MethodStaticInfo mInfo = new MethodStaticInfo(displayMethodName, methodDesc, lineNums, methodBranchCond, methodBranchLines, cyclo, recursive, async, uri);
+            String mergeKey = CoverageNamingSupport.buildMethodMergeKey(originClassName, methodName, methodDesc);
+            MethodStaticInfo mInfo = new MethodStaticInfo(mergeKey, displayMethodName, methodDesc, lineNums,
+                    methodBranchCond, methodBranchLines, cyclo, recursive, async, uri);
             cInfo.addOrMergeMethod(mInfo);
         }
     }

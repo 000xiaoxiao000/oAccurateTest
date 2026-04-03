@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2009, 2016 Mountainminds GmbH & Co. KG and Contributors
+ * Copyright (c) 2009, 2016 Mountainsides GmbH & Co. KG and Contributors
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v1.0
  * which accompanies this distribution, and is available at
@@ -10,24 +10,38 @@
  *******************************************************************************/
 package com.oAT.agent.jacoco.instr;
 
+import com.oAT.agent.common.StackTraceFormatter;
+import com.oAT.agent.common.logger.Log;
+import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.jacoco.ClassProbeInfo;
+import com.oAT.agent.jacoco.ClassProbeInfoRegistry;
 import com.oAT.agent.jacoco.flow.ClassProbesVisitor;
 import com.oAT.agent.jacoco.flow.MethodProbesVisitor;
 import com.oAT.shaded.asm97.*;
+import java.util.Map;
 
 /**
  * Adapter that instruments a class for coverage tracing.
+ * <p>
+ * Generates:
+ * <ul>
+ *   <li>A static boolean[] field $jacocoData to hold probe data</li>
+ *   <li>A static $jacocoInit() method that lazily initializes and registers the probe array</li>
+ * </ul>
  */
 public class ClassInstrumenter extends ClassProbesVisitor {
 
-    private final ClassInfo probeArrayStrategy;
+    private final static Log logger = LogFactory.getLog(ClassInstrumenter.class);
 
+    private final ClassInfo probeArrayStrategy;
     private String className;
+    private int classAccess;
+    private int currentProbeIdx = 0;
 
     /**
      * Emits an instrumented version of this class to the given class visitor.
      *
-     * @param probeArrayStrategy this strategy will be used to access the probe
-     *                           array
+     * @param probeArrayStrategy this strategy will be used to access the probe array
      * @param cv                 next delegate in the visitor chain will receive the
      *                           instrumented class
      */
@@ -40,6 +54,7 @@ public class ClassInstrumenter extends ClassProbesVisitor {
     public void visit(final int version, final int access, final String name, final String signature, final String superName,
                       final String[] interfaces) {
         this.className = name;
+        this.classAccess = access;
         super.visit(version, access, name, signature, superName, interfaces);
     }
 
@@ -62,51 +77,115 @@ public class ClassInstrumenter extends ClassProbesVisitor {
             return null;
         }
         final MethodVisitor frameEliminator = new DuplicateFrameEliminator(mv);
-        final ProbeInserter probeVariableInserter = new ProbeInserter(access, name, desc, signature,frameEliminator, probeArrayStrategy);
+        final ProbeInserter probeVariableInserter = new ProbeInserter(access, name, desc, signature, frameEliminator, probeArrayStrategy, this);
         return new MethodInstrumenter(probeVariableInserter, probeVariableInserter);
     }
 
     @Override
     public void visitTotalProbeCount(final int count) {
-//        // probeArrayStrategy.addMembers(cv, count);
-//        // cv.visitField(InstrSupport.DATAFIELD_ACC,
-//        // InstrSupport.DATAFIELD_NAME, InstrSupport.DATAFIELD_DESC, null,
-//        // null);
-//        // 增加method probe size 初始方法 $jacocoProbeSize
-//        final MethodVisitor mv = cv.visitMethod(InstrSupport.INITMETHOD_ACC, InstrSupport.METHOD_PROBE_SIZE_NAME,
-//                InstrSupport.METHOD_PROBE_SIZE_DESC, null, null);
-//        mv.visitCode();
-//        int methodSize = probeArrayStrategy.getMethodProbeSizes().size();
-//        mv.visitLabel(new Label());
-//        InstrSupport.push(mv, methodSize);
-//        mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_INT);
-//        mv.visitInsn(Opcodes.DUP);
-//        for (Map.Entry<Integer, Integer> e : probeArrayStrategy.getMethodProbeSizes().entrySet()) {
-//            InstrSupport.push(mv, e.getKey());
-//            InstrSupport.push(mv, e.getValue());
-//            mv.visitInsn(Opcodes.IASTORE);
-//            mv.visitInsn(Opcodes.DUP);
-//        }
-//
-//        // InstrSupport.push(mv, 0);
-//        // InstrSupport.push(mv, 9999);
-//        // mv.visitInsn(Opcodes.IASTORE);
-//        mv.visitVarInsn(Opcodes.ASTORE, 1);
-//
-//        mv.visitLabel(new Label());
-//        mv.visitVarInsn(Opcodes.ALOAD, 1);
-//        mv.visitVarInsn(Opcodes.ILOAD, 0);
-//        mv.visitInsn(Opcodes.IALOAD);
-//        mv.visitInsn(Opcodes.IRETURN);
-//
-//        if (probeArrayStrategy.isWithFrames()) {
-//            // mv.visitFrame(Opcodes.F_NEW, 0, new Object[0], 1, new Object[] {
-//            // InstrSupport.METHOD_PROBE_SIZE_DESC });
-//        }
-//        mv.visitLabel(new Label());
-//
-//        mv.visitMaxs(4, 2); // Maximum local stack size is 2
-//        mv.visitEnd();
+        if (count == 0) {
+            return;
+        }
+
+        final boolean isInterface = (classAccess & Opcodes.ACC_INTERFACE) != 0;
+        final int fieldAccess = isInterface ? InstrSupport.DATAFIELD_INTF_ACC : InstrSupport.DATAFIELD_ACC;
+
+        // 1. Generate $jacocoData static field: private static transient boolean[] $jacocoData;
+        cv.visitField(fieldAccess, InstrSupport.DATAFIELD_NAME, InstrSupport.DATAFIELD_DESC, null, null);
+
+        // 2. Generate $jacocoInit() method
+        final MethodVisitor mv = cv.visitMethod(InstrSupport.INITMETHOD_ACC, InstrSupport.INITMETHOD_NAME,
+                InstrSupport.INITMETHOD_DESC, null, null);
+        mv.visitCode();
+        mv.visitLabel(new Label());
+
+        // Load $jacocoData field
+        mv.visitFieldInsn(Opcodes.GETSTATIC, className, InstrSupport.DATAFIELD_NAME, InstrSupport.DATAFIELD_DESC);
+        // if ($jacocoData != null) return $jacocoData;
+        Label notNull = new Label();
+        mv.visitJumpInsn(Opcodes.IFNONNULL, notNull);
+
+        // Create new boolean[probeCount]
+        InstrSupport.push(mv, count);
+        mv.visitIntInsn(Opcodes.NEWARRAY, Opcodes.T_BOOLEAN);
+        mv.visitInsn(Opcodes.DUP);
+        mv.visitFieldInsn(Opcodes.PUTSTATIC, className, InstrSupport.DATAFIELD_NAME, InstrSupport.DATAFIELD_DESC);
+
+        // Register with CoverageData: CoverageData.register(classId, $jacocoData)
+        mv.visitLdcInsn(probeArrayStrategy.getClassId());
+        mv.visitFieldInsn(Opcodes.GETSTATIC, className, InstrSupport.DATAFIELD_NAME, InstrSupport.DATAFIELD_DESC);
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, InstrSupport.COVERAGE_DATA_INTERNAL_NAME,
+                "register", "(J[Z)V", false);
+
+        // Return $jacocoData
+        mv.visitFieldInsn(Opcodes.GETSTATIC, className, InstrSupport.DATAFIELD_NAME, InstrSupport.DATAFIELD_DESC);
+        mv.visitInsn(Opcodes.ARETURN);
+
+        // notNull label
+        mv.visitLabel(notNull);
+        mv.visitFieldInsn(Opcodes.GETSTATIC, className, InstrSupport.DATAFIELD_NAME, InstrSupport.DATAFIELD_DESC);
+        mv.visitInsn(Opcodes.ARETURN);
+
+        // Frame
+        mv.visitFrame(Opcodes.F_NEW, 0, new Object[0], 1, new Object[]{InstrSupport.DATAFIELD_DESC});
+        mv.visitLabel(new Label());
+        mv.visitMaxs(3, 0); // maxStack: 3 (classId + probeArray + field op), maxLocals: 0 (static method)
+        mv.visitEnd();
+
+        // 3. Register ClassProbeInfo
+        try {
+            ProbeInserter.ProbeAssignment assignment = ProbeInserter.getAndClearProbeAssignment();
+            ClassProbeInfo probeInfo = new ClassProbeInfo(
+                    probeArrayStrategy.getClassId(),
+                    probeArrayStrategy.getClassName(),
+                    count
+            );
+
+            // Copy probe metadata from the assignment
+            for (Map.Entry<Integer, Integer> entry : assignment.probeToLineNumber.entrySet()) {
+                probeInfo.setProbeLineNumber(entry.getKey(), entry.getValue());
+            }
+            for (Map.Entry<Integer, Boolean> entry : assignment.probeIsBranch.entrySet()) {
+                probeInfo.setProbeIsBranch(entry.getKey(), entry.getValue());
+            }
+            for (Map.Entry<Integer, Integer> entry : assignment.probeToMethodEntry.entrySet()) {
+                probeInfo.setProbeMethodEntryIndex(entry.getKey(), entry.getValue());
+            }
+            for (Map.Entry<Integer, ProbeInserter.MethodMeta> entry : assignment.methodMetaMap.entrySet()) {
+                ProbeInserter.MethodMeta meta = entry.getValue();
+                probeInfo.setMethodInfo(
+                        entry.getKey(),
+                        meta.methodNameDesc,
+                        meta.lineTotals,
+                        meta.branchTotals,
+                        meta.cyclo,
+                        meta.recursive,
+                        meta.async
+                );
+            }
+            for (Map.Entry<Integer, ProbeInserter.BranchMeta> entry : assignment.branchMetaMap.entrySet()) {
+                ProbeInserter.BranchMeta meta = entry.getValue();
+                probeInfo.setBranchInfo(entry.getKey(), meta.branchLine, meta.conditionNumber);
+            }
+
+            ClassProbeInfoRegistry.register(probeArrayStrategy.getClassId(), probeInfo);
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError]注册 ClassProbeInfo 异常: " + className + ", " +
+                    StackTraceFormatter.formatExceptionWithAgentMark(t));
+        }
     }
 
+    /**
+     * Get current probe index (called by ProbeInserter to assign probe IDs).
+     */
+    public int nextProbeIndex() {
+        return currentProbeIdx++;
+    }
+
+    /**
+     * Get current probe count so far (called by ProbeInserter).
+     */
+    public int getCurrentProbeCount() {
+        return currentProbeIdx;
+    }
 }

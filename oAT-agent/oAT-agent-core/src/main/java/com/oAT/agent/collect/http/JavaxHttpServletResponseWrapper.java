@@ -91,18 +91,21 @@ public class JavaxHttpServletResponseWrapper extends HttpServletResponseWrapper 
 
     @Override
     public void sendError(int sc) throws IOException {
+        this.status = sc;
         specialResponseBody = "sendError: " + sc;
         original.sendError(sc);
     }
 
     @Override
     public void sendError(int sc, String msg) throws IOException {
+        this.status = sc;
         specialResponseBody = "sendError: " + sc + (msg != null ? (", " + msg) : "");
         original.sendError(sc, msg);
     }
 
     @Override
     public void sendRedirect(String location) throws IOException {
+        this.status = HttpServletResponse.SC_FOUND;
         specialResponseBody = "sendRedirect: " + location;
         original.sendRedirect(location);
     }

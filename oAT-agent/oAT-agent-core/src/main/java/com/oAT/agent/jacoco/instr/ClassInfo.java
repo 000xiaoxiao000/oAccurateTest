@@ -86,6 +86,18 @@ public class ClassInfo {
     // 类级别的 URI
     private String classUri = "";
 
+    static boolean isAnonymousClassName(String internalClassName) {
+        int dollarPosition = internalClassName == null ? -1 : internalClassName.lastIndexOf('$');
+        if (dollarPosition < 0 || dollarPosition + 1 >= internalClassName.length()) {
+            return false;
+        }
+        return Character.isDigit(internalClassName.charAt(dollarPosition + 1));
+    }
+
+    static boolean isCompilerGeneratedMethod(int access) {
+        return (access & (Opcodes.ACC_BRIDGE | Opcodes.ACC_SYNTHETIC)) != 0;
+    }
+
     public ClassInfo(final ClassReader reader) {
         className = reader.getClassName();
         methodName = "";
@@ -188,12 +200,16 @@ public class ClassInfo {
                                                  String[] exceptions) {
                     final Set<Integer> lineNumberSet = new HashSet<Integer>();
                     Set<String> skipMethods = new HashSet<String>(Arrays.asList("<init>", InstrSupport.CLINIT_NAME,
-                            "equals", "canEqual", "hashCode", "toString", "clone"));
+                            InstrSupport.INITMETHOD_NAME, "equals", "canEqual", "hashCode", "toString", "clone"));
                     boolean isInitWithParams = "<init>".equals(name) &&
                             ((descriptor != null && descriptor.contains("(") && !descriptor.contains("()")) ||
                                     (signature != null && signature.contains("(") && !signature.contains("()")));
+                    boolean isAnonymousConstructor = "<init>".equals(name) && isAnonymousClassName(className);
+                    boolean isCompilerGeneratedMethod = isCompilerGeneratedMethod(access);
 
-                    if ((!skipMethods.contains(name) || isInitWithParams) && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE | Opcodes.ACC_INTERFACE)) == 0) {
+                    if ((!skipMethods.contains(name) || isInitWithParams) && !isAnonymousConstructor
+                            && !isCompilerGeneratedMethod
+                            && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE | Opcodes.ACC_INTERFACE)) == 0) {
                         if (signature == null || descriptor != null) {
                             methodName = name;
                             methodDesc = descriptor;
@@ -212,7 +228,8 @@ public class ClassInfo {
                     }
 
                     // 如果当前类实现了 Runnable，默认把它的 run 方法标记为异步（很多情况下 Runnable 的 run 会在异步线程执行）
-                    if (implementsRunnable && "run".equals(name) && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE)) == 0) {
+                    if (implementsRunnable && "run".equals(name) && !isCompilerGeneratedMethod
+                            && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE)) == 0) {
                         if (signature == null || descriptor != null) {
                             asyncMethodMap.put(className + " " + name + " " + descriptor, true);
                         } else {
