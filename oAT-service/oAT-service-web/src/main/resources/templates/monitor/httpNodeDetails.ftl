@@ -63,21 +63,23 @@
             请求参数
         </div>
         <div class="ui list content active" style="margin:0px 0px 0px 25px">
-            <#if node.requestParamNames??>
+            <#if node.requestParamNames?? && (node.requestParamNames?size > 0)>
                 <#list node.requestParamNames as paramName>
                     <div class="item">
                         <span class="listHeader">${paramName}:</span>
-                        ${node.requestParamValues[paramName_index]}
+                        ${(node.requestParamValues[paramName_index])!'null'}
                     </div>
                 </#list>
+            <#else>
+                <div class="item">无 URL/Form 参数</div>
             </#if>
-            <#if node.requestParamValues??>
-                <#list node.requestParamValues as paramName>
-                    <div class="item">
-                        <span class="listHeader">${paramName!"null"}</span>
-                    </div>
-                </#list>
-            </#if>
+            <div class="ui fitted divider"></div>
+            <div class="item">
+                <span class="listHeader">请求体:</span>
+            </div>
+            <div class="item">
+                <pre style="white-space: pre-wrap; word-break: break-all; margin: 8px 0 0 0;">${(node.requestBody)!'无请求体'}</pre>
+            </div>
         </div>
     </div>
 </div>
