@@ -9,6 +9,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 
 @Document(indexName = "class_coverage", type = "doc", shards = 2)
 public class ClassCoverageIndex implements Serializable {
@@ -34,6 +35,10 @@ public class ClassCoverageIndex implements Serializable {
     private int totalBranches;
     @ExcelProperty("已覆盖分支数")
     private int coveredBranches;
+    @ExcelIgnore
+    private int totalBranchConditions;
+    @ExcelIgnore
+    private int coveredBranchConditions;
     @ExcelProperty("总行数")
     private int totalLines;
     @ExcelProperty("已覆盖行数")
@@ -70,6 +75,11 @@ public class ClassCoverageIndex implements Serializable {
         private List<Integer> totalLineNumbers;
         // Covered branch identifiers for idempotency
         private List<Integer> coveredBranchIds;
+        private Map<String, List<Integer>> totalBranchConditionNumbers;
+        private Map<String, List<Integer>> coveredBranchConditionNumbers;
+        private int totalBranchConditions;
+        private int coveredBranchConditions;
+        private Double branchRate;
         public String getMethodName() { return methodName; }
         public void setMethodName(String methodName) { this.methodName = methodName; }
         public String getMethodDesc() { return methodDesc; }
@@ -92,6 +102,16 @@ public class ClassCoverageIndex implements Serializable {
         public void setTotalLineNumbers(List<Integer> totalLineNumbers) { this.totalLineNumbers = totalLineNumbers; }
         public List<Integer> getCoveredBranchIds() { return coveredBranchIds; }
         public void setCoveredBranchIds(List<Integer> coveredBranchIds) { this.coveredBranchIds = coveredBranchIds; }
+        public Map<String, List<Integer>> getTotalBranchConditionNumbers() { return totalBranchConditionNumbers; }
+        public void setTotalBranchConditionNumbers(Map<String, List<Integer>> totalBranchConditionNumbers) { this.totalBranchConditionNumbers = totalBranchConditionNumbers; }
+        public Map<String, List<Integer>> getCoveredBranchConditionNumbers() { return coveredBranchConditionNumbers; }
+        public void setCoveredBranchConditionNumbers(Map<String, List<Integer>> coveredBranchConditionNumbers) { this.coveredBranchConditionNumbers = coveredBranchConditionNumbers; }
+        public int getTotalBranchConditions() { return totalBranchConditions; }
+        public void setTotalBranchConditions(int totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
+        public int getCoveredBranchConditions() { return coveredBranchConditions; }
+        public void setCoveredBranchConditions(int coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
+        public Double getBranchRate() { return branchRate; }
+        public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
     }
 
     public String getId() { return id; }
@@ -110,6 +130,10 @@ public class ClassCoverageIndex implements Serializable {
     public void setTotalBranches(int totalBranches) { this.totalBranches = totalBranches; }
     public int getCoveredBranches() { return coveredBranches; }
     public void setCoveredBranches(int coveredBranches) { this.coveredBranches = coveredBranches; }
+    public int getTotalBranchConditions() { return totalBranchConditions; }
+    public void setTotalBranchConditions(int totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
+    public int getCoveredBranchConditions() { return coveredBranchConditions; }
+    public void setCoveredBranchConditions(int coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
     public int getTotalLines() { return totalLines; }
     public void setTotalLines(int totalLines) { this.totalLines = totalLines; }
     public int getCoveredLines() { return coveredLines; }

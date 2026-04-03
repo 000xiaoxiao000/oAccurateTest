@@ -460,6 +460,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 md.setMethodDesc(mInfo.getMethodDesc());
 
                 List<Integer> methodLines = mInfo.getMethodLineNumberMap();
+                Map<String, List<Integer>> totalBranchConditionNumbers = changedLinesInClass != null
+                        ? filterBranchConditionNumbers(mInfo.getBranchLineAndConditionNumberMap(), changedLinesInClass)
+                        : copyBranchConditionNumbers(mInfo.getBranchLineAndConditionNumberMap());
                 if (changedLinesInClass != null) {
                     // Filter lines based on diff
                     List<Integer> filteredLines = new ArrayList<>();
@@ -475,29 +478,17 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                     }
                     md.setTotalLineNumbers(filteredLines);
 
-                    // Filter branches for incremental
-                    // Simple heuristic: if method changed, count only branches that are on changed lines (if mapped)
-                    // Or keep all branches for changed methods. Let's try to filter if branchLineNumberSet is available.
                     List<Integer> branchLines = mInfo.getBranchLineNumberSet();
                     if (branchLines != null && !branchLines.isEmpty()) {
                         int filteredBranches = 0;
                         for (Integer bl : branchLines) {
-                             if (changedLinesInClass.contains(bl)) {
-                                 filteredBranches++;
-                             }
+                            if (changedLinesInClass.contains(bl)) {
+                                filteredBranches++;
+                            }
                         }
-                        // totalBranchCount might be higher than branchLineNumberSet size if multiple branches on same line
-                        // Adjust proportionally? Or just use branchLines size.
-                        // Let's use simple logic: if any branch line in changedLines, include its proportion of branches.
-                        if (mInfo.getTotalBranchCount() != null && mInfo.getTotalBranchCount() > 0) {
-                             double ratio = (double) filteredBranches / branchLines.size();
-                             md.setTotalBranches((int) Math.ceil(mInfo.getTotalBranchCount() * ratio));
-                        } else {
-                             md.setTotalBranches(0);
-                        }
+                        md.setTotalBranches(filteredBranches);
                     } else {
-                        // If no branch mapping, include all branches of the modified method
-                        md.setTotalBranches(mInfo.getTotalBranchCount() != null ? mInfo.getTotalBranchCount() : 0);
+                        md.setTotalBranches(0);
                     }
                 } else {
                     md.setTotalLineNumbers(methodLines);
@@ -508,9 +499,15 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 md.setComplexity(mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
                 md.setCoveredLineNumbers(new ArrayList<>());
                 md.setCoveredBranchIds(new ArrayList<>());
+                md.setTotalBranchConditionNumbers(totalBranchConditionNumbers);
+                md.setCoveredBranchConditionNumbers(new LinkedHashMap<>());
+                md.setTotalBranchConditions(countBranchConditions(totalBranchConditionNumbers));
+                md.setCoveredBranchConditions(0);
+                md.setBranchRate(calculateBranchRate(0, md.getTotalBranchConditions()));
                 classCov.getMethods().add(md);
                 classCov.setTotalLines(classCov.getTotalLines() + md.getTotalLines());
                 classCov.setTotalBranches(classCov.getTotalBranches() + md.getTotalBranches());
+                classCov.setTotalBranchConditions(classCov.getTotalBranchConditions() + md.getTotalBranchConditions());
                 classCov.setTotalComplexity(classCov.getTotalComplexity() + md.getComplexity());
             }
         }
@@ -524,6 +521,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         long coveredMethods = 0;
         long totalBranches = 0;
         long coveredBranches = 0;
+        long totalBranchConditions = 0;
+        long coveredBranchConditions = 0;
         long totalLines = 0;
         long coveredLines = 0;
         int totalComplexity = 0;
@@ -537,6 +536,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         long incCoveredMethods = 0;
         long incTotalBranches = 0;
         long incCoveredBranches = 0;
+        long incTotalBranchConditions = 0;
+        long incCoveredBranchConditions = 0;
         int incTotalComplexity = 0;
 
         List<ClassCoverageIndex> toSave = new ArrayList<>();
@@ -557,7 +558,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
 
             // Compute rates for indexing/filtering
             classCov.setLineRate(classCov.getTotalLines() > 0 ? (double) classCov.getCoveredLines() / classCov.getTotalLines() * 100 : 0.0);
-            classCov.setBranchRate(classCov.getTotalBranches() > 0 ? (double) classCov.getCoveredBranches() / classCov.getTotalBranches() * 100 : 0.0);
+            classCov.setBranchRate(calculateBranchRate(classCov.getCoveredBranchConditions(), classCov.getTotalBranchConditions()));
             classCov.setMethodRate(classCov.getTotalMethods() > 0 ? (double) classCov.getCoveredMethods() / classCov.getTotalMethods() * 100 : 0.0);
 
             if (classCov.getCoveredLines() > 0) coveredClasses++;
@@ -568,6 +569,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             coveredLines += classCov.getCoveredLines();
             totalBranches += classCov.getTotalBranches();
             coveredBranches += classCov.getCoveredBranches();
+            totalBranchConditions += classCov.getTotalBranchConditions();
+            coveredBranchConditions += classCov.getCoveredBranchConditions();
             totalComplexity += classCov.getTotalComplexity();
 
             // Incremental Calculation (Summary for the report)
@@ -582,6 +585,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 incCoveredMethods += classCov.getCoveredMethods();
                 incTotalBranches += classCov.getTotalBranches();
                 incCoveredBranches += classCov.getCoveredBranches();
+                incTotalBranchConditions += classCov.getTotalBranchConditions();
+                incCoveredBranchConditions += classCov.getCoveredBranchConditions();
                 incTotalComplexity += classCov.getTotalComplexity();
             } else {
                 // For full report, calculate inc stats vs diffMap (comparison with previous)
@@ -602,6 +607,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 int classIncTotalComplexity = 0;
                 int classIncTotalBranches = 0;
                 int classIncCoveredBranches = 0;
+                int classIncTotalBranchConditions = 0;
+                int classIncCoveredBranchConditions = 0;
 
                 for (MethodCoverageDetail md : classCov.getMethods()) {
                     boolean methodHasChanges = false;
@@ -633,6 +640,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
 
                         classIncTotalBranches += md.getTotalBranches();
                         classIncCoveredBranches += md.getCoveredBranches();
+                        classIncTotalBranchConditions += md.getTotalBranchConditions();
+                        classIncCoveredBranchConditions += md.getCoveredBranchConditions();
                         classIncTotalComplexity += md.getComplexity();
                     }
 
@@ -654,6 +663,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 incCoveredMethods += methodsWithChangesCovered;
                 incTotalBranches += classIncTotalBranches;
                 incCoveredBranches += classIncCoveredBranches;
+                incTotalBranchConditions += classIncTotalBranchConditions;
+                incCoveredBranchConditions += classIncCoveredBranchConditions;
                 incTotalComplexity += classIncTotalComplexity;
             }
 
@@ -671,6 +682,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         if (coveredMethods > totalMethods) coveredMethods = totalMethods;
         if (coveredLines > totalLines) coveredLines = totalLines;
         if (coveredBranches > totalBranches) coveredBranches = totalBranches;
+        if (coveredBranchConditions > totalBranchConditions) coveredBranchConditions = totalBranchConditions;
         if (coveredClasses > totalClasses) coveredClasses = totalClasses;
 
         report.setTotalClasses(totalClasses);
@@ -681,12 +693,15 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         report.setCoveredLines(coveredLines);
         report.setTotalBranches(totalBranches);
         report.setCoveredBranches(coveredBranches);
+        report.setTotalBranchConditions(totalBranchConditions);
+        report.setCoveredBranchConditions(coveredBranchConditions);
         report.setTotalComplexity(totalComplexity);
 
         // 同样对增量指标进行兜底
         if (incCoveredLines > incTotalLines) incCoveredLines = incTotalLines;
         if (incCoveredMethods > incTotalMethods) incCoveredMethods = incTotalMethods;
         if (incCoveredBranches > incTotalBranches) incCoveredBranches = incTotalBranches;
+        if (incCoveredBranchConditions > incTotalBranchConditions) incCoveredBranchConditions = incTotalBranchConditions;
         if (incCoveredClasses > incTotalClasses) incCoveredClasses = incTotalClasses;
 
         report.setIncTotalClasses(incTotalClasses);
@@ -697,6 +712,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         report.setIncCoveredMethods(incCoveredMethods);
         report.setIncTotalBranches(incTotalBranches);
         report.setIncCoveredBranches(incCoveredBranches);
+        report.setIncTotalBranchConditions(incTotalBranchConditions);
+        report.setIncCoveredBranchConditions(incCoveredBranchConditions);
         report.setIncTotalComplexity(incTotalComplexity);
 
         coverageReportRepository.save(report);
@@ -972,7 +989,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             point.put("timestamp", report.getCreateTime().getTime());
             point.put("lineCoverage", report.getTotalLines() > 0 ? (double) report.getCoveredLines() / report.getTotalLines() * 100 : 0);
             point.put("methodCoverage", report.getTotalMethods() > 0 ? (double) report.getCoveredMethods() / report.getTotalMethods() * 100 : 0);
-            point.put("branchCoverage", report.getTotalBranches() > 0 ? (double) report.getCoveredBranches() / report.getTotalBranches() * 100 : 0);
+            point.put("branchCoverage", calculateBranchRate(report.getCoveredBranchConditions(), report.getTotalBranchConditions()));
             trend.add(point);
         }
         return trend;
@@ -1139,6 +1156,75 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         );
     }
 
+    private Map<String, List<Integer>> copyBranchConditionNumbers(Map<String, List<Integer>> source) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        Map<String, List<Integer>> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
+            List<Integer> values = entry.getValue() == null ? Collections.emptyList() : new ArrayList<>(new LinkedHashSet<>(entry.getValue()));
+            copy.put(entry.getKey(), values);
+        }
+        return copy;
+    }
+
+    private Map<String, List<Integer>> filterBranchConditionNumbers(Map<String, List<Integer>> source, Collection<Integer> retainedLines) {
+        if (source == null || source.isEmpty() || retainedLines == null || retainedLines.isEmpty()) {
+            return null;
+        }
+        Set<Integer> lineSet = retainedLines instanceof Set ? (Set<Integer>) retainedLines : new HashSet<>(retainedLines);
+        Map<String, List<Integer>> filtered = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
+            Integer branchLine = parsePositiveInt(entry.getKey());
+            if (branchLine != null && lineSet.contains(branchLine)) {
+                filtered.put(entry.getKey(), entry.getValue() == null ? Collections.emptyList() : new ArrayList<>(new LinkedHashSet<>(entry.getValue())));
+            }
+        }
+        return filtered.isEmpty() ? null : filtered;
+    }
+
+    private Map<String, List<Integer>> mergeBranchConditionNumbers(Map<String, List<Integer>> current,
+                                                                   Map<String, List<Integer>> incoming) {
+        if ((current == null || current.isEmpty()) && (incoming == null || incoming.isEmpty())) {
+            return new LinkedHashMap<>();
+        }
+        Map<String, LinkedHashSet<Integer>> merged = new LinkedHashMap<>();
+        appendBranchConditionNumbers(merged, current);
+        appendBranchConditionNumbers(merged, incoming);
+        Map<String, List<Integer>> result = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashSet<Integer>> entry : merged.entrySet()) {
+            result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        return result;
+    }
+
+    private void appendBranchConditionNumbers(Map<String, LinkedHashSet<Integer>> target, Map<String, List<Integer>> source) {
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
+            LinkedHashSet<Integer> values = target.computeIfAbsent(entry.getKey(), key -> new LinkedHashSet<>());
+            if (entry.getValue() != null) {
+                values.addAll(entry.getValue());
+            }
+        }
+    }
+
+    private int countBranchConditions(Map<String, List<Integer>> branchConditionNumbers) {
+        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (List<Integer> values : branchConditionNumbers.values()) {
+            total += values == null ? 0 : new LinkedHashSet<>(values).size();
+        }
+        return total;
+    }
+
+    private double calculateBranchRate(long coveredBranchConditions, long totalBranchConditions) {
+        return totalBranchConditions > 0 ? (double) coveredBranchConditions / totalBranchConditions * 100 : 0.0;
+    }
+
     private void reuseMatchedCoverageData(ClassCoverageIndex currentCc, ClassCoverageIndex lastCc, Map<String, List<Integer>> diffMap) {
         List<Integer> changedLines = getChangedLinesForClass(diffMap, currentCc.getClassName());
 
@@ -1162,6 +1248,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                             currentMd.setCoveredLines(lastMd.getCoveredLines());
                             currentMd.setCoveredBranchIds(new ArrayList<>(lastMd.getCoveredBranchIds() != null ? lastMd.getCoveredBranchIds() : Collections.emptyList()));
                             currentMd.setCoveredBranches(lastMd.getCoveredBranches());
+                            currentMd.setCoveredBranchConditionNumbers(copyBranchConditionNumbers(lastMd.getCoveredBranchConditionNumbers()));
+                            currentMd.setCoveredBranchConditions(lastMd.getCoveredBranchConditions());
+                            currentMd.setBranchRate(lastMd.getBranchRate());
                             currentMd.setCovered(lastMd.isCovered());
                         }
                     });
@@ -1173,10 +1262,15 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         int coveredMethods = (int) cc.getMethods().stream().filter(MethodCoverageDetail::isCovered).count();
         int coveredLines = cc.getMethods().stream().mapToInt(MethodCoverageDetail::getCoveredLines).sum();
         int coveredBranches = cc.getMethods().stream().mapToInt(MethodCoverageDetail::getCoveredBranches).sum();
+        int coveredBranchConditions = cc.getMethods().stream().mapToInt(MethodCoverageDetail::getCoveredBranchConditions).sum();
+        int totalBranchConditions = cc.getMethods().stream().mapToInt(MethodCoverageDetail::getTotalBranchConditions).sum();
 
         cc.setCoveredMethods(coveredMethods);
         cc.setCoveredLines(coveredLines);
         cc.setCoveredBranches(coveredBranches);
+        cc.setCoveredBranchConditions(coveredBranchConditions);
+        cc.setTotalBranchConditions(totalBranchConditions);
+        cc.setBranchRate(calculateBranchRate(coveredBranchConditions, totalBranchConditions));
     }
 
     private void mergeStackNode(ClassCoverageIndex classCov, StackNodeVo sn) {
@@ -1209,6 +1303,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 md.setCoveredBranchIds(new ArrayList<>(coveredBranchIds));
                 md.setCoveredBranches(md.getCoveredBranchIds().size());
             }
+            Map<String, List<Integer>> coveredBranchConditionNumbers = mergeBranchConditionNumbers(
+                    md.getCoveredBranchConditionNumbers(), sn.getExecuteBranchConditionMap());
+            md.setCoveredBranchConditionNumbers(coveredBranchConditionNumbers);
+            md.setCoveredBranchConditions(countBranchConditions(coveredBranchConditionNumbers));
+            md.setBranchRate(calculateBranchRate(md.getCoveredBranchConditions(), md.getTotalBranchConditions()));
 
             md.setCovered(md.getCoveredLines() > 0);
         }
@@ -1216,10 +1315,13 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         int classCoveredMethods = (int) classCov.getMethods().stream().filter(MethodCoverageDetail::isCovered).count();
         int classCoveredLines = classCov.getMethods().stream().mapToInt(MethodCoverageDetail::getCoveredLines).sum();
         int classCoveredBranches = classCov.getMethods().stream().mapToInt(MethodCoverageDetail::getCoveredBranches).sum();
+        int classCoveredBranchConditions = classCov.getMethods().stream().mapToInt(MethodCoverageDetail::getCoveredBranchConditions).sum();
 
         classCov.setCoveredMethods(classCoveredMethods);
         classCov.setCoveredLines(classCoveredLines);
         classCov.setCoveredBranches(classCoveredBranches);
+        classCov.setCoveredBranchConditions(classCoveredBranchConditions);
+        classCov.setBranchRate(calculateBranchRate(classCoveredBranchConditions, classCov.getTotalBranchConditions()));
     }
 
     private Optional<MethodCoverageDetail> findBestMethodCoverage(ClassCoverageIndex classCov, StackNodeVo sn) {
@@ -1449,6 +1551,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         StringBuilder sb = new StringBuilder();
 
         Map<Integer, String> lineColors = new HashMap<>();
+        Map<Integer, String> branchLineColors = new HashMap<>();
         Map<String, Integer> methodStartLines = new HashMap<>();
 
         if (classCov.getMethods() != null) {
@@ -1470,6 +1573,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                         }
                     }
                 }
+                mergeBranchLineColors(branchLineColors,
+                        md.getTotalBranchConditionNumbers(),
+                        md.getCoveredBranchConditionNumbers());
             }
         }
 
@@ -1483,10 +1589,12 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 }
             }
 
-            String color = lineColors.get(lineNum);
+            String color = branchLineColors.containsKey(lineNum) ? branchLineColors.get(lineNum) : lineColors.get(lineNum);
             String style = "position:relative;";
             if ("green".equals(color)) {
                 style += "background-color: #ace1af;";
+            } else if ("orange".equals(color)) {
+                style += "background-color: #ffe5b4;";
             } else if ("red".equals(color)) {
                 style += "background-color: #f5c6cb;";
             }
@@ -1498,6 +1606,53 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         sb.append("</pre>");
 
         return sb.toString();
+    }
+
+    private void mergeBranchLineColors(Map<Integer, String> branchLineColors,
+                                       Map<String, List<Integer>> totalBranchConditionNumbers,
+                                       Map<String, List<Integer>> coveredBranchConditionNumbers) {
+        if (totalBranchConditionNumbers == null || totalBranchConditionNumbers.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, List<Integer>> entry : totalBranchConditionNumbers.entrySet()) {
+            Integer branchLine = parsePositiveInt(entry.getKey());
+            if (branchLine == null) {
+                continue;
+            }
+            int totalCount = entry.getValue() == null ? 0 : entry.getValue().size();
+            int coveredCount = 0;
+            if (coveredBranchConditionNumbers != null) {
+                List<Integer> covered = coveredBranchConditionNumbers.get(entry.getKey());
+                coveredCount = covered == null ? 0 : covered.size();
+            }
+            String color = coveredCount <= 0 ? "red" : (coveredCount >= totalCount ? "green" : "orange");
+            branchLineColors.put(branchLine, pickCoverageColor(branchLineColors.get(branchLine), color));
+        }
+    }
+
+    private String pickCoverageColor(String currentColor, String newColor) {
+        if (currentColor == null) {
+            return newColor;
+        }
+        if ("orange".equals(currentColor) || "orange".equals(newColor)) {
+            return "orange";
+        }
+        if ("red".equals(currentColor) || "red".equals(newColor)) {
+            return "red";
+        }
+        return "green";
+    }
+
+    private Integer parsePositiveInt(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private boolean hasSourceEntry(Set<String> entrySet, String className) {
@@ -1724,6 +1879,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                     node.setCoveredMethods(node.getCoveredMethods() + cc.getCoveredMethods());
                     node.setTotalBranches(node.getTotalBranches() + cc.getTotalBranches());
                     node.setCoveredBranches(node.getCoveredBranches() + cc.getCoveredBranches());
+                    node.setTotalBranchConditions(node.getTotalBranchConditions() + cc.getTotalBranchConditions());
+                    node.setCoveredBranchConditions(node.getCoveredBranchConditions() + cc.getCoveredBranchConditions());
                     node.setTotalLines(node.getTotalLines() + cc.getTotalLines());
                     node.setCoveredLines(node.getCoveredLines() + cc.getCoveredLines());
                     node.setTotalComplexity(node.getTotalComplexity() + cc.getTotalComplexity());
@@ -1736,7 +1893,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             if (node.getTotalLines() > 0) node.setLineRate((double) node.getCoveredLines() / node.getTotalLines() * 100);
             else node.setLineRate(0.0);
 
-            if (node.getTotalBranches() > 0) node.setBranchRate((double) node.getCoveredBranches() / node.getTotalBranches() * 100);
+            if (node.getTotalBranchConditions() > 0) node.setBranchRate((double) node.getCoveredBranchConditions() / node.getTotalBranchConditions() * 100);
             else node.setBranchRate(0.0);
 
             if (node.getTotalMethods() > 0) node.setMethodRate((double) node.getCoveredMethods() / node.getTotalMethods() * 100);

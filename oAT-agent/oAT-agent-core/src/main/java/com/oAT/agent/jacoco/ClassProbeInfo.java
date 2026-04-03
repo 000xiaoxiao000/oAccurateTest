@@ -55,6 +55,11 @@ public class ClassProbeInfo {
     private final Map<Integer, Integer> branchProbeToLine;
 
     /**
+     * 分支探针索引 -> 分支中的条件编号（同一源码行内从 1 开始）
+     */
+    private final Map<Integer, Integer> branchProbeToConditionNumber;
+
+    /**
      * 方法入口探针索引 -> 递归标记
      */
     private final Map<Integer, Boolean> methodEntryToRecursive;
@@ -75,6 +80,7 @@ public class ClassProbeInfo {
         this.methodEntryToBranchTotals = new HashMap<>();
         this.methodEntryToCyclo = new HashMap<>();
         this.branchProbeToLine = new HashMap<>();
+        this.branchProbeToConditionNumber = new HashMap<>();
         this.methodEntryToRecursive = new HashMap<>();
         this.methodEntryToAsync = new HashMap<>();
     }
@@ -110,8 +116,9 @@ public class ClassProbeInfo {
         methodEntryToAsync.put(methodEntryIdx, async);
     }
 
-    public void setBranchInfo(int branchProbeIdx, int branchLine) {
+    public void setBranchInfo(int branchProbeIdx, int branchLine, int conditionNumber) {
         branchProbeToLine.put(branchProbeIdx, branchLine);
+        branchProbeToConditionNumber.put(branchProbeIdx, conditionNumber);
     }
 
     // ============ Getter methods for CoverageCollector ============
@@ -126,6 +133,7 @@ public class ClassProbeInfo {
     public Map<Integer, int[]> getMethodEntryToBranchTotals() { return methodEntryToBranchTotals; }
     public Map<Integer, Integer> getMethodEntryToCyclo() { return methodEntryToCyclo; }
     public Map<Integer, Integer> getBranchProbeToLine() { return branchProbeToLine; }
+    public Map<Integer, Integer> getBranchProbeToConditionNumber() { return branchProbeToConditionNumber; }
     public Map<Integer, Boolean> getMethodEntryToRecursive() { return methodEntryToRecursive; }
     public Map<Integer, Boolean> getMethodEntryToAsync() { return methodEntryToAsync; }
 

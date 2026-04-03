@@ -1,6 +1,8 @@
 package com.oAT.agent.model;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public class StackNodeVo implements java.io.Serializable {
     private static final long serialVersionUID = -7156032079009497957L;
@@ -23,6 +25,8 @@ public class StackNodeVo implements java.io.Serializable {
     //分支覆盖率
     //执行到的分支数
     private ArrayList<Integer> executeBranch = new ArrayList<>(4);
+    // 执行到的分支条件: 分支行 -> 已命中的条件编号集合
+    private Map<String, List<Integer>> executeBranchConditionMap;
 
     /**
      * 圈复杂度
@@ -164,6 +168,14 @@ public class StackNodeVo implements java.io.Serializable {
 
     public void setExecuteBranch(ArrayList<Integer> executeBranch) {
         this.executeBranch = executeBranch;
+    }
+
+    public Map<String, List<Integer>> getExecuteBranchConditionMap() {
+        return executeBranchConditionMap;
+    }
+
+    public void setExecuteBranchConditionMap(Map<String, List<Integer>> executeBranchConditionMap) {
+        this.executeBranchConditionMap = executeBranchConditionMap;
     }
 
 }

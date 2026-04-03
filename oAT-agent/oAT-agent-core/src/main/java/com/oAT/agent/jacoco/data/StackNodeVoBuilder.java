@@ -121,6 +121,7 @@ public class StackNodeVoBuilder {
         nodeVo.setDoLines(new ArrayList<>(coverageLines.executedLines));
         nodeVo.setExecuteMethodTotal(buildExecutedMethodEntries(methodEntryIdx, probeInfo));
         nodeVo.setExecuteBranch(new ArrayList<>(coverageLines.executedBranchLines));
+        nodeVo.setExecuteBranchConditionMap(coverageLines.executedBranchConditionMap);
         nodeVo.setExecCyclo(String.valueOf(coverageLines.executedBranchLines.size()));
         nodeVo.setRecursive(Boolean.TRUE.equals(probeInfo.getMethodEntryToRecursive().get(methodEntryIdx)));
         nodeVo.setAsync(Boolean.TRUE.equals(probeInfo.getMethodEntryToAsync().get(methodEntryIdx)));
@@ -141,6 +142,7 @@ public class StackNodeVoBuilder {
     private CoverageLines collectCoverageLines(List<Integer> executedProbeIndices, ClassProbeInfo probeInfo) {
         LinkedHashSet<Integer> executedLines = new LinkedHashSet<>();
         LinkedHashSet<Integer> executedBranchLines = new LinkedHashSet<>();
+        Map<String, LinkedHashSet<Integer>> executedBranchConditionSets = new LinkedHashMap<>();
         boolean[] branchFlags = probeInfo.getProbeIsBranch();
         int[] probeLineNumbers = probeInfo.getProbeLineNumbers();
 
@@ -150,6 +152,12 @@ public class StackNodeVoBuilder {
                 Integer branchLine = probeInfo.getBranchProbeToLine().get(probeIdx);
                 if (branchLine != null && branchLine > 0) {
                     executedBranchLines.add(branchLine);
+                    Integer conditionNumber = probeInfo.getBranchProbeToConditionNumber().get(probeIdx);
+                    if (conditionNumber != null && conditionNumber > 0) {
+                        executedBranchConditionSets
+                                .computeIfAbsent(String.valueOf(branchLine), key -> new LinkedHashSet<>())
+                                .add(conditionNumber);
+                    }
                 }
                 continue;
             }
@@ -161,7 +169,21 @@ public class StackNodeVoBuilder {
         }
 
         executedLines.removeAll(executedBranchLines);
-        return new CoverageLines(executedLines, executedBranchLines);
+        return new CoverageLines(executedLines, executedBranchLines,
+                toConditionMap(executedBranchConditionSets));
+    }
+
+    private Map<String, List<Integer>> toConditionMap(Map<String, LinkedHashSet<Integer>> source) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        Map<String, List<Integer>> result = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashSet<Integer>> entry : source.entrySet()) {
+            if (!entry.getValue().isEmpty()) {
+                result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+            }
+        }
+        return result.isEmpty() ? null : result;
     }
 
     private MethodSignature parseMethodSignature(String methodNameDesc) {
@@ -184,10 +206,14 @@ public class StackNodeVoBuilder {
     private static final class CoverageLines {
         private final LinkedHashSet<Integer> executedLines;
         private final LinkedHashSet<Integer> executedBranchLines;
+        private final Map<String, List<Integer>> executedBranchConditionMap;
 
-        private CoverageLines(LinkedHashSet<Integer> executedLines, LinkedHashSet<Integer> executedBranchLines) {
+        private CoverageLines(LinkedHashSet<Integer> executedLines,
+                              LinkedHashSet<Integer> executedBranchLines,
+                              Map<String, List<Integer>> executedBranchConditionMap) {
             this.executedLines = executedLines;
             this.executedBranchLines = executedBranchLines;
+            this.executedBranchConditionMap = executedBranchConditionMap;
         }
     }
 

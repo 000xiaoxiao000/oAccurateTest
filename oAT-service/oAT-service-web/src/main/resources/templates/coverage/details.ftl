@@ -172,7 +172,7 @@
                     <td class="center aligned">${item.coveredMethods} / ${item.totalMethods}</td>
                     <td class="center aligned <#if item.coveredMethods gt 0>positive<#else>negative</#if>"><#if (item.totalMethods > 0)>${(item.coveredMethods / item.totalMethods * 100)?string("0.00")}%<#else>0.00%</#if></td>
                     <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
-                    <td class="center aligned <#if item.coveredBranches gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.coveredBranches / item.totalBranches * 100)?string("0.00")}%<#else>N/A</#if></td>
+                    <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
                     <td class="center aligned">${item.coveredLines} / ${item.totalLines}</td>
                     <td class="center aligned <#if item.coveredLines gt 0>positive<#else>negative</#if>"><#if (item.totalLines > 0)>${(item.coveredLines / item.totalLines * 100)?string("0.00")}%<#else>0.00%</#if></td>
                     <td class="center aligned">${item.totalComplexity}</td>
@@ -255,7 +255,7 @@
         <td class="center aligned">${item.coveredMethods} / ${item.totalMethods}</td>
         <td class="center aligned <#if item.coveredMethods gt 0>positive<#else>negative</#if>">${item.methodRate?string("0.00")}%</td>
         <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
-        <td class="center aligned <#if item.coveredBranches gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${item.branchRate?string("0.00")}%<#else>N/A</#if></td>
+        <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
         <td class="center aligned">${item.coveredLines} / ${item.totalLines}</td>
         <td class="center aligned <#if item.coveredLines gt 0>positive<#else>negative</#if>">${item.lineRate?string("0.00")}%</td>
         <td class="center aligned">${item.totalComplexity}</td>
@@ -373,7 +373,7 @@
                     html += '<td class="center aligned">' + item.coveredMethods + ' / ' + item.totalMethods + '</td>';
                     html += '<td class="center aligned ' + (item.coveredMethods > 0 ? 'positive' : 'negative') + '">' + item.methodRate.toFixed(2) + '%</td>';
                     html += '<td class="center aligned">' + item.coveredBranches + ' / ' + item.totalBranches + '</td>';
-                    html += '<td class="center aligned ' + (item.coveredBranches > 0 ? 'positive' : (item.totalBranches > 0 ? 'negative' : '')) + '">' + (item.totalBranches > 0 ? item.branchRate.toFixed(2) + '%' : 'N/A') + '</td>';
+                    html += '<td class="center aligned ' + ((item.branchRate || 0) > 0 ? 'positive' : (item.totalBranches > 0 ? 'negative' : '')) + '">' + (item.totalBranches > 0 ? (item.branchRate || 0).toFixed(2) + '%' : 'N/A') + '</td>';
                     html += '<td class="center aligned">' + item.coveredLines + ' / ' + item.totalLines + '</td>';
                     html += '<td class="center aligned ' + (item.coveredLines > 0 ? 'positive' : 'negative') + '">' + item.lineRate.toFixed(2) + '%</td>';
                     html += '<td class="center aligned">' + item.totalComplexity + '</td>';
