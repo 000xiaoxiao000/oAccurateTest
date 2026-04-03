@@ -11,20 +11,22 @@
         .method-table td { vertical-align: middle !important; }
         .method-table .method-name { font-weight: 600; color: #1e70bf; }
         #backToTop {
-            position: fixed;
-            bottom: 40px;
-            right: 40px;
-            display: none;
-            z-index: 999;
-            padding: 10px 15px;
-            background-color: #2185d0;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            position: fixed !important;
+            bottom: 40px !important;
+            right: 40px !important;
+            display: none !important;
+            z-index: 9999 !important;
+            padding: 10px 16px !important;
+            background-color: #2185d0 !important;
+            color: #fff !important;
+            border: none !important;
+            border-radius: 4px !important;
+            cursor: pointer !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+            font-size: 14px !important;
         }
-        #backToTop:hover { background-color: #1678c2; }
+        #backToTop.visible { display: block !important; }
+        #backToTop:hover { background-color: #1678c2 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.35) !important; }
         .source-container pre { margin: 0; font-size: 13px; line-height: 18px; min-width: 100%; }
         .source-container pre > div { min-width: max-content; }
     </style>
@@ -105,15 +107,32 @@
 
 <script>
     $(document).ready(function() {
-        $(window).scroll(function() {
-            if ($(this).scrollTop() > 200) {
-                $('#backToTop').fadeIn();
+        var $sourceContainer = $('.source-container');
+
+        function checkBackToTopVisible() {
+            if ($sourceContainer.length && $(window).scrollTop() > $sourceContainer.offset().top - $(window).height() * 0.5) {
+                $('#backToTop').addClass('visible');
             } else {
-                $('#backToTop').fadeOut();
+                $('#backToTop').removeClass('visible');
             }
+        }
+
+        // 滚动监听
+        $(window).on('scroll.backToTop hashchange.backToTop', function() {
+            checkBackToTopVisible();
         });
-        $('#backToTop').click(function() {
-            $('html, body').animate({scrollTop : 0}, 400);
+
+        // 点击"查看代码"锚点跳转后也要显示
+        $('a[href^="#method_"]').on('click.backToTop', function() {
+            setTimeout(checkBackToTopVisible, 50);
+        });
+
+        // 初始化
+        setTimeout(checkBackToTopVisible, 100);
+
+        $('#backToTop').on('click', function(e) {
+            e.preventDefault();
+            $('html, body').stop().animate({scrollTop: 0}, 400);
             return false;
         });
     });
