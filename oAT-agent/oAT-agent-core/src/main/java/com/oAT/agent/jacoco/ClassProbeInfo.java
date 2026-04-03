@@ -55,24 +55,6 @@ public class ClassProbeInfo {
     private final Map<Integer, Integer> branchProbeToLine;
 
     /**
-     * 分支行号 -> MC/DC条件总数（用于MC/DC覆盖率分母）
-     * MC/DC要求：每个条件的每个取值都必须独立影响判定的结果
-     */
-    private final Map<Integer, Integer> branchLineToConditionCount;
-
-    /**
-     * 分支探针true索引 -> 分支探针false索引 的配对映射
-     * 用于MC/DC分析：同一分支行的true/false探针对
-     * key: true分支探针索引, value: false分支探针索引
-     */
-    private final Map<Integer, Integer> branchTrueToFalseProbe;
-
-    /**
-     * 方法入口探针索引 -> 类中所有方法入口探针索引集合（用于方法覆盖率分母）
-     */
-    private final int[] allMethodEntryIndices;
-
-    /**
      * 方法入口探针索引 -> 递归标记
      */
     private final Map<Integer, Boolean> methodEntryToRecursive;
@@ -93,9 +75,6 @@ public class ClassProbeInfo {
         this.methodEntryToBranchTotals = new HashMap<>();
         this.methodEntryToCyclo = new HashMap<>();
         this.branchProbeToLine = new HashMap<>();
-        this.branchLineToConditionCount = new HashMap<>();
-        this.branchTrueToFalseProbe = new HashMap<>();
-        this.allMethodEntryIndices = new int[0];
         this.methodEntryToRecursive = new HashMap<>();
         this.methodEntryToAsync = new HashMap<>();
     }
@@ -131,20 +110,8 @@ public class ClassProbeInfo {
         methodEntryToAsync.put(methodEntryIdx, async);
     }
 
-    public void setBranchInfo(int branchProbeIdx, int branchLine, int falseProbeIdx) {
+    public void setBranchInfo(int branchProbeIdx, int branchLine) {
         branchProbeToLine.put(branchProbeIdx, branchLine);
-        if (falseProbeIdx >= 0) {
-            branchTrueToFalseProbe.put(branchProbeIdx, falseProbeIdx);
-        }
-    }
-
-    public void setBranchConditionCount(int branchLine, int conditionCount) {
-        branchLineToConditionCount.put(branchLine, conditionCount);
-    }
-
-    public void setAllMethodEntryIndices(int[] indices) {
-        // stored as a field reference, array is owned by caller
-        // We keep the reference to the array passed in from ClassInstrumenter
     }
 
     // ============ Getter methods for CoverageCollector ============
@@ -159,8 +126,6 @@ public class ClassProbeInfo {
     public Map<Integer, int[]> getMethodEntryToBranchTotals() { return methodEntryToBranchTotals; }
     public Map<Integer, Integer> getMethodEntryToCyclo() { return methodEntryToCyclo; }
     public Map<Integer, Integer> getBranchProbeToLine() { return branchProbeToLine; }
-    public Map<Integer, Integer> getBranchLineToConditionCount() { return branchLineToConditionCount; }
-    public Map<Integer, Integer> getBranchTrueToFalseProbe() { return branchTrueToFalseProbe; }
     public Map<Integer, Boolean> getMethodEntryToRecursive() { return methodEntryToRecursive; }
     public Map<Integer, Boolean> getMethodEntryToAsync() { return methodEntryToAsync; }
 

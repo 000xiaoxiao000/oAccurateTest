@@ -8,7 +8,6 @@ import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.jacoco.ClassProbeInfo;
 import com.oAT.agent.jacoco.ClassProbeInfoRegistry;
 import com.oAT.agent.jacoco.CoverageCollector;
-import com.oAT.agent.model.McdcCoverageSupport;
 import com.oAT.agent.model.StackNodeVo;
 
 import java.util.*;
@@ -122,7 +121,6 @@ public class StackNodeVoBuilder {
         nodeVo.setDoLines(new ArrayList<>(coverageLines.executedLines));
         nodeVo.setExecuteMethodTotal(buildExecutedMethodEntries(methodEntryIdx, probeInfo));
         nodeVo.setExecuteBranch(new ArrayList<>(coverageLines.executedBranchLines));
-        nodeVo.setMcdcCoverage(buildMcdcCoverage(executedProbeIndices, probeInfo));
         nodeVo.setExecCyclo(String.valueOf(coverageLines.executedBranchLines.size()));
         nodeVo.setRecursive(Boolean.TRUE.equals(probeInfo.getMethodEntryToRecursive().get(methodEntryIdx)));
         nodeVo.setAsync(Boolean.TRUE.equals(probeInfo.getMethodEntryToAsync().get(methodEntryIdx)));
@@ -173,59 +171,6 @@ public class StackNodeVoBuilder {
         return new MethodSignature(methodName, methodDesc);
     }
 
-    /**
-     * 构建 MC/DC 覆盖率数据。
-     * <p>
-     * 对于每个分支行，检查 true/false 探针对是否都被执行过。
-     * MC/DC 的核心要求是：每个条件必须独立影响判定结果。
-     * 通过分析 true 和 false 探针的执行情况来生成条件组合数据。
-     * </p>
-     *
-     * @param executedProbeIndices 本次执行中被触发的探针索引
-     * @param probeInfo            类探针元信息
-     * @return MC/DC 覆盖数据 Map<branchLine, List<List<String>>>
-     */
-    private Map<String, List<List<String>>> buildMcdcCoverage(List<Integer> executedProbeIndices,
-                                                               ClassProbeInfo probeInfo) {
-        Map<Integer, BranchExecutionStatus> branchExecutionMap = collectBranchExecutionStatus(executedProbeIndices, probeInfo);
-        if (branchExecutionMap.isEmpty()) {
-            return null;
-        }
-
-        Map<String, List<List<String>>> mcdc = new LinkedHashMap<>();
-        Map<Integer, Integer> branchConditionCounts = probeInfo.getBranchLineToConditionCount();
-        for (Map.Entry<Integer, BranchExecutionStatus> entry : branchExecutionMap.entrySet()) {
-            int branchLine = entry.getKey();
-            BranchExecutionStatus status = entry.getValue();
-            int conditionCount = branchConditionCounts.getOrDefault(branchLine, 1);
-            List<List<String>> combinations = McdcCoverageSupport.buildObservedCoverageForBranch(
-                    conditionCount, status.falseExecuted, status.trueExecuted);
-            if (!combinations.isEmpty()) {
-                mcdc.put(String.valueOf(branchLine), combinations);
-            }
-        }
-        return mcdc.isEmpty() ? null : mcdc;
-    }
-
-    private Map<Integer, BranchExecutionStatus> collectBranchExecutionStatus(List<Integer> executedProbeIndices,
-                                                                             ClassProbeInfo probeInfo) {
-        Map<Integer, BranchExecutionStatus> branchExecutionMap = new LinkedHashMap<>();
-        Map<Integer, Integer> branchTrueToFalse = probeInfo.getBranchTrueToFalseProbe();
-        for (int probeIdx : executedProbeIndices) {
-            Integer branchLine = probeInfo.getBranchProbeToLine().get(probeIdx);
-            if (branchLine == null || branchLine <= 0) {
-                continue;
-            }
-            BranchExecutionStatus status = branchExecutionMap.computeIfAbsent(branchLine, key -> new BranchExecutionStatus());
-            if (branchTrueToFalse.containsKey(probeIdx)) {
-                status.trueExecuted = true;
-            } else {
-                status.falseExecuted = true;
-            }
-        }
-        return branchExecutionMap;
-    }
-
     private static final class MethodSignature {
         private final String methodName;
         private final String methodDesc;
@@ -246,8 +191,4 @@ public class StackNodeVoBuilder {
         }
     }
 
-    private static final class BranchExecutionStatus {
-        private boolean falseExecuted;
-        private boolean trueExecuted;
-    }
 }
