@@ -63,7 +63,6 @@ public class StaticSourceMethodInfo implements Serializable {
         return branchLineAndConditionNumberMap;
     }
 
-    @JsonIgnore
     public void setBranchLineAndConditionNumberMap(Map<String, List<Integer>> branchLineAndConditionNumberMap) {
         this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap;
     }
