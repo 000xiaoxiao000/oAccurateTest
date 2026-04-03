@@ -19,7 +19,8 @@
             </div>
             <div class="item">
                 <span class="listHeader">状态码：</span>
-                <#if (node.responseCode!'') == '200'>
+                <#assign responseCode = (node.responseCode!'')?trim>
+                <#if responseCode?matches('2\\d\\d')>
                     <i class="ui green circle icon" style="display: inline"></i>
                 <#else>
                     <i class="ui red circle icon" style="display: inline"></i>
