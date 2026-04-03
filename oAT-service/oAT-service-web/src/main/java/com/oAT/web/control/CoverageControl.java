@@ -282,8 +282,8 @@ public class CoverageControl {
                 if (rateA != rateB) {
                     return Double.compare(rateB, rateA); // Descending
                 }
-                double bRateA = a.getTotalBranches() > 0 ? (double) a.getCoveredBranches() / a.getTotalBranches() : 0;
-                double bRateB = b.getTotalBranches() > 0 ? (double) b.getCoveredBranches() / b.getTotalBranches() : 0;
+                double bRateA = a.getBranchRate() != null ? a.getBranchRate() : 0;
+                double bRateB = b.getBranchRate() != null ? b.getBranchRate() : 0;
                 return Double.compare(bRateB, bRateA); // Descending
             });
         }

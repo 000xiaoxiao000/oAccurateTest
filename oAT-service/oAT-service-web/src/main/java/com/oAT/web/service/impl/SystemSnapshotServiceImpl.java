@@ -289,6 +289,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             Map<String, Set<Integer>> methodCoveredLinesMap = new HashMap<>();
             Map<String, Set<Integer>> methodTotalBranchesMap = new HashMap<>();
             Map<String, Set<Integer>> methodCoveredBranchesMap = new HashMap<>();
+            Map<String, Set<String>> methodTotalBranchConditionsMap = new HashMap<>();
+            Map<String, Set<String>> methodCoveredBranchConditionsMap = new HashMap<>();
             Map<String, Integer> methodComplexityMap = new HashMap<>();
 
             for (TraceNode node : traceNodes) {
@@ -317,14 +319,18 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
                             methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
                                     .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
+                            addBranchConditionKeys(methodTotalBranchConditionsMap, methodKey, staticMethod.getBranchLineAndConditionNumberMap());
                             if (sn.getExecuteBranch() != null) {
                                 methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
                             }
+                            addBranchConditionKeys(methodCoveredBranchConditionsMap, methodKey, sn.getExecuteBranchConditionMap());
                         }
                     }
                 }
             }
 
+            long totalBranchConditions = 0;
+            long coveredBranchConditions = 0;
             totalMethods = methodTotalLinesMap.size();
             for (String mKey : methodTotalLinesMap.keySet()) {
                 totalLines += methodTotalLinesMap.get(mKey).size();
@@ -335,6 +341,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                 totalComplexity += methodComplexityMap.getOrDefault(mKey, 0);
                 totalBranches += methodTotalBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
                 coveredBranches += methodCoveredBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
+                totalBranchConditions += methodTotalBranchConditionsMap.getOrDefault(mKey, Collections.emptySet()).size();
+                coveredBranchConditions += methodCoveredBranchConditionsMap.getOrDefault(mKey, Collections.emptySet()).size();
             }
 
             CoverageReportIndex report = new CoverageReportIndex();
@@ -348,6 +356,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             report.setCoveredLines(coveredLines);
             report.setTotalBranches(totalBranches);
             report.setCoveredBranches(coveredBranches);
+            report.setTotalBranchConditions(totalBranchConditions);
+            report.setCoveredBranchConditions(coveredBranchConditions);
             report.setTotalComplexity(totalComplexity);
 
             snapshot.setCoverageReport(report);
@@ -357,6 +367,24 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             logger.error("Error calculating coverage for snapshot: " + snapshotId, e);
             snapshot.setReportStatus(3); // 失败
             repository.save(snapshot);
+        }
+    }
+    private void addBranchConditionKeys(Map<String, Set<String>> target,
+                                        String methodKey,
+                                        Map<String, List<Integer>> branchConditionNumbers) {
+        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return;
+        }
+        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
+        for (Map.Entry<String, List<Integer>> entry : branchConditionNumbers.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (Integer conditionNumber : entry.getValue()) {
+                if (conditionNumber != null) {
+                    keys.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
         }
     }
 }

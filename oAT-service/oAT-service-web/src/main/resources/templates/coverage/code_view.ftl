@@ -147,7 +147,7 @@
             <#list classCov.methods as m>
                 <#-- 计算百分比并保留小数以防整数截断 -->
                 <#assign linePct = (m.totalLines > 0)?then(m.coveredLines * 1.0 / m.totalLines * 100, 0)>
-                <#assign branchPct = (m.totalBranches > 0)?then(m.coveredBranches * 1.0 / m.totalBranches * 100, 0)>
+                <#assign branchPct = m.branchRate!0>
                 <tr>
                     <td class="method-name" title="${m.methodDesc!""}">${m.methodName}</td>
                     <td>
@@ -158,7 +158,7 @@
                     </td>
                     <td>
                         <span class="stat-txt">${m.coveredBranches}/${m.totalBranches} (${branchPct?string("0.0")}%)</span>
-                        <div class="ui tiny progress <#if branchPct gt 0>success<#elseif m.totalBranches gt 0>error</#if>" data-percent="${branchPct}">
+                        <div class="ui tiny progress <#if branchPct == 100>success<#elseif branchPct gt 0>warning<#elseif m.totalBranches gt 0>error</#if>" data-percent="${branchPct}">
                             <div class="bar" style="width: ${branchPct}%"></div>
                         </div>
                     </td>

@@ -33,6 +33,8 @@ public class CoverageReportIndex implements Serializable {
     private long coveredMethods;
     private long totalBranches;
     private long coveredBranches;
+    private long totalBranchConditions;
+    private long coveredBranchConditions;
     private long totalLines;
     private long coveredLines;
     private int totalComplexity;
@@ -67,6 +69,8 @@ public class CoverageReportIndex implements Serializable {
     private long incCoveredMethods;
     private long incTotalBranches;
     private long incCoveredBranches;
+    private long incTotalBranchConditions;
+    private long incCoveredBranchConditions;
     private int incTotalComplexity;
 
     public String getId() { return id; }
@@ -95,6 +99,10 @@ public class CoverageReportIndex implements Serializable {
     public void setTotalBranches(long totalBranches) { this.totalBranches = totalBranches; }
     public long getCoveredBranches() { return coveredBranches; }
     public void setCoveredBranches(long coveredBranches) { this.coveredBranches = coveredBranches; }
+    public long getTotalBranchConditions() { return totalBranchConditions; }
+    public void setTotalBranchConditions(long totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
+    public long getCoveredBranchConditions() { return coveredBranchConditions; }
+    public void setCoveredBranchConditions(long coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
     public long getTotalLines() { return totalLines; }
     public void setTotalLines(long totalLines) { this.totalLines = totalLines; }
     public long getCoveredLines() { return coveredLines; }
@@ -140,6 +148,10 @@ public class CoverageReportIndex implements Serializable {
     public void setIncTotalBranches(long incTotalBranches) { this.incTotalBranches = incTotalBranches; }
     public long getIncCoveredBranches() { return incCoveredBranches; }
     public void setIncCoveredBranches(long incCoveredBranches) { this.incCoveredBranches = incCoveredBranches; }
+    public long getIncTotalBranchConditions() { return incTotalBranchConditions; }
+    public void setIncTotalBranchConditions(long incTotalBranchConditions) { this.incTotalBranchConditions = incTotalBranchConditions; }
+    public long getIncCoveredBranchConditions() { return incCoveredBranchConditions; }
+    public void setIncCoveredBranchConditions(long incCoveredBranchConditions) { this.incCoveredBranchConditions = incCoveredBranchConditions; }
 
     public int getIncTotalComplexity() { return incTotalComplexity; }
     public void setIncTotalComplexity(int incTotalComplexity) { this.incTotalComplexity = incTotalComplexity; }

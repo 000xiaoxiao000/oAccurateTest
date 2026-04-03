@@ -64,6 +64,7 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 
     // Branch tracking (for metadata only, not for runtime recording)
     private final Set<Integer> branchLines = new HashSet<>();
+    private final Map<Integer, Integer> branchLineConditionCounter = new HashMap<>();
     // Probe index for the current method's entry probe
     private int methodEntryProbeIdx = -1;
 
@@ -105,9 +106,11 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
      */
     static class BranchMeta {
         final int branchLine;
+        final int conditionNumber;
 
-        BranchMeta(int branchLine) {
+        BranchMeta(int branchLine, int conditionNumber) {
             this.branchLine = branchLine;
+            this.conditionNumber = conditionNumber;
         }
     }
 
@@ -280,6 +283,8 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 
         // Record branch line
         this.branchLines.add(currentLine);
+        int conditionNumber = branchLineConditionCounter.getOrDefault(currentLine, 0) + 1;
+        branchLineConditionCounter.put(currentLine, conditionNumber);
 
         ProbeAssignment assignment = PROBE_ASSIGNMENT.get();
 
@@ -301,8 +306,8 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
 
         // Both branch probes belong to the same source line, so either path
         // should count the conditional line as executed branch coverage.
-        assignment.branchMetaMap.put(trueProbeIdx, new BranchMeta(currentLine));
-        assignment.branchMetaMap.put(falseProbeIdx, new BranchMeta(currentLine));
+        assignment.branchMetaMap.put(trueProbeIdx, new BranchMeta(currentLine, conditionNumber));
+        assignment.branchMetaMap.put(falseProbeIdx, new BranchMeta(currentLine, conditionNumber));
 
         // Generate instrumented branch code:
         // Original jump -> jumpTaken (true branch probe)
