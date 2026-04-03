@@ -324,6 +324,12 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                                 methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
                             }
                             addBranchConditionKeys(methodCoveredBranchConditionsMap, methodKey, sn.getExecuteBranchConditionMap());
+                            if (methodCoveredBranchConditionsMap.containsKey(methodKey)) {
+                                Set<String> normalizedKeys = new LinkedHashSet<>();
+                                addBranchConditionKeysToSet(normalizedKeys, staticMethod.getBranchLineAndConditionNumberMap(),
+                                        decodeBranchConditionKeys(methodCoveredBranchConditionsMap.get(methodKey)));
+                                methodCoveredBranchConditionsMap.put(methodKey, normalizedKeys);
+                            }
                         }
                     }
                 }
@@ -386,5 +392,49 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                 }
             }
         }
+    }
+
+    private void addBranchConditionKeysToSet(Set<String> target,
+                                             Map<String, List<Integer>> allowedBranchConditionNumbers,
+                                             Map<String, List<Integer>> branchConditionNumbers) {
+        if (allowedBranchConditionNumbers == null || allowedBranchConditionNumbers.isEmpty()
+                || branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, List<Integer>> entry : allowedBranchConditionNumbers.entrySet()) {
+            List<Integer> allowedValues = entry.getValue();
+            List<Integer> coveredValues = branchConditionNumbers.get(entry.getKey());
+            if (allowedValues == null || allowedValues.isEmpty() || coveredValues == null || coveredValues.isEmpty()) {
+                continue;
+            }
+            Set<Integer> allowed = new LinkedHashSet<>(allowedValues);
+            for (Integer conditionNumber : coveredValues) {
+                if (conditionNumber != null && allowed.contains(conditionNumber)) {
+                    target.add(entry.getKey() + "#" + conditionNumber);
+                }
+            }
+        }
+    }
+
+    private Map<String, List<Integer>> decodeBranchConditionKeys(Set<String> keys) {
+        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
+        if (keys == null || keys.isEmpty()) {
+            return decoded;
+        }
+        for (String key : keys) {
+            if (!StringUtils.hasText(key)) {
+                continue;
+            }
+            int split = key.lastIndexOf('#');
+            if (split <= 0 || split >= key.length() - 1) {
+                continue;
+            }
+            try {
+                int conditionNumber = Integer.parseInt(key.substring(split + 1));
+                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(conditionNumber);
+            } catch (NumberFormatException ignore) {
+            }
+        }
+        return decoded;
     }
 }

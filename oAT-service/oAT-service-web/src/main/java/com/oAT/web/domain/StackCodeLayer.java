@@ -78,8 +78,8 @@ public class StackCodeLayer implements ImageLayer {
             );
         });
 
-        // 添加根节点关系
-        results.add(buildRootEdge());
+        // 添加入口到顶层代码节点的关系
+        results.addAll(buildRootEdges());
         return results;
     }
 
@@ -191,17 +191,42 @@ public class StackCodeLayer implements ImageLayer {
         return element;
     }
 
-    private ImageElement buildRootEdge() {
-        StackNodeVo rootNode =
-                Arrays.stream(codeNodes).filter(a -> a.getId().equals("0")).findAny().orElseThrow(() -> new IllegalStateException(
-                        "代码堆栈中找不到根节点"));
-        ImageData edgeData = new ImageData(generateTempId());
-        edgeData.source = snapshotId;
-        edgeData.target = ClassUtil.toClassName(rootNode.getClassName()) + " " + rootNode.getMethodName();
-        edgeData.name = "invoke";
-        ImageElement element = buildDefaultEdge(edgeData);
-        element.classes = new String[]{"start_invoke", "invoke"};
-        return element;
+    private List<ImageElement> buildRootEdges() {
+        if (ArrayUtils.isEmpty(codeNodes)) {
+            return Collections.emptyList();
+        }
+
+        Set<String> nodeIds = Arrays.stream(codeNodes)
+                .map(StackNodeVo::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        List<StackNodeVo> rootNodes = Arrays.stream(codeNodes)
+                .filter(Objects::nonNull)
+                .filter(node -> {
+                    String parentId = node.parentId();
+                    return "0".equals(parentId) || "ROOT".equals(parentId) || !nodeIds.contains(parentId);
+                })
+                .sorted(Comparator.comparing(StackNodeVo::getId, Comparator.nullsLast(String::compareTo)))
+                .collect(Collectors.toList());
+
+        if (rootNodes.isEmpty()) {
+            rootNodes = Arrays.stream(codeNodes)
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(StackNodeVo::getId, Comparator.nullsLast(String::compareTo)))
+                    .limit(1)
+                    .collect(Collectors.toList());
+        }
+
+        return rootNodes.stream().map(rootNode -> {
+            ImageData edgeData = new ImageData(generateTempId());
+            edgeData.source = snapshotId;
+            edgeData.target = ClassUtil.toClassName(rootNode.getClassName()) + " " + rootNode.getMethodName();
+            edgeData.name = "invoke";
+            ImageElement element = buildDefaultEdge(edgeData);
+            element.classes = new String[]{"start_invoke", "invoke"};
+            return element;
+        }).collect(Collectors.toList());
     }
 
     private List<ImageElement> buildEdges(StackNodeVo node, String nodeId) {
