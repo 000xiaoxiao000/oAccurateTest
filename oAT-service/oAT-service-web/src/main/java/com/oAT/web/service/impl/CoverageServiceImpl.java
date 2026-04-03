@@ -1610,6 +1610,10 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             }
         }
 
+        // 计算行号所需的最小宽度（基于总行数的位数）
+        int totalLineCount = lines.length;
+        int lineWidth = String.valueOf(totalLineCount).length();
+
         sb.append("<pre style='font-family: monospace; white-space: pre; display:inline-block; min-width:100%; box-sizing:border-box;'>");
         for (int i = 0; i < lines.length; i++) {
             int lineNum = i + 1;
@@ -1629,8 +1633,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             } else if ("red".equals(color)) {
                 style += "background-color: #f5c6cb;";
             }
-            sb.append("<div style='display:block;min-width:max-content;").append(style).append("'>")
-                    .append("<span style='color: #999; margin-right: 10px;'>").append(lineNum).append("</span>")
+            sb.append("<div style='display:flex;min-width:max-content;").append(style).append("'>")
+                    .append("<span style='color: #999; flex-shrink:0; width: ").append(lineWidth).append(".2em; text-align: right; display: inline-block; user-select:none; margin-right: 20px;'>").append(lineNum).append("</span>")
                     .append(escapeHtml(lines[i]))
                     .append("</div>");
         }
