@@ -530,17 +530,18 @@
 
         function buildSessionItemHtml(session) {
             var preview = getSessionPreview(session);
+            var timeStr = escapeHtml(new Date(session.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}));
             return '<div class="ai-session-item ' + (session.id === activeSessionId ? 'active' : '') + '" data-session-id="' + escapeHtml(session.id) + '">'
                 + '<div class="ai-session-top">'
-                + '<div class="ai-session-title">' + escapeHtml(session.title || '新会话') + '</div>'
+                + '<div class="ai-session-title" title="' + escapeHtml(session.title || '新会话') + '">' + escapeHtml(session.title || '新会话') + '</div>'
                 + '<div class="ai-session-actions">'
-                + '<div class="ai-session-time">' + escapeHtml(new Date(session.updatedAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})) + '</div>'
+                + '<span class="ai-session-time">' + timeStr + '</span>'
                 + '<button class="ai-session-action pin ' + (session.pinned ? 'pinned' : '') + '" type="button" data-session-id="' + escapeHtml(session.id) + '" title="置顶"><i class="thumbtack icon"></i></button>'
                 + '<button class="ai-session-action rename" type="button" data-session-id="' + escapeHtml(session.id) + '" title="重命名"><i class="edit outline icon"></i></button>'
                 + '<button class="ai-session-action delete" type="button" data-session-id="' + escapeHtml(session.id) + '" title="删除"><i class="trash alternate outline icon"></i></button>'
                 + '</div>'
                 + '</div>'
-                + '<div class="ai-session-preview">' + escapeHtml((preview || '从这里继续你的 AI 交互工作台').substring(0, 52)) + '</div>'
+                + '<div class="ai-session-preview">' + escapeHtml((preview || '从这里继续你的 AI 交互工作台').substring(0, 80)) + '</div>'
                 + '</div>';
         }
 
