@@ -88,26 +88,57 @@
 
         function setPanelOpen(open) {
             var wasOpen = $root.hasClass('is-panel-open');
+            // 关闭面板前，先保存对话框的右下角位置
+            var savedDialogRect = null;
+            if (wasOpen && !open) {
+                savedDialogRect = $root[0].getBoundingClientRect();
+            }
             $root.toggleClass('is-panel-open', open);
             sessionStorage.setItem(panelKey, open ? '1' : '0');
-            if (wasOpen && !open) {
-                // 关闭面板时，将 launcher 锚定在当前视觉位置（避免因 widget 缩小而跳到左上角）
-                anchorLauncherPosition();
-            }
             window.requestAnimationFrame(function () {
-                applyPosition(getCurrentPosition());
+                if (savedDialogRect) {
+                    // 关闭面板时，使用保存的对话框位置将 launcher 锚定在右下角
+                    var launcherWidth = 96;
+                    var launcherHeight = 112;
+                    var targetLeft = savedDialogRect.right - launcherWidth;
+                    var targetTop = savedDialogRect.bottom - launcherHeight;
+                    applyPosition(clampPosition({ left: targetLeft, top: targetTop }));
+                } else {
+                    applyPosition(getCurrentPosition());
+                }
+                writeLocalJSON(positionKey, getCurrentPosition());
             });
         }
 
         function anchorLauncherPosition() {
             var rect = $launcher[0].getBoundingClientRect();
-            // 目标：让 launcher 关闭后面板消失后，launcher 仍停留在当前屏幕坐标
+            // 目标:让 launcher 关闭后面板消失后,launcher 仍停留在当前屏幕坐标
             // widget position:fixed, left/top 控制其左上角
-            // 关闭后 widget 宽度 ≈ launcher 宽度(96px)，所以 left = launcherRight - widgetWidth
+            // 关闭后 widget 宽度 ≈ launcher 宽度(96px),所以 left = launcherRight - widgetWidth
             var targetLeft = rect.right - $root.outerWidth();
             var targetTop = rect.top;
             applyPosition(clampPosition({ left: targetLeft, top: targetTop }));
             writeLocalJSON(positionKey, getCurrentPosition());
+        }
+        
+        function anchorLauncherToBottomRight() {
+            // 获取当前对话框的尺寸和位置
+            var rootRect = $root[0].getBoundingClientRect();
+                    
+            // 关闭面板后,widget 只包含 launcher(约96px宽)
+            // 我们需要让 launcher 定位在原来对话框的右下角位置
+            // 对话框右下角的屏幕坐标
+            var dialogRight = rootRect.right;
+            var dialogBottom = rootRect.bottom;
+                    
+            // 计算新的 left/top,使得 launcher 的右下角对齐到对话框的右下角
+            var launcherWidth = 96; // launcher 的宽度
+            var launcherHeight = 112; // launcher 的高度
+            var targetLeft = dialogRight - launcherWidth;
+            var targetTop = dialogBottom - launcherHeight;
+                    
+            applyPosition(clampPosition({ left: targetLeft, top: targetTop }));
+            // 不在这里保存位置，让 setPanelOpen 中的 requestAnimationFrame 统一保存
         }
 
         function scrollToBottom() {
