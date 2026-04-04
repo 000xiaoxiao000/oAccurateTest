@@ -27,6 +27,18 @@
         <div class="ai-workbench-bg bg-two"></div>
         <div class="ai-workbench-grid"></div>
 
+        <!-- Dynamic animation layers -->
+        <div class="ai-workbench-particles">
+            <div class="ai-workbench-particle"></div>
+            <div class="ai-workbench-particle"></div>
+            <div class="ai-workbench-particle"></div>
+            <div class="ai-workbench-particle"></div>
+            <div class="ai-workbench-particle"></div>
+            <div class="ai-workbench-particle"></div>
+            <div class="ai-workbench-particle"></div>
+            <div class="ai-workbench-particle"></div>
+        </div>
+
         <div class="ai-workbench-hero">
             <div class="ai-hero-copy">
                 <div class="ai-eyebrow">AI Interactive Workbench</div>

@@ -21,6 +21,7 @@
         var projectId = $root.data('project-id');
         var projectName = $root.data('project-name') || '当前项目';
         var askUrl = $root.data('ask-url');
+        var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
         var storagePrefix = 'ai-floating-widget:' + projectId;
         var historyKey = storagePrefix + ':history';
         var hiddenKey = storagePrefix + ':hidden';
@@ -816,10 +817,27 @@
             var height = canvas.height;
             var mascot = {
                 x: width / 2,
-                y: height / 2 - 6,
-                radius: 28,
-                color: '#00b5ad'
+                y: height / 2 - 5,
+                radius: 26,
+                color: mascotPrimary
             };
+            // Parse mascotPrimary to RGB for particle accents
+            var mRgb = {
+                r: parseInt(mascotPrimary.slice(1,3), 16) || 0,
+                g: parseInt(mascotPrimary.slice(3,5), 16) || 181,
+                b: parseInt(mascotPrimary.slice(5,7), 16) || 173
+            };
+            var particles = [];
+
+            // Orbiting particles (scaled down from workbench mascot)
+            for (var i = 0; i < 8; i++) {
+                particles.push({
+                    angle: (Math.PI * 2 / 8) * i,
+                    radius: 34 + Math.random() * 10,
+                    size: 1 + Math.random() * 1.5,
+                    speed: 0.003 + Math.random() * 0.002
+                });
+            }
 
             $(window).on('mousemove.aiFloatingMascot', function (event) {
                 mouseX = event.clientX;
@@ -836,13 +854,51 @@
 
                 ctx.save();
                 ctx.translate(mascot.x, mascot.y);
-                ctx.translate(0, Math.sin(Date.now() / 500) * 2);
+                ctx.translate(0, Math.sin(Date.now() / 500) * 1.5);
 
+                // Dashed orbital rings
+                ctx.save();
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+                ctx.setLineDash([4, 4]);
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(0, 0, 34, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, 42, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+
+                // Orbiting particles
+                particles.forEach(function (particle, index) {
+                    var angle = particle.angle + Date.now() * particle.speed * (index % 2 === 0 ? 1 : -1);
+                    var pxOrbit = Math.cos(angle) * particle.radius;
+                    var pyOrbit = Math.sin(angle) * (particle.radius * 0.45);
+                    ctx.beginPath();
+                    ctx.fillStyle = index % 2 === 0 ? 'rgba(255,255,255,0.9)' : 'rgba(' + mRgb.r + ',' + mRgb.g + ',' + mRgb.b + ',0.22)';
+                    ctx.arc(pxOrbit, pyOrbit, particle.size, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+
+                // Shadow platform
+                ctx.beginPath();
+                ctx.ellipse(0, 30, 28, 6, 0, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.07)';
+                ctx.fill();
+
+                // Body
                 ctx.beginPath();
                 ctx.ellipse(0, 0, mascot.radius, mascot.radius * 0.9, 0, 0, Math.PI * 2);
                 ctx.fillStyle = mascot.color;
                 ctx.fill();
 
+                // Face highlight
+                ctx.beginPath();
+                ctx.arc(-mascot.radius * 0.48, -mascot.radius * 0.52, mascot.radius * 0.16, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.fill();
+
+                // Eyes
                 var eyeOffsetX = mascot.radius * 0.35;
                 var eyeOffsetY = -mascot.radius * 0.2;
                 var eyeSize = mascot.radius * 0.3;
@@ -855,6 +911,7 @@
                 ctx.arc(eyeOffsetX, eyeOffsetY, eyeSize, 0, Math.PI * 2);
                 ctx.fill();
 
+                // Pupils follow mouse
                 var px = Math.cos(lookAngle) * eyeSize * 0.4;
                 var py = Math.sin(lookAngle) * eyeSize * 0.4;
                 ctx.fillStyle = 'black';
@@ -865,13 +922,28 @@
                 ctx.arc(eyeOffsetX + px, eyeOffsetY + py, eyeSize * 0.5, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-                ctx.lineWidth = 2;
+                // Mouth
+                ctx.strokeStyle = 'rgba(0,0,0,0.38)';
+                ctx.lineWidth = 1.8;
+                ctx.lineCap = 'round';
                 ctx.beginPath();
-                ctx.arc(0, 4, 6, 0.2, Math.PI - 0.2);
+                ctx.arc(0, 4, 7, 0.2, Math.PI - 0.2);
                 ctx.stroke();
-                ctx.restore();
 
+                // Legs
+                ctx.beginPath();
+                ctx.moveTo(-7, 24);
+                ctx.lineTo(-3, 31);
+                ctx.lineTo(-1, 24);
+                ctx.moveTo(7, 24);
+                ctx.lineTo(3, 31);
+                ctx.lineTo(1, 24);
+                ctx.strokeStyle = 'rgba(15,23,42,0.18)';
+                ctx.lineWidth = 2.8;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                ctx.restore();
                 window.requestAnimationFrame(draw);
             }
 
