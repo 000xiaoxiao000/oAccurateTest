@@ -87,11 +87,27 @@
         }
 
         function setPanelOpen(open) {
+            var wasOpen = $root.hasClass('is-panel-open');
             $root.toggleClass('is-panel-open', open);
             sessionStorage.setItem(panelKey, open ? '1' : '0');
+            if (wasOpen && !open) {
+                // 关闭面板时，将 launcher 锚定在当前视觉位置（避免因 widget 缩小而跳到左上角）
+                anchorLauncherPosition();
+            }
             window.requestAnimationFrame(function () {
                 applyPosition(getCurrentPosition());
             });
+        }
+
+        function anchorLauncherPosition() {
+            var rect = $launcher[0].getBoundingClientRect();
+            // 目标：让 launcher 关闭后面板消失后，launcher 仍停留在当前屏幕坐标
+            // widget position:fixed, left/top 控制其左上角
+            // 关闭后 widget 宽度 ≈ launcher 宽度(96px)，所以 left = launcherRight - widgetWidth
+            var targetLeft = rect.right - $root.outerWidth();
+            var targetTop = rect.top;
+            applyPosition(clampPosition({ left: targetLeft, top: targetTop }));
+            writeLocalJSON(positionKey, getCurrentPosition());
         }
 
         function scrollToBottom() {
