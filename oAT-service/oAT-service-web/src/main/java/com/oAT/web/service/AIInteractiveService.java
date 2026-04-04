@@ -1,0 +1,11 @@
+package com.oAT.web.service;
+
+import com.oAT.web.service.entity.AIInteractivePageVo;
+import com.oAT.web.service.entity.AIInteractiveReplyVo;
+import com.oAT.web.service.entity.UserVo;
+
+public interface AIInteractiveService {
+    AIInteractivePageVo buildPage(String projectId, UserVo user);
+
+    AIInteractiveReplyVo ask(String projectId, UserVo user, String question, String pageContext);
+}
