@@ -28,6 +28,8 @@ import java.io.IOException;
 @RequestMapping("/p/{projectId}/coverage")
 public class CoverageControl {
 
+    private static final String[] PRIMARY_COLORS = {"#5865f2", "#00b5ad", "#ff8a65", "#7e57c2", "#26a69a", "#42a5f5"};
+
     @Autowired
     private CoverageService coverageService;
 
@@ -300,10 +302,13 @@ public class CoverageControl {
 
         // 为面包屑补充信息
         model.addAttribute("projectId", projectId);
-        model.addAttribute("project", projectService.getProject(projectId));
+        com.oAT.web.service.entity.ProjectVo project = projectService.getProject(projectId);
+        model.addAttribute("project", project);
         model.addAttribute("appId", appId);
         AppVo appVo = appService.getApp(appId);
         model.addAttribute("appName", appVo != null ? appVo.getName() : appId);
+        // 悬浮小人主色，与 AIInteractive 保持一致
+        model.addAttribute("mascotPrimary", computeMascotPrimary(project.getId(), project.getName()));
 
         CoverageReportIndex report = coverageService.getReport(reportId);
         if (report != null) {
@@ -335,6 +340,28 @@ public class CoverageControl {
         String prefix = normalizedClassName.substring(0, lastDot + 1);
         String tail = normalizedClassName.substring(lastDot + 1);
         return prefix + CoverageSourceClassUtil.toTreeDisplayName(tail, "class");
+    }
+
+    // ========== Mascot Helper Methods (与 AIInteractive/ProjectInterceptor 保持一致) ==========
+
+    private String computeMascotPrimary(String projectId, String projectName) {
+        int seed = positiveHash(projectId + ":" + projectName);
+        return pick(PRIMARY_COLORS, seed / 5 + 13);
+    }
+
+    private int positiveHash(String value) {
+        int hash = value == null ? 0 : value.hashCode();
+        if (hash == Integer.MIN_VALUE) {
+            return 0;
+        }
+        return Math.abs(hash);
+    }
+
+    private String pick(String[] values, int seed) {
+        if (values.length == 0) {
+            return "";
+        }
+        return values[seed % values.length];
     }
 
     /**
