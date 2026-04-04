@@ -71,6 +71,12 @@
                 radius: 72,
                 color: mascotPrimary
             };
+            // Parse mascotPrimary to RGB for particle accents (consistent with floating widget)
+            var mRgb = {
+                r: parseInt(mascotPrimary.slice(1,3), 16) || 0,
+                g: parseInt(mascotPrimary.slice(3,5), 16) || 181,
+                b: parseInt(mascotPrimary.slice(5,7), 16) || 173
+            };
             var particles = [];
 
             for (var i = 0; i < 18; i++) {
@@ -115,7 +121,7 @@
                     var pxOrbit = Math.cos(angle) * particle.radius;
                     var pyOrbit = Math.sin(angle) * (particle.radius * 0.45);
                     ctx.beginPath();
-                    ctx.fillStyle = index % 2 === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(15,118,110,0.22)';
+                    ctx.fillStyle = index % 2 === 0 ? 'rgba(255,255,255,0.95)' : 'rgba(' + mRgb.r + ',' + mRgb.g + ',' + mRgb.b + ',0.22)';
                     ctx.arc(pxOrbit, pyOrbit, particle.size, 0, Math.PI * 2);
                     ctx.fill();
                 });
@@ -186,7 +192,98 @@
 
         function setSignalState(state) {
             $signalLights.find('.ai-signal-light').removeClass('active');
-            $signalLights.find('[data-state="' + state + '"]').addClass('active');
+            var $target = $signalLights.find('[data-state="' + state + '"]');
+            if ($target.length) {
+                $target.addClass('active');
+                // Pulse animation on state change
+                $target.find('.dot').css({transform: 'scale(1.6)', transition: 'transform 0.2s ease'});
+                setTimeout(function () {
+                    $target.find('.dot').css({transform: 'scale(1)', transition: 'transform 0.3s ease'});
+                }, 200);
+            }
+        }
+
+        function initWorkbenchAnimation() {
+            var $shell = $('.ai-workbench-shell');
+            if (!$shell.length) return;
+
+            // Mouse-following ambient light on the shell
+            var $ambient = $('<div class="ai-workbench-ambient"></div>');
+            $shell.prepend($ambient);
+            $ambient.css({
+                position: 'absolute',
+                width: '400px',
+                height: '400px',
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(' + hexToRgb(mascotPrimary) + ',0.08) 0%, transparent 70%)',
+                pointerEvents: 'none',
+                zIndex: 0,
+                opacity: 0,
+                transition: 'opacity 0.4s ease, left 0.15s ease-out, top 0.15s ease-out'
+            });
+
+            $(document).on('mousemove.aiAmbient', function (e) {
+                var offset = $shell.offset();
+                var x = e.clientX - offset.left - 200;
+                var y = e.clientY - offset.top - 200;
+                // Only show when mouse is inside the shell area
+                if (e.clientX >= offset.left && e.clientX <= offset.left + $shell.outerWidth() &&
+                    e.clientY >= offset.top && e.clientY <= offset.top + $shell.outerHeight()) {
+                    $ambient.css({left: x, top: y, opacity: 1});
+                } else {
+                    $ambient.css({opacity: 0});
+                }
+            });
+
+            // Ripple effect on send button click
+            $sendButton.on('mousedown', function () {
+                createRipple($(this), mascotPrimary);
+            });
+
+            // Dock chip hover glow
+            $(document).on('mouseenter', '.ai-dock-chip', function () {
+                $(this).css({
+                    boxShadow: '0 0 20px ' + hexToRgba(mascotPrimary, 0.25) + ', inset 0 0 12px ' + hexToRgba(mascotPrimary, 0.06),
+                    borderColor: hexToRgba(mascotPrimary, 0.35)
+                });
+            }).on('mouseleave', '.ai-dock-chip', function () {
+                $(this).css({boxShadow: '', borderColor: ''});
+            });
+        }
+
+        function hexToRgb(hex) {
+            hex = String(hex || '#14b8a6').replace('#', '');
+            if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+            var r = parseInt(hex.substring(0, 2), 16) || 20;
+            var g = parseInt(hex.substring(2, 4), 16) || 184;
+            var b = parseInt(hex.substring(4, 6), 16) || 166;
+            return r + ',' + g + ',' + b;
+        }
+
+        function hexToRgba(hex, alpha) {
+            return 'rgba(' + hexToRgb(hex) + ',' + alpha + ')';
+        }
+
+        function createRipple($el, color) {
+            var ripple = $('<span class="ai-btn-ripple"></span>');
+            var rect = $el[0].getBoundingClientRect();
+            var size = Math.max(rect.width, rect.height) * 2;
+            var x = event.clientX - rect.left - size / 2;
+            var y = event.clientY - rect.top - size / 2;
+            ripple.css({
+                position: 'absolute',
+                width: size + 'px',
+                height: size + 'px',
+                borderRadius: '50%',
+                background: 'rgba(' + hexToRgb(color) + ',0.25)',
+                transform: 'scale(0)',
+                left: x + 'px',
+                top: y + 'px',
+                pointerEvents: 'none',
+                animation: 'aiBtnRipple 0.5s ease-out forwards'
+            });
+            $el.css({position: 'relative', overflow: 'hidden'}).append(ripple);
+            setTimeout(function () { ripple.remove(); }, 500);
         }
 
         function setRequestState(text, disabled) {
@@ -779,6 +876,7 @@
         initMascotCanvas();
         loadSessions();
         renderActiveSession();
+        initWorkbenchAnimation();
 
         $sendButton.on('click', function () {
             sendQuestion();
