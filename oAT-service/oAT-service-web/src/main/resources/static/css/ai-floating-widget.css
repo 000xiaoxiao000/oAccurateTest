@@ -50,7 +50,7 @@
     min-width: 48px;
     height: 24px;
     border-radius: 999px;
-    background: rgba(0, 181, 173, 0.1);
+    background: rgba(20, 184, 166, 0.12);
     color: #0f766e;
     font-size: 12px;
     font-weight: 600;
@@ -180,8 +180,8 @@
     max-width: 100%;
     padding: 8px 10px;
     border-radius: 12px;
-    background: rgba(240, 253, 250, 0.95);
-    border: 1px solid rgba(20, 184, 166, 0.18);
+    background: rgba(240, 253, 250, 0.92);
+    border: 1px solid rgba(20, 184, 166, 0.22);
     color: #0f766e;
     font-size: 12px;
     line-height: 1.5;
@@ -212,8 +212,8 @@
 .ai-floating-avatar {
     width: 32px;
     height: 32px;
-    border-radius: 12px;
-    background: #e0f2fe;
+    border-radius: 14px;
+    background: #dff7f5;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -239,7 +239,8 @@
 }
 
 .ai-floating-message-card {
-    background: #f8fafc;
+    background: rgba(248, 250, 252, 0.82);
+    border: 1px solid rgba(226, 232, 240, 0.78);
     border-radius: 14px;
     padding: 10px 12px;
     color: #1f2937;
@@ -249,7 +250,7 @@
 }
 
 .ai-floating-message.user .ai-floating-message-card {
-    background: #eef2ff;
+    background: rgba(238, 242, 255, 0.9);
 }
 
 .ai-floating-message-actions {
@@ -310,7 +311,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(15, 118, 110, 0.12);
+    background: rgba(20, 184, 166, 0.12);
     color: #0f766e;
     flex-shrink: 0;
 }
@@ -337,8 +338,8 @@
 }
 
 .ai-floating-starter {
-    border: 1px solid rgba(0, 181, 173, 0.18);
-    background: rgba(0, 181, 173, 0.06);
+    border: 1px solid rgba(20, 184, 166, 0.18);
+    background: rgba(20, 184, 166, 0.06);
     color: #0f766e;
     border-radius: 999px;
     padding: 6px 10px;

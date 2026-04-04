@@ -133,7 +133,8 @@
         </div>
 
         <div class="ui stackable grid ai-workbench-main">
-            <div class="four wide column">
+            <!-- 左侧：会话列表 - 占比增加 -->
+            <div class="five wide column">
                 <div class="ai-panel ai-session-panel glass">
                     <div class="ai-panel-header compact">
                         <div>
@@ -163,6 +164,7 @@
                 </div>
             </div>
 
+            <!-- 中间：实时交互流 - 占比最大 -->
             <div class="seven wide column">
                 <div class="ai-panel ai-chat-panel glass">
                     <div class="ai-panel-header">
@@ -200,7 +202,8 @@
                 </div>
             </div>
 
-            <div class="five wide column">
+            <!-- 右侧：动态侧边栏 - 占比减少 -->
+            <div class="four wide column">
                 <div class="ai-panel ai-capability-panel glass">
                     <div class="ai-panel-header compact">
                         <div>
