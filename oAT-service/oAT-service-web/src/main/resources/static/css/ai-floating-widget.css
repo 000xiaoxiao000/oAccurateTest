@@ -8,6 +8,8 @@
     align-items: flex-end;
     gap: 12px;
     user-select: none;
+    --mascot-primary: #00b5ad;
+    --mascot-dark: #0f766e;
 }
 
 .ai-floating-widget.is-mascot-hidden .ai-floating-launcher,
@@ -50,8 +52,8 @@
     min-width: 48px;
     height: 24px;
     border-radius: 999px;
-    background: rgba(20, 184, 166, 0.12);
-    color: #0f766e;
+    background: rgba(var(--mascot-primary-rgb, 20, 184, 166), 0.12);
+    color: var(--mascot-dark);
     font-size: 12px;
     font-weight: 600;
 }
