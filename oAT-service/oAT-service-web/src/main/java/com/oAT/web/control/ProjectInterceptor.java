@@ -19,6 +19,8 @@ import java.util.List;
 @Component
 public class ProjectInterceptor implements HandlerInterceptor {
 
+    private static final String[] PRIMARY_COLORS = {"#5865f2", "#00b5ad", "#ff8a65", "#7e57c2", "#26a69a", "#42a5f5"};
+
     @Autowired
     ProjectService projectService;
     @Autowired
@@ -31,13 +33,15 @@ public class ProjectInterceptor implements HandlerInterceptor {
         ProjectVo project = null;
         Assert.isTrue(request.getRequestURI().startsWith("/p/"), "url must matching  start with  '/p/{projectId}'");
         projectId = request.getRequestURI().split("/")[2];
-        Assert.isTrue(!projectId.trim().isEmpty(), "url must matching  start with  '/p/{projectId}'");
+        Assert.isTrue(!projectId.trim().isEmpty(), "url must matching  start with '/p/{projectId}'");
 
 
         // 如果为共享请求，则跳过项目权限验证
         Boolean share = (Boolean) request.getAttribute("_share");
         if (share != null && share) {
-            request.setAttribute("project", projectService.getProject(projectId));
+            project = projectService.getProject(projectId);
+            request.setAttribute("project", project);
+            setMascotPrimary(request, project);
             return true;
         }
         // 验证用户是否拥有项目权限
@@ -52,7 +56,36 @@ public class ProjectInterceptor implements HandlerInterceptor {
         List<AppVo> apps = appService.getAppList(projectId);
         request.setAttribute("apps", apps);
         request.setAttribute("project", project);
+        setMascotPrimary(request, project);
         return true;
     }
 
+    /**
+     * 根据 projectId 和 projectName 计算与 AIInteractive 页面一致的 mascotPrimary 颜色，
+     * 使所有页面的悬浮小人与 AIInteractive 页面的小人颜色统一。
+     */
+    private void setMascotPrimary(HttpServletRequest request, ProjectVo project) {
+        String mascotPrimary = computeMascotPrimary(project.getId(), project.getName());
+        request.setAttribute("mascotPrimary", mascotPrimary);
+    }
+
+    private String computeMascotPrimary(String projectId, String projectName) {
+        int seed = positiveHash(projectId + ":" + projectName);
+        return pick(PRIMARY_COLORS, seed / 5 + 13);
+    }
+
+    private int positiveHash(String value) {
+        int hash = value == null ? 0 : value.hashCode();
+        if (hash == Integer.MIN_VALUE) {
+            return 0;
+        }
+        return Math.abs(hash);
+    }
+
+    private String pick(String[] values, int seed) {
+        if (values.length == 0) {
+            return "";
+        }
+        return values[seed % values.length];
+    }
 }

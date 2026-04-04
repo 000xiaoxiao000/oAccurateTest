@@ -807,6 +807,43 @@
             }
         }
 
+        function applyMascotTheme() {
+            var primary = mascotPrimary || '#00b5ad';
+            var r = parseInt(primary.slice(1, 3), 16) || 0;
+            var g = parseInt(primary.slice(3, 5), 16) || 181;
+            var b = parseInt(primary.slice(5, 7), 16) || 173;
+            // 计算一个稍暗的主色作为文字/按钮强调色
+            var darkR = Math.max(0, Math.round(r * 0.55));
+            var darkG = Math.max(0, Math.round(g * 0.55));
+            var darkB = Math.max(0, Math.round(b * 0.55));
+
+            // 设置 CSS 变量
+            $root[0].style.setProperty('--mascot-primary', primary);
+            $root[0].style.setProperty('--mascot-dark', 'rgb(' + darkR + ',' + darkG + ',' + darkB + ')');
+
+            // 统一设置所有 UI 强调色，使悬浮小人与 AIInteractive 页面颜色一致
+            var styleBlock = document.getElementById('aiFloatingThemeStyle');
+            if (!styleBlock) {
+                styleBlock = document.createElement('style');
+                styleBlock.id = 'aiFloatingThemeStyle';
+                document.head.appendChild(styleBlock);
+            }
+            styleBlock.textContent =
+                '.ai-floating-launcher-text { background: rgba(' + r + ',' + g + ',' + b + ',0.12) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
+                '.ai-floating-link { color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
+                '.ai-floating-section-toggle:hover { color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
+                '.ai-floating-context-chip { background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; border-color: rgba(' + r + ',' + g + ',' + b + ',0.22) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
+                '.ai-floating-row-hover { outline-color: rgba(' + r + ',' + g + ',' + b + ',0.2) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; }' +
+                '.ai-floating-row-selected { outline-color: rgba(' + r + ',' + g + ',' + b + ',0.5) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.15) !important; }' +
+                '.ai-floating-avatar { background: rgba(' + r + ',' + g + ',' + b + ',0.1) !important; }' +
+                '.ai-floating-message-action { border-color: rgba(' + darkR + ',' + darkG + ',' + darkB + ',0.25) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
+                '.ai-floating-quick-link.priority-high { border-color: rgba(' + r + ',' + g + ',' + b + ',0.36) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; }' +
+                '.ai-floating-quick-link-icon { background: rgba(' + r + ',' + g + ',' + b + ',0.12) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
+                '.ai-floating-starter { border-color: rgba(' + r + ',' + g + ',' + b + ',0.22) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
+                '.ai-floating-compose textarea:focus { border-color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; box-shadow: 0 0 0 3px rgba(' + r + ',' + g + ',' + b + ',0.12) !important; }' +
+                '.ai-floating-restore { background: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; box-shadow: 0 12px 26px rgba(' + darkR + ',' + darkG + ',' + darkB + ',0.24) !important; }';
+        }
+
         function initMascot() {
             var canvas = document.getElementById('aiFloatingMascotCanvas');
             if (!canvas) {
@@ -1077,6 +1114,7 @@
         }
 
         initMascot();
+        applyMascotTheme();
         setHidden(sessionStorage.getItem(hiddenKey) === '1');
         setPanelOpen(sessionStorage.getItem(panelKey) === '1' && sessionStorage.getItem(hiddenKey) !== '1');
         initPosition();
