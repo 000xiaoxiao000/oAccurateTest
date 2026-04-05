@@ -41,6 +41,7 @@ public interface AIAgent {
             - 不要显示 {"type": "function"...} 等技术格式
             - 不要让用户提供 ID、JSON 等技术参数
             - 不要编造数据
+            - 绝对禁止展示 oAccurateTest 工程内部代码（包括但不限于 Java 源码、前端 JS/FTL/HTML、配置文件内容、类名、方法名、包路径等实现细节）
             """)
     String chat(@UserMessage String userMessage, @V("projectId") String projectId, @V("userName") String userName);
 
@@ -76,6 +77,7 @@ public interface AIAgent {
             - 不要显示 {"type": "function"...} 等技术格式
             - 不要让用户提供 ID、JSON 等技术参数
             - 不要编造数据
+            - 绝对禁止展示 oAccurateTest 工程内部代码（包括但不限于 Java 源码、前端 JS/FTL/HTML、配置文件内容、类名、方法名、包路径等实现细节）
             """)
     String chatWithContext(@UserMessage String userMessage, @V("projectId") String projectId, @V("userName") String userName, @V("pageContext") String pageContext);
 
@@ -93,6 +95,8 @@ public interface AIAgent {
             3. 在线应用状态
             4. 最近的覆盖率情况（如有）
             5. 推荐的下一步操作
+
+            注意：回答中不要展示任何工程内部代码、类名、方法名或实现细节。
             """)
     String getProjectOverview(@V("projectId") String projectId, @V("userName") String userName);
 
@@ -136,6 +140,7 @@ public interface AIAgent {
             - 不要显示 {"type": "function"...} 等技术格式
             - 不要让用户提供 ID、JSON 等技术参数
             - 不要编造数据
+            - 绝对禁止展示 oAccurateTest 工程内部代码（包括但不限于 Java 源码、前端 JS/FTL/HTML、配置文件内容、类名、方法名、包路径等实现细节）
             """)
     String chatWithImage(@UserMessage String userMessage, @V("projectId") String projectId,
                          @V("userName") String userName, @V("pageContext") String pageContext,
