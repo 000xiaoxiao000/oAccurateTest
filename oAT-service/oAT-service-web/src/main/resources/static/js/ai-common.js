@@ -548,7 +548,7 @@
         }
 
         /** 绘制眼睛 — 根据状态返回不同的形状参数 */
-        function getEyeParams(state, t) {
+        function getEyeParams(state) {
             if (state === STATE_THINKING) {
                 // 正常圆眼 — 思考中，停止眯眼，保持自然注视
                 return { type: 'open', scale: 1.0, pupilScale: 0.5 };
@@ -560,286 +560,254 @@
         }
 
         function draw() {
+            rafId = window.requestAnimationFrame(draw);
             try {
                 // 防御：canvas 可能已被销毁或脱离 DOM
                 if (!el || el.parentNode === null || !ctx) { return; }
 
-                // 动态同步尺寸（处理 CSS 响应式缩放后属性未更新的情况）
+                // 动态同步尺寸
                 var curW = el.width || w;
                 var curH = el.height || h;
                 if (curW !== w || curH !== h) { w = curW; h = curH; }
 
                 ctx.clearRect(0, 0, w, h);
                 var rect = el.getBoundingClientRect();
-                // 防御：元素不可见时 getBoundingClientRect 返回全 0
-                if (rect.width === 0 && rect.height === 0) {
-                    rafId = window.requestAnimationFrame(draw);
-                    return;
-                }
+                if (rect.width === 0 && rect.height === 0) { return; }
+
                 var lmx = mx - (rect.left + w / 2);
                 var lmy = my - (rect.top + h / 2);
-            var lookAngle = Math.atan2(lmy, lmx);
-            var now = Date.now();
-            var t = now;
-            var stateElapsed = now - stateEnterTime;
+                var lookAngle = Math.atan2(lmy, lmx);
+                var now = Date.now();
+                var t = now;
+                var stateElapsed = now - stateEnterTime;
 
-            // ===== 身体偏移量：根据状态不同 =====
-            var bodyOffsetY = 0;
-            var bodyScaleY = 1;
-
-            if (currentState === STATE_THINKING) {
-                // 思考中：快速小幅度上下弹跳（更紧凑）
-                bodyOffsetY = Math.sin(now / 110) * 5;
-                bodyScaleY = 1 + Math.sin(now / 170) * 0.025;
-            } else if (currentState === STATE_DONE) {
-                // 完成：大幅度衰减弹跳
-                if (doneBounceCount < doneBounceMax) {
-                    var bounceProgress = stateElapsed % 350;
-                    if (bounceProgress < 175) {
-                        bodyOffsetY = -Math.sin(bounceProgress / 175 * Math.PI) * (12 - doneBounceCount * 3);
+                // ===== 身体偏移量 =====
+                var bodyOffsetY = 0;
+                var bodyScaleY = 1;
+                if (currentState === STATE_THINKING) {
+                    bodyOffsetY = Math.sin(now / 110) * 5;
+                    bodyScaleY = 1 + Math.sin(now / 170) * 0.025;
+                } else if (currentState === STATE_DONE) {
+                    if (doneBounceCount < doneBounceMax) {
+                        var bounceProgress = stateElapsed % 350;
+                        if (bounceProgress < 175) {
+                            bodyOffsetY = -Math.sin(bounceProgress / 175 * Math.PI) * (12 - doneBounceCount * 3);
+                        } else {
+                            bodyOffsetY = 0;
+                            if (bounceProgress > 280) { doneBounceCount++; }
+                        }
                     } else {
-                        bodyOffsetY = 0;
-                        if (bounceProgress > 280) { doneBounceCount++; }
+                        if (stateElapsed > 3000) { setState(STATE_IDLE); }
                     }
                 } else {
-                    // 弹跳结束 → 完成状态停留3秒后自动回到 idle
-                    if (stateElapsed > 3000) { setState(STATE_IDLE); }
+                    bodyOffsetY = Math.sin(now / 500) * 2.5;
                 }
-            } else {
-                // idle：缓慢呼吸式浮动
-                bodyOffsetY = Math.sin(now / 500) * 2.5;
-            }
 
-            ctx.save();
-            ctx.translate(w / 2, h / 2 - 4 + bodyOffsetY);
-            ctx.scale(1, bodyScaleY);
+                ctx.save();
+                ctx.translate(w / 2, h / 2 - 4 + bodyOffsetY);
+                ctx.scale(1, bodyScaleY);
 
-            // ===== 完成状态：彩虹光晕 =====
-            if (currentState === STATE_DONE && stateElapsed < 1400) {
-                var glowAlpha = Math.max(0, 1 - stateElapsed / 1400) * 0.22;
-                var glowR = radius * (1.35 + Math.sin(now / 180) * 0.08);
-                var gradient = ctx.createRadialGradient(0, 0, radius * 0.6, 0, 0, glowR);
-                gradient.addColorStop(0, 'rgba(255,200,80,' + glowAlpha + ')');
-                gradient.addColorStop(0.35, 'rgba(244,114,182,' + (glowAlpha * 0.8) + ')');
-                gradient.addColorStop(0.65, 'rgba(96,165,250,' + (glowAlpha * 0.6) + ')');
-                gradient.addColorStop(1, 'rgba(167,139,250,0)');
-                ctx.beginPath(); ctx.arc(0, 0, glowR, 0, Math.PI * 2);
-                ctx.fillStyle = gradient; ctx.fill();
-            }
-
-            // ===== 轨道环 — 思考时加速 =====
-            var ringSpeedMultiplier = (currentState === STATE_THINKING) ? 4 : 1;
-            ctx.save();
-            ctx.strokeStyle = 'rgba(148,163,184,0.25)';
-            ctx.setLineDash([6, 6]);
-            ctx.beginPath(); ctx.arc(0, 0, radius * 1.33, now * 0.00008 * ringSpeedMultiplier, Math.PI * 2 + now * 0.00008 * ringSpeedMultiplier); ctx.stroke();
-            ctx.beginPath(); ctx.arc(0, 0, radius * 1.63, -now * 0.00006 * ringSpeedMultiplier, Math.PI * 2 - now * 0.00006 * ringSpeedMultiplier); ctx.stroke();
-            ctx.restore();
-
-            // ===== 粒子 — 思考时加速并改变颜色 =====
-            var particleSpeedMult = (currentState === STATE_THINKING) ? 4 : 1;
-            var particleColorPrimary = (currentState === STATE_THINKING)
-                ? ('rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.55)')
-                : ('rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.22)');
-            particles.forEach(function (p, idx) {
-                var dir = (idx % 2 === 0) ? 1 : -1;
-                var a = p.angle + now * p.speed * dir * particleSpeedMult;
-                var px = Math.cos(a) * p.radius;
-                var py = Math.sin(a) * p.radius * 0.45;
-                ctx.beginPath();
-                if (idx % 2 === 0) {
-                    ctx.fillStyle = (currentState === STATE_THINKING) ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.95)';
-                } else {
-                    ctx.fillStyle = particleColorPrimary;
+                // ===== 完成状态：彩虹光晕 =====
+                if (currentState === STATE_DONE && stateElapsed < 1400) {
+                    var glowAlpha = Math.max(0, 1 - stateElapsed / 1400) * 0.22;
+                    var glowR = radius * (1.35 + Math.sin(now / 180) * 0.08);
+                    var gradient = ctx.createRadialGradient(0, 0, radius * 0.6, 0, 0, glowR);
+                    gradient.addColorStop(0, 'rgba(255,200,80,' + glowAlpha + ')');
+                    gradient.addColorStop(0.35, 'rgba(244,114,182,' + (glowAlpha * 0.8) + ')');
+                    gradient.addColorStop(0.65, 'rgba(96,165,250,' + (glowAlpha * 0.6) + ')');
+                    gradient.addColorStop(1, 'rgba(167,139,250,0)');
+                    ctx.beginPath(); ctx.arc(0, 0, glowR, 0, Math.PI * 2);
+                    ctx.fillStyle = gradient; ctx.fill();
                 }
-                // 思考时粒子微微脉动
-                var sz = p.size;
-                if (currentState === STATE_THINKING) { sz *= (1 + Math.sin(now / 150 + idx) * 0.35); }
-                ctx.arc(px, py, sz, 0, Math.PI * 2); ctx.fill();
-            });
 
-            // ===== 底部阴影 — 随弹跳变化 =====
-            ctx.beginPath();
-            var shadowScaleY = Math.max(0.4, 1 - Math.abs(bodyOffsetY) / 30);
-            ctx.ellipse(0, radius * 1.07, radius * 1.01, radius * 0.2 * shadowScaleY, 0, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(15,23,42,' + (0.06 + shadowScaleY * 0.03) + ')'; ctx.fill();
+                // ===== 轨道环 =====
+                var ringSpeedMultiplier = (currentState === STATE_THINKING) ? 4 : 1;
+                ctx.save();
+                ctx.strokeStyle = 'rgba(148,163,184,0.25)';
+                ctx.setLineDash([6, 6]);
+                ctx.beginPath(); ctx.arc(0, 0, radius * 1.33, now * 0.00008 * ringSpeedMultiplier, Math.PI * 2 + now * 0.00008 * ringSpeedMultiplier); ctx.stroke();
+                ctx.beginPath(); ctx.arc(0, 0, radius * 1.63, -now * 0.00006 * ringSpeedMultiplier, Math.PI * 2 - now * 0.00006 * ringSpeedMultiplier); ctx.stroke();
+                ctx.restore();
 
-            // ===== 身体 =====
-            ctx.beginPath();
-            ellipse(ctx, 0, 0, radius, radius * 0.9, 0, 0, Math.PI * 2);
-            ctx.fillStyle = primaryColor; ctx.fill();
-
-            // ===== 高光 =====
-            ctx.beginPath();
-            ctx.arc(-radius * 0.48, -radius * 0.52, radius * 0.16, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fill();
-
-            // ===== 思考波纹（仅在 thinking 状态显示）=====
-            if (currentState === STATE_THINKING) {
-                var waveRings = 3;
-                for (var wr = 0; wr < waveRings; wr++) {
-                    var waveT = ((now / 600) + wr / waveRings) % 1;
-                    var waveAlpha = (1 - waveT) * 0.18;
-                    var waveR = radius * (1.15 + waveT * 0.5);
-                    ctx.beginPath(); ctx.arc(0, 0, waveR, 0, Math.PI * 2);
-                    ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + waveAlpha + ')';
-                    ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.stroke();
-                }
-                ctx.setLineDash([]);
-            }
-
-            // ===== 思考：可爱汗滴（左额头）=====
-            if (currentState === STATE_THINKING) {
-                var sweatPhase = (now % 1400) / 1400; // 0→1 每次循环
-                var sweatX = -radius * 0.56;
-                var sweatY = -radius * 0.32 + sweatPhase * radius * 0.45;
-                var sweatAlpha = sweatPhase < 0.85 ? (sweatPhase < 0.15 ? sweatPhase / 0.15 : 1) : Math.max(0, 1 - (sweatPhase - 0.85) / 0.15);
-                if (sweatAlpha > 0.05) {
-                    ctx.save();
-                    ctx.fillStyle = 'rgba(180,220,255,' + (sweatAlpha * 0.75) + ')';
+                // ===== 粒子 =====
+                var particleSpeedMult = (currentState === STATE_THINKING) ? 4 : 1;
+                var particleColorPrimary = (currentState === STATE_THINKING)
+                    ? ('rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.55)')
+                    : ('rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.22)');
+                particles.forEach(function (p, idx) {
+                    var dir = (idx % 2 === 0) ? 1 : -1;
+                    var a = p.angle + now * p.speed * dir * particleSpeedMult;
+                    var px = Math.cos(a) * p.radius;
+                    var py = Math.sin(a) * p.radius * 0.45;
                     ctx.beginPath();
-                    ctx.ellipse(sweatX, sweatY, radius * 0.075, radius * 0.11, -0.3, 0, Math.PI * 2);
-                    ctx.fill();
-                    // 小高光
-                    ctx.fillStyle = 'rgba(255,255,255,' + (sweatAlpha * 0.6) + ')';
-                    ctx.beginPath(); ctx.arc(sweatX - radius * 0.02, sweatY - radius * 0.035, radius * 0.025, 0, Math.PI * 2); ctx.fill();
-                    ctx.restore();
+                    if (idx % 2 === 0) {
+                        ctx.fillStyle = (currentState === STATE_THINKING) ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.95)';
+                    } else {
+                        ctx.fillStyle = particleColorPrimary;
+                    }
+                    var sz = p.size;
+                    if (currentState === STATE_THINKING) { sz *= (1 + Math.sin(now / 150 + idx) * 0.35); }
+                    ctx.arc(px, py, sz, 0, Math.PI * 2); ctx.fill();
+                });
+
+                // ===== 底部阴影 =====
+                ctx.beginPath();
+                var shadowScaleY = Math.max(0.4, 1 - Math.abs(bodyOffsetY) / 30);
+                ctx.ellipse(0, radius * 1.07, radius * 1.01, radius * 0.2 * shadowScaleY, 0, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(15,23,42,' + (0.06 + shadowScaleY * 0.03) + ')'; ctx.fill();
+
+                // ===== 身体 =====
+                ctx.beginPath();
+                ellipse(ctx, 0, 0, radius, radius * 0.9, 0, 0, Math.PI * 2);
+                ctx.fillStyle = primaryColor; ctx.fill();
+
+                // ===== 高光 =====
+                ctx.beginPath();
+                ctx.arc(-radius * 0.48, -radius * 0.52, radius * 0.16, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.fill();
+
+                // ===== 思考波纹 =====
+                if (currentState === STATE_THINKING) {
+                    for (var wr = 0; wr < 3; wr++) {
+                        var waveT = ((now / 600) + wr / 3) % 1;
+                        var waveAlpha = (1 - waveT) * 0.18;
+                        var waveR = radius * (1.15 + waveT * 0.5);
+                        ctx.beginPath(); ctx.arc(0, 0, waveR, 0, Math.PI * 2);
+                        ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + waveAlpha + ')';
+                        ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.stroke();
+                    }
+                    ctx.setLineDash([]);
                 }
 
-                // 思考：头顶问号浮动
-                var qBobY = Math.sin(now / 350) * 4;
-                var qAlpha = 0.6 + Math.sin(now / 300) * 0.25;
-                ctx.save();
-                ctx.font = 'bold ' + Math.round(radius * 0.36) + 'px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                ctx.fillStyle = 'rgba(251,191,36,' + qAlpha + ')';
-                ctx.fillText('?', 0, -radius * 0.62 + qBobY);
-                ctx.restore();
-
-                // 思考：腮红（害羞/紧张感）
-                var blushAlpha = 0.18 + Math.sin(now / 500) * 0.08;
-                ctx.fillStyle = 'rgba(255,130,160,' + blushAlpha + ')';
-                ctx.beginPath(); ctx.arc(-radius * 0.54, radius * 0.08, radius * 0.12, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(radius * 0.54, radius * 0.08, radius * 0.12, 0, Math.PI * 2); ctx.fill();
-            }
-
-            // ===== 眼睛 =====
-            var ex = radius * 0.35, ey = -radius * 0.2, es = radius * 0.3;
-            var eyeP = getEyeParams(currentState, t);
-            var ps, px, py;
-
-            if (eyeP.type === 'squint') {
-                // 眯眼 > <
-                ctx.strokeStyle = 'white'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-                var sq = eyeP.squeeze;
-                ctx.save();
-                ctx.translate(-ex, ey); ctx.rotate(-0.4);
-                ctx.beginPath(); ctx.moveTo(-es * sq, 0); ctx.lineTo(es * sq, 0); ctx.stroke();
-                ctx.restore();
-                ctx.save();
-                ctx.translate(ex, ey); ctx.rotate(0.4);
-                ctx.beginPath(); ctx.moveTo(-es * sq, 0); ctx.lineTo(es * sq, 0); ctx.stroke();
-                ctx.restore();
-
-                // 小瞳孔点
-                ctx.fillStyle = 'black';
-                ps = es * eyeP.pupilScale;
-                var ppx = Math.cos(lookAngle) * es * 0.25, ppy = Math.sin(lookAngle) * es * 0.25;
-                ctx.beginPath(); ctx.arc(-ex + ppx, ey + ppy, ps, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(ex + ppx, ey + ppy, ps, 0, Math.PI * 2); ctx.fill();
-            } else {
-                // 正常圆眼
-                var eyeScl = eyeP.scale || 1;
-                ctx.fillStyle = 'white';
-                ctx.beginPath(); ctx.arc(-ex, ey, es * eyeScl, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(ex, ey, es * eyeScl, 0, Math.PI * 2); ctx.fill();
-
-                // 瞳孔跟随鼠标
-                ctx.fillStyle = 'black';
-                ps = es * (eyeP.pupilScale || 0.5);
-                px = Math.cos(lookAngle) * es * 0.4; py = Math.sin(lookAngle) * es * 0.4;
-                ctx.beginPath(); ctx.arc(-ex + px, ey + py, ps, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(ex + px, ey + py, ps, 0, Math.PI * 2); ctx.fill();
-
-                // 完成：眼睛里的星星闪光
-                if (eyeP.sparkle) {
-                    var sparkAng = now / 420;
+                // ===== 思考：汗滴 + 问号 + 腮红 =====
+                if (currentState === STATE_THINKING) {
+                    var sweatPhase = (now % 1400) / 1400;
+                    var sweatX = -radius * 0.56;
+                    var sweatY = -radius * 0.32 + sweatPhase * radius * 0.45;
+                    var sweatAlpha = sweatPhase < 0.85 ? (sweatPhase < 0.15 ? sweatPhase / 0.15 : 1) : Math.max(0, 1 - (sweatPhase - 0.85) / 0.15);
+                    if (sweatAlpha > 0.05) {
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(180,220,255,' + (sweatAlpha * 0.75) + ')';
+                        ctx.beginPath();
+                        ctx.ellipse(sweatX, sweatY, radius * 0.075, radius * 0.11, -0.3, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.fillStyle = 'rgba(255,255,255,' + (sweatAlpha * 0.6) + ')';
+                        ctx.beginPath(); ctx.arc(sweatX - radius * 0.02, sweatY - radius * 0.035, radius * 0.025, 0, Math.PI * 2); ctx.fill();
+                        ctx.restore();
+                    }
+                    var qBobY = Math.sin(now / 350) * 4;
+                    var qAlpha = 0.6 + Math.sin(now / 300) * 0.25;
                     ctx.save();
-                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-                    // 左眼闪光
-                    ctx.translate(-ex + px, ey + py);
-                    drawStar(es * 0.35 * Math.cos(sparkAng), -es * 0.3 + Math.sin(sparkAng * 2) * 2, 2.5, sparkAng);
-                    // 右眼闪光
-                    ctx.translate(ex * 2, 0);
-                    drawStar(es * 0.35 * Math.cos(sparkAng + 1), -es * 0.3 + Math.sin(sparkAng * 2 + 1) * 2, 2.5, -sparkAng);
+                    ctx.font = 'bold ' + Math.round(radius * 0.36) + 'px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillStyle = 'rgba(251,191,36,' + qAlpha + ')';
+                    ctx.fillText('?', 0, -radius * 0.62 + qBobY);
                     ctx.restore();
+                    var blushAlpha = 0.18 + Math.sin(now / 500) * 0.08;
+                    ctx.fillStyle = 'rgba(255,130,160,' + blushAlpha + ')';
+                    ctx.beginPath(); ctx.arc(-radius * 0.54, radius * 0.08, radius * 0.12, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(radius * 0.54, radius * 0.08, radius * 0.12, 0, Math.PI * 2); ctx.fill();
                 }
-            }
 
-            // ===== 嘴巴 =====
-            var mp = getMouthParams(currentState, t);
-            ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+                // ===== 眼睛 =====
+                var ex = radius * 0.35, ey = -radius * 0.2, es = radius * 0.3;
+                var eyeP = getEyeParams(currentState);
+                var ps, px, py;
+                if (eyeP.type === 'squint') {
+                    ctx.strokeStyle = 'white'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+                    var sq = eyeP.squeeze;
+                    ctx.save();
+                    ctx.translate(-ex, ey); ctx.rotate(-0.4);
+                    ctx.beginPath(); ctx.moveTo(-es * sq, 0); ctx.lineTo(es * sq, 0); ctx.stroke();
+                    ctx.restore();
+                    ctx.save();
+                    ctx.translate(ex, ey); ctx.rotate(0.4);
+                    ctx.beginPath(); ctx.moveTo(-es * sq, 0); ctx.lineTo(es * sq, 0); ctx.stroke();
+                    ctx.restore();
+                    ctx.fillStyle = 'black';
+                    ps = es * eyeP.pupilScale;
+                    var ppx = Math.cos(lookAngle) * es * 0.25, ppy = Math.sin(lookAngle) * es * 0.25;
+                    ctx.beginPath(); ctx.arc(-ex + ppx, ey + ppy, ps, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(ex + ppx, ey + ppy, ps, 0, Math.PI * 2); ctx.fill();
+                } else {
+                    var eyeScl = eyeP.scale || 1;
+                    ctx.fillStyle = 'white';
+                    ctx.beginPath(); ctx.arc(-ex, ey, es * eyeScl, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(ex, ey, es * eyeScl, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = 'black';
+                    ps = es * (eyeP.pupilScale || 0.5);
+                    px = Math.cos(lookAngle) * es * 0.4; py = Math.sin(lookAngle) * es * 0.4;
+                    ctx.beginPath(); ctx.arc(-ex + px, ey + py, ps, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(ex + px, ey + py, ps, 0, Math.PI * 2); ctx.fill();
+                    if (eyeP.sparkle) {
+                        var sparkAng = now / 420;
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                        ctx.translate(-ex + px, ey + py);
+                        drawStar(es * 0.35 * Math.cos(sparkAng), -es * 0.3 + Math.sin(sparkAng * 2) * 2, 2.5, sparkAng);
+                        ctx.translate(ex * 2, 0);
+                        drawStar(es * 0.35 * Math.cos(sparkAng + 1), -es * 0.3 + Math.sin(sparkAng * 2 + 1) * 2, 2.5, -sparkAng);
+                        ctx.restore();
+                    }
+                }
 
-            if (mp.type === 'o') {
-                // O 型嘴
-                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                // ===== 嘴巴 =====
+                var mp = getMouthParams(currentState, t);
+                ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+                if (mp.type === 'o') {
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.beginPath();
+                    ctx.ellipse(0, radius * 0.13, radius * mp.openness, radius * mp.openness * 1.1, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(0, radius * (0.13 - mp.depth * 0.3), radius * mp.width, 0.2, Math.PI - 0.2);
+                    ctx.stroke();
+                }
+
+                // ===== 完成腮红 =====
+                if (currentState === STATE_DONE) {
+                    var doneBlushAlpha = 0.22 + Math.sin(now / 180) * 0.08;
+                    ctx.fillStyle = 'rgba(255,120,150,' + doneBlushAlpha + ')';
+                    ctx.beginPath(); ctx.arc(-radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
+                }
+
+                // ===== 小脚 =====
+                var legSwing = (currentState === STATE_THINKING) ? Math.sin(now / 100) * 3 : 0;
                 ctx.beginPath();
-                ctx.ellipse(0, radius * 0.13, radius * mp.openness, radius * mp.openness * 1.1, 0, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                // 微笑弧度
-                ctx.beginPath();
-                ctx.arc(0, radius * (0.13 - mp.depth * 0.3), radius * mp.width, 0.2, Math.PI - 0.2);
-                ctx.stroke();
-            }
+                ctx.moveTo(-18, 70); ctx.lineTo(-8 + legSwing, 88); ctx.lineTo(-2, 70);
+                ctx.moveTo(18, 70); ctx.lineTo(8 - legSwing, 88); ctx.lineTo(2, 70);
+                ctx.strokeStyle = 'rgba(15,23,42,0.22)'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
 
-            // ===== 完成：腮红加强（开心脸红）=====
-            if (currentState === STATE_DONE) {
-                var doneBlushAlpha = 0.22 + Math.sin(now / 180) * 0.08;
-                ctx.fillStyle = 'rgba(255,120,150,' + doneBlushAlpha + ')';
-                ctx.beginPath(); ctx.arc(-radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
-            }
-
-            // ===== 小脚 — 思考时微微摆动 =====
-            var legSwing = (currentState === STATE_THINKING) ? Math.sin(now / 100) * 3 : 0;
-            ctx.beginPath();
-            ctx.moveTo(-18, 70); ctx.lineTo(-8 + legSwing, 88); ctx.lineTo(-2, 70);
-            ctx.moveTo(18, 70); ctx.lineTo(8 - legSwing, 88); ctx.lineTo(2, 70);
-            ctx.strokeStyle = 'rgba(15,23,42,0.22)'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
-
-            // ===== 庆祝星星粒子 =====
-            if (currentState === STATE_DONE) {
-                for (var ci = celebrationParticles.length - 1; ci >= 0; ci--) {
-                    var cp = celebrationParticles[ci];
-                    cp.x += cp.vx; cp.y += cp.vy;
-                    cp.vy += 0.04; // 重力
-                    cp.rotation += cp.rotSpeed;
-                    cp.life -= cp.decay;
-                    if (cp.life <= 0) { celebrationParticles.splice(ci, 1); continue; }
-                    ctx.globalAlpha = cp.life;
-                    ctx.fillStyle = cp.color;
-                    drawStar(cp.x, cp.y, cp.size, cp.rotation);
-                    ctx.globalAlpha = 1;
+                // ===== 庆祝粒子 =====
+                if (currentState === STATE_DONE) {
+                    for (var ci = celebrationParticles.length - 1; ci >= 0; ci--) {
+                        var cp = celebrationParticles[ci];
+                        cp.x += cp.vx; cp.y += cp.vy;
+                        cp.vy += 0.04;
+                        cp.rotation += cp.rotSpeed;
+                        cp.life -= cp.decay;
+                        if (cp.life <= 0) { celebrationParticles.splice(ci, 1); continue; }
+                        ctx.globalAlpha = cp.life;
+                        ctx.fillStyle = cp.color;
+                        drawStar(cp.x, cp.y, cp.size, cp.rotation);
+                        ctx.globalAlpha = 1;
+                    }
+                    for (var hi = hearts.length - 1; hi >= 0; hi--) {
+                        var ht = hearts[hi];
+                        ht.x += ht.vx; ht.y += ht.vy;
+                        ht.vy *= 0.995;
+                        ht.life -= ht.decay;
+                        if (ht.life <= 0 || ht.y < -radius * 1.5) { hearts.splice(hi, 1); continue; }
+                        drawHeart(ht.x, ht.y, ht.size, ht.rotation, ht.life);
+                    }
                 }
-
-                // 爱心粒子
-                for (var hi = hearts.length - 1; hi >= 0; hi--) {
-                    var ht = hearts[hi];
-                    ht.x += ht.vx; ht.y += ht.vy;
-                    ht.vy *= 0.995; // 减速上升
-                    ht.life -= ht.decay;
-                    if (ht.life <= 0 || ht.y < -radius * 1.5) { hearts.splice(hi, 1); continue; }
-                    drawHeart(ht.x, ht.y, ht.size, ht.rotation, ht.life);
-                }
-            }
 
                 ctx.restore();
-                rafId = window.requestAnimationFrame(draw);
             } catch (drawErr) {
-                // 单帧绘制失败不应打断动画循环，静默重试下一帧
-                rafId = window.requestAnimationFrame(draw);
+                // 单帧绘制失败不应打断动画循环
             }
         }
 
@@ -897,7 +865,7 @@
     //  用法:
     //    var monitor = AiUtils.createFaceLandmarkMonitor({
     //        videoElement: document.getElementById('myVideo'),
-    *        canvasElement: document.getElementById('overlayCanvas'),   // 可选，用于绘制调试
+    //        canvasElement: document.getElementById('overlayCanvas'),   // 可选，用于绘制调试
     //        distanceThreshold: 0.35,     // 归一化距离阈值 (0-1)
     //        regionPadding: 0.1,          // 区域边界内缩比例
     //        onThresholdExceed: function(data) { ... },   // 超阈值回调
