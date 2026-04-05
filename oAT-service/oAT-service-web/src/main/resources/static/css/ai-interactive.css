@@ -271,8 +271,8 @@
 }
 
 .ai-stage-panel {
-    min-height: 330px;
-    border-radius: 30px;
+    min-height: 240px;
+    border-radius: 24px;
     position: relative;
     display: flex;
     align-items: center;
@@ -287,61 +287,61 @@
 }
 
 .ai-stage-ring.ring-one {
-    width: 220px;
-    height: 220px;
+    width: 160px;
+    height: 160px;
     animation: spinSlow 18s linear infinite;
 }
 
 .ai-stage-ring.ring-two {
-    width: 290px;
-    height: 290px;
+    width: 210px;
+    height: 210px;
     animation: spinSlow 24s linear infinite reverse;
 }
 
 .ai-stage-platform {
     position: absolute;
-    width: 220px;
-    height: 44px;
-    bottom: 54px;
+    width: 160px;
+    height: 34px;
+    bottom: 38px;
     border-radius: 50%;
     background: radial-gradient(circle, rgba(15, 23, 42, 0.14), rgba(15, 23, 42, 0.02) 72%, rgba(15, 23, 42, 0));
 }
 
 .ai-stage-badge {
     position: absolute;
-    padding: 8px 12px;
+    padding: 5px 9px;
     border-radius: 999px;
-    font-size: 12px;
+    font-size: 10px;
     color: #0f172a;
     background: rgba(255, 255, 255, 0.88);
     border: 1px solid rgba(226, 232, 240, 0.9);
-    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
     animation: aiFloat 6s ease-in-out infinite;
 }
 
 .ai-stage-badge.badge-one {
-    top: 28px;
-    left: 20px;
+    top: 16px;
+    left: 12px;
 }
 
 .ai-stage-badge.badge-two {
-    top: 54px;
-    right: 24px;
+    top: 34px;
+    right: 14px;
     animation-delay: -2s;
 }
 
 .ai-stage-badge.badge-three {
-    bottom: 28px;
-    right: 54px;
+    bottom: 18px;
+    right: 36px;
     animation-delay: -4s;
 }
 
 .ai-mascot-canvas {
     position: relative;
     z-index: 1;
-    width: 260px;
-    height: 260px;
-    filter: drop-shadow(0 24px 40px rgba(15, 23, 42, 0.16));
+    width: 180px;
+    height: 180px;
+    filter: drop-shadow(0 16px 30px rgba(15, 23, 42, 0.14));
 }
 
 .ai-side-console {
@@ -1113,7 +1113,7 @@
         grid-template-columns: 1fr;
     }
     .ai-workbench-hero .ai-stage-panel {
-        min-height: 260px;
+        min-height: 200px;
         order: -1;
     }
 }
@@ -1142,6 +1142,10 @@
     /* Reduce animation intensity on mobile */
     .ai-workbench-particles {
         display: none;
+    }
+
+    .ai-stage-panel {
+        min-height: 180px;
     }
 }
 
