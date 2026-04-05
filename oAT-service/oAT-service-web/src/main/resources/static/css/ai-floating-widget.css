@@ -431,8 +431,13 @@
 .ai-floating-compose-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     margin-top: 10px;
+    gap: 8px;
+}
+
+.ai-floating-compose-actions > .ai-floating-state {
+    margin-right: auto;
 }
 
 /* ===== Unified Compose Toolbar (shared across floating widget & interactive page) ===== */

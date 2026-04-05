@@ -150,6 +150,8 @@
     </div>
 </#if>
 
+<#-- 浮动小窗组件：仅在非 AI Interactive 工作台页面显示（工作台页面有独立全屏 UI） -->
+<#if !(AIInteractive?? && AIInteractive == "active")>
 <div id="aiFloatingWidget"
      class="ai-floating-widget"
      data-project-id="${project.id}"
@@ -205,19 +207,19 @@
         <div class="ai-floating-compose">
             <!-- file input 必须在 button 外部 -->
             <input type="file" id="aiFloatingImageInput" accept="image/*" style="display:none">
-            <div class="ai-floating-compose-toolbar">
-                <button type="button" id="aiFloatingImageUploadBtn" class="ai-floating-toolbar-btn" title="上传图片">
-                    <i class="image icon"></i>
-                    <img class="ai-floating-image-preview" alt="preview">
-                    <span class="ai-image-remove-btn" title="移除图片"><i class="close icon"></i></span>
-                </button>
-                <button type="button" id="aiFloatingVoiceRecordBtn" class="ai-floating-toolbar-btn" title="语音输入">
-                    <i class="microphone icon"></i>
-                </button>
-            </div>
             <textarea id="aiFloatingQuestionInput" rows="3" placeholder="随时提问，例如：这个页面的数据该从哪里看"></textarea>
             <div class="ai-floating-compose-actions">
                 <span id="aiFloatingState" class="ai-floating-state">就绪</span>
+                <div class="ai-floating-compose-toolbar">
+                    <button type="button" id="aiFloatingImageUploadBtn" class="ai-floating-toolbar-btn" title="上传图片">
+                        <i class="image icon"></i>
+                        <img class="ai-floating-image-preview" alt="preview">
+                        <span class="ai-image-remove-btn" title="移除图片"><i class="close icon"></i></span>
+                    </button>
+                    <button type="button" id="aiFloatingVoiceRecordBtn" class="ai-floating-toolbar-btn" title="语音输入">
+                        <i class="microphone icon"></i>
+                    </button>
+                </div>
                 <button id="aiFloatingSendButton" class="ui teal mini button" type="button">发送</button>
             </div>
         </div>
@@ -225,6 +227,7 @@
 
     <button id="aiFloatingRestore" class="ai-floating-restore" type="button">显示小人</button>
 </div>
+</#if>
 
 <script>
     $('#headerNavigation .ui.dropdown').dropdown({

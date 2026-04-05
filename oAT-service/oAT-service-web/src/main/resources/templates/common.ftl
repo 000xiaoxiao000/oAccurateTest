@@ -6,4 +6,7 @@
 <script src="/js/common.js?version=1"></script>
 <link href="/css/common.css?version=1" rel="stylesheet">
 <link href="/css/ai-floating-widget.css?v=${.now}" rel="stylesheet">
+<!-- AI 统一公共模块（两个模式共用） -->
+<script src="/js/ai-common.js?v=${.now}"></script>
+<!-- 浮动小窗逻辑（仅在非 Interactive 页面激活） -->
 <script src="/js/ai-floating-widget.js?v=${.now}"></script>
