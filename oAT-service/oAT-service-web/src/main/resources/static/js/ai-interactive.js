@@ -612,19 +612,7 @@
                 showToast('仅支持图片文件', 'warning');
                 return;
             }
-            if (file.size > 10 * 1024 * 1024) {
-                showToast('图片不能超过 10MB', 'warning');
-                return;
-            }
-            var reader = new FileReader();
-            reader.onload = function (e) {
-                uploadedImageData = e.target.result;
-                var $btn = $('#aiImageUploadBtn');
-                $btn.addClass('has-image');
-                $btn.find('.ai-image-preview').attr('src', uploadedImageData).show();
-                showToast('图片已添加：' + file.name, 'success');
-            };
-            reader.readAsDataURL(file);
+            handleImageFile(file);
             this.value = ''; // reset for same file re-select
         });
 
@@ -1204,6 +1192,43 @@
                 sendQuestion();
             }
         });
+
+        // ===== 粘贴图片支持 =====
+        $questionInput.on('paste', function (e) {
+            var clipboardData = e.originalEvent.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+            var items = clipboardData.items;
+            if (!items) return;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    e.preventDefault(); // 阻止粘贴文本
+                    var file = items[i].getAsFile();
+                    if (!file) continue;
+                    // 复用图片处理逻辑
+                    handleImageFile(file);
+                    return;
+                }
+            }
+        });
+
+        /**
+         * 处理图片文件（统一入口：文件选择 / 粘贴 / 拖拽共用）
+         */
+        function handleImageFile(file) {
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('图片不能超过 10MB', 'warning');
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                uploadedImageData = e.target.result;
+                var $btn = $('#aiImageUploadBtn');
+                $btn.addClass('has-image');
+                $btn.find('.ai-image-preview').attr('src', uploadedImageData).show();
+                showToast('图片已添加：' + (file.name || '粘贴图片'), 'success');
+            };
+            reader.readAsDataURL(file);
+        }
 
         $(document).on('click', '.starter-question, .ai-action-btn', function () {
             sendQuestion($(this).data('question'));
