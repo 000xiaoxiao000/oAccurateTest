@@ -253,9 +253,15 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
     private List<AIQuickLinkVo> buildQuickLinks(String projectId, List<AppVo> apps, String topic) {
         List<AIQuickLinkVo> links = new ArrayList<>();
-        links.add(new AIQuickLinkVo("项目概览", "查看项目整体情况", "/project/" + projectId + "/overview"));
-        links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/project/" + projectId + "/coverage"));
-        links.add(new AIQuickLinkVo("链路追踪", "查看调用链路", "/project/" + projectId + "/trace"));
+        links.add(new AIQuickLinkVo("项目主页", "回到项目整体概况", "/p/" + projectId + "/home"));
+        links.add(new AIQuickLinkVo("监控台", "查看实时请求与调用链", "/p/" + projectId + "/monitor"));
+        if (!apps.isEmpty()) {
+            String appId = apps.get(0).getId();
+            links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage/details?appId=" + appId));
+        } else {
+            links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage/overview"));
+        }
+        links.add(new AIQuickLinkVo("快照列表", "浏览项目沉淀的全部快照", "/p/" + projectId + "/snapshot/list"));
         return links;
     }
 

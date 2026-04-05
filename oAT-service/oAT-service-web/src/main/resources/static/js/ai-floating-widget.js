@@ -383,15 +383,21 @@
         function renderContextStatus() {
             var html = '';
             if (liveSignals.filters.length) {
-                html += '<div class="ai-floating-context-chip">当前筛选：' + escapeHtml(liveSignals.filters.join('、')) + '</div>';
+                html += '<div class="ai-floating-context-chip">当前筛选：<span>' + escapeHtml(liveSignals.filters.join('、')) + '</span><button class="ai-floating-chip-close" type="button" title="清除"><i class="close icon"></i></button></div>';
             }
             if (liveSignals.tableHover) {
-                html += '<div class="ai-floating-context-chip">当前悬停：' + escapeHtml(liveSignals.tableHover) + '</div>';
+                html += '<div class="ai-floating-context-chip">当前悬停：<span>' + escapeHtml(liveSignals.tableHover) + '</span><button class="ai-floating-chip-close" type="button" title="清除"><i class="close icon"></i></button></div>';
             }
             if (liveSignals.tableSelection) {
-                html += '<div class="ai-floating-context-chip">当前选中：' + escapeHtml(liveSignals.tableSelection) + '</div>';
+                html += '<div class="ai-floating-context-chip">当前选中：<span>' + escapeHtml(liveSignals.tableSelection) + '</span><button class="ai-floating-chip-close" type="button" title="清除"><i class="close icon"></i></button></div>';
             }
             $contextStatus.html(html);
+            // 无内容时隐藏整个区域，避免占位影响布局
+            if (!html) {
+                $contextStatus.hide();
+            } else {
+                $contextStatus.show();
+            }
             renderStarters(buildAdaptiveStarters(currentContext));
         }
 
@@ -1506,6 +1512,23 @@
 
         $(document).on('click', '.ai-floating-starter, .ai-floating-message-action', function () {
             sendQuestion($(this).data('question'));
+        });
+
+        $(document).on('click', '.ai-floating-chip-close', function (e) {
+            e.stopPropagation();
+            var $chip = $(this).closest('.ai-floating-context-chip');
+            if ($chip.text().indexOf('当前筛选') !== -1) {
+                liveSignals.filters = [];
+            } else if ($chip.text().indexOf('当前悬停') !== -1) {
+                liveSignals.tableHover = '';
+            } else if ($chip.text().indexOf('当前选中') !== -1) {
+                liveSignals.tableSelection = '';
+                if ($selectedRow && $selectedRow.length) {
+                    $selectedRow.removeClass('ai-floating-row-selected');
+                    $selectedRow = null;
+                }
+            }
+            renderContextStatus();
         });
 
         $(document).on('click', '.ai-floating-section-header', function () {
