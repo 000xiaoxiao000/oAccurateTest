@@ -51,10 +51,12 @@ public class AIInteractiveControl {
     public ResultNotified<AIInteractiveReplyVo> ask(@PathVariable String projectId,
                                                     @SessionAttribute UserVo user,
                                                     String question,
-                                                    String pageContext) {
-        if (!StringUtils.hasText(question)) {
-            return new ResultNotified<>(false, "请输入您想了解的内容");
+                                                    String pageContext,
+                                                    String imageData) {
+        if (!StringUtils.hasText(question) && !StringUtils.hasText(imageData)) {
+            return new ResultNotified<>(false, "请输入您想了解的内容或上传图片");
         }
-        return new ResultNotified<>(true, "分析完成", aiInteractiveService.ask(projectId, user, question.trim(), pageContext));
+        return new ResultNotified<>(true, "分析完成",
+                aiInteractiveService.ask(projectId, user, question.trim(), pageContext, imageData));
     }
 }

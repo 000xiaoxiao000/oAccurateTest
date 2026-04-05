@@ -202,6 +202,16 @@
         </div>
 
         <div class="ai-floating-compose">
+            <div class="ai-floating-compose-toolbar">
+                <button type="button" id="aiFloatingImageUploadBtn" class="ai-floating-toolbar-btn" title="上传图片">
+                    <i class="image icon"></i>
+                    <img class="ai-floating-image-preview" alt="preview">
+                    <input type="file" id="aiFloatingImageInput" accept="image/*" style="display:none">
+                </button>
+                <button type="button" id="aiFloatingVoiceRecordBtn" class="ai-floating-toolbar-btn" title="语音输入">
+                    <i class="microphone icon"></i>
+                </button>
+            </div>
             <textarea id="aiFloatingQuestionInput" rows="3" placeholder="随时提问，例如：这个页面的数据该从哪里看"></textarea>
             <div class="ai-floating-compose-actions">
                 <span id="aiFloatingState" class="ai-floating-state">就绪</span>
