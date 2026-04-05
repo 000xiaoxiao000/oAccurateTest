@@ -545,13 +545,8 @@
         /** 绘制眼睛 — 根据状态返回不同的形状参数 */
         function getEyeParams(state, t) {
             if (state === STATE_THINKING) {
-                // 眯眼 > < — 思考中，带微微闪烁和偶尔睁大
+                // 严格眯眼 > < — 思考中，仅允许眯眼，绝不切换为圆眼
                 var blinkPhase = Math.sin(t / 400);
-                // 偶尔睁大一下表示"想到了什么"
-                var wideMoment = Math.sin(t / 1200) > 0.82;
-                if (wideMoment) {
-                    return { type: 'open', scale: 1.06, pupilScale: 0.55 };
-                }
                 var squeeze = blinkPhase > 0.7 ? 0.92 : 0.58;
                 return { type: 'squint', squeeze: squeeze, pupilScale: 0.28 };
             } else if (state === STATE_DONE) {
