@@ -644,7 +644,7 @@
             // ===== 底部阴影 — 随弹跳变化 =====
             ctx.beginPath();
             var shadowScaleY = Math.max(0.4, 1 - Math.abs(bodyOffsetY) / 30);
-            ctx.ellipse(0, radius * 1.07, radius * 1.0, radius * 0.2 * shadowScaleY, 0, 0, Math.PI * 2);
+            ctx.ellipse(0, radius * 1.07, radius * 1.01, radius * 0.2 * shadowScaleY, 0, 0, Math.PI * 2);
             ctx.fillStyle = 'rgba(15,23,42,' + (0.06 + shadowScaleY * 0.03) + ')'; ctx.fill();
 
             // ===== 身体 =====
@@ -710,6 +710,7 @@
             // ===== 眼睛 =====
             var ex = radius * 0.35, ey = -radius * 0.2, es = radius * 0.3;
             var eyeP = getEyeParams(currentState, t);
+            var ps, px, py;
 
             if (eyeP.type === 'squint') {
                 // 眯眼 > <
@@ -726,7 +727,7 @@
 
                 // 小瞳孔点
                 ctx.fillStyle = 'black';
-                var ps = es * eyeP.pupilScale;
+                ps = es * eyeP.pupilScale;
                 var ppx = Math.cos(lookAngle) * es * 0.25, ppy = Math.sin(lookAngle) * es * 0.25;
                 ctx.beginPath(); ctx.arc(-ex + ppx, ey + ppy, ps, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(ex + ppx, ey + ppy, ps, 0, Math.PI * 2); ctx.fill();
@@ -739,8 +740,8 @@
 
                 // 瞳孔跟随鼠标
                 ctx.fillStyle = 'black';
-                var ps = es * (eyeP.pupilScale || 0.5);
-                var px = Math.cos(lookAngle) * es * 0.4, py = Math.sin(lookAngle) * es * 0.4;
+                ps = es * (eyeP.pupilScale || 0.5);
+                px = Math.cos(lookAngle) * es * 0.4; py = Math.sin(lookAngle) * es * 0.4;
                 ctx.beginPath(); ctx.arc(-ex + px, ey + py, ps, 0, Math.PI * 2); ctx.fill();
                 ctx.beginPath(); ctx.arc(ex + px, ey + py, ps, 0, Math.PI * 2); ctx.fill();
 
