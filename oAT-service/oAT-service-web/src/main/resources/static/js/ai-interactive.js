@@ -616,9 +616,28 @@
             this.value = ''; // reset for same file re-select
         });
 
-        // 点击预览图可移除
+        // 点击预览图 → 打开全屏预览
         $(document).on('click', '.ai-image-preview', function (e) {
             e.stopPropagation();
+            var src = $(this).attr('src');
+            if (!src) return;
+            // 创建全屏预览遮罩
+            var $overlay = $('<div class="ai-lightbox-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s ease;">'
+                + '<img src="' + escapeHtml(src) + '" style="max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.4);object-fit:contain;" alt="图片预览">'
+                + '<div style="position:absolute;top:16px;right:16px;display:flex;gap:8px;">'
+                + '<span class="ai-lightbox-hint" style="color:rgba(255,255,255,0.6);font-size:12px;background:rgba(0,0,0,0.5);padding:4px 10px;border-radius:999px;pointer-events:none;">点击任意处关闭</span>'
+                + '</div></div>');
+            $('body').append($overlay);
+            requestAnimationFrame(function () { $overlay.css({opacity: '1'}); });
+            $overlay.on('click', function () {
+                $overlay.css({opacity: '0'});
+                setTimeout(function () { $overlay.remove(); }, 200);
+            });
+        });
+
+        // 右键 / 双击预览图移除图片
+        $(document).on('contextmenu', '.ai-image-preview', function (e) {
+            e.preventDefault();
             uploadedImageData = null;
             $('#aiImageUploadBtn').removeClass('has-image').find('.ai-image-preview').hide().attr('src', '');
             showToast('已移除图片', 'info');
