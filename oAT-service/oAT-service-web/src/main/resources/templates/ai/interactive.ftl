@@ -63,7 +63,7 @@
                 <div class="ai-stage-ring ring-one"></div>
                 <div class="ai-stage-ring ring-two"></div>
                 <div class="ai-stage-platform"></div>
-                <canvas id="aiMascotCanvas" class="ai-mascot-canvas" width="260" height="260"></canvas>
+                <canvas id="aiMascotCanvas" class="ai-mascot-canvas" width="180" height="180"></canvas>
                 <div class="ai-stage-badge badge-one">Project Pulse</div>
                 <div class="ai-stage-badge badge-two">Signal Online</div>
                 <div class="ai-stage-badge badge-three">${mascotName?html}</div>

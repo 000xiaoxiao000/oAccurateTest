@@ -60,13 +60,14 @@
          *  初始化
          * ============================================================ */
 
-        // Mascot Canvas（使用公共工厂）
-        U.createMascotCanvas({
+        // Mascot Canvas（使用公共工厂，支持状态动画）
+        var mascotCanvas = U.createMascotCanvas({
             canvas: document.getElementById('aiMascotCanvas'),
             primaryColor: mascotPrimary,
-            particleCount: 18,
-            orbitRadius: 92
-        }).start();
+            particleCount: 10,
+            orbitRadius: 60
+        });
+        mascotCanvas.start();
 
         // 全局 Lightbox（两种预览图选择器都绑定）
         U.initGlobalLightbox($, '.ai-image-preview, .ai-floating-image-preview');
@@ -533,6 +534,7 @@
             $questionInput.val('');
             imgHandler.clear(); uploadedImageData = null;
             setSignalState('thinking'); setRequestState('思考中...', true); setSendButtonToStop(); showLoading();
+            mascotCanvas.setState('thinking');
 
             currentAjaxRequest = $.ajax({
                 url: askUrl, type: 'POST', dataType: 'json', timeout: aiTimeout,
@@ -542,7 +544,7 @@
                 if (!response || response.success === false || response.result === false) {
                     var fail = (response && response.message) || '当前无法完成分析，请稍后重试。';
                     appendMessage('assistant', assistantName, fail, [], { animate: true });
-                    saveMessage({ role: 'assistant', title: assistantName, message: fail, actions: [] }); addTimeline('分析失败', fail); setSignalState('online'); return;
+                    saveMessage({ role: 'assistant', title: assistantName, message: fail, actions: [] }); addTimeline('分析失败', fail); setSignalState('online'); mascotCanvas.setState('idle'); return;
                 }
                 var d = response.data || {};
                 var reply = d.answer || response.message || '已收到你的问题。';
@@ -551,14 +553,15 @@
                 renderQuickLinks(session.quickLinks); renderFollowUps(session.suggestions);
                 saveMessage({ role: 'assistant', title: assistantName, message: reply, actions: d.suggestions || [], quickLinks: d.quickLinks || [] });
                 addTimeline('生成回复', d.topic || 'general'); setSignalState('reply');
+                mascotCanvas.setState('done');
             }).fail(function (jqXHR, textStatus) {
                 hideLoading();
-                if (textStatus === 'abort') { showStoppedMessage(pendingQuestion); return; }
-                if (textStatus === 'timeout') { showTimeoutMessage(); return; }
+                if (textStatus === 'abort') { showStoppedMessage(pendingQuestion); mascotCanvas.setState('idle'); return; }
+                if (textStatus === 'timeout') { showTimeoutMessage(); mascotCanvas.setState('idle'); return; }
                 var err = '请求失败了（' + textStatus + '），请稍后再试，或者换一个更具体的问题。';
                 appendMessage('assistant', assistantName, err, [], { animate: true });
                 saveMessage({ role: 'assistant', title: assistantName, message: err, actions: [] });
-                addTimeline('请求异常', textStatus + ' - 请稍后重试或更换问题描述'); setSignalState('online');
+                addTimeline('请求异常', textStatus + ' - 请稍后重试或更换问题描述'); setSignalState('online'); mascotCanvas.setState('idle');
             }).always(function () {
                 currentAjaxRequest = null; var s = getActiveSession(); if (s) { s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
                 resetSendButton(); setRequestState('就绪', false);
