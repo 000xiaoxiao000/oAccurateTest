@@ -1115,9 +1115,9 @@
 /* 关闭按钮 — 固定在预览缩略图右上角，默认隐藏 */
 .ai-toolbar-btn .ai-image-remove-btn {
     position: absolute;
-    bottom: calc(100% + 110px);
+    bottom: calc(100% + 116px);
     left: 50%;
-    transform: translateX(48px);
+    transform: translateX(50px);
     width: 18px;
     height: 18px;
     border-radius: 50%;
@@ -1152,7 +1152,7 @@
 /* 关闭按钮 hover 效果 */
 .ai-toolbar-btn .ai-image-remove-btn:hover {
     background: rgba(220, 38, 38, 1);
-    transform: translateX(48px) scale(1.1);
+    transform: translateX(50px) scale(1.1);
 }
 
 .ai-toolbar-btn .ai-image-remove-btn i,
