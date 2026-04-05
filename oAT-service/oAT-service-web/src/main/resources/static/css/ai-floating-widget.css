@@ -501,10 +501,11 @@
     box-shadow: 0 8px 20px rgba(0,0,0,0.22);
 }
 
-/* 浮动小窗关闭按钮 — 覆盖定位（预览图宽100px），默认隐藏 */
+/* 浮动小窗关闭按钮 — 定位到预览图右上角（预览图宽100px居中），默认隐藏 */
 .ai-floating-toolbar-btn .ai-image-remove-btn {
     bottom: calc(100% + 96px);
-    transform: translateX(40px);
+    left: 50%;
+    transform: translateX(42px);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.15s ease;
@@ -520,7 +521,7 @@
 /* 关闭按钮 hover 效果 */
 .ai-floating-toolbar-btn .ai-image-remove-btn:hover {
     background: rgba(220, 38, 38, 1);
-    transform: translateX(40px) scale(1.1);
+    transform: translateX(42px) scale(1.1);
 }
 
 @keyframes aiFloatingRecordPulse {

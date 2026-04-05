@@ -68,7 +68,7 @@
     <!-- Search Form -->
     <div class="ui segment">
         <form class="ui form" action="/p/${projectId}/coverage/details" method="get" id="searchForm">
-            <input type="hidden" name="reportId" value="${reportId}">
+            <input type="hidden" name="reportId" value="${reportId!}">
             <input type="hidden" name="appId" value="${appId!}">
             <input type="hidden" name="viewType" value="${viewType!'list'}">
             <div class="fields">
@@ -132,7 +132,7 @@
                         || minComplexity??
                         || maxComplexity??>
                     <#if hasSearchFilter>
-                        <a href="/p/${projectId}/coverage/details?reportId=${reportId}&appId=${appId!}&viewType=${viewType!'list'}" class="ui tiny grey basic button">清空筛选</a>
+                        <a href="/p/${projectId}/coverage/details?reportId=${reportId!}&appId=${appId!}&viewType=${viewType!'list'}" class="ui tiny grey basic button">清空筛选</a>
                     </#if>
                 </div>
             </div>
@@ -141,7 +141,7 @@
 
     <!-- View Switcher -->
     <div class="ui secondary pointing menu" style="margin-bottom: 20px">
-        <#assign commonParams = "reportId=${reportId}&appId=${appId!}&className=${className!}&methodName=${methodName!}&minRate=${minRate!}&maxRate=${maxRate!}&minBranchRate=${minBranchRate!}&maxBranchRate=${maxBranchRate!}&minMethodRate=${minMethodRate!}&maxMethodRate=${maxMethodRate!}&minComplexity=${minComplexity!}&maxComplexity=${maxComplexity!}">
+        <#assign commonParams = "reportId=${reportId!}&appId=${appId!}&className=${className!}&methodName=${methodName!}&minRate=${minRate!}&maxRate=${maxRate!}&minBranchRate=${minBranchRate!}&maxBranchRate=${maxBranchRate!}&minMethodRate=${minMethodRate!}&maxMethodRate=${maxMethodRate!}&minComplexity=${minComplexity!}&maxComplexity=${maxComplexity!}">
         <a class="item ${(viewType == 'list')?then('active', '')}" href="?${commonParams}&viewType=list">
             <i class="list icon"></i> 列表型
         </a>
@@ -177,7 +177,7 @@
                     <td class="center aligned <#if item.coveredLines gt 0>positive<#else>negative</#if>"><#if (item.totalLines > 0)>${(item.coveredLines / item.totalLines * 100)?string("0.00")}%<#else>0.00%</#if></td>
                     <td class="center aligned">${item.totalComplexity}</td>
                     <td class="center aligned">
-                        <a href="/p/${projectId}/coverage/code?reportId=${reportId}&className=${item.className}&appId=${item.appId}" target="_blank" class="ui basic blue mini button">代码</a>
+                        <a href="/p/${projectId}/coverage/code?reportId=${reportId!}&className=${item.className}&appId=${item.appId}" target="_blank" class="ui basic blue mini button">代码</a>
                     </td>
                 </tr>
                 </#list>
@@ -249,7 +249,7 @@
             <#else>
                 <i class="file code outline icon"></i>
                 ${item.name}
-                <a href="/p/${projectId}/coverage/code?reportId=${reportId}&className=${item.fullName}&appId=${appId}" target="_blank" style="margin-left: 10px"><i class="code icon"></i>代码</a>
+                <a href="/p/${projectId}/coverage/code?reportId=${reportId!}&className=${item.fullName}&appId=${appId}" target="_blank" style="margin-left: 10px"><i class="code icon"></i>代码</a>
             </#if>
         </td>
         <td class="center aligned">${item.coveredMethods} / ${item.totalMethods}</td>
@@ -317,7 +317,7 @@
         $icon.removeClass('plus minus').addClass('spinner loading');
 
         var data = {
-            reportId: "${reportId}",
+            reportId: "${reportId!}",
             parentPackage: nodeId,
             className: "${className!""}",
             methodName: "${methodName!""}",
@@ -367,7 +367,7 @@
                     }
                     html += '<i class="' + icon + ' icon"></i>' + item.name;
                     if (isClass) {
-                        html += '<a href="/p/${projectId}/coverage/code?reportId=${reportId}&className=' + item.fullName + '&appId=${appId}" target="_blank" style="margin-left: 10px"><i class="code icon"></i>代码</a>';
+                        html += '<a href="/p/${projectId}/coverage/code?reportId=${reportId!}&className=' + item.fullName + '&appId=${appId}" target="_blank" style="margin-left: 10px"><i class="code icon"></i>代码</a>';
                     }
                     html += '</td>';
                     html += '<td class="center aligned">' + item.coveredMethods + ' / ' + item.totalMethods + '</td>';
