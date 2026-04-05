@@ -156,7 +156,8 @@
      data-project-name="${project.name}"
      data-ask-url="/p/${project.id}/AIInteractive/ask"
      data-ai-url="/p/${project.id}/AIInteractive"
-     data-mascot-primary="${mascotPrimary!('#00b5ad')}">
+     data-mascot-primary="${mascotPrimary!('#00b5ad')}"
+     data-ai-timeout="${(aiTimeout)!120}">
     <button id="aiFloatingLauncher" class="ai-floating-launcher" type="button" title="打开 AI 助手">
         <canvas id="aiFloatingMascotCanvas" width="88" height="88"></canvas>
         <span class="ai-floating-launcher-text">AI</span>

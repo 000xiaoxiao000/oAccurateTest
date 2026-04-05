@@ -22,6 +22,7 @@
         var projectName = $root.data('project-name') || '当前项目';
         var askUrl = $root.data('ask-url');
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
+        var aiTimeout = ($root.data('ai-timeout') || 120) * 1000;
         var storagePrefix = 'ai-floating-widget:' + projectId;
         var historyKey = storagePrefix + ':history';
         var hiddenKey = storagePrefix + ':hidden';
@@ -797,7 +798,7 @@
 
         /* ===== Stop / Resume Generation (Floating) ===== */
         function fwSetSendButtonToStop() {
-            $sendButton.text('停止').addClass('ai-floating-stop-btn');
+            $sendButton.text('停止').addClass('ai-floating-stop-btn').prop('disabled', false);
         }
 
         function fwResetSendButton() {
@@ -1385,7 +1386,7 @@
                 url: askUrl,
                 type: 'POST',
                 dataType: 'json',
-                timeout: 120000,
+                timeout: aiTimeout, // 超时时间（毫秒），与后端 ai.llm.timeout 统一
                 data: requestData
             }).done(function (response) {
                 hideLoading();

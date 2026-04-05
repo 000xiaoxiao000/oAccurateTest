@@ -32,6 +32,7 @@
         var askUrl = $root.data('ask-url');
         var assistantName = $root.data('assistant-name') || 'AI';
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
+        var aiTimeout = ($root.data('ai-timeout') || 120) * 1000;
         var projectId = $root.data('project-id') || 'default';
         var projectName = $root.data('project-name') || '当前项目';
         var legacyHistoryKey = 'ai-interactive-history:' + projectId;
@@ -458,7 +459,7 @@
 
         /* ===== Stop / Resume Generation ===== */
         function setSendButtonToStop() {
-            $sendButton.text('停止').addClass('ai-stop-btn').removeClass('teal');
+            $sendButton.text('停止').addClass('ai-stop-btn').removeClass('teal').prop('disabled', false);
         }
 
         function resetSendButton() {
@@ -1129,7 +1130,7 @@
                 url: askUrl,
                 type: 'POST',
                 dataType: 'json',
-                timeout: 120000, // 120秒超时
+                timeout: aiTimeout, // 超时时间（毫秒），与后端 ai.llm.timeout 统一
                 data: requestData
             }).done(function (response) {
                 hideLoading();

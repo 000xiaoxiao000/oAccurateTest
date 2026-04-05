@@ -6,6 +6,7 @@ import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -25,6 +26,9 @@ public class ProjectInterceptor implements HandlerInterceptor {
     ProjectService projectService;
     @Autowired
     AppService appService;
+
+    @Value("${ai.llm.timeout:120}")
+    private int aiTimeout;
 
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
@@ -57,6 +61,7 @@ public class ProjectInterceptor implements HandlerInterceptor {
         request.setAttribute("apps", apps);
         request.setAttribute("project", project);
         setMascotPrimary(request, project);
+        request.setAttribute("aiTimeout", aiTimeout);
         return true;
     }
 

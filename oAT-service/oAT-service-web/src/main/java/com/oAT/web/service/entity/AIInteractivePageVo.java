@@ -17,6 +17,7 @@ public class AIInteractivePageVo implements Serializable {
     private List<AIAbilityCardVo> abilityCards;
     private List<AIQuickLinkVo> quickLinks;
     private Map<String, String> mascot;
+    private int aiTimeout;
 
     public String getProjectId() {
         return projectId;
@@ -112,5 +113,13 @@ public class AIInteractivePageVo implements Serializable {
 
     public void setMascot(Map<String, String> mascot) {
         this.mascot = mascot;
+    }
+
+    public int getAiTimeout() {
+        return aiTimeout;
+    }
+
+    public void setAiTimeout(int aiTimeout) {
+        this.aiTimeout = aiTimeout;
     }
 }
