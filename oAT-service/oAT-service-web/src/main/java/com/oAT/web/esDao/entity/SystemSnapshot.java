@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 /**
  * 系统快照
  */
-@Document(indexName = "system_snapshot", type = "doc", shards = 2)
+@Document(indexName = "system_snapshot", shards = 2)
 public class SystemSnapshot implements Serializable, StandardDate {
     public static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss,SSS";
     /**

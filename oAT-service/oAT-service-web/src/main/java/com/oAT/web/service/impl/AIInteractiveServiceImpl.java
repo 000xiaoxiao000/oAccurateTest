@@ -1,8 +1,10 @@
 package com.oAT.web.service.impl;
 
+import com.oAT.ai.config.AIConfigProperties;
 import com.oAT.web.service.AIInteractiveService;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
+import com.oAT.ai.service.LLMService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.AIAbilityCardVo;
 import com.oAT.web.service.entity.AIInteractivePageVo;
@@ -11,6 +13,8 @@ import com.oAT.web.service.entity.AIQuickLinkVo;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -24,6 +28,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class AIInteractiveServiceImpl implements AIInteractiveService {
+
+    private static final Logger logger = LoggerFactory.getLogger(AIInteractiveServiceImpl.class);
 
     private static final String[] MASCOT_NAMES = {"小准", "探探", "跃跃", "灵灵", "星仔", "阿AT"};
     private static final String[] MASCOT_ROLES = {"数据侦察员", "链路向导", "项目陪跑员", "交互分析官", "洞察助手"};
@@ -41,6 +47,13 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
     @Autowired
     private ClientSessionService clientSessionService;
+
+    // AI 模块依赖 (JDK 17+), 在 JDK 8 环境下可能为 null
+    @Autowired(required = false)
+    private LLMService llmService;
+
+    @Autowired(required = false)
+    private AIConfigProperties aiConfig;
 
     @Override
     public AIInteractivePageVo buildPage(String projectId, UserVo user) {
@@ -75,10 +88,83 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         AIInteractiveReplyVo reply = new AIInteractiveReplyVo();
         reply.setQuestion(cleanQuestion);
         reply.setTopic(topic);
-        reply.setAnswer(buildAnswer(user, project, apps, cleanQuestion, topic, contextSummary));
+
+        // 尝试使用大模型回答
+        String llmAnswer = callLLM(project, apps, user, cleanQuestion, contextSummary, topic);
+        if (llmAnswer != null) {
+            reply.setAnswer(llmAnswer);
+        } else {
+            // 回退到规则引擎
+            reply.setAnswer(buildAnswer(user, project, apps, cleanQuestion, topic, contextSummary));
+        }
+
         reply.setSuggestions(buildFollowUpSuggestions(apps, topic));
         reply.setQuickLinks(buildQuickLinks(projectId, apps, topic));
         return reply;
+    }
+
+    /**
+     * 调用大模型获取回复
+     */
+    private String callLLM(ProjectVo project, List<AppVo> apps, UserVo user,
+                           String question, String pageContext, String topic) {
+        // AI 模块仅在 JDK 17+ 环境下可用
+        if (llmService == null || aiConfig == null || !llmService.isAvailable()) {
+            logger.debug("LLM service is not available (JDK 17+ required), fallback to rule engine");
+            return null;
+        }
+
+        try {
+            String systemPrompt = buildSystemPrompt(project, apps, aiConfig.getSystemPromptPrefix());
+            String userPrompt = buildUserPrompt(user, question, pageContext, topic, apps);
+
+            logger.info("Calling LLM for question: {}", question);
+            String response = llmService.chat(systemPrompt, userPrompt);
+
+            if (response != null) {
+                logger.info("LLM response received successfully");
+            }
+            return response;
+        } catch (Exception e) {
+            logger.error("Failed to call LLM, fallback to rule engine", e);
+            return null;
+        }
+    }
+
+    /**
+     * 构建系统提示词
+     */
+    private String buildSystemPrompt(ProjectVo project, List<AppVo> apps, String prefix) {
+        StringBuilder prompt = new StringBuilder(prefix);
+        prompt.append("\n\n当前项目上下文：");
+        prompt.append("\n- 项目名称：").append(project.getName());
+        if (StringUtils.hasText(project.getDescribe())) {
+            prompt.append("\n- 项目描述：").append(project.getDescribe());
+        }
+        prompt.append("\n- 应用总数：").append(apps.size());
+        prompt.append("\n- 在线应用数：").append(countOnlineApps(apps));
+        if (!apps.isEmpty()) {
+            prompt.append("\n- 应用列表：").append(appNames(apps, 10));
+        }
+        prompt.append("\n\n请根据用户的问题，结合项目上下文给出专业、有帮助的回答。");
+        prompt.append("回答应该简洁明了，如果需要可以给出具体的操作建议。");
+        return prompt.toString();
+    }
+
+    /**
+     * 构建用户提示词
+     */
+    private String buildUserPrompt(UserVo user, String question, String pageContext,
+                                    String topic, List<AppVo> apps) {
+        StringBuilder prompt = new StringBuilder();
+
+        if (StringUtils.hasText(pageContext)) {
+            prompt.append("当前页面上下文：").append(pageContext).append("\n\n");
+        }
+
+        prompt.append("用户问题：").append(question);
+
+        return prompt.toString();
     }
 
     private List<AppVo> loadApps(String projectId) {

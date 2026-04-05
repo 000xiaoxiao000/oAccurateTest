@@ -4,14 +4,13 @@ import com.oAT.web.common.EncryptUtil;
 import com.oAT.web.esDao.ResourceRepository;
 import com.oAT.web.esDao.entity.ResourceIndex;
 import com.oAT.web.service.ResourceService;
-import org.elasticsearch.action.update.UpdateRequest;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
 import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
+import org.springframework.data.elasticsearch.core.document.Document;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.UpdateQuery;
-import org.springframework.data.elasticsearch.core.query.UpdateQueryBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
@@ -23,7 +22,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.Date;
 
 @Service
 public class ResourceServiceImpl implements ResourceService, InitializingBean{
@@ -78,33 +76,24 @@ public class ResourceServiceImpl implements ResourceService, InitializingBean{
     }
 
     private boolean existsById(String id) {
-        NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
-        builder.withFields("id", "referenceCount");
-        builder.withIds(Arrays.asList(id));
-        Page<ResourceIndex> item = resourceRepository.search(builder.build());
-        return item.getTotalElements() > 0;
+        return resourceRepository.existsById(id);
     }
 
     private void _reference(String id, int count) {
         synchronized (id.intern()) {
-            // 获取旧的 资源数
-            NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
-            builder.withFields("id", "referenceCount");
-            builder.withIds(Arrays.asList(id));
-            Page<ResourceIndex> item = resourceRepository.search(builder.build());
-            Assert.isTrue(item.getTotalElements() > 0, "找不到指定资源:" + id);
-            ResourceIndex oldResource = item.getContent().get(0);
+            // 获取旧的资源
+            ResourceIndex oldResource = resourceRepository.findById(id).orElse(null);
+            Assert.notNull(oldResource, "找不到指定资源:" + id);
 
-            // 修改引用数+1
-            UpdateRequest request = new UpdateRequest();
-            request.doc("updateTime", new ResourceIndex().currentTimeToString(),
-                    "referenceCount", oldResource.getReferenceCount() + 1);
-            UpdateQuery updateQuery = new UpdateQueryBuilder()
-                    .withClass(ResourceIndex.class)
-                    .withId(id)
-                    .withUpdateRequest(request)
+            // 修改引用数
+            Document doc = Document.create();
+            doc.put("updateTime", new ResourceIndex().currentTimeToString());
+            doc.put("referenceCount", oldResource.getReferenceCount() + count);
+
+            UpdateQuery updateQuery = UpdateQuery.builder(id)
+                    .withDocument(doc)
                     .build();
-            elasticsearchTemplate.update(updateQuery);
+            elasticsearchTemplate.update(updateQuery, IndexCoordinates.of("resources"));
         }
     }
     // 注：并发调用会出现删除两次的情况

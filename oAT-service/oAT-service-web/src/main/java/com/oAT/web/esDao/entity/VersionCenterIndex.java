@@ -10,7 +10,7 @@ import java.io.Serializable;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-@Document(indexName = "version_center", type = "doc", shards = 2)
+@Document(indexName = "version_center", shards = 2)
 public class VersionCenterIndex implements Serializable, StandardDate {
     @Id
     private String id;

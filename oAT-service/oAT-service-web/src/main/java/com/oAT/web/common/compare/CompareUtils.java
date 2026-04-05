@@ -4,7 +4,6 @@ import com.oAT.web.common.Job;
 import org.apache.commons.lang3.ArrayUtils;
 import org.objectweb.asm.ClassReader;
 import org.springframework.util.Assert;
-import sun.misc.IOUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -206,11 +205,8 @@ public class CompareUtils {
         }
 
         private byte[] getContent() throws IOException {
-            InputStream input = zipFile.getInputStream(entry);
-            try {
-                return IOUtils.readFully(input, -1, false);
-            } finally {
-                input.close();
+            try (InputStream input = zipFile.getInputStream(entry)) {
+                return input.readAllBytes();
             }
         }
     }
@@ -239,8 +235,8 @@ public class CompareUtils {
     }
 
     public CompareResult compare(String className, InputStream source, InputStream target) throws IOException {
-        byte[] s = IOUtils.readFully(source, -1, false);
-        byte[] t = IOUtils.readFully(target, -1, false);
+        byte[] s = source.readAllBytes();
+        byte[] t = target.readAllBytes();
         return compare(className, s, t);
     }
 

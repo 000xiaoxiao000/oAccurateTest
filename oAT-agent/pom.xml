@@ -10,6 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <modules>
+        <module>oAT-client-model</module>
         <module>oAT-agent-core</module>
         <module>oAT-agnet-shaded</module>
     </modules>

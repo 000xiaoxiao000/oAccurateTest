@@ -9,7 +9,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-@Document(indexName = "system", type = "doc", shards = 2)
+@Document(indexName = "system", shards = 2)
 public class SystemIndex implements java.io.Serializable, StandardDate {
     private static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss,SSS";
     //基础属性 ========================================

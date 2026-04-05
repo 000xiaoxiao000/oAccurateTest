@@ -8,19 +8,12 @@ import com.oAT.web.service.entity.SnapshotSearchResult;
 import com.oAT.web.service.entity.TableToUsecase;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.lucene.search.join.ScoreMode;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.text.Text;
 import org.elasticsearch.index.query.*;
-import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
-import org.elasticsearch.search.fetch.subphase.highlight.HighlightField;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
-import org.springframework.data.elasticsearch.core.SearchResultMapper;
-import org.springframework.data.elasticsearch.core.aggregation.AggregatedPage;
-import org.springframework.data.elasticsearch.core.aggregation.impl.AggregatedPageImpl;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
@@ -99,14 +92,73 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
 //        builder.field("codes", 100);
         builder.field("remotes.invokerInterface", 100);
         searchBuilder.withHighlightFields(builder.fields().toArray(new HighlightBuilder.Field[0]));
-        AggregatedPage<SystemSnapshot> page = elasticsearchTemplate
-                .queryForPage(searchBuilder.build(), SystemSnapshot.class, new ResultMapper());
+
+        // Spring Data Elasticsearch 4.4 新 API
+        SearchHits<SystemSnapshot> searchHits = elasticsearchTemplate.search(searchBuilder.build(), SystemSnapshot.class);
+        List<SnapshotSearchResult> results = new ArrayList<>();
+
+        for (SearchHit<SystemSnapshot> hit : searchHits) {
+            SnapshotSearchResult r = new SnapshotSearchResult();
+            r.setId(hit.getId());
+
+            Map<String, Object> source = hit.getContent() != null ? convertToMap(hit.getContent()) : null;
+            if (source == null) continue;
+
+            r.setProjectId(source.get("projectId") != null ? source.get("projectId").toString() : null);
+            r.setTitle(source.get("title") != null ? source.get("title").toString() : null);
+            r.setDirectoryId(source.get("directory") != null ? source.get("directory").toString() : null);
+            r.setAppId(source.get("appId") != null ? source.get("appId").toString() : null);
+
+            if (source.containsKey("topicImage")) {
+                r.setHeadImage(source.get("topicImage").toString());
+            }
+            if (source.containsKey("subTitle")) {
+                r.setSubTitle(source.get("subTitle").toString());
+            }
+            // versionLastUpdate
+            if (source.containsKey("versionLastUpdate")) {
+                r.setUpdateTime(r.parse(source.get("versionLastUpdate").toString()));
+            }
+
+            // 处理高亮
+            Map<String, List<String>> highlightFields = hit.getHighlightFields();
+            for (Map.Entry<String, List<String>> entry : highlightFields.entrySet()) {
+                String fieldName = entry.getKey();
+                List<String> fragments = entry.getValue();
+                if (fragments != null && !fragments.isEmpty()) {
+                    if ("title".equals(fieldName)) {
+                        r.setTitleFragment(fragments.get(0));
+                    } else if ("describe".equals(fieldName)) {
+                        r.setDescribeFragments(fragments.toArray(new String[0]));
+                    } else if ("sqls.content".equals(fieldName)) {
+                        r.setSqlContentFragments(fragments.toArray(new String[0]));
+                    } else if ("remotes.invokerInterface".equals(fieldName)) {
+                        r.setRemoteContentFragments(fragments.toArray(new String[0]));
+                    }
+                }
+            }
+            results.add(r);
+        }
+
         SearchPage searchPage = new SearchPage();
-        searchPage.setContents(page.getContent());
-        searchPage.setTotal(page.getTotalElements());
+        searchPage.setContents(results);
+        searchPage.setTotal(searchHits.getTotalHits());
         return searchPage;
     }
 
+    private Map<String, Object> convertToMap(SystemSnapshot snapshot) {
+        Map<String, Object> map = new java.util.HashMap<>();
+        map.put("projectId", snapshot.getProjectId());
+        map.put("appId", snapshot.getAppId());
+        map.put("title", snapshot.getTitle());
+        map.put("subTitle", snapshot.getSubTitle());
+        map.put("topicImage", snapshot.getTopicImage());
+        map.put("describe", snapshot.getDescribe());
+        map.put("directory", snapshot.getDirectory());
+        map.put("versionLastUpdate", snapshot.getVersionLastUpdate());
+        map.put("labels", snapshot.getLabels());
+        return map;
+    }
 
     @Override
     public List<SystemSnapshot> searchByTable(String projectId, String databaseName, String tableName) {
@@ -129,8 +181,10 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
         builder.withFields(ArrayUtils.add(basicFields, "sqls.*"));
 
         builder.withFilter(masterQuery);
-        Page<SystemSnapshot> p = systemSnapshotRepository.search(builder.build());
-        return p.getContent();
+        SearchHits<SystemSnapshot> searchHits = elasticsearchTemplate.search(builder.build(), SystemSnapshot.class);
+        return searchHits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .collect(Collectors.toList());
     }
 
 
@@ -156,8 +210,10 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
                 basicFields
         );
         builder.withFilter(masterQuery);
-        Page<SystemSnapshot> p = systemSnapshotRepository.search(builder.build());
-        return p.getContent();
+        SearchHits<SystemSnapshot> searchHits = elasticsearchTemplate.search(builder.build(), SystemSnapshot.class);
+        return searchHits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -183,66 +239,10 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
         NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
         builder.withFields(ArrayUtils.add(basicFields, "sqls.*"));
         builder.withFilter(masterQuery);
-        Page<SystemSnapshot> p = systemSnapshotRepository.search(builder.build());
-        return p.getContent();
-    }
-
-    private class ResultMapper implements SearchResultMapper {
-        @Override
-        public <T> AggregatedPage<T> mapResults(SearchResponse response, Class<T> clazz, Pageable pageable) {
-            List<SnapshotSearchResult> list = new ArrayList();
-            for (SearchHit hit : response.getHits()) {
-                if (response.getHits().getHits().length <= 0) {
-                    return null;
-                }
-                if (hit.getSourceAsMap().get("disable").equals(true)) {
-                    continue;
-                }
-                SnapshotSearchResult r = new SnapshotSearchResult();
-                r.setId(hit.getId());
-                r.setProjectId(hit.getSourceAsMap().get("projectId").toString());
-                r.setTitle(hit.getSourceAsMap().get("title").toString());
-                r.setDirectoryId(hit.getSourceAsMap().get("directory").toString());
-                r.setAppId(hit.getSourceAsMap().get("appId").toString());
-
-                if (hit.getSourceAsMap().containsKey("topicImage")) {
-                    r.setHeadImage(hit.getSourceAsMap().get("topicImage").toString());
-                }
-                if (hit.getSourceAsMap().containsKey("subTitle")) {
-                    r.setSubTitle(hit.getSourceAsMap().get("subTitle").toString());
-                }
-                // versionLastUpdate
-                r.setUpdateTime(r.parse(hit.getSourceAsMap().get("versionLastUpdate").toString()));
-                for (Map.Entry<String, HighlightField> hf : hit.getHighlightFields().entrySet()) {
-                    String[] values = toString(hf.getValue().getFragments());
-                    if ("title".equals(hf.getKey())) {
-                        r.setTitleFragment(values[0]);
-                    } else if ("describe".equals(hf.getKey())) {
-                        r.setDescribeFragments(values);
-                    } else if ("sqls.content".equals(hf.getKey())) {
-                        r.setSqlContentFragments(values);
-                    } else if ("remotes.invokerInterface".equals(hf.getKey())) {
-                        r.setRemoteContentFragments(values);
-                    }
-                }
-                list.add(r);
-            }
-            return new AggregatedPageImpl<T>((List<T>) list);
-        }
-
-        @Override
-        public <T> T mapSearchHit(SearchHit searchHit, Class<T> aClass) {
-            return null;
-        }
-
-
-        private String[] toString(Text[] texts) {
-            String[] result = new String[texts.length];
-            for (int i = 0; i < texts.length; i++) {
-                result[i] = texts[i].string();
-            }
-            return result;
-        }
+        SearchHits<SystemSnapshot> searchHits = elasticsearchTemplate.search(builder.build(), SystemSnapshot.class);
+        return searchHits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .collect(Collectors.toList());
     }
 
 }

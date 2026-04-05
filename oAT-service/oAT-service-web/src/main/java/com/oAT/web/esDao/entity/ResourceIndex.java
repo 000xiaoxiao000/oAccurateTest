@@ -8,7 +8,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
-@Document(indexName = "resources", type = "doc", shards = 2)
+@Document(indexName = "resources", shards = 2)
 public class ResourceIndex implements Serializable, StandardDate {
     @Id
     private String id; // 内容的md5

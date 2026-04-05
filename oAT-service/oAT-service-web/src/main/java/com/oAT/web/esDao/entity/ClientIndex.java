@@ -8,7 +8,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
-@Document(indexName = "client", type = "doc", shards = 2)
+@Document(indexName = "client", shards = 2)
 public class ClientIndex implements Serializable, StandardDate {
     public static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss,SSS";
     //基础属性 ========================================
