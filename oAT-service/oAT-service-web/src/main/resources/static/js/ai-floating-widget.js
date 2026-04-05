@@ -849,6 +849,14 @@
                 appendMessage('assistant', 'AI 助手', '仅支持图片文件', [], { scrollTop: true });
                 return;
             }
+            fwHandleImageFile(file);
+            this.value = '';
+        });
+
+        /**
+         * Floating widget 统一图片处理入口（文件选择 / 粘贴共用）
+         */
+        function fwHandleImageFile(file) {
             if (file.size > 10 * 1024 * 1024) {
                 appendMessage('assistant', 'AI 助手', '图片不能超过 10MB', [], { scrollTop: true });
                 return;
@@ -861,8 +869,7 @@
                 $btn.find('.ai-floating-image-preview').attr('src', fwUploadedImageData).show();
             };
             reader.readAsDataURL(file);
-            this.value = '';
-        });
+        }
 
         $(document).on('click', '.ai-floating-image-preview', function (e) {
             e.stopPropagation();
@@ -1442,6 +1449,22 @@
             if (event.keyCode === 13 && !event.shiftKey) {
                 event.preventDefault();
                 sendQuestion();
+            }
+        });
+
+        // ===== 粘贴图片支持 (Floating) =====
+        $questionInput.on('paste', function (e) {
+            var clipboardData = e.originalEvent.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+            var items = clipboardData.items;
+            if (!items) return;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    var file = items[i].getAsFile();
+                    if (file) fwHandleImageFile(file);
+                    return;
+                }
             }
         });
 

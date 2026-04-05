@@ -192,11 +192,12 @@
                     </div>
 
                     <div class="ai-compose-box">
+                        <!-- file input 必须在 button 外部，否则浏览器会吞掉 click 事件 -->
+                        <input type="file" id="aiImageInput" accept="image/*" style="display:none">
                         <div class="ai-compose-toolbar">
                             <button type="button" id="aiImageUploadBtn" class="ai-toolbar-btn" title="上传图片">
                                 <i class="image icon"></i>
                                 <img class="ai-image-preview" alt="preview">
-                                <input type="file" id="aiImageInput" accept="image/*" style="display:none">
                             </button>
                             <button type="button" id="aiVoiceRecordBtn" class="ai-toolbar-btn" title="语音输入">
                                 <i class="microphone icon"></i>

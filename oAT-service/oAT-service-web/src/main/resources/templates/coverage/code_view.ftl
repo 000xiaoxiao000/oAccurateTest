@@ -463,11 +463,12 @@
         </div>
 
         <div class="ai-floating-compose">
+            <!-- file input 必须在 button 外部 -->
+            <input type="file" id="aiFloatingImageInput" accept="image/*" style="display:none">
             <div class="ai-floating-compose-toolbar">
                 <button type="button" id="aiFloatingImageUploadBtn" class="ai-floating-toolbar-btn" title="上传图片">
                     <i class="image icon"></i>
                     <img class="ai-floating-image-preview" alt="preview">
-                    <input type="file" id="aiFloatingImageInput" accept="image/*" style="display:none">
                 </button>
                 <button type="button" id="aiFloatingVoiceRecordBtn" class="ai-floating-toolbar-btn" title="语音输入">
                     <i class="microphone icon"></i>
