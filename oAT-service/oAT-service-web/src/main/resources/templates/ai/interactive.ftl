@@ -195,20 +195,20 @@
                     <div class="ai-compose-box">
                         <!-- file input 必须在 button 外部，否则浏览器会吞掉 click 事件 -->
                         <input type="file" id="aiImageInput" accept="image/*" style="display:none">
-                        <div class="ai-compose-toolbar">
-                            <button type="button" id="aiImageUploadBtn" class="ai-toolbar-btn" title="上传图片">
-                                <i class="image icon"></i>
-                                <img class="ai-image-preview" alt="preview">
-                                <span class="ai-image-remove-btn" title="移除图片"><i class="close icon"></i></span>
-                            </button>
-                            <button type="button" id="aiVoiceRecordBtn" class="ai-toolbar-btn" title="语音输入">
-                                <i class="microphone icon"></i>
-                            </button>
-                        </div>
                         <textarea id="aiQuestionInput" rows="3"
                                   placeholder="例如：帮我总结一下当前项目概况，或者告诉我线上异常该怎么排查"></textarea>
                         <div class="ai-compose-actions">
                             <span id="aiRequestState" class="ai-request-state">就绪</span>
+                            <div class="ai-compose-toolbar">
+                                <button type="button" id="aiImageUploadBtn" class="ai-toolbar-btn" title="上传图片">
+                                    <i class="image icon"></i>
+                                    <img class="ai-image-preview" alt="preview">
+                                    <span class="ai-image-remove-btn" title="移除图片"><i class="close icon"></i></span>
+                                </button>
+                                <button type="button" id="aiVoiceRecordBtn" class="ai-toolbar-btn" title="语音输入">
+                                    <i class="microphone icon"></i>
+                                </button>
+                            </div>
                             <button id="aiSendButton" class="ui teal button">发送</button>
                         </div>
                     </div>

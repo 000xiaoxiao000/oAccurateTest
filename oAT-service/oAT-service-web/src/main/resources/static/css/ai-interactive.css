@@ -857,7 +857,12 @@
     margin-top: 12px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.ai-compose-actions > .ai-request-state {
+    margin-right: auto;
 }
 
 .ai-capability-panel {
