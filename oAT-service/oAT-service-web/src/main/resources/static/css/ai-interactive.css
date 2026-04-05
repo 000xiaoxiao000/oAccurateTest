@@ -31,7 +31,7 @@
     top: -120px;
     left: -60px;
     background: radial-gradient(circle, var(--ai-halo) 0%, rgba(255, 255, 255, 0) 72%);
-    animation: aiFloat 8s ease-in-out infinite;
+    animation: aiFloat 8sn ease-in-out infinite;
 }
 
 .ai-workbench-bg.bg-two {
@@ -498,7 +498,7 @@
     min-height: 580px;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .ai-session-panel {
@@ -1048,6 +1048,7 @@
     align-items: center;
     gap: 6px;
     margin-bottom: 8px;
+    overflow: visible;
 }
 
 .ai-toolbar-btn {
@@ -1080,9 +1081,14 @@
     animation: aiRecordPulse 1.5s ease-in-out infinite;
 }
 
+.ai-toolbar-btn {
+    position: relative;
+    overflow: visible;
+}
+
 .ai-toolbar-btn .ai-image-preview {
     position: absolute;
-    bottom: 38px;
+    bottom: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
     width: 120px;
@@ -1090,13 +1096,20 @@
     object-fit: cover;
     border-radius: 10px;
     border: 2px solid #14b8a6;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
     display: none;
-    z-index: 5;
+    z-index: 100;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .ai-toolbar-btn.has-image .ai-image-preview {
     display: block;
+}
+
+.ai-toolbar-btn .ai-image-preview:hover {
+    transform: translateX(-50%) scale(1.08);
+    box-shadow: 0 8px 26px rgba(0,0,0,0.22);
 }
 
 @keyframes aiRecordPulse {
