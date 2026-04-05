@@ -474,6 +474,28 @@
     box-shadow: 0 8px 20px rgba(0,0,0,0.22);
 }
 
+/* 浮动小窗关闭按钮 — 覆盖定位（预览图宽100px），默认隐藏 */
+.ai-floating-toolbar-btn .ai-image-remove-btn {
+    bottom: calc(100% + 90px);
+    transform: translateX(38px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.15s ease;
+}
+
+/* 焦点/悬停在预览图上时显示关闭按钮 */
+.ai-floating-toolbar-btn.has-image .ai-floating-image-preview:hover ~ .ai-image-remove-btn,
+.ai-floating-toolbar-btn.has-image .ai-image-remove-btn:hover {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* 关闭按钮 hover 效果 */
+.ai-floating-toolbar-btn .ai-image-remove-btn:hover {
+    background: rgba(220, 38, 38, 1);
+    transform: translateX(38px) scale(1.1);
+}
+
 @keyframes aiFloatingRecordPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
     50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.15); }

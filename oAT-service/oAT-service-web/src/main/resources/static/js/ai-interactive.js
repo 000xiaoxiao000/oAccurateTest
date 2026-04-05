@@ -601,7 +601,17 @@
         /* ===== Image Upload & Voice Recording ===== */
         var uploadedImageData = null;
 
-        $('#aiImageUploadBtn').on('click', function () {
+        $('#aiImageUploadBtn').on('click', function (e) {
+            // 有图片时点击按钮只预览图片，不触发文件选择
+            if ($(this).hasClass('has-image')) {
+                e.preventDefault();
+                var src = $(this).find('.ai-image-preview').attr('src');
+                if (src) {
+                    // 触发预览图点击事件
+                    $(this).find('.ai-image-preview').trigger('click');
+                }
+                return;
+            }
             $('#aiImageInput').trigger('click');
         });
 
@@ -616,12 +626,12 @@
             this.value = ''; // reset for same file re-select
         });
 
-        // 点击预览图 → 打开全屏预览
+        // 点击预览图 → 打开全屏预览（不触发文件选择）
         $(document).on('click', '.ai-image-preview', function (e) {
             e.stopPropagation();
+            e.preventDefault();
             var src = $(this).attr('src');
             if (!src) return;
-            // 创建全屏预览遮罩
             var $overlay = $('<div class="ai-lightbox-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s ease;">'
                 + '<img src="' + escapeHtml(src) + '" style="max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.4);object-fit:contain;" alt="图片预览">'
                 + '<div style="position:absolute;top:16px;right:16px;display:flex;gap:8px;">'
@@ -635,8 +645,9 @@
             });
         });
 
-        // 右键 / 双击预览图移除图片
-        $(document).on('contextmenu', '.ai-image-preview', function (e) {
+        // 点击关闭按钮 → 移除已粘贴/选择的图片（阻止冒泡到按钮）
+        $(document).on('click', '.ai-image-remove-btn', function (e) {
+            e.stopPropagation();
             e.preventDefault();
             uploadedImageData = null;
             $('#aiImageUploadBtn').removeClass('has-image').find('.ai-image-preview').hide().attr('src', '');

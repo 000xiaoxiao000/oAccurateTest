@@ -838,7 +838,16 @@
         }
 
         /* ===== Image Upload & Voice Recording (Floating) ===== */
-        $('#aiFloatingImageUploadBtn').on('click', function () {
+        $('#aiFloatingImageUploadBtn').on('click', function (e) {
+            // 有图片时点击按钮只预览图片，不触发文件选择
+            if ($(this).hasClass('has-image')) {
+                e.preventDefault();
+                var src = $(this).find('.ai-floating-image-preview').attr('src');
+                if (src) {
+                    $(this).find('.ai-floating-image-preview').trigger('click');
+                }
+                return;
+            }
             $('#aiFloatingImageInput').trigger('click');
         });
 
@@ -871,9 +880,10 @@
             reader.readAsDataURL(file);
         }
 
-        // 点击预览图 → 打开全屏预览
+        // 点击预览图 → 打开全屏预览（不触发文件选择）
         $(document).on('click', '.ai-floating-image-preview', function (e) {
             e.stopPropagation();
+            e.preventDefault();
             var src = $(this).attr('src');
             if (!src) return;
             var $overlay = $('<div class="ai-lightbox-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s ease;">'
@@ -889,8 +899,9 @@
             });
         });
 
-        // 右键预览图移除图片
-        $(document).on('contextmenu', '.ai-floating-image-preview', function (e) {
+        // 点击关闭按钮 → 移除图片
+        $(document).on('click', '.ai-image-remove-btn', function (e) {
+            e.stopPropagation();
             e.preventDefault();
             fwUploadedImageData = null;
             $('#aiFloatingImageUploadBtn').removeClass('has-image')
