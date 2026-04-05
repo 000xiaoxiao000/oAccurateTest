@@ -32,7 +32,7 @@
         var askUrl = $root.data('ask-url');
         var assistantName = $root.data('assistant-name') || 'AI';
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
-        var aiTimeout = ($root.data('ai-timeout') || 120) * 1000;
+        var aiTimeout = ($root.data('ai-timeout') || 1800) * 1000;
         var projectId = $root.data('project-id') || 'default';
         var projectName = $root.data('project-name') || '当前项目';
         var legacyHistoryKey = 'ai-interactive-history:' + projectId;
@@ -553,9 +553,10 @@
 
         function showTimeoutMessage() {
             var elapsed = Math.round((Date.now() - loadingStartTime) / 1000);
+            var timeoutSeconds = aiTimeout / 1000;
             hideLoading();
             appendMessage('assistant', assistantName,
-                '抱歉，AI 响应超时（已等待 ' + elapsed + ' 秒）。可能原因：\n\n'
+                '抱歉，AI 响应超时（已等待 ' + elapsed + ' 秒，超时阈值 ' + timeoutSeconds + ' 秒）。可能原因：\n\n'
                 + '1. 大模型服务负载较高或网络延迟较大\n'
                 + '2. 问题涉及大量数据查询需要更长时间\n'
                 + '3. 服务端处理出现异常\n\n'
@@ -563,10 +564,10 @@
             saveMessage({
                 role: 'assistant',
                 title: assistantName,
-                message: '[请求超时]',
+                message: '[请求超时] 等待 ' + elapsed + 's / 阈值 ' + timeoutSeconds + 's',
                 actions: []
             });
-            addTimeline('请求超时', '等待超过 ' + elapsed + ' 秒后自动终止');
+            addTimeline('请求超时', '等待 ' + elapsed + 's 超过阈值 ' + timeoutSeconds + 's');
         }
 
         /* ===== Copy Button ===== */

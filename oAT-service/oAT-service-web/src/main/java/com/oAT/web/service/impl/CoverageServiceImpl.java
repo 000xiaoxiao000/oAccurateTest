@@ -137,12 +137,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                 job.state = Job.JobState.finish;
                 job.getProgress().finish("报告生成完成");
                 job.getLogger().info("报告生成成功: " + reportId);
+                // Clean up completed job to prevent memory leak
+                jobs.remove(job);
             } catch (Exception e) {
                 logger.error("Generate report failed", e);
                 job.state = Job.JobState.error;
                 String errorMsg = toFriendlyError(e.getMessage());
                 job.getProgress().updateName("生成失败: " + errorMsg);
                 job.getLogger().error("生成报告失败: " + errorMsg);
+                // Clean up failed job to prevent memory leak
+                jobs.remove(job);
             }
         });
         return job.getId();
@@ -179,8 +183,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         if (job != null) job.getLogger().info("正在获取应用配置信息...");
         AppVo app = appService.getApp(appId);
 
-        // Clear diff cache for this task
+        // Clear caches for this task
         diffCache.clear();
+        zipEntryCache.clear();
 
         // 1. Get Static Source Info
         if (job != null) job.getProgress().next("加载静态源码信息", 10);
@@ -1776,6 +1781,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
     }
 
     private String escapeHtml(String text) {
+        if (text == null) {
+            return "";
+        }
         return text.replace("&", "&amp;")
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
@@ -1790,6 +1798,10 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                                                          Double minMethodRate, Double maxMethodRate,
                                                          Integer minComplexity, Integer maxComplexity,
                                                          Pageable pageable) {
+        if (reportId == null || reportId.isEmpty()) {
+            return new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
+        }
+
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery()
                 .must(QueryBuilders.termQuery("reportId", reportId));
 
@@ -1833,6 +1845,10 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                                                Double minBranchRate, Double maxBranchRate,
                                                Double minMethodRate, Double maxMethodRate,
                                                Integer minComplexity, Integer maxComplexity) {
+        if (reportId == null || reportId.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery()
                 .must(QueryBuilders.termQuery("reportId", reportId));
 

@@ -22,7 +22,7 @@
         var projectName = $root.data('project-name') || '当前项目';
         var askUrl = $root.data('ask-url');
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
-        var aiTimeout = ($root.data('ai-timeout') || 120) * 1000;
+        var aiTimeout = ($root.data('ai-timeout') || 1800) * 1000;
         var storagePrefix = 'ai-floating-widget:' + projectId;
         var historyKey = storagePrefix + ':history';
         var hiddenKey = storagePrefix + ':hidden';
@@ -1002,13 +1002,18 @@
 
         function showTimeoutMessage() {
             var elapsed = Math.round((Date.now() - fwLoadingStartTime) / 1000);
+            var timeoutSeconds = aiTimeout / 1000;
             hideLoading();
             appendMessage('assistant', 'AI 助手',
-                '抱歉，AI 响应超时（已等待 ' + elapsed + ' 秒）。请稍后重试或换一个更具体的问题。', [], {scrollTop: true});
+                '抱歉，AI 响应超时（已等待 ' + elapsed + ' 秒，超时阈值 ' + timeoutSeconds + ' 秒）。可能原因：\n\n'
+                + '1. 大模型服务负载较高或网络延迟较大\n'
+                + '2. 问题涉及大量数据查询需要更长时间\n'
+                + '3. 服务端处理出现异常\n\n'
+                + '建议：可以稍后重试，或换一个更具体的问题。', [], {scrollTop: true});
             saveHistory({
                 role: 'assistant',
                 title: 'AI 助手',
-                message: '[请求超时]',
+                message: '[请求超时] 等待 ' + elapsed + 's / 阈值 ' + timeoutSeconds + 's',
                 actions: []
             });
         }
