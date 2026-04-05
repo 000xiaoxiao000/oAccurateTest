@@ -1515,7 +1515,7 @@
             writeLocalJSON(positionKey, getCurrentPosition());
         });
 
-        $(document).on('click', '.ai-floating-starter, .ai-floating-message-action', function () {
+        $(document).on('click', '.ai-floating-starter, .ai-floating-message-action, .ai-resume-btn', function () {
             sendQuestion($(this).data('question'));
         });
 
