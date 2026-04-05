@@ -534,10 +534,10 @@
                 var elapsed = Math.round((Date.now() - loadingStartTime) / 1000);
                 $loading.find('.ai-loading-timer').text(elapsed + 's');
                 if (elapsed >= 30 && elapsed % 10 === 0) {
-                    $loading.find('.ai-loading-text').text('AI 正在深入分析，请稍候... (' + elapsed + 's)');
+                    $loading.find('.ai-loading-text').text('AI 正在深入分析，请稍候...');
                 }
                 if (elapsed >= 60) {
-                    $loading.find('.ai-loading-text').text('响应时间较长，AI 可能遇到了复杂问题... (' + elapsed + 's)');
+                    $loading.find('.ai-loading-text').text('响应时间较长，AI 可能遇到了复杂问题...');
                     $loading.find('.ai-loading-timer').css('color', '#d97706');
                 }
             }, 1000);
