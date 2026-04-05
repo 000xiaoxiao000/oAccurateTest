@@ -435,7 +435,10 @@
     margin-top: 10px;
 }
 
-/* ===== Floating Compose Toolbar ===== */
+/* ===== Unified Compose Toolbar (shared across floating widget & interactive page) ===== */
+
+/* Toolbar containers */
+.ai-compose-toolbar,
 .ai-floating-compose-toolbar {
     display: flex;
     align-items: center;
@@ -444,10 +447,18 @@
     overflow: visible;
 }
 
+/* Workbench toolbar centered */
+.ai-compose-toolbar {
+    justify-content: center;
+}
+/* Floating toolbar centered — fix image preview off-center issue */
+.ai-floating-compose-toolbar {
+    justify-content: center;
+}
+
+/* Base button style — shared properties */
+.ai-toolbar-btn,
 .ai-floating-toolbar-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
     border: 1px solid rgba(203, 213, 225, 0.6);
     background: rgba(255, 255, 255, 0.85);
     cursor: pointer;
@@ -455,78 +466,140 @@
     align-items: center;
     justify-content: center;
     color: #64748b;
-    font-size: 12px;
     transition: all 0.15s ease;
     position: relative;
-    overflow: visible;
     padding: 0;
 }
 
+/* Size variants */
+.ai-toolbar-btn {
+    width: 32px; height: 32px; border-radius: 10px; font-size: 14px;
+}
+.ai-floating-toolbar-btn {
+    width: 28px; height: 28px; border-radius: 8px; font-size: 12px;
+    overflow: visible;
+}
+
+/* Hover & recording states — shared */
+.ai-toolbar-btn:hover,
 .ai-floating-toolbar-btn:hover {
     background: rgba(20, 184, 166, 0.08);
     border-color: rgba(20, 184, 166, 0.3);
     color: #0f766e;
 }
 
+.ai-toolbar-btn.recording,
 .ai-floating-toolbar-btn.recording {
     background: rgba(239, 68, 68, 0.08);
     border-color: rgba(239, 68, 68, 0.35);
     color: #dc2626;
-    animation: aiFloatingRecordPulse 1.5s ease-in-out infinite;
+    animation: aiRecordPulse 1.5s ease-in-out infinite;
 }
 
+/* ===== Unified Image Preview ===== */
+.ai-toolbar-btn .ai-image-preview,
 .ai-floating-toolbar-btn .ai-floating-image-preview {
     position: absolute;
     bottom: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
-    width: 100px;
-    max-height: 100px;
     object-fit: cover;
-    border-radius: 8px;
     border: 2px solid #14b8a6;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
     display: none;
     z-index: 100;
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* Image preview size variants */
+.ai-toolbar-btn .ai-image-preview {
+    width: 120px; max-height: 120px; border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+.ai-floating-toolbar-btn .ai-floating-image-preview {
+    width: 100px; max-height: 100px; border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+}
+
+/* Show preview when image present */
+.ai-toolbar-btn.has-image .ai-image-preview,
 .ai-floating-toolbar-btn.has-image .ai-floating-image-preview {
     display: block;
 }
 
+/* Preview hover zoom */
+.ai-toolbar-btn .ai-image-preview:hover,
 .ai-floating-toolbar-btn .ai-floating-image-preview:hover {
     transform: translateX(-50%) scale(1.08);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.22);
+    box-shadow: 0 8px 26px rgba(0,0,0,0.22);
 }
 
-/* 浮动小窗关闭按钮 — 定位到预览图右上角（预览图宽100px居中），默认隐藏 */
+/* ===== Unified Remove Button (close icon on image preview) ===== */
+.ai-toolbar-btn .ai-image-remove-btn,
 .ai-floating-toolbar-btn .ai-image-remove-btn {
-    bottom: calc(100% + 96px);
-    left: 50%;
-    transform: translateX(42px);
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(220, 38, 38, 0.9);
+    color: #fff;
+    border: 1.5px solid #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    z-index: 110;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.15s ease;
 }
 
-/* 焦点/悬停在预览图上时显示关闭按钮 */
+/* Remove button positioning per variant */
+.ai-toolbar-btn .ai-image-remove-btn {
+    bottom: calc(100% + 116px); left: 50%; transform: translateX(50px);
+}
+.ai-floating-toolbar-btn .ai-image-remove-btn {
+    bottom: calc(100% + 72px); left: 50%; transform: translateX(42px);
+}
+
+/* Show remove button on hover */
+.ai-toolbar-btn.has-image .ai-image-preview:hover ~ .ai-image-remove-btn,
+.ai-toolbar-btn.has-image .ai-image-remove-btn:hover,
 .ai-floating-toolbar-btn.has-image .ai-floating-image-preview:hover ~ .ai-image-remove-btn,
 .ai-floating-toolbar-btn.has-image .ai-image-remove-btn:hover {
     opacity: 1;
     pointer-events: auto;
 }
 
-/* 关闭按钮 hover 效果 */
-.ai-floating-toolbar-btn .ai-image-remove-btn:hover {
-    background: rgba(220, 38, 38, 1);
-    transform: translateX(42px) scale(1.1);
+/* Hide upload icon when image is present */
+.ai-toolbar-btn.has-image > i.image,
+.ai-floating-toolbar-btn.has-image > i.image {
+    display: none;
 }
 
-@keyframes aiFloatingRecordPulse {
+/* Remove button hover */
+.ai-toolbar-btn .ai-image-remove-btn:hover {
+    background: rgba(220, 38, 38, 1);
+    transform: translateX(50px) scale(1.1);
+}
+.ai-floating-toolbar-btn .ai-image-remove-btn:hover {
+    background: rgba(220, 38, 38, 1);
+    transform: translateX(42px) scale(1.15);
+}
+
+/* Remove button inner icon */
+.ai-toolbar-btn .ai-image-remove-btn i,
+.ai-floating-toolbar-btn .ai-image-remove-btn i {
+    margin: 0 !important;
+    font-size: 9px;
+}
+
+/* Shared record pulse animation (renamed from aiFloatingRecordPulse → unified) */
+@keyframes aiRecordPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
-    50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.15); }
+    50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.15); }
 }
 
 .ai-floating-state {
@@ -561,43 +634,58 @@
     cursor: grabbing;
 }
 
-/* ===== Stop / Resume Generation (Floating) ===== */
+/* ===== Unified Stop / Resume Generation ===== */
+.ai-stop-btn,
 .ai-floating-stop-btn {
     background: rgba(239, 68, 68, 0.08) !important;
     border-color: rgba(239, 68, 68, 0.35) !important;
     color: #dc2626 !important;
 }
 
+.ai-stop-btn:hover,
 .ai-floating-stop-btn:hover {
     background: rgba(239, 68, 68, 0.15) !important;
     border-color: rgba(239, 68, 68, 0.5) !important;
 }
 
+/* Stopped card — base + size variants */
+.ai-stopped-card,
 .ai-floating-stopped-card {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    border-radius: 12px;
     background: rgba(254, 243, 199, 0.7);
     border: 1px solid rgba(245, 158, 11, 0.35);
     color: #92400e;
-    font-size: 12.5px;
 }
 
+/* Workbench variant */
+.ai-stopped-card {
+    gap: 12px; padding: 12px 16px; border-radius: 14px; font-size: 13.5px;
+}
+/* Floating variant */
+.ai-floating-stopped-card {
+    gap: 10px; padding: 10px 14px; border-radius: 12px; font-size: 12.5px;
+}
+
+/* Resume button — base */
+.ai-stopped-card .ai-resume-btn,
 .ai-floating-stopped-card .ai-resume-btn {
     flex-shrink: 0;
-    padding: 5px 12px;
     border-radius: 999px;
     border: 1px solid rgba(20, 184, 166, 0.35);
     background: rgba(240, 253, 250, 0.9);
     color: #0f766e;
-    font-size: 11.5px;
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
 }
+/* Workbench resume size */
+.ai-stopped-card .ai-resume-btn { padding: 6px 14px; font-size: 12px; }
+/* Floating resume size */
+.ai-floating-stopped-card .ai-resume-btn { padding: 5px 12px; font-size: 11.5px; }
 
+/* Resume hover — shared */
+.ai-stopped-card .ai-resume-btn:hover,
 .ai-floating-stopped-card .ai-resume-btn:hover {
     background: rgba(20, 184, 166, 0.1);
     border-color: rgba(20, 184, 166, 0.5);

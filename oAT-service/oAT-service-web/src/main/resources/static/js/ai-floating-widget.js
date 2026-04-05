@@ -1365,7 +1365,7 @@
             var saveMsg = question;
             if (fwUploadedImageData) {
                 userMsgHtml += (question ? '<br>' : '') + '<img src="' + escapeHtml(fwUploadedImageData)
-                    + '" style="max-width:220px;max-height:150px;border-radius:8px;margin-top:4px;" alt="上传的图片">';
+                    + '" style="max-width:280px;max-height:200px;border-radius:10px;margin-top:6px;" alt="上传的图片">';
                 saveMsg += (saveMsg ? ' [附图]' : '[图片]');
             }
             appendMessage('user', '你', userMsgHtml, [], { isHtml: true });
