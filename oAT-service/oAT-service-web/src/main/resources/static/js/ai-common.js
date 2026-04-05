@@ -245,7 +245,7 @@
             isRecording ? stop() : start();
         }
 
-        return { init: function ($) {
+        return { init: function () {
             $btn.on('click', function () { toggle(); });
         }, toggle: toggle, stop: stop, isRecording: function () { return isRecording; } };
     }
