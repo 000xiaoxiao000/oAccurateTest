@@ -13,6 +13,8 @@ import com.oAT.web.service.entity.CoverageComparisonVo;
 import com.oAT.web.service.entity.UserVo;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +29,8 @@ import java.io.IOException;
 @Controller
 @RequestMapping("/p/{projectId}/coverage")
 public class CoverageControl {
+
+    private static final Logger logger = LoggerFactory.getLogger(CoverageControl.class);
 
     private static final String[] PRIMARY_COLORS = {"#5865f2", "#00b5ad", "#ff8a65", "#7e57c2", "#26a69a", "#42a5f5"};
 
@@ -178,6 +182,12 @@ public class CoverageControl {
                     .orElseGet(() -> versionService.getVersionItemList(projectId, report.getAppId()).stream()
                             .filter(v -> v.getVersionNumber().equals(report.getVersionNumber()))
                             .findFirst().orElse(null)));
+        } else {
+            // 防御性兜底：确保模板必需变量始终存在，避免 InvalidReferenceException
+            model.addAttribute("appId", "");
+            model.addAttribute("versionNumber", "");
+            model.addAttribute("appName", "未知应用");
+            logger.warn("[details] reportId={} 未找到对应报告，已设置默认值避免模板渲染异常", reportId);
         }
 
         // Required by projectHeader.ftl

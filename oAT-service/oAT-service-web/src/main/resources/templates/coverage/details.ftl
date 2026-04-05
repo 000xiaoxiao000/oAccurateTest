@@ -26,9 +26,9 @@
     <div class="ui breadcrumb" style="margin-bottom: 20px">
         <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
         <i class="right angle icon divider"></i>
-        <a class="section" href="/p/${project.id}/${appId}/version/list">${appName!appId}</a>
+        <a class="section" href="/p/${project.id}/${appId!}/version/list">${appName!appId!}</a>
         <i class="right angle icon divider"></i>
-        <a class="section" href="/p/${project.id}/coverage/overview?appId=${appId}&versionNumber=${versionNumber}">覆盖率概览</a>
+        <a class="section" href="/p/${project.id}/coverage/overview?appId=${appId!}&versionNumber=${versionNumber!}">覆盖率概览</a>
     </div>
 
     <div class="ui segment" style="background-color: #f9f9f9;">

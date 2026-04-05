@@ -124,23 +124,23 @@
             applyPosition(clampPosition({ left: targetLeft, top: targetTop }));
             writeLocalJSON(positionKey, getCurrentPosition());
         }
-        
+
         function anchorLauncherToBottomRight() {
             // 获取当前对话框的尺寸和位置
             var rootRect = $root[0].getBoundingClientRect();
-                    
+
             // 关闭面板后,widget 只包含 launcher(约96px宽)
             // 我们需要让 launcher 定位在原来对话框的右下角位置
             // 对话框右下角的屏幕坐标
             var dialogRight = rootRect.right;
             var dialogBottom = rootRect.bottom;
-                    
+
             // 计算新的 left/top,使得 launcher 的右下角对齐到对话框的右下角
             var launcherWidth = 96; // launcher 的宽度
             var launcherHeight = 112; // launcher 的高度
             var targetLeft = dialogRight - launcherWidth;
             var targetTop = dialogBottom - launcherHeight;
-                    
+
             applyPosition(clampPosition({ left: targetLeft, top: targetTop }));
             // 不在这里保存位置，让 setPanelOpen 中的 requestAnimationFrame 统一保存
         }
@@ -987,7 +987,7 @@
                 var elapsed = Math.round((Date.now() - fwLoadingStartTime) / 1000);
                 $loading.find('.fw-loading-timer').text(elapsed + 's');
                 if (elapsed >= 30 && elapsed % 10 === 0) {
-                    $loading.find('.fw-loading-text').text('AI 正在深入分析，请稍候... (' + elapsed + 's)');
+                    $loading.find('.fw-loading-text').text('AI 正在深入分析，请稍候...');
                 }
             }, 1000);
         }
