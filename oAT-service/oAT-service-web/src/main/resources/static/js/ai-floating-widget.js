@@ -40,6 +40,9 @@
         var $questionInput = $('#aiFloatingQuestionInput');
         var $sendButton = $('#aiFloatingSendButton');
         var $state = $('#aiFloatingState');
+        var fwCurrentAjaxRequest = null;
+        var fwPendingQuestion = '';
+        var fwUploadedImageData = null;  // Floating widget 图片数据
         var $panelEyebrow = $('#aiFloatingPanelEyebrow');
         var $panelTitle = $('#aiFloatingPanelTitle');
         var mouseX = window.innerWidth / 2;
@@ -757,12 +760,14 @@
         function appendMessage(role, title, message, actions, options) {
             options = options || {};
             var avatar = role === 'assistant' ? 'AI' : '我';
+            var contentHtml = options.isHtml ? message : formatMessage(message);
             var html = ''
                 + '<div class="ai-floating-message ' + role + '">'
                 + '  <div class="ai-floating-avatar">' + escapeHtml(avatar) + '</div>'
                 + '  <div class="ai-floating-message-body">'
                 + '      <div class="ai-floating-message-name">' + escapeHtml(title) + '</div>'
-                + '      <div class="ai-floating-message-card">' + formatMessage(message);
+                + '      <div class="ai-floating-message-card" style="position:relative">' + contentHtml
+                + '<button class="ai-floating-copy-btn" title="复制"><i class="copy icon"></i></button>';
 
             if (actions && actions.length) {
                 html += '<div class="ai-floating-message-actions">';
@@ -777,6 +782,8 @@
                 + '</div>';
 
             $messageList.append(html);
+            // 绑定复制按钮
+            bindCopyButton($messageList.find('.ai-floating-copy-btn').last(), message);
             $('#aiFloatingMessageSection').removeClass('is-collapsed');
             if (options.scrollTop) {
                 scrollToTop();
@@ -786,6 +793,203 @@
                 return;
             }
             scrollToBottom();
+        }
+
+        /* ===== Stop / Resume Generation (Floating) ===== */
+        function fwSetSendButtonToStop() {
+            $sendButton.text('停止').addClass('ai-floating-stop-btn');
+        }
+
+        function fwResetSendButton() {
+            $sendButton.text('发送').removeClass('ai-floating-stop-btn');
+        }
+
+        function fwStopGeneration() {
+            if (fwCurrentAjaxRequest) {
+                fwCurrentAjaxRequest.abort();
+                fwCurrentAjaxRequest = null;
+            }
+        }
+
+        function fwShowStoppedMessage(questionText) {
+            hideLoading();
+            var html = ''
+                + '<div class="ai-floating-message assistant">'
+                + '  <div class="ai-floating-avatar">AI</div>'
+                + '  <div class="ai-floating-message-body">'
+                + '    <div class="ai-floating-message-name">AI 助手</div>'
+                + '    <div class="ai-floating-stopped-card">'
+                + '      <span><i class="pause circle icon"></i> 已停止生成</span>'
+                + '      <button class="ai-resume-btn" data-question="' + escapeHtml(questionText) + '">重新发送</button>'
+                + '    </div>'
+                + '  </div>'
+                + '</div>';
+            $messageList.append(html);
+            $('#aiFloatingMessageSection').removeClass('is-collapsed');
+            scrollToBottom();
+            saveHistory({
+                role: 'assistant',
+                title: 'AI 助手',
+                message: '[已停止生成] 原问题: ' + questionText,
+                actions: []
+            });
+            fwResetSendButton();
+            setState('就绪', false);
+        }
+
+        /* ===== Image Upload & Voice Recording (Floating) ===== */
+        $('#aiFloatingImageUploadBtn').on('click', function () {
+            $('#aiFloatingImageInput').trigger('click');
+        });
+
+        $('#aiFloatingImageInput').on('change', function () {
+            var file = this.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                appendMessage('assistant', 'AI 助手', '仅支持图片文件', [], { scrollTop: true });
+                return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                appendMessage('assistant', 'AI 助手', '图片不能超过 10MB', [], { scrollTop: true });
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                fwUploadedImageData = e.target.result;
+                var $btn = $('#aiFloatingImageUploadBtn');
+                $btn.addClass('has-image');
+                $btn.find('.ai-floating-image-preview').attr('src', fwUploadedImageData).show();
+            };
+            reader.readAsDataURL(file);
+            this.value = '';
+        });
+
+        $(document).on('click', '.ai-floating-image-preview', function (e) {
+            e.stopPropagation();
+            fwUploadedImageData = null;
+            $('#aiFloatingImageUploadBtn').removeClass('has-image')
+                .find('.ai-floating-image-preview').hide().attr('src', '');
+        });
+
+        // Floating voice recording
+        var fwMediaRecorder = null;
+        var fwVoiceChunks = [];
+        var fwIsRecording = false;
+        var fwRecordStartTime = 0;
+        var fwRecordTimerInterval = null;
+
+        $('#aiFloatingVoiceRecordBtn').on('click', function () {
+            var $btn = $(this);
+            if (fwIsRecording) {
+                fwIsRecording = false;
+                $btn.removeClass('recording').find('i').removeClass('stop').addClass('microphone');
+                $btn.attr('title', '语音输入');
+                if (fwRecordTimerInterval) { clearInterval(fwRecordTimerInterval); fwRecordTimerInterval = null; }
+                if (fwMediaRecorder && fwMediaRecorder.state !== 'inactive') { fwMediaRecorder.stop(); }
+            } else {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    appendMessage('assistant', 'AI 助手', '当前浏览器不支持语音输入', [], { scrollTop: true });
+                    return;
+                }
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+                    fwMediaRecorder = new MediaRecorder(stream);
+                    fwVoiceChunks = [];
+                    fwIsRecording = true;
+                    fwRecordStartTime = Date.now();
+                    $btn.addClass('recording').find('i').removeClass('microphone').addClass('stop');
+
+                    fwMediaRecorder.ondataavailable = function (e) { fwVoiceChunks.push(e.data); };
+                    fwMediaRecorder.onstop = function () {
+                        stream.getTracks().forEach(function (t) { t.stop(); });
+                        if (fwVoiceChunks.length > 0) {
+                            var currentVal = $.trim($questionInput.val());
+                            var prefix = currentVal ? (currentVal + '\n') : '';
+                            var sec = Math.round((Date.now() - fwRecordStartTime) / 1000);
+                            var m = Math.floor(sec / 60);
+                            var s = sec % 60;
+                            var durStr = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+                            $questionInput.val(prefix + '[语音片段 ' + durStr + '] （语音转文字功能待后端接入ASR）');
+                        }
+                        fwVoiceChunks = [];
+                    };
+                    fwMediaRecorder.start();
+                    fwRecordTimerInterval = setInterval(function () {
+                        var sec = Math.floor((Date.now() - fwRecordStartTime) / 1000);
+                        $btn.attr('title', '录音中... ' + String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0'));
+                    }, 500);
+                }).catch(function (err) {
+                    appendMessage('assistant', 'AI 助手', '无法访问麦克风：' + (err.message || '权限被拒绝'), [], { scrollTop: true });
+                });
+            }
+        });
+
+        /* ===== Loading Indicator (Floating) ===== */
+        var fwLoadingTimerInterval = null;
+        var fwLoadingStartTime = 0;
+
+        function showLoading() {
+            hideLoading();
+            fwLoadingStartTime = Date.now();
+            var $loading = $('<div class="ai-floating-loading" id="aiFloatingLoading">'
+                + '<div style="display:flex;align-items:center;gap:10px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;">'
+                + '<span class="fw-loading-dots"><i class="spinner loading icon" style="color:#14b8a6;font-size:16px;"></i></span>'
+                + '<span class="fw-loading-text" style="font-size:13px;color:#64748b;">正在思考中...</span>'
+                + '<span class="fw-loading-timer" style="font-size:11px;color:#94a3b8;margin-left:auto;white-space:nowrap;"></span>'
+                + '</div></div>');
+            $messageList.append($loading);
+            $('#aiFloatingMessageSection').removeClass('is-collapsed');
+            scrollToBottom();
+            fwLoadingTimerInterval = setInterval(function () {
+                var elapsed = Math.round((Date.now() - fwLoadingStartTime) / 1000);
+                $loading.find('.fw-loading-timer').text(elapsed + 's');
+                if (elapsed >= 30 && elapsed % 10 === 0) {
+                    $loading.find('.fw-loading-text').text('AI 正在深入分析，请稍候... (' + elapsed + 's)');
+                }
+            }, 1000);
+        }
+
+        function hideLoading() {
+            if (fwLoadingTimerInterval) {
+                clearInterval(fwLoadingTimerInterval);
+                fwLoadingTimerInterval = null;
+            }
+            $('#aiFloatingLoading').remove();
+        }
+
+        function showTimeoutMessage() {
+            var elapsed = Math.round((Date.now() - fwLoadingStartTime) / 1000);
+            hideLoading();
+            appendMessage('assistant', 'AI 助手',
+                '抱歉，AI 响应超时（已等待 ' + elapsed + ' 秒）。请稍后重试或换一个更具体的问题。', [], {scrollTop: true});
+            saveHistory({
+                role: 'assistant',
+                title: 'AI 助手',
+                message: '[请求超时]',
+                actions: []
+            });
+        }
+
+        /* ===== Copy Button ===== */
+        function bindCopyButton($btn, text) {
+            $btn.on('click', function (e) {
+                e.stopPropagation();
+                var plainText = (text || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+                if (!plainText) return;
+                if (navigator.clipboard !== undefined) {
+                    navigator.clipboard.writeText(plainText).then(function () {
+                        $(this).css({color:'#16a34a','border-color':'rgba(22,163,77,0.4)'}).html('<i class="check icon"></i>');
+                        setTimeout(function () { $(this).css({'color':'#94a3b8','border-color':'rgba(203,213,225,0.6)'}).html('<i class="copy icon"></i>'); }, 1500);
+                    }.bind(this)).catch(function () {});
+                } else {
+                    var ta = document.createElement('textarea');
+                    ta.value = plainText;
+                    document.body.appendChild(ta); ta.select();
+                    try { document.execCommand('copy'); } catch(e2) {}
+                    document.body.removeChild(ta);
+                    $(this).css({color:'#16a34a','border-color':'rgba(22,163,77,0.4)'}).html('<i class="check icon"></i>');
+                    setTimeout(function () { $(this).css({'color':'#94a3b8','border-color':'rgba(203,213,225,0.6)'}).html('<i class="copy icon"></i>'); }, 1500);
+                }
+            });
         }
 
         function renderQuickLinks(links) {
@@ -1096,33 +1300,58 @@
 
         function sendQuestion(questionText) {
             var question = $.trim(questionText || $questionInput.val());
-            if (!question) {
+            // 允许纯图片发送
+            if (!question && !fwUploadedImageData) {
                 $questionInput.focus();
                 return;
             }
 
+            fwPendingQuestion = question || '[图片提问]';
+
             setHidden(false);
             setPanelOpen(true);
-            appendMessage('user', '你', question, []);
+
+            // 构建用户消息（含图片）
+            var userMsgHtml = question;
+            var saveMsg = question;
+            if (fwUploadedImageData) {
+                userMsgHtml += (question ? '<br>' : '') + '<img src="' + escapeHtml(fwUploadedImageData)
+                    + '" style="max-width:220px;max-height:150px;border-radius:8px;margin-top:4px;" alt="上传的图片">';
+                saveMsg += (saveMsg ? ' [附图]' : '[图片]');
+            }
+            appendMessage('user', '你', userMsgHtml, [], { isHtml: true });
             saveHistory({
                 role: 'user',
                 title: '你',
-                message: question,
+                message: saveMsg,
                 actions: []
             });
 
             $questionInput.val('');
             setState('思考中...', true);
 
-            $.ajax({
+            // 构建请求数据
+            var requestData = { question: question || '[图片提问]', pageContext: buildPageContextPayload() };
+            if (fwUploadedImageData) {
+                requestData.imageData = fwUploadedImageData;
+            }
+
+            // 清除已上传的图片
+            fwUploadedImageData = null;
+            $('#aiFloatingImageUploadBtn').removeClass('has-image')
+                .find('.ai-floating-image-preview').hide().attr('src', '');
+
+            fwSetSendButtonToStop();
+            showLoading();
+
+            fwCurrentAjaxRequest = $.ajax({
                 url: askUrl,
                 type: 'POST',
                 dataType: 'json',
-                data: {
-                    question: question,
-                    pageContext: buildPageContextPayload()
-                }
+                timeout: 120000,
+                data: requestData
             }).done(function (response) {
+                hideLoading();
                 if (!response || response.success === false || response.result === false) {
                     appendMessage('assistant', 'AI 助手', (response && response.message) || '当前无法完成分析，请稍后重试。', []);
                     saveHistory({
@@ -1147,15 +1376,26 @@
                     actions: suggestions,
                     quickLinks: links
                 });
-            }).fail(function () {
-                appendMessage('assistant', 'AI 助手', '请求失败了，请稍后再试，或者换一个更具体的问题。', []);
-                saveHistory({
-                    role: 'assistant',
-                    title: 'AI 助手',
-                    message: '请求失败了，请稍后再试，或者换一个更具体的问题。',
-                    actions: []
-                });
+            }).fail(function (jqXHR, textStatus) {
+                hideLoading();
+                if (textStatus === 'abort') {
+                    fwShowStoppedMessage(fwPendingQuestion);
+                    return;
+                }
+                if (textStatus === 'timeout') {
+                    showTimeoutMessage();
+                } else {
+                    appendMessage('assistant', 'AI 助手', '请求失败了（' + textStatus + '），请稍后再试，或者换一个更具体的问题。', []);
+                    saveHistory({
+                        role: 'assistant',
+                        title: 'AI 助手',
+                        message: '请求失败 - ' + textStatus,
+                        actions: []
+                    });
+                }
             }).always(function () {
+                fwCurrentAjaxRequest = null;
+                fwResetSendButton();
                 setState('就绪', false);
             });
         }
@@ -1191,6 +1431,10 @@
         $restore.on('mousedown', beginRestoreDrag);
 
         $sendButton.on('click', function () {
+            if ($sendButton.hasClass('ai-floating-stop-btn')) {
+                fwStopGeneration();
+                return;
+            }
             sendQuestion();
         });
 

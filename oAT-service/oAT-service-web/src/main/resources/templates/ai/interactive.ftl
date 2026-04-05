@@ -192,6 +192,16 @@
                     </div>
 
                     <div class="ai-compose-box">
+                        <div class="ai-compose-toolbar">
+                            <button type="button" id="aiImageUploadBtn" class="ai-toolbar-btn" title="上传图片">
+                                <i class="image icon"></i>
+                                <img class="ai-image-preview" alt="preview">
+                                <input type="file" id="aiImageInput" accept="image/*" style="display:none">
+                            </button>
+                            <button type="button" id="aiVoiceRecordBtn" class="ai-toolbar-btn" title="语音输入">
+                                <i class="microphone icon"></i>
+                            </button>
+                        </div>
                         <textarea id="aiQuestionInput" rows="3"
                                   placeholder="例如：帮我总结一下当前项目概况，或者告诉我线上异常该怎么排查"></textarea>
                         <div class="ai-compose-actions">

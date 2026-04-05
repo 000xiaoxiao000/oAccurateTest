@@ -55,12 +55,12 @@ public class AIConfig implements AIConfigProperties {
     /**
      * 模型名称
      */
-    private String model = "gemma3:1b";
+    private String model = "qwen2.5-coder:7b";
 
     /**
      * 最大 token 数
      */
-    private int maxTokens = 2000;
+    private int maxTokens = 4096;
 
     /**
      * 温度参数 (0-2, 值越低输出越确定)
@@ -70,7 +70,7 @@ public class AIConfig implements AIConfigProperties {
     /**
      * 请求超时时间(秒)
      */
-    private int timeout = 60;
+    private int timeout = 1800;
 
     /**
      * 系统提示词前缀
@@ -193,6 +193,7 @@ public class AIConfig implements AIConfigProperties {
         return OllamaChatModel.builder()
                 .baseUrl(normalizeBaseUrl(baseUrl))
                 .modelName(model)
+                .numPredict(maxTokens)
                 .temperature(temperature)
                 .timeout(Duration.ofSeconds(timeout))
                 .build();

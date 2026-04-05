@@ -43,6 +43,8 @@
         var $questionInput = $('#aiQuestionInput');
         var $sendButton = $('#aiSendButton');
         var $requestState = $('#aiRequestState');
+        var currentAjaxRequest = null;  // 当前正在执行的 AJAX 请求，用于停止功能
+        var pendingQuestion = '';       // 被停止的问题，用于重新发送
         var $followUpList = $('#aiFollowUpList');
         var $quickLinkList = $('#aiQuickLinkList');
         var $signalLights = $('#aiSignalLights');
@@ -423,24 +425,287 @@
         function appendMessage(role, title, message, actions, options) {
             options = options || {};
             var avatar = role === 'assistant' ? assistantName.substring(0, 1) : '我';
-            var contentHtml = options.animate ? '<div class="ai-message-text"></div>' : formatMessage(message);
+            var contentHtml = options.animate ? '<div class="ai-message-text"></div>'
+                : (options.isHtml ? message : formatMessage(message));
             var $node = $('<div class="ai-message ' + role + '">'
                 + '<div class="ai-message-avatar">' + escapeHtml(avatar) + '</div>'
                 + '<div class="ai-message-body">'
                 + '<div class="ai-message-name">' + escapeHtml(title) + '</div>'
-                + '<div class="ai-message-card">' + contentHtml + (options.animate ? '' : renderActions(actions)) + '</div>'
+                + '<div class="ai-message-card" style="position:relative">' + contentHtml
+                + (options.animate ? '' : '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions))
+                + '</div>'
                 + '</div>'
                 + '</div>');
             $messageList.append($node);
+            // 绑定一键复制（非动画消息）
+            if (!options.animate) {
+                bindCopyButton($node.find('.ai-message-copy'), message);
+            }
             $messageList.scrollTop($messageList[0].scrollHeight);
             if (options.animate) {
                 var $card = $node.find('.ai-message-card');
                 typewriterText($card.find('.ai-message-text'), message, function () {
                     if (actions && actions.length) {
-                        $card.append(renderActions(actions));
+                        $card.append('<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions));
+                        bindCopyButton($card.find('.ai-message-copy'), message);
+                    } else {
+                        $card.append('<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>');
+                        bindCopyButton($card.find('.ai-message-copy'), message);
                     }
                 });
             }
+        }
+
+        /* ===== Stop / Resume Generation ===== */
+        function setSendButtonToStop() {
+            $sendButton.text('停止').addClass('ai-stop-btn').removeClass('teal');
+        }
+
+        function resetSendButton() {
+            $sendButton.text('发送').removeClass('ai-stop-btn').addClass('teal');
+        }
+
+        function stopGeneration() {
+            if (currentAjaxRequest) {
+                currentAjaxRequest.abort();
+                currentAjaxRequest = null;
+            }
+        }
+
+        function showStoppedMessage(questionText) {
+            hideLoading();
+            var $node = $('<div class="ai-message assistant">'
+                + '<div class="ai-message-avatar">' + escapeHtml(assistantName.substring(0, 1)) + '</div>'
+                + '<div class="ai-message-body">'
+                + '<div class="ai-message-name">' + escapeHtml(assistantName) + '</div>'
+                + '<div class="ai-stopped-card">'
+                + '<span><i class="pause circle icon"></i> 已停止生成，等待 ' + Math.round((Date.now() - loadingStartTime) / 1000) + 's 后手动中断</span>'
+                + '<button class="ai-resume-btn" data-question="' + escapeHtml(questionText) + '">重新发送</button>'
+                + '</div></div></div>');
+            $messageList.append($node);
+            $messageList.scrollTop($messageList[0].scrollHeight);
+            saveMessage({
+                role: 'assistant',
+                title: assistantName,
+                message: '[已停止生成] 原问题: ' + questionText,
+                actions: []
+            });
+            addTimeline('用户中断', '手动停止了 AI 回复生成');
+            resetSendButton();
+            setRequestState('就绪', false);
+            setSignalState('online');
+            var session = getActiveSession();
+            if (session) { session.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
+        }
+
+        $(document).on('click', '.ai-resume-btn', function () {
+            var q = $(this).data('question') || pendingQuestion;
+            if (!q) return;
+            // 移除 stopped 消息卡片
+            $(this).closest('.ai-message').remove();
+            sendQuestion(q);
+        });
+
+        $sendButton.on('click', function () {
+            if ($(this).hasClass('ai-stop-btn')) {
+                stopGeneration();
+                return;
+            }
+            sendQuestion();
+        });
+
+        /* ===== Loading Indicator ===== */
+        var loadingTimerInterval = null;
+        var loadingStartTime = 0;
+
+        function showLoading() {
+            hideLoading();
+            loadingStartTime = Date.now();
+            var $loading = $('<div class="ai-loading-indicator" id="aiLoadingIndicator">'
+                + '<div class="loading-avatar" style="width:38px;height:38px;border-radius:14px;background:#dff7f5;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;color:#0f172a;">' + assistantName.substring(0, 1) + '</div>'
+                + '<div class="ai-loading-dots"><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span></div>'
+                + '<span class="ai-loading-text">正在思考中...</span>'
+                + '<span class="ai-loading-timer">0s</span>'
+                + '</div>');
+            $messageList.append($loading);
+            $messageList.scrollTop($messageList[0].scrollHeight);
+            loadingTimerInterval = setInterval(function () {
+                var elapsed = Math.round((Date.now() - loadingStartTime) / 1000);
+                $loading.find('.ai-loading-timer').text(elapsed + 's');
+                if (elapsed >= 30 && elapsed % 10 === 0) {
+                    $loading.find('.ai-loading-text').text('AI 正在深入分析，请稍候... (' + elapsed + 's)');
+                }
+                if (elapsed >= 60) {
+                    $loading.find('.ai-loading-text').text('响应时间较长，AI 可能遇到了复杂问题... (' + elapsed + 's)');
+                    $loading.find('.ai-loading-timer').css('color', '#d97706');
+                }
+            }, 1000);
+        }
+
+        function hideLoading() {
+            if (loadingTimerInterval) {
+                clearInterval(loadingTimerInterval);
+                loadingTimerInterval = null;
+            }
+            $('#aiLoadingIndicator').remove();
+        }
+
+        function showTimeoutMessage() {
+            var elapsed = Math.round((Date.now() - loadingStartTime) / 1000);
+            hideLoading();
+            appendMessage('assistant', assistantName,
+                '抱歉，AI 响应超时（已等待 ' + elapsed + ' 秒）。可能原因：\n\n'
+                + '1. 大模型服务负载较高或网络延迟较大\n'
+                + '2. 问题涉及大量数据查询需要更长时间\n'
+                + '3. 服务端处理出现异常\n\n'
+                + '建议：可以稍后重试，或换一个更具体的问题。', [], {animate: true});
+            saveMessage({
+                role: 'assistant',
+                title: assistantName,
+                message: '[请求超时]',
+                actions: []
+            });
+            addTimeline('请求超时', '等待超过 ' + elapsed + ' 秒后自动终止');
+        }
+
+        /* ===== Copy Button ===== */
+        function bindCopyButton($btn, text) {
+            $btn.on('click', function (e) {
+                e.stopPropagation();
+                var rawText = text || '';
+                // 提取纯文本（去掉 HTML 标签和多余空白）
+                var plainText = rawText.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+                if (!plainText || navigator.clipboard === undefined) {
+                    showToast('无法复制内容', 'warning');
+                    return;
+                }
+                navigator.clipboard.writeText(plainText).then(function () {
+                    var $b = $(this);
+                    $b.addClass('copied').html('<i class="check icon"></i>');
+                    showToast('已复制到剪贴板', 'success');
+                    setTimeout(function () { $b.removeClass('copied').html('<i class="copy icon"></i>'); }, 1800);
+                }.bind(this)).catch(function () {
+                    // fallback for older browsers
+                    var ta = document.createElement('textarea');
+                    ta.value = plainText;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    try { document.execCommand('copy'); } catch(e2) {}
+                    document.body.removeChild(ta);
+                    $(this).addClass('copied').html('<i class="check icon"></i>');
+                    setTimeout(function () { $(this).removeClass('copied').html('<i class="copy icon"></>'); }.bind(this), 1800);
+                }.bind(this));
+            });
+        }
+
+        /* ===== Image Upload & Voice Recording ===== */
+        var uploadedImageData = null;
+
+        $('#aiImageUploadBtn').on('click', function () {
+            $('#aiImageInput').trigger('click');
+        });
+
+        $('#aiImageInput').on('change', function () {
+            var file = this.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showToast('仅支持图片文件', 'warning');
+                return;
+            }
+            if (file.size > 10 * 1024 * 1024) {
+                showToast('图片不能超过 10MB', 'warning');
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                uploadedImageData = e.target.result;
+                var $btn = $('#aiImageUploadBtn');
+                $btn.addClass('has-image');
+                $btn.find('.ai-image-preview').attr('src', uploadedImageData).show();
+                showToast('图片已添加：' + file.name, 'success');
+            };
+            reader.readAsDataURL(file);
+            this.value = ''; // reset for same file re-select
+        });
+
+        // 点击预览图可移除
+        $(document).on('click', '.ai-image-preview', function (e) {
+            e.stopPropagation();
+            uploadedImageData = null;
+            $('#aiImageUploadBtn').removeClass('has-image').find('.ai-image-preview').hide().attr('src', '');
+            showToast('已移除图片', 'info');
+        });
+
+        // 语音录制
+        var mediaRecorder = null;
+        var voiceChunks = [];
+        var isRecording = false;
+        var recordStartTime = 0;
+        var recordTimerInterval = null;
+
+        $('#aiVoiceRecordBtn').on('click', function () {
+            var $btn = $(this);
+            if (isRecording) {
+                stopVoiceRecording($btn);
+            } else {
+                startVoiceRecording($btn);
+            }
+        });
+
+        function startVoiceRecording($btn) {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showToast('当前浏览器不支持语音输入', 'error');
+                return;
+            }
+            navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+                mediaRecorder = new MediaRecorder(stream);
+                voiceChunks = [];
+                isRecording = true;
+                recordStartTime = Date.now();
+                $btn.addClass('recording').find('i').removeClass('microphone').addClass('stop');
+
+                mediaRecorder.ondataavailable = function (e) { voiceChunks.push(e.data); };
+
+                mediaRecorder.onstop = function () {
+                    stream.getTracks().forEach(function (t) { t.stop(); });
+                    if (voiceChunks.length > 0) {
+                        var blob = new Blob(voiceChunks, { type: 'audio/webm' });
+                        // 转文字提示（实际转写需后端 ASR 支持，此处做占位提示）
+                        var currentVal = $.trim($questionInput.val());
+                        var prefix = currentVal ? (currentVal + '\n') : '';
+                        $questionInput.val(prefix + '[语音片段 ' + formatDuration(Math.round((Date.now() - recordStartTime) / 1000)) + '] （语音转文字功能待后端接入ASR）');
+                        $questionInput.focus();
+                        showToast('语音已录制，当前为模拟模式。完整语音识别需后端支持。', 'info');
+                    }
+                    voiceChunks = [];
+                };
+
+                mediaRecorder.start();
+
+                recordTimerInterval = setInterval(function () {
+                    var sec = Math.floor((Date.now() - recordStartTime) / 1000);
+                    $btn.attr('title', '录音中... ' + formatDuration(sec) + ' (点击结束)');
+                }, 500);
+
+            }).catch(function (err) {
+                showToast('无法访问麦克风：' + (err.message || '权限被拒绝'), 'error');
+            });
+        }
+
+        function stopVoiceRecording($btn) {
+            isRecording = false;
+            $btn.removeClass('recording').find('i').removeClass('stop').addClass('microphone');
+            $btn.attr('title', '语音输入');
+            if (recordTimerInterval) { clearInterval(recordTimerInterval); recordTimerInterval = null; }
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+        }
+
+        function formatDuration(totalSec) {
+            var m = Math.floor(totalSec / 60);
+            var s = totalSec % 60;
+            return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
         }
 
         function renderQuickLinks(links) {
@@ -790,7 +1055,8 @@
 
         function sendQuestion(rawQuestion) {
             var question = $.trim(rawQuestion || $questionInput.val());
-            if (!question) {
+            // 允许纯图片发送（无文字但有图片）
+            if (!question && !uploadedImageData) {
                 $questionInput.focus();
                 return;
             }
@@ -800,27 +1066,55 @@
                 session = getActiveSession();
             }
 
-            appendMessage('user', '你', question);
-            updateSessionTitle(session, question);
+            pendingQuestion = question || '[图片提问]';
+
+            // 构建用户消息内容（包含图片）
+            var userMsgHtml = question;
+            var saveMessageText = question;
+            if (uploadedImageData) {
+                userMsgHtml += (question ? '<br>' : '') + '<img src="' + escapeHtml(uploadedImageData)
+                    + '" style="max-width:280px;max-height:200px;border-radius:10px;margin-top:6px;" alt="上传的图片">';
+                saveMessageText += (saveMessageText ? ' [附图]' : '[图片]');
+            }
+            appendMessage('user', '你', userMsgHtml, [], { isHtml: true });
+            updateSessionTitle(session, question || '[图片提问]');
             saveMessage({
                 role: 'user',
                 title: '你',
-                message: question,
+                message: saveMessageText,
                 actions: []
             });
-            addTimeline('收到提问', question);
+            addTimeline('收到提问', pendingQuestion);
             $questionInput.val('');
+            // 清除已上传的图片
+            uploadedImageData = null;
+            $('#aiImageUploadBtn').removeClass('has-image').find('.ai-image-preview').hide().attr('src', '');
             setSignalState('thinking');
             setRequestState('思考中...', true);
 
-            $.ajax({
+            setSendButtonToStop();
+            showLoading();
+
+            // 构建请求数据，包含图片
+            var requestData = { question: question };
+            if (uploadedImageData) {
+                requestData.imageData = uploadedImageData;
+            }
+
+            // 保存当前图片数据用于消息显示
+            var sentImageHtml = '';
+            if (uploadedImageData) {
+                sentImageHtml = '<br><img src="' + escapeHtml(uploadedImageData) + '" style="max-width:280px;max-height:200px;border-radius:10px;margin-top:6px;" alt="用户上传的图片">';
+            }
+
+            currentAjaxRequest = $.ajax({
                 url: askUrl,
                 type: 'POST',
                 dataType: 'json',
-                data: {
-                    question: question
-                }
+                timeout: 120000, // 120秒超时
+                data: requestData
             }).done(function (response) {
+                hideLoading();
                 if (!response || response.success === false || response.result === false) {
                     var failMessage = (response && response.message) || '当前无法完成分析，请稍后重试。';
                     appendMessage('assistant', assistantName, failMessage, [], {animate: true});
@@ -851,21 +1145,33 @@
                 });
                 addTimeline('生成回复', data.topic || 'general');
                 setSignalState('reply');
-            }).fail(function () {
-                var errorMessage = '请求失败了，请稍后再试，或者换一个更具体的问题。';
-                appendMessage('assistant', assistantName, errorMessage, [], {animate: true});
-                saveMessage({
-                    role: 'assistant',
-                    title: assistantName,
-                    message: errorMessage,
-                    actions: []
-                });
-                addTimeline('请求异常', '请稍后重试或更换问题描述');
-                setSignalState('online');
+            }).fail(function (jqXHR, textStatus) {
+                hideLoading();
+                if (textStatus === 'abort') {
+                    // 用户主动中断
+                    showStoppedMessage(pendingQuestion);
+                    return;
+                }
+                if (textStatus === 'timeout') {
+                    showTimeoutMessage();
+                } else {
+                    var errorMessage = '请求失败了（' + textStatus + '），请稍后再试，或者换一个更具体的问题。';
+                    appendMessage('assistant', assistantName, errorMessage, [], {animate: true});
+                    saveMessage({
+                        role: 'assistant',
+                        title: assistantName,
+                        message: errorMessage,
+                        actions: []
+                    });
+                    addTimeline('请求异常', textStatus + ' - 请稍后重试或更换问题描述');
+                    setSignalState('online');
+                }
             }).always(function () {
+                currentAjaxRequest = null;
                 session.updatedAt = Date.now();
                 persistSessions();
                 renderSessionList();
+                resetSendButton();
                 setRequestState('就绪', false);
                 window.setTimeout(function () {
                     setSignalState('online');
@@ -878,10 +1184,6 @@
         loadSessions();
         renderActiveSession();
         initWorkbenchAnimation();
-
-        $sendButton.on('click', function () {
-            sendQuestion();
-        });
 
         $newSessionButton.on('click', function () {
             createNewSession();
