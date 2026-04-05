@@ -389,10 +389,15 @@
     function createMascotCanvas(opts) {
         opts = opts || {};
         var el = typeof opts.canvas === 'string' ? document.getElementById(opts.canvas) : opts.canvas;
-        if (!el) return { start: function () {}, stop: function () {}, setState: function () {} };
+        if (!el) { console.warn('[Mascot] Canvas element not found'); return { start: function () {}, stop: function () {}, setState: function () {} }; }
 
         var ctx = el.getContext('2d');
-        var w = el.width, h = el.height;
+        if (!ctx) { console.warn('[Mascot] Cannot get 2D context from canvas', el); return { start: function () {}, stop: function () {}, setState: function () {} }; }
+
+        // 防御：canvas 尺寸可能为 0（DOM 未就绪或 CSS 隐藏），使用属性值或回退到默认尺寸
+        var w = el.width || parseInt(el.getAttribute('width'), 10) || 180;
+        var h = el.height || parseInt(el.getAttribute('height'), 10) || 180;
+        if (w <= 0 || h <= 0) { w = 180; h = 180; }
         var radius = Math.min(w, h) * 0.42;
         var primaryColor = opts.primaryColor || '#00b5ad';
         var particleCount = opts.particleCount || 8;
@@ -545,10 +550,8 @@
         /** 绘制眼睛 — 根据状态返回不同的形状参数 */
         function getEyeParams(state, t) {
             if (state === STATE_THINKING) {
-                // 严格眯眼 > < — 思考中，仅允许眯眼，绝不切换为圆眼
-                var blinkPhase = Math.sin(t / 400);
-                var squeeze = blinkPhase > 0.7 ? 0.92 : 0.58;
-                return { type: 'squint', squeeze: squeeze, pupilScale: 0.28 };
+                // 正常圆眼 — 思考中，停止眯眼，保持自然注视
+                return { type: 'open', scale: 1.0, pupilScale: 0.5 };
             } else if (state === STATE_DONE) {
                 // 超级大眼 — 开心到眼睛都亮了
                 return { type: 'open', scale: 1.18, pupilScale: 0.48, sparkle: true };
@@ -557,10 +560,24 @@
         }
 
         function draw() {
-            ctx.clearRect(0, 0, w, h);
-            var rect = el.getBoundingClientRect();
-            var lmx = mx - (rect.left + w / 2);
-            var lmy = my - (rect.top + h / 2);
+            try {
+                // 防御：canvas 可能已被销毁或脱离 DOM
+                if (!el || el.parentNode === null || !ctx) { return; }
+
+                // 动态同步尺寸（处理 CSS 响应式缩放后属性未更新的情况）
+                var curW = el.width || w;
+                var curH = el.height || h;
+                if (curW !== w || curH !== h) { w = curW; h = curH; }
+
+                ctx.clearRect(0, 0, w, h);
+                var rect = el.getBoundingClientRect();
+                // 防御：元素不可见时 getBoundingClientRect 返回全 0
+                if (rect.width === 0 && rect.height === 0) {
+                    rafId = window.requestAnimationFrame(draw);
+                    return;
+                }
+                var lmx = mx - (rect.left + w / 2);
+                var lmy = my - (rect.top + h / 2);
             var lookAngle = Math.atan2(lmy, lmx);
             var now = Date.now();
             var t = now;
@@ -585,8 +602,8 @@
                         if (bounceProgress > 280) { doneBounceCount++; }
                     }
                 } else {
-                    // 弹跳结束 → 自动回到 idle
-                    if (stateElapsed > 1600) { setState(STATE_IDLE); }
+                    // 弹跳结束 → 完成状态停留3秒后自动回到 idle
+                    if (stateElapsed > 3000) { setState(STATE_IDLE); }
                 }
             } else {
                 // idle：缓慢呼吸式浮动
@@ -818,8 +835,12 @@
                 }
             }
 
-            ctx.restore();
-            rafId = window.requestAnimationFrame(draw);
+                ctx.restore();
+                rafId = window.requestAnimationFrame(draw);
+            } catch (drawErr) {
+                // 单帧绘制失败不应打断动画循环，静默重试下一帧
+                rafId = window.requestAnimationFrame(draw);
+            }
         }
 
         /** 椭圆路径兼容辅助函数（部分浏览器不支持 ellipse） */
@@ -866,6 +887,358 @@
     }
 
     // ============================================================
+    //  11. 人脸特征点检测与距离监控
+    //
+    //  基于 MediaPipe Face Mesh（468 个关键点），实时计算：
+    //    - 眼睛与嘴巴之间的距离（欧氏距离）
+    //    - 特征点是否离开预设区域
+    //  距离超阈值时触发通知回调。
+    //
+    //  用法:
+    //    var monitor = AiUtils.createFaceLandmarkMonitor({
+    //        videoElement: document.getElementById('myVideo'),
+    *        canvasElement: document.getElementById('overlayCanvas'),   // 可选，用于绘制调试
+    //        distanceThreshold: 0.35,     // 归一化距离阈值 (0-1)
+    //        regionPadding: 0.1,          // 区域边界内缩比例
+    //        onThresholdExceed: function(data) { ... },   // 超阈值回调
+    //        onRegionExit: function(data) { ... },         // 出区域回调
+    //        onFrame: function(data) { ... }                // 每帧数据回调（可选）
+    //    });
+    //    monitor.start();
+    //    monitor.stop();
+    //    monitor.getLatestData() → { eyeMouthDist, leftEye, rightEye, mouth, ... }
+    // ============================================================
+
+    /**
+     * MediaPipe FaceMesh CDN 地址
+     */
+    var FACEMESH_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/face_mesh.js';
+    var CAMERA_UTILS_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js';
+
+    /**
+     * 创建人脸特征点监控器
+     * @param {Object} opts 配置项
+     * @returns {{start:function, stop:function, getLatestData:function, isRunning:function}}
+     */
+    function createFaceLandmarkMonitor(opts) {
+        opts = opts || {};
+        var videoEl = opts.videoElement;
+        var canvasEl = opts.canvasElement || null;
+        var distanceThreshold = opts.distanceThreshold || 0.35;
+        var regionPadding = opts.regionPadding || 0.1;
+        var onThresholdExceed = typeof opts.onThresholdExceed === 'function' ? opts.onThresholdExceed : null;
+        var onRegionExit = typeof opts.onRegionExit === 'function' ? opts.onRegionExit : null;
+        var onFrame = typeof opts.onFrame === 'function' ? opts.onFrame : null;
+
+        var faceMesh = null;
+        var camera = null;
+        var ctx = null;
+        var running = false;
+        var latestData = null;
+        var lastWarnTime = 0;       // 防抖：阈值警告最小间隔
+        var WARN_DEBOUNCE = 1500;   // ms
+
+        // 预设安全区域（首次检测到人脸时初始化）
+        var safeRegion = { x: 0, y: 0, w: 1, h: 1, initialized: false };
+
+        /** 关键点索引（MediaPipe Face Mesh 468 点） */
+        var IDX = {
+            // 左眼关键点
+            leftEyeOuter: 33,
+            leftEyeInner: 133,
+            leftEyeTop: 159,
+            leftEyeBottom: 145,
+            // 右眼关键点
+            rightEyeOuter: 362,
+            rightEyeInner: 263,
+            rightEyeTop: 386,
+            rightEyeBottom: 374,
+            // 嘴巴关键点
+            mouthUpper: 13,
+            mouthLower: 14,
+            mouthLeft: 61,
+            mouthRight: 291,
+            // 面部轮廓
+            noseTip: 1,
+            forehead: 10,
+            chin: 152,
+            leftCheek: 234,
+            rightCheek: 454
+        };
+
+        /** 计算两点间欧氏距离 */
+        function dist(p1, p2) {
+            if (!p1 || !p2) return 0;
+            var dx = p1.x - p2.x, dy = p1.y - p2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        /** 取两点中点 */
+        function midpoint(p1, p2) {
+            if (!p1 || !p2) return { x: 0, y: 0 };
+            return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+        }
+
+        /** 从一组关键点计算眼睛中心 */
+        function getEyeCenter(landmarks, outerIdx, innerIdx, topIdx, bottomIdx) {
+            if (!landmarks || landmarks.length <= Math.max(outerIdx, innerIdx, topIdx, bottomIdx)) return null;
+            var outer = landmarks[outerIdx], inner = landmarks[innerIdx];
+            var top = landmarks[topIdx], bottom = landmarks[bottomIdx];
+            return midpoint(midpoint(outer, inner), midpoint(top, bottom));
+        }
+
+        /** 从一组关键点计算嘴巴中心 */
+        function getMouthCenter(landmarks) {
+            if (!landmarks || landmarks.length <= 291) return null;
+            var upper = landmarks[IDX.mouthUpper], lower = landmarks[IDX.mouthLower];
+            var left = landmarks[IDX.mouthLeft], right = landmarks[IDX.mouthRight];
+            return midpoint(midpoint(upper, lower), midpoint(left, right));
+        }
+
+        /** 初始化安全区域（基于面部边界框） */
+        function initSafeRegion(landmarks) {
+            if (safeRegion.initialized) return;
+            var xs = [], ys = [];
+            [IDX.forehead, IDX.chin, IDX.leftCheek, IDX.rightCheek].forEach(function (i) {
+                if (landmarks[i]) { xs.push(landmarks[i].x); ys.push(landmarks[i].y); }
+            });
+            if (xs.length < 4) return;
+            var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+            var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+            var pw = (maxX - minX) * regionPadding;
+            var ph = (maxY - minY) * regionPadding;
+            safeRegion = {
+                x: minX - pw, y: minY - ph,
+                w: (maxX - minX) + pw * 2, h: (maxY - minY) + ph * 2,
+                initialized: true
+            };
+        }
+
+        /** 检查特征点是否在安全区域内 */
+        function checkRegionSafety(keypoints) {
+            var allInside = true;
+            for (var i = 0; i < keypoints.length; i++) {
+                var p = keypoints[i];
+                if (!p) continue;
+                if (p.x < safeRegion.x || p.x > safeRegion.x + safeRegion.w ||
+                    p.y < safeRegion.y || p.y > safeRegion.y + safeRegion.h) {
+                    allInside = false;
+                    break;
+                }
+            }
+            return allInside;
+        }
+
+        /** 绘制调试叠加层 */
+        function drawDebugOverlay(landmarks, data) {
+            if (!canvasEl || !ctx) return;
+            var w = canvasEl.width, h = canvasEl.height;
+            ctx.clearRect(0, 0, w, h);
+
+            // 绘制安全区域边界
+            if (safeRegion.initialized) {
+                ctx.strokeStyle = 'rgba(20, 184, 166, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                ctx.strokeRect(safeRegion.x * w, safeRegion.y * h, safeRegion.w * w, safeRegion.h * h);
+                ctx.setLineDash([]);
+            }
+
+            // 绘制眼睛-嘴巴连线
+            if (data.leftEye && data.mouth) {
+                ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(data.leftEye.x * w, data.leftEye.y * h);
+                ctx.lineTo(data.mouth.x * w, data.mouth.y * h);
+                ctx.stroke();
+            }
+            if (data.rightEye && data.mouth) {
+                ctx.strokeStyle = 'rgba(168, 85, 247, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(data.rightEye.x * w, data.rightEye.y * h);
+                ctx.lineTo(data.mouth.x * w, data.mouth.y * h);
+                ctx.stroke();
+            }
+
+            // 绘制关键点
+            var points = [
+                { p: data.leftEye, color: '#3b82f6', label: 'LE' },
+                { p: data.rightEye, color: '#a855f7', label: 'RE' },
+                { p: data.mouth, color: '#ef4444', label: 'MO' }
+            ];
+            points.forEach(function (pt) {
+                if (!pt.p) return;
+                ctx.fillStyle = pt.color;
+                ctx.beginPath();
+                ctx.arc(pt.p.x * w, pt.p.y * h, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.font = '10px monospace';
+                ctx.fillText(pt.label, pt.p.x * w + 7, pt.p.y * h - 7);
+            });
+
+            // 显示距离数值
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+            ctx.font = 'bold 13px monospace';
+            ctx.fillText('L-Eye ↔ Mouth: ' + (data.leftEyeToMouthDist || 0).toFixed(4), 10, 20);
+            ctx.fillText('R-Eye ↔ Mouth: ' + (data.rightEyeToMouthDist || 0).toFixed(4), 10, 38);
+            ctx.fillText('Avg Dist: ' + (data.eyeMouthDist || 0).toFixed(4) + ' | Threshold: ' + distanceThreshold.toFixed(2), 10, 56);
+            ctx.fillText('In Region: ' + (data.inRegion ? 'YES' : 'NO'), 10, 74);
+        }
+
+        /** 单帧处理回调 */
+        function onResults(results) {
+            if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+                latestData = { detected: false };
+                return;
+            }
+
+            var landmarks = results.multiFaceLandmarks[0];
+
+            // 计算关键特征点位置
+            var leftEye = getEyeCenter(landmarks, IDX.leftEyeOuter, IDX.leftEyeInner, IDX.leftEyeTop, IDX.leftEyeBottom);
+            var rightEye = getEyeCenter(landmarks, IDX.rightEyeOuter, IDX.rightEyeInner, IDX.rightEyeTop, IDX.rightEyeBottom);
+            var mouth = getMouthCenter(landmarks);
+
+            if (!leftEye || !rightEye || !mouth) {
+                latestData = { detected: true, valid: false };
+                return;
+            }
+
+            // 初始化安全区域
+            initSafeRegion(landmarks);
+
+            // 核心指标：眼睛到嘴巴的距离
+            var leftDist = dist(leftEye, mouth);
+            var rightDist = dist(rightEye, mouth);
+            var avgDist = (leftDist + rightDist) / 2;
+
+            // 检查关键特征点是否在安全区域内
+            var checkPoints = [leftEye, rightEye, mouth, landmarks[IDX.noseTip]];
+            var inRegion = checkRegionSafety(checkPoints);
+
+            // 构建当前帧数据
+            var frameData = {
+                detected: true,
+                valid: true,
+                timestamp: Date.now(),
+                leftEye: { x: leftEye.x, y: leftEye.y },
+                rightEye: { x: rightEye.x, y: rightEye.y },
+                mouth: { x: mouth.x, y: mouth.y },
+                leftEyeToMouthDist: leftDist,
+                rightEyeToMouthDist: rightDist,
+                eyeMouthDist: avgDist,
+                inRegion: inRegion,
+                thresholdExceeded: avgDist > distanceThreshold
+            };
+
+            latestData = frameData;
+
+            // 绘制调试层
+            drawDebugOverlay(landmarks, frameData);
+
+            // 阈值超限检测（带防抖）
+            if (frameData.thresholdExceeded && onThresholdExceed) {
+                var now = Date.now();
+                if (now - lastWarnTime > WARN_DEBOUNCE) {
+                    lastWarnTime = now;
+                    onThresholdExceed(frameData);
+                }
+            }
+
+            // 离开安全区域检测
+            if (!inRegion && onRegionExit) {
+                onRegionExit(frameData);
+            }
+
+            // 每帧通用回调
+            if (onFrame) {
+                onFrame(frameData);
+            }
+        }
+
+        /** 动态加载 MediaPipe 脚本并启动 */
+        function loadAndStart() {
+            if (typeof FaceMesh !== 'undefined' && typeof Camera !== 'undefined') {
+                initFaceMesh();
+                return;
+            }
+
+            // 加载 Camera Utils
+            var camScript = document.createElement('script');
+            camScript.src = CAMERA_UTILS_CDN;
+            camScript.onload = function () {
+                // 加载 Face Mesh
+                var fmScript = document.createElement('script');
+                fmScript.src = FACEMESH_CDN;
+                fmScript.onload = function () { initFaceMesh(); };
+                document.head.appendChild(fmScript);
+            };
+            document.head.appendChild(camScript);
+        }
+
+        /** 初始化 FaceMesh 和 Camera */
+        function initFaceMesh() {
+            if (!videoEl) {
+                showToast('未指定视频元素，无法启用人脸检测', 'error');
+                return;
+            }
+
+            faceMesh = new FaceMesh({
+                locateFile: function (file) {
+                    return 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4/' + file;
+                }
+            });
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            faceMesh.setResults(onResults);
+
+            if (canvasEl) {
+                ctx = canvasEl.getContext('2d');
+                canvasEl.width = videoEl.videoWidth || 640;
+                canvasEl.height = videoEl.videoHeight || 480;
+            }
+
+            camera = new Camera(videoEl, {
+                onFrame: async function () {
+                    if (running && faceMesh) {
+                        await faceMesh.send({ image: videoEl });
+                    }
+                },
+                width: 1280,
+                height: 720
+            });
+            camera.start().then(function () {
+                running = true;
+                showToast('人脸特征点检测已启动', 'success');
+            }).catch(function (err) {
+                showToast('摄像头启动失败: ' + (err.message || '未知错误'), 'error');
+            });
+        }
+
+        return {
+            start: function () {
+                loadAndStart();
+            },
+            stop: function () {
+                running = false;
+                if (camera) { try { camera.stop(); } catch(e) {} }
+                if (faceMesh) { try { faceMesh.close(); } catch(e) {} }
+                if (ctx && canvasEl) { ctx.clearRect(0, 0, canvasEl.width, canvasEl.height); }
+                latestData = { detected: false, stopped: true };
+            },
+            getLatestData: function () { return latestData; },
+            isRunning: function () { return running; }
+        };
+    }
+
+    // ============================================================
     //  导出
     // ============================================================
 
@@ -889,6 +1262,7 @@
         createImageHandler: createImageHandler,
         createVoiceRecorder: createVoiceRecorder,
         createMascotCanvas: createMascotCanvas,
+        createFaceLandmarkMonitor: createFaceLandmarkMonitor,
 
         // UI 功能
         openLightbox: openLightbox,

@@ -230,6 +230,15 @@
     line-height: 1.8;
 }
 
+/* 按钮区域向下偏移，优化视觉效果 */
+.ai-hero-copy .ai-hero-tags {
+    margin-top: 8px;
+}
+
+.ai-hero-copy .ai-hero-actions {
+    margin-top: 22px;
+}
+
 .ai-hero-tags,
 .ai-hero-actions,
 .ai-console-stack,
@@ -277,7 +286,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: visible; /* 改为 visible 防止 canvas 被裁剪 */
+    isolation: isolate; /* 创建新的层叠上下文，确保 z-index 生效 */
 }
 
 .ai-stage-ring {
@@ -338,10 +348,16 @@
 
 .ai-mascot-canvas {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     width: 180px;
     height: 180px;
+    border-radius: 50%;
     filter: drop-shadow(0 16px 30px rgba(15, 23, 42, 0.14));
+    /* 确保 canvas 始终可见，不被父容器裁剪 */
+    visibility: visible !important;
+    opacity: 1 !important;
+    display: block;
+    flex-shrink: 0;
 }
 
 .ai-side-console {
