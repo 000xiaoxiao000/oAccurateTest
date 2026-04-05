@@ -8,21 +8,14 @@ import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.service.entity.CaseSearchResult;
 import com.oAT.web.service.entity.TableToUsecase;
 import com.oAT.web.service.entity.UsecaseVo;
-import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.text.Text;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
-import org.elasticsearch.search.fetch.subphase.highlight.HighlightField;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
-import org.springframework.data.elasticsearch.core.SearchResultMapper;
-import org.springframework.data.elasticsearch.core.aggregation.AggregatedPage;
-import org.springframework.data.elasticsearch.core.aggregation.impl.AggregatedPageImpl;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
@@ -71,11 +64,47 @@ public class UsecaseSearchImpl implements UsecaseSearchService{
         builder.field("usecase.sql.contents", 100);
         builder.field("usecase.remote.content", 100);
         searchBuilder.withHighlightFields(builder.fields().toArray(new HighlightBuilder.Field[0]));
-        AggregatedPage<CaseCenterIndex> page = elasticsearchTemplate
-                .queryForPage(searchBuilder.build(), CaseCenterIndex.class, new CaseSearchResultMapper());
+
+        // Spring Data Elasticsearch 4.4 新 API
+        SearchHits<CaseCenterIndex> searchHits = elasticsearchTemplate.search(searchBuilder.build(), CaseCenterIndex.class);
+        List<CaseSearchResult> results = new ArrayList<>();
+
+        for (SearchHit<CaseCenterIndex> hit : searchHits) {
+            CaseSearchResult r = new CaseSearchResult();
+            r.setId(hit.getId());
+
+            CaseCenterIndex content = hit.getContent();
+            if (content == null || content.getUsecase() == null) continue;
+
+            r.setProjectId(content.getUsecase().getProjectId());
+            r.setTitle(content.getUsecase().getTitle());
+            if (content.getUsecase().getHeadImage() != null) {
+                r.setHeadImage(content.getUsecase().getHeadImage());
+            }
+
+            // 处理高亮
+            Map<String, List<String>> highlightFields = hit.getHighlightFields();
+            for (Map.Entry<String, List<String>> entry : highlightFields.entrySet()) {
+                String fieldName = entry.getKey();
+                List<String> fragments = entry.getValue();
+                if (fragments != null && !fragments.isEmpty()) {
+                    if ("usecase.title".equals(fieldName)) {
+                        r.setTitleFragment(fragments.get(0));
+                    } else if ("usecase.content".equals(fieldName)) {
+                        r.setContentFragments(fragments.toArray(new String[0]));
+                    } else if ("usecase.sql.contents".equals(fieldName)) {
+                        r.setSqlContentFragments(fragments.toArray(new String[0]));
+                    } else if ("usecase.remote.content".equals(fieldName)) {
+                        r.setRemoteContentFragments(fragments.toArray(new String[0]));
+                    }
+                }
+            }
+            results.add(r);
+        }
+
         SearchPage searchPage = new SearchPage();
-        searchPage.setContents(page.getContent());
-        searchPage.setTotal(page.getTotalElements());
+        searchPage.setContents(results);
+        searchPage.setTotal(searchHits.getTotalHits());
         return searchPage;
     }
 
@@ -132,9 +161,10 @@ public class UsecaseSearchImpl implements UsecaseSearchService{
                 "usecase.sql",
                 "usecase.headImage");
         builder.withFilter(boolQuery);
-        Page<CaseCenterIndex> items = caseRepository.search(builder.build());
-        List<CaseCenterIndex> list = items.getContent();
-        for (CaseCenterIndex caseCenterIndex : list) {
+        SearchHits<CaseCenterIndex> searchHits = elasticsearchTemplate.search(builder.build(), CaseCenterIndex.class);
+        for (SearchHit<CaseCenterIndex> hit : searchHits) {
+            CaseCenterIndex caseCenterIndex = hit.getContent();
+            if (caseCenterIndex == null || caseCenterIndex.getUsecase() == null) continue;
             UsecaseVo usecaseVo = new UsecaseVo();
             BeanUtils.copyProperties(caseCenterIndex.getUsecase(), usecaseVo);
             usecaseVo.setId(caseCenterIndex.getId());
@@ -178,9 +208,10 @@ public class UsecaseSearchImpl implements UsecaseSearchService{
                 "usecase.directory",
                 "usecase.headImage");
         builder.withFilter(boolQuery);
-        Page<CaseCenterIndex> items = caseRepository.search(builder.build());
-        List<CaseCenterIndex> list = items.getContent();
-        for (CaseCenterIndex caseCenterIndex : list) {
+        SearchHits<CaseCenterIndex> searchHits = elasticsearchTemplate.search(builder.build(), CaseCenterIndex.class);
+        for (SearchHit<CaseCenterIndex> hit : searchHits) {
+            CaseCenterIndex caseCenterIndex = hit.getContent();
+            if (caseCenterIndex == null || caseCenterIndex.getUsecase() == null) continue;
             UsecaseVo usecaseVo = new UsecaseVo();
             BeanUtils.copyProperties(caseCenterIndex.getUsecase(), usecaseVo);
             usecaseVo.setId(caseCenterIndex.getId());
@@ -188,54 +219,6 @@ public class UsecaseSearchImpl implements UsecaseSearchService{
             result.add(usecaseVo);
         }
         return result;
-    }
-
-
-    private class CaseSearchResultMapper implements SearchResultMapper {
-        @Override
-        public <T> AggregatedPage<T> mapResults(SearchResponse response, Class<T> clazz, Pageable pageable) {
-
-            List<CaseSearchResult> list = new ArrayList();
-            for (SearchHit hit : response.getHits()) {
-                if (response.getHits().getHits().length <= 0) {
-                    return null;
-                }
-                CaseSearchResult r = new CaseSearchResult();
-                r.setId(hit.getId());
-                r.setProjectId(((Map) hit.getSourceAsMap().get("usecase")).get("projectId").toString());
-                r.setTitle(((Map) hit.getSourceAsMap().get("usecase")).get("title").toString());
-                if (((Map) hit.getSourceAsMap().get("usecase")).containsKey("headImage")) {
-                    r.setHeadImage(((Map) hit.getSourceAsMap().get("usecase")).get("headImage").toString());
-                }
-                for (Map.Entry<String, HighlightField> hf : hit.getHighlightFields().entrySet()) {
-                    String[] values = toString(hf.getValue().getFragments());
-                    if ("usecase.title".equals(hf.getKey())) {
-                        r.setTitleFragment(values[0]);
-                    } else if ("usecase.content".equals(hf.getKey())) {
-                        r.setContentFragments(values);
-                    } else if ("usecase.sql.contents".equals(hf.getKey())) {
-                        r.setSqlContentFragments(values);
-                    } else if ("usecase.remote.content".equals(hf.getKey())) {
-                        r.setRemoteContentFragments(values);
-                    }
-                }
-                list.add(r);
-            }
-            return new AggregatedPageImpl<T>((List<T>) list);
-        }
-
-        @Override
-        public <T> T mapSearchHit(SearchHit searchHit, Class<T> aClass) {
-            return null;
-        }
-
-        private String[] toString(Text[] texts) {
-            String[] result = new String[texts.length];
-            for (int i = 0; i < texts.length; i++) {
-                result[i] = texts[i].string();
-            }
-            return result;
-        }
     }
 
 }

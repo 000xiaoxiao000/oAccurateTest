@@ -9,7 +9,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 /**
  * 用例中心索引
  */
-@Document(indexName = "case_center", type = "doc", shards = 2)
+@Document(indexName = "case_center", shards = 2)
 public class CaseCenterIndex implements StandardDate {
     @Id
     private String id;

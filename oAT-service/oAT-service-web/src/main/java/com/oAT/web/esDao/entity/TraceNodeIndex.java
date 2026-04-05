@@ -10,7 +10,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
-@Document(indexName = "trace_node", type = "doc", shards = 2)
+@Document(indexName = "trace_node", shards = 2)
 public class TraceNodeIndex implements StandardDate, Serializable {
     @Id
     private String id;

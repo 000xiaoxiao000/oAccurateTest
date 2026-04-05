@@ -2,7 +2,6 @@ package com.oAT.web.common;
 
 import com.oAT.web.common.compare.WildcardMatcher;
 import org.springframework.util.Assert;
-import sun.misc.IOUtils;
 
 import java.io.Closeable;
 import java.io.File;
@@ -105,11 +104,8 @@ public class ZipFileVisit implements Closeable{
         }
 
         public byte[] getContent() throws IOException {
-            InputStream input = zipFile.getInputStream(entry);
-            try {
-                return IOUtils.readFully(input, -1, false);
-            } finally {
-                input.close();
+            try (InputStream input = zipFile.getInputStream(entry)) {
+                return input.readAllBytes();
             }
         }
     }

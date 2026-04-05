@@ -8,7 +8,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import java.io.Serializable;
 import java.util.Date;
 
-@Document(indexName = "coverage_report", type = "doc", shards = 2)
+@Document(indexName = "coverage_report", shards = 2)
 public class CoverageReportIndex implements Serializable {
     @Id
     private String id;

@@ -9,7 +9,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 /**
  * 静态源码数据索引
  */
-@Document(indexName = "static_source_info", type = "doc", shards = 2)
+@Document(indexName = "static_source_info", shards = 2)
 public class StaticSourceInfo implements StandardDate {
     @Id
     private String id;

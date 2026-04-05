@@ -32,9 +32,6 @@ public class CommonControl implements ErrorController{
         }
     }
 
-    @Override
-    public String getErrorPath() {
-        return ERROR_PATH;
-    }
+    // Spring Boot 2.7+: getErrorPath() 已废弃，通过配置 server.error.path 指定错误路径
 
 }

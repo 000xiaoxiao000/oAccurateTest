@@ -36,6 +36,7 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -47,7 +48,9 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.elasticsearch.search.sort.SortOrder;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.query.DeleteQuery;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.query.NativeSearchQuery;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.SourceFilter;
 import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
@@ -1803,11 +1806,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         addRangeQuery(boolQuery, "methodRate", minMethodRate, maxMethodRate);
         addRangeQuery(boolQuery, "totalComplexity", minComplexity, maxComplexity);
 
-        NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
+        NativeSearchQuery query = new NativeSearchQueryBuilder()
                 .withQuery(boolQuery)
-                .withPageable(pageable);
+                .withPageable(pageable)
+                .build();
 
-        return classCoverageRepository.search(queryBuilder.build());
+        SearchHits<ClassCoverageIndex> searchHits = elasticsearchOperations.search(query, ClassCoverageIndex.class);
+        List<ClassCoverageIndex> content = searchHits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .collect(Collectors.toList());
+        return new org.springframework.data.domain.PageImpl<>(content, pageable, searchHits.getTotalHits());
     }
 
     private void addRangeQuery(BoolQueryBuilder boolQuery, String field, Number min, Number max) {
@@ -1861,7 +1869,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                     .withSort(SortBuilders.fieldSort("className").order(SortOrder.ASC))
                     .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE));
 
-            classPage = classCoverageRepository.search(queryBuilder.build());
+            SearchHits<ClassCoverageIndex> searchHits = elasticsearchOperations.search(queryBuilder.build(), ClassCoverageIndex.class);
+            List<ClassCoverageIndex> content = searchHits.getSearchHits().stream()
+                    .map(SearchHit::getContent)
+                    .collect(Collectors.toList());
+            classPage = new org.springframework.data.domain.PageImpl<>(content, PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE), searchHits.getTotalHits());
             for (ClassCoverageIndex cc : classPage.getContent()) {
                 String classFullName = cc.getClassName();
                 if (!classFullName.startsWith(prefix)) {
@@ -1880,7 +1892,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
                     .withSort(SortBuilders.fieldSort("className").order(SortOrder.ASC))
                     .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE));
 
-            classPage = classCoverageRepository.search(queryBuilder.build());
+            SearchHits<ClassCoverageIndex> searchHits2 = elasticsearchOperations.search(queryBuilder.build(), ClassCoverageIndex.class);
+            List<ClassCoverageIndex> content2 = searchHits2.getSearchHits().stream()
+                    .map(SearchHit::getContent)
+                    .collect(Collectors.toList());
+            classPage = new org.springframework.data.domain.PageImpl<>(content2, PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE), searchHits2.getTotalHits());
             for (ClassCoverageIndex cc : classPage.getContent()) {
                 String classFullName = cc.getClassName();
                 if (!classFullName.startsWith(prefix)) {
@@ -1985,8 +2001,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         }
         logger.info("Deleting coverage report: {}", reportId);
 
-        DeleteQuery deleteQuery = new DeleteQuery();
-        deleteQuery.setQuery(QueryBuilders.termQuery("reportId", reportId));
+        NativeSearchQuery deleteQuery = new NativeSearchQueryBuilder()
+                .withQuery(QueryBuilders.termQuery("reportId", reportId))
+                .build();
         elasticsearchOperations.delete(deleteQuery, ClassCoverageIndex.class);
 
         coverageReportRepository.deleteById(reportId);

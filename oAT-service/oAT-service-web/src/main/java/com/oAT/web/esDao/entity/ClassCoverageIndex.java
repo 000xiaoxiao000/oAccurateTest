@@ -11,7 +11,7 @@ import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 
-@Document(indexName = "class_coverage", type = "doc", shards = 2)
+@Document(indexName = "class_coverage", shards = 2)
 public class ClassCoverageIndex implements Serializable {
     @Id
     @ExcelIgnore
