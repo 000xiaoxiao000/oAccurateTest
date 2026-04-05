@@ -17,7 +17,8 @@
      data-project-name="${projectName?html}"
      data-assistant-name="${mascotName?html}"
      data-mascot-primary="${mascotPrimary?html}"
-     data-ask-url="/p/${projectId?html}/AIInteractive/ask">
+     data-ask-url="/p/${projectId?html}/AIInteractive/ask"
+     data-ai-timeout="${aiTimeout}">
 
     <textarea id="aiWelcomeMessage" style="display: none;">${welcomeMessage?html}</textarea>
 

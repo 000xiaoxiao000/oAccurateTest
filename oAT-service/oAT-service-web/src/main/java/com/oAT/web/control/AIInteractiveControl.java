@@ -39,6 +39,7 @@ public class AIInteractiveControl {
         model.addAttribute("appNames", page.getAppNames());
         model.addAttribute("mascotHint", page.getMascotHint());
         model.addAttribute("quickLinks", page.getQuickLinks());
+        model.addAttribute("aiTimeout", page.getAiTimeout());
         Map<String, String> mascot = page.getMascot();
         if (mascot != null) {
             model.addAllAttributes(mascot);

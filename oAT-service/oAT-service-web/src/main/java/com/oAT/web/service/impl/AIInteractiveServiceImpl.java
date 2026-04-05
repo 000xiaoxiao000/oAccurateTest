@@ -17,6 +17,7 @@ import com.oAT.web.service.entity.UserVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -55,6 +56,9 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     @Autowired(required = false)
     private AgentDataProvider agentDataProvider;
 
+    @Value("${ai.llm.timeout:120}")
+    private int aiTimeout;
+
     @Override
     public AIInteractivePageVo buildPage(String projectId, UserVo user) {
         ProjectVo project = projectService.getProject(projectId);
@@ -74,6 +78,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         page.setMascotHint(buildMascotHint(project, apps));
         page.setQuickLinks(buildQuickLinks(projectId, apps, "overview"));
         page.setMascot(mascot);
+        page.setAiTimeout(aiTimeout);
         return page;
     }
 
