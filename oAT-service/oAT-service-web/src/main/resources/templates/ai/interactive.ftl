@@ -198,6 +198,7 @@
                             <button type="button" id="aiImageUploadBtn" class="ai-toolbar-btn" title="上传图片">
                                 <i class="image icon"></i>
                                 <img class="ai-image-preview" alt="preview">
+                                <span class="ai-image-remove-btn" title="移除图片"><i class="close icon"></i></span>
                             </button>
                             <button type="button" id="aiVoiceRecordBtn" class="ai-toolbar-btn" title="语音输入">
                                 <i class="microphone icon"></i>
