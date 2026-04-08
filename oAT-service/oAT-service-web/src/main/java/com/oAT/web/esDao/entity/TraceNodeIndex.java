@@ -20,7 +20,7 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     private String traceNodeId;
     @Field(type = FieldType.Keyword)
     private String appId;
-    @Field(type = FieldType.Date, format = {})
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
     @Field(type = FieldType.Keyword)
     private String type;

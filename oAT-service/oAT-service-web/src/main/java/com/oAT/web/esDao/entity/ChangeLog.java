@@ -9,7 +9,7 @@ import java.util.Date;
 public class ChangeLog implements Serializable,StandardDate {
     @Field(type = FieldType.Keyword)
     private String userId;
-    @Field(type = FieldType.Date, format = {})
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date time;
     @Field(type = FieldType.Keyword)
     private String type;

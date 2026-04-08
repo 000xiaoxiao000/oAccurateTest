@@ -18,9 +18,9 @@ public class StaticSourceInfo implements StandardDate {
     private String appId;
     @Field(type = FieldType.Keyword)
     private String type;
-    @Field(type = FieldType.Keyword)
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
-    @Field(type = FieldType.Keyword)
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
 
     // 实体对象

@@ -3,6 +3,7 @@ package com.oAT.web.service.impl;
 import com.oAT.web.esDao.SystemRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.entity.*;
+import com.oAT.web.esDao.entity.StandardDate;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.exceptions.DirtyDataException;
 import com.oAT.web.service.AppService;
@@ -20,7 +21,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-public class AppServiceImpl implements AppService {
+public class AppServiceImpl implements AppService, StandardDate {
 
     @Autowired
     private SystemRepository systemRepository;
@@ -250,7 +251,7 @@ public class AppServiceImpl implements AppService {
             int i = 0;
             Timestamp ts1 = Timestamp.valueOf(dateTime);
             // Convert Date to String before splitting
-            String timeStr = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(c.getTime());
+            String timeStr = new SimpleDateFormat(StandardDate.dateFormat).format(c.getTime());
             Timestamp ts2 = Timestamp.valueOf(timeStr.split(",")[0]);
             if (c.getUserId().equals(userId) && c.getContent().equals(content) && ts1.equals(ts2)) {
                 comments1.remove(i);

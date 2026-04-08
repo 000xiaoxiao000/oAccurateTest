@@ -22,9 +22,9 @@ public class SystemSnapshot implements Serializable, StandardDate {
     @Id
     private String id;
 
-    @Field(type = FieldType.Date, format = {})
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
-    @Field(type = FieldType.Date, format = {})
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
     @Field(type = FieldType.Keyword)
     private String projectId;
@@ -77,7 +77,7 @@ public class SystemSnapshot implements Serializable, StandardDate {
     /**
      * 版本最后变更时间
      */
-    @Field(type = FieldType.Date, format = {})
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date versionLastUpdate;
     /**
      * 标签组
