@@ -47,8 +47,6 @@ import com.oAT.web.service.ResourceService;
 import com.oAT.web.esDao.entity.MethodCoverageExportVo;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
-import org.elasticsearch.search.sort.SortBuilders;
-import org.elasticsearch.search.sort.SortOrder;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -58,7 +56,7 @@ import org.springframework.data.elasticsearch.core.query.SourceFilter;
 import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 
 @Service
-public class CoverageServiceImpl implements CoverageService, InitializingBean {
+public class CoverageServiceImpl implements CoverageService, InitializingBean, StandardDate {
     private static final Logger logger = LoggerFactory.getLogger(CoverageServiceImpl.class);
 
     private final Map<String, List<String>> zipEntryCache = new ConcurrentHashMap<>();
@@ -1009,12 +1007,18 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
     @Override
     public boolean hasNewerData(String appId, String lastProcessedTime) {
         if (lastProcessedTime == null) return true;
-        String queryTime = lastProcessedTime;
-        if (queryTime.length() == 19) {
-            queryTime += ",000";
+        try {
+            String queryTime = lastProcessedTime;
+            if (queryTime.length() == 19) {
+                queryTime += ",000";
+            }
+            Date createTime = parse(queryTime);
+            Page<TraceNodeIndex> page = traceNodeRepository.findByAppIdAndCreateTimeGreaterThanOrderByCreateTimeAsc(appId, createTime, PageRequest.of(0, 1));
+            return page.getTotalElements() > 0;
+        } catch (Exception e) {
+            logger.warn("Parse lastProcessedTime failed: {}", lastProcessedTime, e);
+            return true;
         }
-        Page<TraceNodeIndex> page = traceNodeRepository.findByAppIdAndCreateTimeGreaterThanOrderByCreateTimeAsc(appId, queryTime, PageRequest.of(0, 1));
-        return page.getTotalElements() > 0;
     }
 
     @Override
@@ -1107,10 +1111,10 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         }
         Date updateTime = snapshot.getUpdateTime();
         if (updateTime != null) {
-            return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(updateTime);
+            return new SimpleDateFormat(StandardDate.dateFormat).format(updateTime);
         }
         Date createTime = snapshot.getCreateTime();
-        return createTime == null ? "" : new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(createTime);
+        return createTime == null ? "" : new SimpleDateFormat(StandardDate.dateFormat).format(createTime);
     }
 
     private List<String> parseSnapshotIds(String rawSnapshotIds) {

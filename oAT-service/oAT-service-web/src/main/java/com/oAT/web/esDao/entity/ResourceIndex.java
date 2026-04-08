@@ -17,9 +17,9 @@ public class ResourceIndex implements Serializable, StandardDate {
     @Field(type = FieldType.Keyword)
     private long contentLength;// 内容大小
     private int referenceCount;// 引用计数
-    @Field(type = FieldType.Date, format = {})
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
-    @Field(type = FieldType.Date, format = {})
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
 
     public ResourceIndex() {

@@ -20,7 +20,7 @@ public class CoverageReportIndex implements Serializable {
     private String repoBranch;
     @Field(type = FieldType.Keyword)
     private String repoCommitId;
-    @Field(type = FieldType.Date)
+    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
 
     @Field(type = FieldType.Keyword)
