@@ -398,6 +398,11 @@
                 if (!job) {
                     clearInterval(interval);
                     $('#jobStatus').text('找不到任务信息');
+                    $('#jobProgress').addClass('error');
+                    $('#btnCloseModal').off('click').on('click', function () {
+                        $('#jobModal').modal('hide');
+                        location.reload();
+                    });
                     $('#btnCloseModal').removeClass('disabled').text('关闭');
                     return;
                 }
@@ -419,14 +424,21 @@
                 if (job.state === 'finish') {
                     clearInterval(interval);
                     $('#jobStatus').text('生成成功，页面刷新中...');
+                    $('#btnCloseModal').off('click').on('click', function () {
+                        $('#jobModal').modal('hide');
+                        location.reload();
+                    });
+                    $('#btnCloseModal').removeClass('disabled').text('完成');
                     setTimeout(function () { location.reload(); }, 1200);
                 } else if (job.state === 'error') {
                     clearInterval(interval);
                     $('#jobProgress').addClass('error');
                     $('#jobStatus').text(progress.name || '生成失败');
-                    $('#btnCloseModal').removeClass('disabled').text('关闭').off('click').on('click', function () {
+                    $('#btnCloseModal').off('click').on('click', function () {
                         $('#jobModal').modal('hide');
+                        location.reload();
                     });
+                    $('#btnCloseModal').removeClass('disabled').text('关闭');
                 }
             });
         }, 1000);
