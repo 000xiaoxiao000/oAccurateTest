@@ -328,6 +328,14 @@ public class VersionItemControl {
         return "/version/appList";
     }
 
+    // 兼容旧路由：/p/{projectId}/{appId}/version/appList
+    @RequestMapping("{appId}/version/appList")
+    public String openAppListLegacyView(@PathVariable String projectId, @PathVariable String appId, Model model) {
+        List<AppVo> list = appService.getAppList(projectId);
+        model.addAttribute("apps", list);
+        return "/version/appList";
+    }
+
     // 打开版本比对页面
     @RequestMapping("{appId}/version/compare")
     public String openCompareView(@PathVariable String projectId, @PathVariable String appId, Model model) {
