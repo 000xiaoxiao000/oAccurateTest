@@ -1,6 +1,5 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
@@ -22,9 +21,9 @@ public class ClientSession implements Serializable {
     private String configs;
 
     /**
-     * 登录时间 (毫秒)
+     * 登录时间 (格式化的字符串)
     */
-    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
+    @Field(type = FieldType.Keyword)
     private String loginTime;
 
     /**

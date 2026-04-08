@@ -1,10 +1,11 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
+
+import java.util.Date;
 
 /**
  * 静态源码数据索引
@@ -17,10 +18,10 @@ public class StaticSourceInfo implements StandardDate {
     private String appId;
     @Field(type = FieldType.Keyword)
     private String type;
-    @Field(type = FieldType.Date, pattern = dateFormat, format = DateFormat.custom)
-    private String createTime;
-    @Field(type = FieldType.Date, pattern = dateFormat, format = DateFormat.custom)
-    private String updateTime;
+    @Field(type = FieldType.Keyword)
+    private Date createTime;
+    @Field(type = FieldType.Keyword)
+    private Date updateTime;
 
     // 实体对象
     @Field(type = FieldType.Object)
@@ -32,8 +33,8 @@ public class StaticSourceInfo implements StandardDate {
     public StaticSourceInfo(StaticSourceClassInfo classInfo) {
         this.classInfo = classInfo;
         this.type = "classInfo";
-        createTime = currentTimeToString();
-        updateTime = currentTimeToString();
+        createTime = new Date();
+        updateTime = new Date();
     }
 
     public String getId() {
@@ -60,19 +61,19 @@ public class StaticSourceInfo implements StandardDate {
         this.type = type;
     }
 
-    public String getCreateTime() {
+    public Date getCreateTime() {
         return createTime;
     }
 
-    public void setCreateTime(String createTime) {
+    public void setCreateTime(Date createTime) {
         this.createTime = createTime;
     }
 
-    public String getUpdateTime() {
+    public Date getUpdateTime() {
         return updateTime;
     }
 
-    public void setUpdateTime(String updateTime) {
+    public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
     }
 
