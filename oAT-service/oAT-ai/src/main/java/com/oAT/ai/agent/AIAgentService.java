@@ -1,5 +1,6 @@
 package com.oAT.ai.agent;
 
+import com.oAT.agent.AISelfLearningService;
 import com.oAT.ai.agent.cache.RedisCacheService;
 import com.oAT.ai.agent.cache.SemanticCacheService;
 import com.oAT.ai.agent.tools.*;
@@ -49,7 +50,7 @@ public class AIAgentService {
     private final SemanticCacheService semanticCacheService;
 
     /** 智能工具推荐器 */
-    private final ToolRecommender toolRecommender;
+    private final com.oAT.ai.agent.ToolRecommender toolRecommender;
 
     /** 动态LLM切换器 */
     private final DynamicLLMSwitcher llmSwitcher;
@@ -70,7 +71,7 @@ public class AIAgentService {
 
         // 初始化增强服务
         this.semanticCacheService = new SemanticCacheService(0.85, 500, null);
-        this.toolRecommender = new ToolRecommender();
+        this.toolRecommender = new com.oAT.ai.agent.ToolRecommender();
         this.llmSwitcher = new DynamicLLMSwitcher(aiConfig);
         this.conversationMemory = new ConversationMemoryService();
 
@@ -176,7 +177,7 @@ public class AIAgentService {
             }
 
             // 2. 智能工具推荐（日志记录，供后续分析）
-            ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
+            com.oAT.ai.agent.ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
             logger.debug("Tool recommendation: primary={}, intent={}, confidence={}",
                     recommendation.primaryTool, recommendation.detectedIntent, recommendation.confidence);
 
@@ -576,7 +577,7 @@ public class AIAgentService {
     // ==================== 公开访问接口 ====================
 
     public SemanticCacheService getSemanticCacheService() { return semanticCacheService; }
-    public ToolRecommender getToolRecommender() { return toolRecommender; }
+    public com.oAT.ai.agent.ToolRecommender getToolRecommender() { return toolRecommender; }
     public DynamicLLMSwitcher getLlmSwitcher() { return llmSwitcher; }
     public ConversationMemoryService getConversationMemory() { return conversationMemory; }
 
