@@ -87,7 +87,7 @@ public class ResourceServiceImpl implements ResourceService, InitializingBean{
 
             // 修改引用数
             Document doc = Document.create();
-            doc.put("updateTime", new ResourceIndex().currentTimeToString());
+            doc.put("updateTime", new java.util.Date());
             doc.put("referenceCount", oldResource.getReferenceCount() + count);
 
             UpdateQuery updateQuery = UpdateQuery.builder(id)

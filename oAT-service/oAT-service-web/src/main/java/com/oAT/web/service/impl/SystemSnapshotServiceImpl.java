@@ -59,16 +59,16 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         if (snapshot.getDirectory() == null) {
             snapshot.setDirectory("root");
         }
-        snapshot.setUpdateTime(snapshot.currentTimeToString());
-        snapshot.setCreateTime(snapshot.currentTimeToString());
+        snapshot.setUpdateTime(new Date());
+        snapshot.setCreateTime(new Date());
         snapshot.setVersion("1.0");
-        snapshot.setVersionLastUpdate(snapshot.currentTimeToString());
+        snapshot.setVersionLastUpdate(new Date());
         snapshot.setPrincipals(new String[]{userId});
         snapshot.setProjectId(projectId);
 
         // 添加创建日志
         ChangeLog log = new ChangeLog();
-        log.setTime(log.currentTimeToString());
+        log.setTime(new Date());
         log.setType("create");
         log.setContent("创建当前快照");
         log.setUserId(userId);
@@ -139,7 +139,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         }
         if (source.getVersion() != null) {
             oldSnapshot.setVersion(source.getVersion());
-            oldSnapshot.setVersionLastUpdate(oldSnapshot.currentTimeToString());
+            oldSnapshot.setVersionLastUpdate(new Date());
         }
         if (source.getVersionCycle() != null) {
             oldSnapshot.setVersionCycle(source.getVersionCycle());
@@ -153,7 +153,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         if (source.getTopicImage() != null) {
             oldSnapshot.setTopicImage(source.getTopicImage());
         }
-        oldSnapshot.setUpdateTime(oldSnapshot.currentTimeToString());
+        oldSnapshot.setUpdateTime(new Date());
         return repository.save(oldSnapshot);
     }
 

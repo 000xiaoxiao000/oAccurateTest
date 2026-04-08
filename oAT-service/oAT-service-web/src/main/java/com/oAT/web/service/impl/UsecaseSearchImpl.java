@@ -168,7 +168,7 @@ public class UsecaseSearchImpl implements UsecaseSearchService{
             UsecaseVo usecaseVo = new UsecaseVo();
             BeanUtils.copyProperties(caseCenterIndex.getUsecase(), usecaseVo);
             usecaseVo.setId(caseCenterIndex.getId());
-            usecaseVo.setUpdateTime(caseCenterIndex.parse(caseCenterIndex.getUpdateTime()));
+            usecaseVo.setUpdateTime(caseCenterIndex.getUpdateTime());
             TableToUsecase tableToUsecase = new TableToUsecase();
             tableToUsecase.setTable(tableName);
             tableToUsecase.setDatabase(databaseName);
@@ -215,7 +215,7 @@ public class UsecaseSearchImpl implements UsecaseSearchService{
             UsecaseVo usecaseVo = new UsecaseVo();
             BeanUtils.copyProperties(caseCenterIndex.getUsecase(), usecaseVo);
             usecaseVo.setId(caseCenterIndex.getId());
-            usecaseVo.setUpdateTime(caseCenterIndex.parse(caseCenterIndex.getUpdateTime()));
+            usecaseVo.setUpdateTime(caseCenterIndex.getUpdateTime());
             result.add(usecaseVo);
         }
         return result;

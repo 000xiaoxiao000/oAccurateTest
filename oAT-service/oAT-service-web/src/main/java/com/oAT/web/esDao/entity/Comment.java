@@ -4,12 +4,13 @@ import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
+import java.util.Date;
 
 public class Comment implements Serializable, StandardDate {
     @Field(type = FieldType.Keyword)
     private String userId;
     @Field(type = FieldType.Keyword)
-    private String time;
+    private Date time;
     @Field(type = FieldType.Keyword)
     private String content;
     @Field(type = FieldType.Object)
@@ -25,11 +26,11 @@ public class Comment implements Serializable, StandardDate {
         this.userId = userId;
     }
 
-    public String getTime() {
+    public Date getTime() {
         return time;
     }
 
-    public void setTime(String time) {
+    public void setTime(Date time) {
         this.time = time;
     }
 

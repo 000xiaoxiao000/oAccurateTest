@@ -49,7 +49,7 @@ public class SystemLogServiceImpl implements SystemLogService{
 
     private SystemLogVo convert(SystemIndex index) {
         SystemLogVo logVo = new SystemLogVo();
-        logVo.setCreateTime(index.parse(index.getCreateTime()));
+        logVo.setCreateTime(index.getCreateTime());
         logVo.setId(index.getId());
         BeanUtils.copyProperties(index.getSystemLog(), logVo);
         return logVo;

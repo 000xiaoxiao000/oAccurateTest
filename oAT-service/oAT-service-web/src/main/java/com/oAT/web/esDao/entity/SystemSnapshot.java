@@ -1,13 +1,13 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.stream.Stream;
 
 /**
@@ -22,10 +22,10 @@ public class SystemSnapshot implements Serializable, StandardDate {
     @Id
     private String id;
 
-    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
-    private String createTime;
-    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
-    private String updateTime;
+    @Field(type = FieldType.Date, format = {})
+    private Date createTime;
+    @Field(type = FieldType.Date, format = {})
+    private Date updateTime;
     @Field(type = FieldType.Keyword)
     private String projectId;
 
@@ -77,8 +77,8 @@ public class SystemSnapshot implements Serializable, StandardDate {
     /**
      * 版本最后变更时间
      */
-    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
-    private String versionLastUpdate;
+    @Field(type = FieldType.Date, format = {})
+    private Date versionLastUpdate;
     /**
      * 标签组
      */
@@ -136,19 +136,19 @@ public class SystemSnapshot implements Serializable, StandardDate {
         this.id = id;
     }
 
-    public String getCreateTime() {
+    public Date getCreateTime() {
         return createTime;
     }
 
-    public void setCreateTime(String createTime) {
+    public void setCreateTime(Date createTime) {
         this.createTime = createTime;
     }
 
-    public String getUpdateTime() {
+    public Date getUpdateTime() {
         return updateTime;
     }
 
-    public void setUpdateTime(String updateTime) {
+    public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
     }
 
@@ -232,11 +232,11 @@ public class SystemSnapshot implements Serializable, StandardDate {
         this.versionCycle = versionCycle;
     }
 
-    public String getVersionLastUpdate() {
+    public Date getVersionLastUpdate() {
         return versionLastUpdate;
     }
 
-    public void setVersionLastUpdate(String versionLastUpdate) {
+    public void setVersionLastUpdate(Date versionLastUpdate) {
         this.versionLastUpdate = versionLastUpdate;
     }
 

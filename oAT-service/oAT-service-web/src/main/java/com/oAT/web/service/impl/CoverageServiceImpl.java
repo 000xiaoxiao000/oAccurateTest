@@ -23,6 +23,7 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -32,6 +33,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -1102,10 +1104,12 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         if (snapshot == null) {
             return "";
         }
-        if (StringUtils.hasText(snapshot.getUpdateTime())) {
-            return snapshot.getUpdateTime();
+        Date updateTime = snapshot.getUpdateTime();
+        if (updateTime != null) {
+            return new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(updateTime);
         }
-        return snapshot.getCreateTime() == null ? "" : snapshot.getCreateTime();
+        Date createTime = snapshot.getCreateTime();
+        return createTime == null ? "" : new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(createTime);
     }
 
     private List<String> parseSnapshotIds(String rawSnapshotIds) {
@@ -1882,8 +1886,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
                     .withQuery(boolQuery)
                     .withSourceFilter(sourceFilter)
-                    .withSort(SortBuilders.fieldSort("className").order(SortOrder.ASC))
-                    .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE));
+                    .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE, Sort.by(new Sort.Order(Sort.Direction.ASC, "className"))));
 
             SearchHits<ClassCoverageIndex> searchHits = elasticsearchOperations.search(queryBuilder.build(), ClassCoverageIndex.class);
             List<ClassCoverageIndex> content = searchHits.getSearchHits().stream()
@@ -1905,8 +1908,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
             NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
                     .withQuery(boolQuery)
                     .withSourceFilter(sourceFilter)
-                    .withSort(SortBuilders.fieldSort("className").order(SortOrder.ASC))
-                    .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE));
+                    .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE, Sort.by(new Sort.Order(Sort.Direction.ASC, "className"))));
 
             SearchHits<ClassCoverageIndex> searchHits2 = elasticsearchOperations.search(queryBuilder.build(), ClassCoverageIndex.class);
             List<ClassCoverageIndex> content2 = searchHits2.getSearchHits().stream()

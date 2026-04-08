@@ -96,7 +96,7 @@ public class ProjectServiceImpl implements ProjectService {
         }
         BeanUtils.copyProperties(groupParam, labelGroup);
         index.setLabelGroup(labelGroup);
-        index.setUpdateTime(index.currentTimeToString());
+        index.setUpdateTime(new java.util.Date());
         systemRepository.save(index);
         return convertLable(index);
     }
@@ -158,7 +158,7 @@ public class ProjectServiceImpl implements ProjectService {
     private ProjectMemberVo convertProjectMember(SystemIndex index) {
         ProjectMemberVo vo = new ProjectMemberVo();
         vo.setId(index.getId());
-        vo.setCreateTime(index.parse(index.getCreateTime()));
+        vo.setCreateTime(index.getCreateTime());
         vo.setProjectId(index.getProjectMember().getProjectId());
         vo.setMemberId(index.getProjectMember().getMemberId());
 
@@ -169,7 +169,7 @@ public class ProjectServiceImpl implements ProjectService {
     private LabelGroupVo convertLable(SystemIndex index) {
         LabelGroupVo vo = new LabelGroupVo();
         vo.setId(index.getId());
-        vo.setUpdateTime(index.parse(index.getUpdateTime()));
+        vo.setUpdateTime(index.getUpdateTime());
         BeanUtils.copyProperties(index.getLabelGroup(), vo);
         return vo;
     }
@@ -274,7 +274,7 @@ public class ProjectServiceImpl implements ProjectService {
         Optional<SystemIndex> o = systemRepository.findById(projectMemberId);
         Assert.isTrue(o.isPresent(), "指定项目下不存在该用户，id=" + projectMemberId);
         SystemIndex index = o.get();
-        index.setUpdateTime(index.currentTimeToString());
+        index.setUpdateTime(new java.util.Date());
         index.getProjectMember().setRole(role.toString());
         systemRepository.save(index);
     }
@@ -287,7 +287,7 @@ public class ProjectServiceImpl implements ProjectService {
         Project project = o.get().getProject();
         project.setName(projectVo.getName());
         project.setDescribe(projectVo.getDescribe());
-        index.setUpdateTime(index.currentTimeToString());
+        index.setUpdateTime(new java.util.Date());
         index = systemRepository.save(o.get());
         return convertProject(index);
     }

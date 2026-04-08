@@ -1,12 +1,10 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
-import java.text.SimpleDateFormat;
 import java.util.Date;
 
 @Document(indexName = "system", shards = 2)
@@ -19,11 +17,11 @@ public class SystemIndex implements java.io.Serializable, StandardDate {
     @Field(type = FieldType.Keyword)
     private String type;
 
-    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
-    private String createTime;
+    @Field(type = FieldType.Date, format = {})
+    private Date createTime;
 
-    @Field(type = FieldType.Date, pattern = DATE_FORMAT, format = DateFormat.custom)
-    private String updateTime;
+    @Field(type = FieldType.Date, format = {})
+    private Date updateTime;
 
     //实体对象=================================================================
     @Field(type = FieldType.Object)
@@ -87,15 +85,15 @@ public class SystemIndex implements java.io.Serializable, StandardDate {
 
     private SystemIndex(String type) {
         this.type = type;
-        createTime = new SimpleDateFormat(DATE_FORMAT).format(new Date());
-        updateTime = new SimpleDateFormat(DATE_FORMAT).format(new Date());
+        createTime = new Date();
+        updateTime = new Date();
     }
 
-    public String getCreateTime() {
+    public Date getCreateTime() {
         return createTime;
     }
 
-    public void setCreateTime(String createTime) {
+    public void setCreateTime(Date createTime) {
         this.createTime = createTime;
     }
 
@@ -107,11 +105,11 @@ public class SystemIndex implements java.io.Serializable, StandardDate {
         this.id = id;
     }
 
-    public String getUpdateTime() {
+    public Date getUpdateTime() {
         return updateTime;
     }
 
-    public void setUpdateTime(String updateTime) {
+    public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
     }
 

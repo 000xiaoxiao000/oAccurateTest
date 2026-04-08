@@ -186,7 +186,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             }
             vo.setFileExist(file.exists());
         }
-        vo.setCreateTime(index.parse(index.getCreateTime()));
+        vo.setCreateTime(index.getCreateTime());
         // Use a safe, slightly broader check when called without pre-fetched reports
         List<CoverageReportIndex> reports = coverageReportRepository.findByAppId(vo.getAppId());
         return convertVersionItem(index, reports);
@@ -209,7 +209,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             }
             vo.setFileExist(file.exists());
         }
-        vo.setCreateTime(index.parse(index.getCreateTime()));
+        vo.setCreateTime(index.getCreateTime());
 
         // Normalize version and commit for safe comparison
         String version = vo.getVersionNumber() == null ? null : vo.getVersionNumber().trim();
@@ -748,7 +748,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         Assert.isTrue(optional.isPresent(), String.format("找不到id=%s的比对报告", compareId));
         VersionCenterIndex index = optional.get();
         VersionCompareReport report = index.getCompareReport();
-        report.setCreateTime(index.parse(index.getCreateTime()));
+        report.setCreateTime(index.getCreateTime());
         return report;
     }
 
@@ -766,7 +766,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             report.setGitBranch(index.getCompareReport().getGitBranch());
             report.setGitOldCommit(index.getCompareReport().getGitOldCommit());
             report.setGitNewCommit(index.getCompareReport().getGitNewCommit());
-            report.setCreateTime(index.parse(index.getCreateTime()));
+            report.setCreateTime(index.getCreateTime());
             // populate counts if available
             VersionCompareReport r = index.getCompareReport();
             if (r != null) {

@@ -77,7 +77,7 @@ public class SystemSnapshotControl {
             if ("name".equals(sort)) {
                 return a.getTitle().compareToIgnoreCase(b.getTitle());
             } else {// 默认排序 updateTime
-                return a.parse(a.getVersionLastUpdate()).compareTo(b.parse(b.getVersionLastUpdate()));
+                return a.getVersionLastUpdate().compareTo(b.getVersionLastUpdate());
             }
         }).collect(Collectors.toList());
 
@@ -179,22 +179,22 @@ public class SystemSnapshotControl {
                 , v2) -> v1));
 
         List<DynamicItem> dynamics = Arrays.stream(snapshot.getChangeLogs()).map(a -> {
-            String time = DateUtil.timeDifference(a.parse(a.getTime()));
+            String time = DateUtil.timeDifference(a.getTime());
             String title = userMap.get(a.getUserId()).getName();
             DynamicItem dynamicItem = new DynamicItem(time, title, a.getType());
             dynamicItem.setDescribe(a.getContent());
-            dynamicItem.setDate(a.parse(a.getTime()));
+            dynamicItem.setDate(a.getTime());
             return dynamicItem;
         }).collect(Collectors.toList());
 
         List<DynamicItem> comments = Arrays.stream(snapshot.getComments()).map(a -> {
-            String time = DateUtil.timeDifference(a.parse(a.getTime()));
+            String time = DateUtil.timeDifference(a.getTime());
             String title = userMap.get(a.getUserId()).getName();
             DynamicItem dynamicItem = new DynamicItem(time, title, "comment");
             dynamicItem.setDescribe(a.getContent());
-            dynamicItem.setDate(a.parse(a.getTime()));
+            dynamicItem.setDate(a.getTime());
             return dynamicItem;
-        }).collect(Collectors.toList());
+        }).toList();
 
         dynamics.addAll(comments);
         // 排序

@@ -105,7 +105,7 @@ public class UserServiceImpl implements UserService{
         Assert.isTrue(o.isPresent(), "指定用户不存在 id=" + userVo.getId());
         SystemIndex index = o.get();
         BeanUtils.copyProperties(userVo, index.getUser(), "password", "header");
-        index.setUpdateTime(index.currentTimeToString());
+        index.setUpdateTime(new java.util.Date());
         systemRepository.save(index);
     }
 
@@ -123,7 +123,7 @@ public class UserServiceImpl implements UserService{
         }
         index.getUser().setPassword(DigestUtils.
                 md5DigestAsHex(newPassword.getBytes(Charset.forName("UTF-8"))));
-        index.setUpdateTime(index.currentTimeToString());
+        index.setUpdateTime(new java.util.Date());
         systemRepository.save(index);
     }
 
@@ -131,8 +131,8 @@ public class UserServiceImpl implements UserService{
         UserVo userVo = new UserVo();
         // 拷贝基本属性
         userVo.setId(index.getId());
-        userVo.setUpdateTime(index.parse(index.getUpdateTime()));
-        userVo.setCreateTime(index.parse(index.getCreateTime()));
+        userVo.setUpdateTime(index.getUpdateTime());
+        userVo.setCreateTime(index.getCreateTime());
         BeanUtils.copyProperties(index.getUser(), userVo);
         return userVo;
     }

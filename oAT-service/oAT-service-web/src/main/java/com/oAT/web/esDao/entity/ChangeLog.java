@@ -1,22 +1,22 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
+import java.util.Date;
 
 public class ChangeLog implements Serializable,StandardDate {
     @Field(type = FieldType.Keyword)
     private String userId;
-    @Field(type = FieldType.Date, pattern = dateFormat, format = DateFormat.custom)
-    private String time;
+    @Field(type = FieldType.Date, format = {})
+    private Date time;
     @Field(type = FieldType.Keyword)
     private String type;
     @Field(type = FieldType.Text)
     private String content;
 
-    public ChangeLog(String userId, String time, String type, String content) {
+    public ChangeLog(String userId, Date time, String type, String content) {
         this.userId = userId;
         this.time = time;
         this.type = type;
@@ -34,11 +34,11 @@ public class ChangeLog implements Serializable,StandardDate {
         this.userId = userId;
     }
 
-    public String getTime() {
+    public Date getTime() {
         return time;
     }
 
-    public void setTime(String time) {
+    public void setTime(Date time) {
         this.time = time;
     }
 
