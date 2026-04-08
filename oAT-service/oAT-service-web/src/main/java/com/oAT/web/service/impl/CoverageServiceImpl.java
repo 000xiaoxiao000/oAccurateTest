@@ -180,6 +180,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         return coverageReportRepository.findById(reportId).orElse(null);
     }
 
+    @SuppressWarnings("deprecation")
     private String generateReportInternal(String appId, String versionNumber, String branch, String commitId,
                                         Integer reportType, String baseVersionNumber, String baseCommitId, Job<String> job) {
         if (job != null) job.getLogger().info("正在获取应用配置信息...");
@@ -1161,6 +1162,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private Map<String, List<Integer>> getCachedDiff(AppVo app, String oldCommit, String newCommit) {
         String cacheKey = app.getId() + ":" + oldCommit + ":" + newCommit;
         return diffCache.computeIfAbsent(cacheKey, k ->

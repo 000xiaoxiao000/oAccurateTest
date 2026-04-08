@@ -358,7 +358,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
                     if (!list.isEmpty()) {
                         index = list.get(0);
                         index.setClassInfo(classInfo);
-                        index.setUpdateTime(index.currentTimeToString());
+                        index.setUpdateTime(new Date());
                         stats.updatedCount++;
                     } else {
                         index = new StaticSourceInfo(classInfo);
