@@ -1,7 +1,7 @@
 package com.oAT.web.control;
 
 import com.oAT.ai.agent.AIAgentService;
-import com.oAT.ai.agent.AISelfLearningService;
+import com.oAT.agent.AISelfLearningService;
 import com.oAT.ai.agent.FeedbackPersistenceService;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.service.entity.AIFeedbackVo;
@@ -58,7 +58,7 @@ public class AIFeedbackControl {
 
             // 持久化到文件
             record = feedbackPersistence.submit(record);
-            
+
             // 触发自主学习（异步）
             if (aiAgentService != null) {
                 try {
@@ -72,10 +72,10 @@ public class AIFeedbackControl {
             }
 
             // 同时保留内存映射用于快速查询（兼容性）
-            
-            logger.info("Feedback persisted: id={}, type={}, rating={}", 
+
+            logger.info("Feedback persisted: id={}, type={}, rating={}",
                 record.getFeedbackId(), feedback.getFeedbackType(), feedback.getRating());
-            
+
             return new ResultNotified<>(true, "感谢您的反馈！反馈ID: " + record.getFeedbackId());
         } catch (Exception e) {
             logger.error("Failed to submit feedback", e);
@@ -94,14 +94,14 @@ public class AIFeedbackControl {
             Map<String, Object> updates = new HashMap<>();
             updates.put("rating", helpful ? 5 : 1);
             updates.put("feedbackType", helpful ? "helpful" : "not_helpful");
-            
+
             boolean updated = feedbackPersistence.update(feedbackId, updates);
             if (!updated) {
                 return new ResultNotified<>(false, "反馈记录不存在");
             }
-            
+
             logger.info("Quick rate: id={}, helpful={}", feedbackId, helpful);
-            
+
             return new ResultNotified<>(true, "感谢评分！");
         } catch (Exception e) {
             logger.error("Failed to rate feedback", e);
@@ -127,7 +127,7 @@ public class AIFeedbackControl {
                     }
                 } catch (Exception ignored) {}
             }
-            
+
             return new ResultNotified<>(true, "获取反馈统计成功", (Serializable) stats);
         } catch (Exception e) {
             logger.error("Failed to get feedback stats", e);
@@ -144,7 +144,7 @@ public class AIFeedbackControl {
         try {
             List<FeedbackPersistenceService.FeedbackRecord> myFeedbacks =
                     feedbackPersistence.getUserFeedbacks(userId, 50);
-            
+
             // 转换为前端友好的格式
             List<Map<String, Object>> result = new ArrayList<>();
             for (FeedbackPersistenceService.FeedbackRecord fb : myFeedbacks) {
@@ -159,7 +159,7 @@ public class AIFeedbackControl {
                 item.put("usedTools", fb.getUsedTools());
                 result.add(item);
             }
-            
+
             return new ResultNotified<>(true, "获取反馈历史成功", (Serializable) (Serializable) result);
         } catch (Exception e) {
             logger.error("Failed to get user feedback", e);
