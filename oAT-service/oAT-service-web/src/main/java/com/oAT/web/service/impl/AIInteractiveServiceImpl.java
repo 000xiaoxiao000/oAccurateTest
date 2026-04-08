@@ -32,7 +32,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
     private static final Logger logger = LoggerFactory.getLogger(AIInteractiveServiceImpl.class);
 
-    private static final String[] MASCOT_NAMES = {"小准", "探探", "跃跃", "灵灵", "星仔", "阿AT"};
+    private static final String[] MASCOT_NAMES = {"知秋", "阿涌", "小溯", "言希", "跃链", "拾一"};
     private static final String[] MASCOT_ROLES = {"数据侦察员", "链路向导", "项目陪跑员", "交互分析官", "洞察助手"};
     private static final String[] MASCOT_MOODS = {"专注", "活跃", "机敏", "稳健", "可靠"};
     private static final String[] PRIMARY_COLORS = {"#5865f2", "#00b5ad", "#ff8a65", "#7e57c2", "#26a69a", "#42a5f5"};
@@ -84,6 +84,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
     @Override
     public AIInteractiveReplyVo ask(String projectId, UserVo user, String question, String pageContext, String imageData) {
+        long startTime = System.currentTimeMillis();
         ProjectVo project = projectService.getProject(projectId);
         List<AppVo> apps = loadApps(projectId);
         String cleanQuestion = question == null ? "" : question.trim();
@@ -101,6 +102,13 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         // 只使用 AI Agent (支持自主工具调用)
         String answer = callAIAgent(project, apps, user, cleanQuestion, contextSummary, imageData);
         reply.setAnswer(answer);
+
+        // 记录响应时间
+        long responseTime = System.currentTimeMillis() - startTime;
+        Map<String, Object> metadata = new HashMap<>();
+        metadata.put("responseTime", responseTime);
+        metadata.put("topic", topic);
+        reply.setMetadata(metadata);
 
         reply.setSuggestions(buildFollowUpSuggestions(apps, topic));
         reply.setQuickLinks(buildQuickLinks(projectId, apps, topic));

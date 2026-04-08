@@ -42,6 +42,14 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Spring Data Redis for distributed cache -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+            <version>2.7.18</version>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- SLF4J for logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -66,6 +74,7 @@
             <artifactId>langchain4j-open-ai</artifactId>
             <version>${langchain4j.version}</version>
         </dependency>
+
     </dependencies>
 
     <build>

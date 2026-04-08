@@ -1,6 +1,9 @@
 package com.oAT.ai.agent;
 
+import com.oAT.ai.agent.cache.RedisCacheService;
+import com.oAT.ai.agent.cache.SemanticCacheService;
 import com.oAT.ai.agent.tools.*;
+import com.oAT.ai.config.AIConfig;
 import com.oAT.ai.config.AIConfigProperties;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
@@ -9,9 +12,11 @@ import dev.langchain4j.service.AiServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,12 +45,37 @@ public class AIAgentService {
     /** 工具实例映射：方法名 → 工具对象 */
     private final Map<String, Object> toolInstances = new LinkedHashMap<>();
 
+    /** 语义缓存服务（用于相似问题命中） */
+    private final SemanticCacheService semanticCacheService;
+
+    /** 智能工具推荐器 */
+    private final ToolRecommender toolRecommender;
+
+    /** 动态LLM切换器 */
+    private final DynamicLLMSwitcher llmSwitcher;
+
+    /** 多轮对话记忆服务 */
+    private final ConversationMemoryService conversationMemory;
+
+    /** 自主学习服务 */
+    private volatile AISelfLearningService selfLearningService;
+
     @Autowired
     public AIAgentService(ChatLanguageModel chatLanguageModel,
                           AIConfigProperties configProperties,
-                          AgentDataProvider dataProvider) {
+                          AgentDataProvider dataProvider,
+                          AIConfig aiConfig) {
         this.configProperties = configProperties;
         this.dataProvider = dataProvider;
+
+        // 初始化增强服务
+        this.semanticCacheService = new SemanticCacheService(0.85, 500, null);
+        this.toolRecommender = new ToolRecommender();
+        this.llmSwitcher = new DynamicLLMSwitcher(aiConfig);
+        this.conversationMemory = new ConversationMemoryService();
+
+        // 注册所有内置工具到推荐器
+        toolRecommender.registerAllBuiltInTools();
 
         if (chatLanguageModel == null) {
             logger.warn("ChatLanguageModel is null, AI Agent will not be available");
@@ -75,6 +105,9 @@ public class AIAgentService {
         PerformanceAnalysisTool performanceTool = new PerformanceAnalysisTool(dataProvider);
         DefectStatisticsTool defectTool = new DefectStatisticsTool(dataProvider);
         TestcaseRecommendationTool testcaseTool = new TestcaseRecommendationTool(dataProvider);
+        BugDetectTool bugDetectTool = new BugDetectTool(dataProvider);
+        CallChainAnalysisTool callChainAnalysisTool = new CallChainAnalysisTool(dataProvider);
+        CallChainCompareTool callChainCompareTool = new CallChainCompareTool(dataProvider);
 
         tools.add(projectInfoTool);
         tools.add(appStatusTool);
@@ -85,6 +118,9 @@ public class AIAgentService {
         tools.add(performanceTool);
         tools.add(defectTool);
         tools.add(testcaseTool);
+        tools.add(bugDetectTool);
+        tools.add(callChainAnalysisTool);
+        tools.add(callChainCompareTool);
 
         // 注册工具实例，用于兜底执行
         registerTool(projectInfoTool);
@@ -96,6 +132,9 @@ public class AIAgentService {
         registerTool(performanceTool);
         registerTool(defectTool);
         registerTool(testcaseTool);
+        registerTool(bugDetectTool);
+        registerTool(callChainAnalysisTool);
+        registerTool(callChainCompareTool);
 
         return tools;
     }
@@ -119,7 +158,7 @@ public class AIAgentService {
 
     /**
      * 与AI Agent对话（带工具调用兜底）
-     * 如果 LLM 返回的是原始工具调用JSON格式，自动解析并执行工具
+     * 集成语义缓存、智能工具推荐、多轮对话记忆
      */
     public String chat(AgentContext context, String question) {
         if (!isAvailable()) {
@@ -127,18 +166,46 @@ public class AIAgentService {
         }
         try {
             AgentContext.setContext(context);
-            String response = aiAgent.chat(question, context.getProjectId(), context.getUserName());
 
-            // 兜底检查：是否返回了未执行的原始工具调用
-            String fallbackResult = tryFallbackToolExecution(response);
-            if (fallbackResult != null) {
-                logger.info("Detected raw tool call in AI response, executed tool directly via fallback: {}", response != null ?
-                        (response.length() > 80 ? response.substring(0, 80) + "..." : response) : "null");
-                return fallbackResult;
+            // 1. 语义缓存检查（相似问题命中直接返回）
+            SemanticCacheService.CachedResponse cached = semanticCacheService.get(question);
+            if (cached != null && cached.isFromCache() && cached.getAnswer() != null) {
+                logger.info("Semantic cache hit for question: {}",
+                        question.length() > 50 ? question.substring(0, 50) + "..." : question);
+                return cached.getAnswer();
             }
 
-            logger.info("AI Agent response: {}", response != null ?
-                    (response.length() > 100 ? response.substring(0, 100) + "..." : response) : "null");
+            // 2. 智能工具推荐（日志记录，供后续分析）
+            ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
+            logger.debug("Tool recommendation: primary={}, intent={}, confidence={}",
+                    recommendation.primaryTool, recommendation.detectedIntent, recommendation.confidence);
+
+            // 3. 构建增强的上下文（包含多轮对话摘要）
+            String enhancedQuestion = buildEnhancedQuestion(context, question);
+
+            long startTime = System.currentTimeMillis();
+            String response = aiAgent.chat(enhancedQuestion, context.getProjectId(), context.getUserName());
+            long responseTime = System.currentTimeMillis() - startTime;
+
+            // 4. 兜底检查
+            String fallbackResult = tryFallbackToolExecution(response);
+            if (fallbackResult != null) {
+                logger.info("Detected raw tool call in AI response, executed via fallback");
+                response = fallbackResult;
+            }
+
+            // 5. 将结果存入语义缓存
+            if (response != null && !response.isEmpty()) {
+                semanticCacheService.put(question, response, null);
+                // 记录工具推荐结果（用于学习优化）
+                toolRecommender.recordToolCall(recommendation.primaryTool, true);
+                llmSwitcher.recordResult(llmSwitcher.getDefaultModelName(), true, responseTime);
+            } else {
+                llmSwitcher.recordResult(llmSwitcher.getDefaultModelName(), false, responseTime);
+            }
+
+            logger.info("AI Agent response: {}ms, length={}",
+                    responseTime, response != null ? response.length() : 0);
             return response;
         } catch (Exception e) {
             logger.error("AI Agent chat failed", e);
@@ -459,5 +526,89 @@ public class AIAgentService {
             if (type == char.class) return '\0';
         }
         return null;
+    }
+
+    // ==================== 增强功能方法 ====================
+
+    /**
+     * 构建增强的问题（包含多轮对话上下文摘要）
+     */
+    private String buildEnhancedQuestion(AgentContext context, String question) {
+        StringBuilder enhanced = new StringBuilder();
+        String sessionKey = context.getUserId() + ":" + context.getProjectId();
+
+        // 尝试获取会话上下文
+        ConversationMemoryService.ConversationSession activeSession = conversationMemory.getActiveSession(context.getUserId());
+        if (activeSession != null && activeSession.getMessageCount() > 2) {
+            String ctxSummary = conversationMemory.buildContextForLLM(activeSession.getSessionId(), 5);
+            if (ctxSummary != null && !ctxSummary.isEmpty()) {
+                enhanced.append("[之前的对话上下文]\n").append(ctxSummary).append("\n\n[当前问题]\n");
+                logger.debug("Added conversation context for user {}", context.getUserId());
+            }
+        }
+
+        enhanced.append(question);
+
+        // 记录到对话记忆（异步）
+        conversationMemory.addUserMessage(
+                activeSession != null ? activeSession.getSessionId() : createOrGetSession(context),
+                question);
+
+        return enhanced.toString();
+    }
+
+    private String createOrGetSession(AgentContext context) {
+        ConversationMemoryService.ConversationSession existing = conversationMemory.getActiveSession(context.getUserId());
+        if (existing != null) return existing.getSessionId();
+        return conversationMemory.createSession(context.getUserId(), context.getProjectId());
+    }
+
+    /**
+     * 记录AI回复到对话记忆
+     */
+    public void recordAssistantResponse(AgentContext context, String answer) {
+        ConversationMemoryService.ConversationSession session = conversationMemory.getActiveSession(context.getUserId());
+        if (session != null) {
+            conversationMemory.addAssistantMessage(session.getSessionId(), answer, null);
+        }
+    }
+
+    // ==================== 公开访问接口 ====================
+
+    public SemanticCacheService getSemanticCacheService() { return semanticCacheService; }
+    public ToolRecommender getToolRecommender() { return toolRecommender; }
+    public DynamicLLMSwitcher getLlmSwitcher() { return llmSwitcher; }
+    public ConversationMemoryService getConversationMemory() { return conversationMemory; }
+
+    /**
+     * 获取自主学习服务（懒加载）
+     */
+    public AISelfLearningService getSelfLearningService() {
+        if (selfLearningService == null) {
+            synchronized (this) {
+                if (selfLearningService == null) {
+                    // 使用系统属性获取数据路径
+                    String dataPath = System.getProperty("oat.data.path",
+                            System.getProperty("user.home") + "/oAT/codeData");
+                    FeedbackPersistenceService fps = new FeedbackPersistenceService(dataPath);
+                    selfLearningService = new AISelfLearningService(fps);
+                    selfLearningService.setToolRecommender(toolRecommender);
+                }
+            }
+        }
+        return selfLearningService;
+    }
+
+    /**
+     * 获取 AI 增强服务综合统计
+     */
+    public Map<String, Object> getEnhancedStats() {
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("semanticCache", semanticCacheService.getStats());
+        stats.put("toolRecommender", toolRecommender.getStats());
+        stats.put("llmSwitcher", llmSwitcher.getStats());
+        stats.put("conversationMemory", conversationMemory.getStats());
+        stats.put("agentAvailable", isAvailable());
+        return stats;
     }
 }
