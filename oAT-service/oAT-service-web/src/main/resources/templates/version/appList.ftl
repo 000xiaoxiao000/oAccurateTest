@@ -11,6 +11,13 @@
 <#assign versionItemActive="active">
 <#include "../projectHeader.ftl">
 
+<!--面包屑导航-->
+<div class="ui breadcrumb" style="margin: 20px 0px">
+    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+    <i class="right angle icon divider"></i>
+    <div class="active section">版本中心</div>
+</div>
+
 <!--内容主体-->
 <div class="ui text container  " style="margin-top: 50px">
     <!-- 中间内容 -->

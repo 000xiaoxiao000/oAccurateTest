@@ -87,6 +87,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     private ElasticsearchOperations elasticsearchOperations;
 
     private ExecutorService jobExecutors;
+    private java.util.concurrent.ScheduledExecutorService jobCleanupExecutor;
     private List<Job<String>> jobs;
 
     private static final int TREE_NODE_SCAN_PAGE_SIZE = 2000;
@@ -94,6 +95,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     @Override
     public void afterPropertiesSet() {
         jobExecutors = Executors.newFixedThreadPool(5);
+        jobCleanupExecutor = Executors.newSingleThreadScheduledExecutor();
         jobs = Collections.synchronizedList(new LinkedList<>());
     }
 
@@ -137,16 +139,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 job.state = Job.JobState.finish;
                 job.getProgress().finish("报告生成完成");
                 job.getLogger().info("报告生成成功: " + reportId);
-                // Clean up completed job to prevent memory leak
-                jobs.remove(job);
+                // Delay cleanup to allow frontend to poll the final state
+                scheduleJobCleanup(job);
             } catch (Exception e) {
                 logger.error("Generate report failed", e);
                 job.state = Job.JobState.error;
                 String errorMsg = toFriendlyError(e.getMessage());
                 job.getProgress().updateName("生成失败: " + errorMsg);
                 job.getLogger().error("生成报告失败: " + errorMsg);
-                // Clean up failed job to prevent memory leak
-                jobs.remove(job);
+                // Delay cleanup to allow frontend to poll the final state
+                scheduleJobCleanup(job);
             }
         });
         return job.getId();
@@ -163,6 +165,17 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             return "网络连接失败，请检查相关服务(Git/ES)是否在线。";
         }
         return msg;
+    }
+
+    /**
+     * Schedule job cleanup after a delay to allow frontend to poll final state
+     */
+    private void scheduleJobCleanup(Job<String> job) {
+        // Wait 30 seconds before removing the job to allow frontend polling
+        jobCleanupExecutor.schedule(() -> {
+            jobs.remove(job);
+            logger.debug("Cleaned up job: {}", job.getId());
+        }, 30, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     @Override
