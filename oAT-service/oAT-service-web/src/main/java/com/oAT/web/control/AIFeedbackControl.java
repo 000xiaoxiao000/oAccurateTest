@@ -1,9 +1,14 @@
 package com.oAT.web.control;
 
+import com.oAT.ai.agent.AIAgentService;
+import com.oAT.ai.agent.AISelfLearningService;
+import com.oAT.ai.agent.FeedbackPersistenceService;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.service.entity.AIFeedbackVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,9 +25,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class AIFeedbackControl {
 
     private static final Logger logger = LoggerFactory.getLogger(AIFeedbackControl.class);
-    
-    // 临时存储反馈数据（实际应存入数据库）
-    private final Map<String, AIFeedbackVo> feedbackStore = new ConcurrentHashMap<>();
+
+    /** 持久化服务 */
+    @Autowired
+    private FeedbackPersistenceService feedbackPersistence;
+
+    /** AI Agent 服务（用于触发自主学习） */
+    @Autowired(required = false)
+    private AIAgentService aiAgentService;
+
+    @Value("${oat.data.path:${user.home}/oAT/codeData}")
+    private String oatDataPath;
 
     /**
      * 提交反馈
@@ -31,17 +44,39 @@ public class AIFeedbackControl {
     @ResponseBody
     public ResultNotified<String> submitFeedback(@RequestBody AIFeedbackVo feedback) {
         try {
-            // 生成反馈ID
-            feedback.setFeedbackId(UUID.randomUUID().toString());
-            feedback.setCreateTime(new Date());
+            // 构建持久化记录
+            FeedbackPersistenceService.FeedbackRecord record = new FeedbackPersistenceService.FeedbackRecord();
+            record.setProjectId(feedback.getProjectId());
+            record.setUserId(feedback.getUserId());
+            record.setQuestion(feedback.getQuestion());
+            record.setAnswer(feedback.getAnswer());
+            record.setRating(feedback.getRating());
+            record.setFeedbackType(feedback.getFeedbackType());
+            record.setComment(feedback.getComment());
+            record.setUsedTools(feedback.getUsedTools());
+            record.setResponseTime(feedback.getResponseTime());
+
+            // 持久化到文件
+            record = feedbackPersistence.submit(record);
             
-            // 存储反馈
-            feedbackStore.put(feedback.getFeedbackId(), feedback);
+            // 触发自主学习（异步）
+            if (aiAgentService != null) {
+                try {
+                    AISelfLearningService selfLearning = aiAgentService.getSelfLearningService();
+                    if (selfLearning != null) {
+                        selfLearning.onNewFeedback(record);
+                    }
+                } catch (Exception e) {
+                    logger.warn("Self-learning trigger failed (non-critical): {}", e.getMessage());
+                }
+            }
+
+            // 同时保留内存映射用于快速查询（兼容性）
             
-            logger.info("Feedback received: id={}, type={}, rating={}", 
-                feedback.getFeedbackId(), feedback.getFeedbackType(), feedback.getRating());
+            logger.info("Feedback persisted: id={}, type={}, rating={}", 
+                record.getFeedbackId(), feedback.getFeedbackType(), feedback.getRating());
             
-            return new ResultNotified<>(true, "感谢您的反馈！");
+            return new ResultNotified<>(true, "感谢您的反馈！反馈ID: " + record.getFeedbackId());
         } catch (Exception e) {
             logger.error("Failed to submit feedback", e);
             return new ResultNotified<>(false, "提交反馈失败：" + e.getMessage());
@@ -56,13 +91,14 @@ public class AIFeedbackControl {
     public ResultNotified<String> quickRate(@RequestParam String feedbackId,
                                            @RequestParam boolean helpful) {
         try {
-            AIFeedbackVo feedback = feedbackStore.get(feedbackId);
-            if (feedback == null) {
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("rating", helpful ? 5 : 1);
+            updates.put("feedbackType", helpful ? "helpful" : "not_helpful");
+            
+            boolean updated = feedbackPersistence.update(feedbackId, updates);
+            if (!updated) {
                 return new ResultNotified<>(false, "反馈记录不存在");
             }
-            
-            feedback.setRating(helpful ? 5 : 1);
-            feedback.setFeedbackType(helpful ? "helpful" : "not_helpful");
             
             logger.info("Quick rate: id={}, helpful={}", feedbackId, helpful);
             
@@ -74,42 +110,23 @@ public class AIFeedbackControl {
     }
 
     /**
-     * 获取反馈统计
+     * 获取反馈统计（使用持久化数据）
      */
     @GetMapping("/stats")
     @ResponseBody
     public ResultNotified<?> getFeedbackStats(@RequestParam(required = false) String projectId) {
         try {
-            int totalFeedback = 0;
-            int positiveFeedback = 0;
-            int negativeFeedback = 0;
-            Map<String, Integer> typeDistribution = new HashMap<>();
-            
-            for (AIFeedbackVo feedback : feedbackStore.values()) {
-                if (projectId != null && !projectId.equals(feedback.getProjectId())) {
-                    continue;
-                }
-                
-                totalFeedback++;
-                
-                String type = feedback.getFeedbackType();
-                typeDistribution.put(type, typeDistribution.getOrDefault(type, 0) + 1);
-                
-                if ("helpful".equals(type)) {
-                    positiveFeedback++;
-                } else {
-                    negativeFeedback++;
-                }
+            Map<String, Object> stats = feedbackPersistence.getStats(projectId);
+
+            // 追加自主学习状态（如果有）
+            if (aiAgentService != null) {
+                try {
+                    AISelfLearningService sl = aiAgentService.getSelfLearningService();
+                    if (sl != null) {
+                        stats.put("selfLearning", sl.getStatus());
+                    }
+                } catch (Exception ignored) {}
             }
-            
-            Map<String, Object> stats = new HashMap<>();
-            stats.put("totalFeedback", totalFeedback);
-            stats.put("positiveFeedback", positiveFeedback);
-            stats.put("negativeFeedback", negativeFeedback);
-            stats.put("satisfactionRate", totalFeedback > 0 
-                ? String.format("%.2f%%", (double) positiveFeedback / totalFeedback * 100) 
-                : "0%");
-            stats.put("typeDistribution", typeDistribution);
             
             return new ResultNotified<>(true, "获取反馈统计成功", (Serializable) stats);
         } catch (Exception e) {
@@ -119,37 +136,86 @@ public class AIFeedbackControl {
     }
 
     /**
-     * 获取用户的反馈历史
+     * 获取用户的反馈历史（使用持久化数据）
      */
     @GetMapping("/my")
     @ResponseBody
     public ResultNotified<?> getMyFeedback(@RequestParam String userId) {
         try {
-            List<Map<String, Object>> myFeedbacks = new ArrayList<>();
+            List<FeedbackPersistenceService.FeedbackRecord> myFeedbacks =
+                    feedbackPersistence.getUserFeedbacks(userId, 50);
             
-            for (AIFeedbackVo feedback : feedbackStore.values()) {
-                if (userId.equals(feedback.getUserId())) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("feedbackId", feedback.getFeedbackId());
-                    item.put("question", feedback.getQuestion());
-                    item.put("rating", feedback.getRating());
-                    item.put("feedbackType", feedback.getFeedbackType());
-                    item.put("createTime", feedback.getCreateTime());
-                    myFeedbacks.add(item);
-                }
+            // 转换为前端友好的格式
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (FeedbackPersistenceService.FeedbackRecord fb : myFeedbacks) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("feedbackId", fb.getFeedbackId());
+                item.put("question", fb.getQuestion());
+                item.put("rating", fb.getRating());
+                item.put("feedbackType", fb.getFeedbackType());
+                item.put("topic", fb.getTopic());
+                item.put("createTime", fb.getCreateTime());
+                item.put("responseTime", fb.getResponseTime());
+                item.put("usedTools", fb.getUsedTools());
+                result.add(item);
             }
             
-            // 按时间倒序
-            myFeedbacks.sort((a, b) -> {
-                Date dateA = (Date) a.get("createTime");
-                Date dateB = (Date) b.get("createTime");
-                return dateB.compareTo(dateA);
-            });
-            
-            return new ResultNotified<>(true, "获取反馈历史成功", (Serializable) (Serializable) myFeedbacks);
+            return new ResultNotified<>(true, "获取反馈历史成功", (Serializable) (Serializable) result);
         } catch (Exception e) {
             logger.error("Failed to get user feedback", e);
             return new ResultNotified<>(false, "获取反馈历史失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取 AI 自主学习报告
+     */
+    @GetMapping("/learning-report")
+    @ResponseBody
+    public ResultNotified<?> getLearningReport() {
+        try {
+            if (aiAgentService == null) {
+                return new ResultNotified<>(false, "AI服务不可用");
+            }
+            AISelfLearningService selfLearning = aiAgentService.getSelfLearningService();
+            if (selfLearning == null) {
+                return new ResultNotified<>(false, "自主学习服务未初始化");
+            }
+
+            AISelfLearningService.LearningReport report = selfLearning.runLearningCycle();
+            report.suggestions = selfLearning.getSuggestions();
+
+            return new ResultNotified<>(true, "学习报告已生成", (Serializable) report);
+        } catch (Exception e) {
+            logger.error("Failed to generate learning report", e);
+            return new ResultNotified<>(false, "生成学习报告失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取 AI 服务增强状态
+     */
+    @GetMapping("/ai-status")
+    @ResponseBody
+    public ResultNotified<?> getAIStatus() {
+        try {
+            Map<String, Object> status = new HashMap<>();
+            status.put("timestamp", System.currentTimeMillis());
+
+            if (aiAgentService != null && aiAgentService.isAvailable()) {
+                status.put("available", true);
+                status.put("enhancedStats", aiAgentService.getEnhancedStats());
+            } else {
+                status.put("available", false);
+            }
+
+            // Redis 状态
+            status.put("feedbackStorage", "persistent");
+            status.put("feedbackCount", feedbackPersistence.getStats(null).getOrDefault("total", 0));
+
+            return new ResultNotified<>(true, "获取AI状态成功", (Serializable) status);
+        } catch (Exception e) {
+            return new ResultNotified<>(false, "获取AI状态失败: " + e.getMessage());
         }
     }
 }

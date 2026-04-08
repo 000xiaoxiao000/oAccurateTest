@@ -539,6 +539,72 @@ public class AgentDataProviderImpl implements AgentDataProvider {
         return result;
     }
 
+    @Override
+    public String getSourceCode(String className) {
+        if (className == null || className.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            // 从静态信息中查找该类的源码（遍历所有应用的静态数据）
+            String targetClass = className.trim();
+            String simpleName = simpleClassName(targetClass);
+
+            // 尝试获取所有应用的列表进行搜索
+            List<AppVo> allApps = appService.getAppList(null);
+            if (allApps == null || allApps.isEmpty()) return null;
+
+            for (AppVo app : allApps) {
+                try {
+                    // 先尝试精确匹配
+                    List<StaticSourceInfo> infos = staticInfoRepository.findByAppIdAndClassInfo_ClassName(app.getId(), targetClass);
+                    if (infos != null && !infos.isEmpty()) {
+                        for (StaticSourceInfo info : infos) {
+                            if (info.getClassInfo() != null && info.getClassInfo().getSourceCode() != null) {
+                                return info.getClassInfo().getSourceCode();
+                            }
+                        }
+                    }
+
+                    // 如果精确匹配未命中且是全限定名，尝试按简单名模糊匹配
+                    if (!simpleName.equals(targetClass)) {
+                        List<StaticSourceInfo> appInfos = staticInfoRepository.findByAppId(app.getId());
+                        if (appInfos != null) {
+                            for (StaticSourceInfo si : appInfos) {
+                                if (si.getClassInfo() != null && si.getClassInfo().getClassName() != null
+                                        && si.getClassInfo().getClassName().endsWith("." + simpleName)
+                                        && si.getClassInfo().getSourceCode() != null) {
+                                    return si.getClassInfo().getSourceCode();
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            return null;
+        } catch (Exception e) {
+            logger.error("Get source code failed: className={}", className, e);
+            return null;
+        }
+    }
+
+    @Override
+    public Map<String, String> getSourceCodes(List<String> classNames) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (classNames == null || classNames.isEmpty()) {
+            return result;
+        }
+        for (String className : classNames) {
+            if (className != null && !className.trim().isEmpty()) {
+                String code = getSourceCode(className.trim());
+                if (code != null) {
+                    result.put(className.trim(), code);
+                }
+            }
+        }
+        return result;
+    }
+
     private Map<String, Object> convertAppToMap(AppVo app) {
         Map<String, Object> map = new HashMap<>();
         map.put("id", app.getId());

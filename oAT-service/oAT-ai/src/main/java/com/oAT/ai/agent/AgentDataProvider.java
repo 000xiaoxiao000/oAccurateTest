@@ -136,4 +136,20 @@ public interface AgentDataProvider {
      * @return 统计数据
      */
     Map<String, Object> getProjectStatistics(String projectId);
+
+    /**
+     * 获取指定类的源码（用于AI代码分析）
+     *
+     * @param className 类全限定名（如 com.example.UserService）
+     * @return 源码文本；如果未找到返回 null
+     */
+    String getSourceCode(String className);
+
+    /**
+     * 获取多个类的源码（批量）
+     *
+     * @param classNames 类全限定名列表
+     * @return 类名 -> 源码的映射
+     */
+    Map<String, String> getSourceCodes(List<String> classNames);
 }

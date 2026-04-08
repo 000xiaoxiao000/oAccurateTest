@@ -13,6 +13,8 @@ public class StaticSourceClassInfo implements Serializable {
     private String className;
     @Field(type = FieldType.Object)
     private Map<String, StaticSourceMethodInfo> methodMaps;
+    @Field(type = FieldType.Text)
+    private String sourceCode;
 
     public String getClassId() {
         return classId;
@@ -36,5 +38,13 @@ public class StaticSourceClassInfo implements Serializable {
 
     public void setMethodMaps(Map<String, StaticSourceMethodInfo> methodMaps) {
         this.methodMaps = methodMaps;
+    }
+
+    public String getSourceCode() {
+        return sourceCode;
+    }
+
+    public void setSourceCode(String sourceCode) {
+        this.sourceCode = sourceCode;
     }
 }
