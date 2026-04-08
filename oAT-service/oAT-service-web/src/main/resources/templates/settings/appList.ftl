@@ -5,9 +5,9 @@
     <title>项目设置-应用例表</title>
     <#include "../common.ftl">
     <#--属性编辑器-->
-    <script src="/js/codemirror.js"></script>
+    <script src="/js/codemirror.min.js"></script>
     <script src="/js/properties.js"></script>
-    <link href="/css/codemirror.css" rel="stylesheet">
+    <link href="/css/codemirror.min.css" rel="stylesheet">
     <style type="text/css">
         /*自动调整编辑器高度*/
         .CodeMirror {
