@@ -113,7 +113,7 @@ public class SnapshotServiceImpl implements SnapshotService{
             CaseCenterIndex old = indexItem.get();
             //将快照中新值 替换旧属性
             BeanUtils.copyProperties(snapshot, old.getSnapshot(), "traceId", "createUser");
-            old.setUpdateTime(old.currentTimeToString());
+            old.setUpdateTime(new java.util.Date());
             centerRepository.save(old);
         }
     }
@@ -159,11 +159,11 @@ public class SnapshotServiceImpl implements SnapshotService{
         SnapshotVo vo = new SnapshotVo(index.getId());
         BeanUtils.copyProperties(index.getSnapshot(), vo);
         vo.setId(index.getId());
-        vo.setCreateTime(index.parse(index.getCreateTime()));
+        vo.setCreateTime(index.getCreateTime());
         if (index.getUpdateTime() != null) {
-            vo.setUpdateTime(index.parse(index.getUpdateTime()));
+            vo.setUpdateTime(index.getUpdateTime());
         } else {
-            vo.setUpdateTime(index.parse(index.getCreateTime()));
+            vo.setUpdateTime(index.getCreateTime());
         }
         return vo;
     }

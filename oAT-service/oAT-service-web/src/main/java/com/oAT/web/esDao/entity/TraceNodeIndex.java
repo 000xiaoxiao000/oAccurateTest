@@ -3,12 +3,12 @@ package com.oAT.web.esDao.entity;
 import com.oAT.agent.model.*;
 import com.oAT.web.exceptions.DirtyDataException;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
+import java.util.Date;
 
 @Document(indexName = "trace_node", shards = 2)
 public class TraceNodeIndex implements StandardDate, Serializable {
@@ -20,8 +20,8 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     private String traceNodeId;
     @Field(type = FieldType.Keyword)
     private String appId;
-    @Field(type = FieldType.Date, pattern = dateFormat, format = DateFormat.custom)
-    private String createTime;
+    @Field(type = FieldType.Date, format = {})
+    private Date createTime;
     @Field(type = FieldType.Keyword)
     private String type;
     @Field(type = FieldType.Object)
@@ -113,7 +113,7 @@ public class TraceNodeIndex implements StandardDate, Serializable {
 
     private void init(TraceNode node) {
         type = node.toType();
-        createTime = currentTimeToString();
+        createTime = new Date();
         traceId = node.getTraceId();
         traceNodeId = node.getTraceNodeId();
         if (node.getApp() != null) {
@@ -146,11 +146,11 @@ public class TraceNodeIndex implements StandardDate, Serializable {
         this.traceNodeId = traceNodeId;
     }
 
-    public String getCreateTime() {
+    public Date getCreateTime() {
         return createTime;
     }
 
-    public void setCreateTime(String createTime) {
+    public void setCreateTime(Date createTime) {
         this.createTime = createTime;
     }
 

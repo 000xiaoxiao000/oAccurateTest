@@ -1,13 +1,11 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 
 @Document(indexName = "version_center", shards = 2)
@@ -16,10 +14,10 @@ public class VersionCenterIndex implements Serializable, StandardDate {
     private String id;
     @Field(type = FieldType.Keyword)
     private String type;
-    @Field(type = FieldType.Date, pattern = dateFormat, format = DateFormat.custom)
-    private String createTime;
-    @Field(type = FieldType.Date, pattern = dateFormat, format = DateFormat.custom)
-    private String updateTime;
+    @Field(type = FieldType.Date, format = {})
+    private Date createTime;
+    @Field(type = FieldType.Date, format = {})
+    private Date updateTime;
 
 
     //实体对象=================================================================
@@ -37,15 +35,15 @@ public class VersionCenterIndex implements Serializable, StandardDate {
     public VersionCenterIndex(VersionItem versionItem) {
         this.versionItem = versionItem;
         this.type = "versionItem";
-        createTime = currentTimeToString();
-        updateTime = currentTimeToString();
+        createTime = new Date();
+        updateTime = new Date();
     }
 
     public VersionCenterIndex(VersionCompareReport compareReport) {
         this.compareReport = compareReport;
         this.type = "compareReport";
-        createTime = currentTimeToString();
-        updateTime = currentTimeToString();
+        createTime = new Date();
+        updateTime = new Date();
     }
 
     public String getId() {
@@ -64,19 +62,19 @@ public class VersionCenterIndex implements Serializable, StandardDate {
         this.type = type;
     }
 
-    public String getCreateTime() {
+    public Date getCreateTime() {
         return createTime;
     }
 
-    public void setCreateTime(String createTime) {
+    public void setCreateTime(Date createTime) {
         this.createTime = createTime;
     }
 
-    public String getUpdateTime() {
+    public Date getUpdateTime() {
         return updateTime;
     }
 
-    public void setUpdateTime(String updateTime) {
+    public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
     }
 

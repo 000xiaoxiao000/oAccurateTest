@@ -288,8 +288,8 @@ public class UsecaseServiceImpl implements UsecaseService {
         UsecaseDetailVo detailVo = new UsecaseDetailVo();
         BeanUtils.copyProperties(caseCenterIndex.getUsecase(), detailVo);
         detailVo.setId(caseCenterIndex.getId());
-        detailVo.setCreateTime(caseCenterIndex.parse(caseCenterIndex.getCreateTime()));
-        detailVo.setUpdateTime(caseCenterIndex.parse(caseCenterIndex.getUpdateTime()));
+        detailVo.setCreateTime(caseCenterIndex.getCreateTime());
+        detailVo.setUpdateTime(caseCenterIndex.getUpdateTime());
         UsecaseSql usecaseSql = caseCenterIndex.getUsecase().getSql();
         if (usecaseSql != null) {
             detailVo.setSqls(convertUsecaseSql(usecaseSql));
@@ -394,7 +394,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         CaseCenterIndex index = optional.get();
         index.getDirectory().setParentId(parentId);
         index.getDirectory().setName(name);
-        index.setUpdateTime(index.currentTimeToString());
+        index.setUpdateTime(new java.util.Date());
         centerRepository.save(index);
     }
 
@@ -461,7 +461,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         index.getUsecase().setAuthors(authorList.toArray(new String[0]));
         index.getUsecase().setLastUpdateAuthor(author);
         // 更新修改时间
-        index.setUpdateTime(index.currentTimeToString());
+        index.setUpdateTime(new java.util.Date());
         centerRepository.save(index);
     }
 
@@ -484,7 +484,8 @@ public class UsecaseServiceImpl implements UsecaseService {
         UsecaseDirectoryVo vo = new UsecaseDirectoryVo();
         BeanUtils.copyProperties(index.getDirectory(), vo);
         vo.setId(index.getId());
-        vo.setUpdateTime(index.parse(index.getUpdateTime()));
+        vo.setUpdateTime(index.getUpdateTime());
+
         return vo;
     }
 
@@ -492,8 +493,8 @@ public class UsecaseServiceImpl implements UsecaseService {
         UsecaseVo usecaseVo = new UsecaseVo();
         BeanUtils.copyProperties(caseCenterIndex.getUsecase(), usecaseVo);
         usecaseVo.setId(caseCenterIndex.getId());
-        usecaseVo.setCreateTime(caseCenterIndex.parse(caseCenterIndex.getCreateTime()));
-        usecaseVo.setUpdateTime(caseCenterIndex.parse(caseCenterIndex.getUpdateTime()));
+        usecaseVo.setCreateTime(caseCenterIndex.getCreateTime());
+        usecaseVo.setUpdateTime(caseCenterIndex.getUpdateTime());
         return usecaseVo;
     }
 

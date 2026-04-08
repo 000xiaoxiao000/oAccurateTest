@@ -15,6 +15,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -61,7 +62,7 @@ public class AppServiceImpl implements AppService {
         app.setRepoUserName(appVo.getRepoUserName());
         app.setRepoPassword(appVo.getRepoPassword());
         appIndex.setApp(app);
-        appIndex.setUpdateTime(appIndex.currentTimeToString());
+        appIndex.setUpdateTime(new java.util.Date());
         systemRepository.save(appIndex);
         return convertApp(appIndex);
     }
@@ -92,7 +93,7 @@ public class AppServiceImpl implements AppService {
             BeanUtils.copyProperties(dir, oldDir);
         }
         app.setSnapshotDirs(dirs);
-        appIndex.setUpdateTime(appIndex.currentTimeToString());
+        appIndex.setUpdateTime(new java.util.Date());
         systemRepository.save(appIndex);
         return dir;
     }
@@ -228,7 +229,7 @@ public class AppServiceImpl implements AppService {
         }
         Comment comment = new Comment();
         comment.setUserId(userId);
-        comment.setTime(systemSnapshotIndex.currentTimeToString());
+        comment.setTime(new Date());
         comment.setContent(content);
         newComments[length] = comment;
 
@@ -248,7 +249,9 @@ public class AppServiceImpl implements AppService {
         for (Comment c : comments1) {
             int i = 0;
             Timestamp ts1 = Timestamp.valueOf(dateTime);
-            Timestamp ts2 = Timestamp.valueOf(c.getTime().split(",")[0]);
+            // Convert Date to String before splitting
+            String timeStr = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(c.getTime());
+            Timestamp ts2 = Timestamp.valueOf(timeStr.split(",")[0]);
             if (c.getUserId().equals(userId) && c.getContent().equals(content) && ts1.equals(ts2)) {
                 comments1.remove(i);
                 break;
