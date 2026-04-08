@@ -155,7 +155,7 @@
                                         </#list>
                                     </#if>
                                 </td>
-                                <td>${snap.createTime!'-'}</td>
+                                <td>${(snap.createTime?string("yyyy-MM-dd HH:mm"))!'-'}</td>
                                 <td class="center aligned">
                                     <a href="/p/${project.id}/${appId}/snapshot/detail/${snap.id}" target="_blank">
                                         <i class="external alternate blue link icon" title="跳转到快照"></i>

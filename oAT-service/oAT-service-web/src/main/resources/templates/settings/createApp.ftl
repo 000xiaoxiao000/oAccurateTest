@@ -11,9 +11,9 @@
 <script src="https://cdn.bootcss.com/semantic-ui/2.3.1/semantic.min.js"></script>
 <script src="/js/d3.min.js"></script>-->
 
-    <script src="/js/codemirror.js"></script>
+    <script src="/js/codemirror.min.js"></script>
     <script src="/js/properties.js"></script>
-    <link href="/css/codemirror.css" rel="stylesheet">
+    <link href="/css/codemirror.min.css" rel="stylesheet">
 
 <#include "../common.ftl">
 

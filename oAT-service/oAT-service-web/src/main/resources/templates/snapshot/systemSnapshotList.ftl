@@ -153,7 +153,7 @@
                             ${snapshot.title}
                         </a>
                     </td>
-                    <td>${snapshot.versionLastUpdate?datetime('yyyy-MM-dd hh:mm:ss')}</td>
+                    <td>${(snapshot.versionLastUpdate?string('yyyy-MM-dd HH:mm:ss'))!'-'}</td>
                     <td>
                         <#if loginNameRole != "visitor">
                             <div class="ui dropdown quickMenu" tabindex="0">
