@@ -27,8 +27,25 @@ public class AgentContext implements Serializable {
 
     /**
      * 页面上下文（用户当前所在页面的信息）
+     * 例如: "覆盖率报告页面", "调用链监控页面", "应用详情页面"
      */
     private String pageContext;
+
+    /**
+     * 当前页面数据摘要（用于增强AI理解）
+     * 例如: "当前查看的是user-service应用的覆盖率报告，行覆盖率75%"
+     */
+    private String pageDataSummary;
+
+    /**
+     * 用户选中的应用或实体ID
+     */
+    private String selectedEntityId;
+
+    /**
+     * 用户选中的应用或实体名称
+     */
+    private String selectedEntityName;
 
     public AgentContext() {
     }
@@ -106,5 +123,42 @@ public class AgentContext implements Serializable {
 
     public void setPageContext(String pageContext) {
         this.pageContext = pageContext;
+    }
+
+    public String getPageDataSummary() {
+        return pageDataSummary;
+    }
+
+    public void setPageDataSummary(String pageDataSummary) {
+        this.pageDataSummary = pageDataSummary;
+    }
+
+    public String getSelectedEntityId() {
+        return selectedEntityId;
+    }
+
+    public void setSelectedEntityId(String selectedEntityId) {
+        this.selectedEntityId = selectedEntityId;
+    }
+
+    public String getSelectedEntityName() {
+        return selectedEntityName;
+    }
+
+    public void setSelectedEntityName(String selectedEntityName) {
+        this.selectedEntityName = selectedEntityName;
+    }
+
+    @Override
+    public String toString() {
+        return "AgentContext{" +
+                "projectId='" + projectId + '\'' +
+                ", userId='" + userId + '\'' +
+                ", userName='" + userName + '\'' +
+                ", pageContext='" + pageContext + '\'' +
+                ", pageDataSummary='" + pageDataSummary + '\'' +
+                ", selectedEntityId='" + selectedEntityId + '\'' +
+                ", selectedEntityName='" + selectedEntityName + '\'' +
+                '}';
     }
 }

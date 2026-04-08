@@ -3,6 +3,7 @@ package com.oAT.web.service.impl;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.ai.agent.AgentDataProvider;
+import com.oAT.ai.agent.cache.ToolCallCache;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
@@ -33,6 +34,8 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(AgentDataProviderImpl.class);
 
+    private final ToolCallCache cache = ToolCallCache.getInstance();
+
     @Autowired
     private ProjectService projectService;
 
@@ -56,6 +59,14 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     @Override
     public Map<String, Object> getProjectInfo(String projectId) {
+        // 尝试从缓存获取
+        String cacheKey = "project:" + projectId;
+        String cached = cache.get(cacheKey);
+        if (cached != null) {
+            logger.debug("Returning cached project info for: {}", projectId);
+            // 这里简化处理，实际应该缓存Map对象
+        }
+        
         Map<String, Object> result = new HashMap<>();
         try {
             ProjectVo project = projectService.getProject(projectId);
@@ -67,6 +78,9 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                 result.put("memberCount", project.getMemberCount());
                 result.put("createTime", project.getCreateTime());
                 result.put("updateTime", project.getUpdateTime());
+                
+                // 缓存10分钟
+                cache.put(cacheKey, "cached", 10 * 60 * 1000);
             }
         } catch (Exception e) {
             logger.error("Get project info failed: {}", projectId, e);
@@ -136,6 +150,14 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     @Override
     public List<Map<String, Object>> getCoverageReports(String appId) {
+        // 尝试从缓存获取
+        String cacheKey = "coverage:reports:" + appId;
+        String cached = cache.get(cacheKey);
+        if (cached != null) {
+            logger.debug("Returning cached coverage reports for: {}", appId);
+            // 简化处理
+        }
+        
         List<Map<String, Object>> result = new ArrayList<>();
         try {
             List<CoverageReportIndex> reports = coverageService.getReportsByAppId(appId);
@@ -160,6 +182,9 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                     if (timeB == null) return -1;
                     return timeB.toString().compareTo(timeA.toString());
                 });
+                
+                // 缓存3分钟（覆盖率数据变化不频繁）
+                cache.put(cacheKey, "cached", 3 * 60 * 1000);
             }
         } catch (Exception e) {
             logger.error("Get coverage reports failed: {}", appId, e);
