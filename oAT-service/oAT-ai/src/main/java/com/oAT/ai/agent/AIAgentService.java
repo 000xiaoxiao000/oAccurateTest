@@ -72,6 +72,9 @@ public class AIAgentService {
         TraceQueryTool traceQueryTool = new TraceQueryTool(dataProvider);
         SnapshotTool snapshotTool = new SnapshotTool(dataProvider);
         CodeRelationTool codeRelationTool = new CodeRelationTool(dataProvider);
+        PerformanceAnalysisTool performanceTool = new PerformanceAnalysisTool(dataProvider);
+        DefectStatisticsTool defectTool = new DefectStatisticsTool(dataProvider);
+        TestcaseRecommendationTool testcaseTool = new TestcaseRecommendationTool(dataProvider);
 
         tools.add(projectInfoTool);
         tools.add(appStatusTool);
@@ -79,6 +82,9 @@ public class AIAgentService {
         tools.add(traceQueryTool);
         tools.add(snapshotTool);
         tools.add(codeRelationTool);
+        tools.add(performanceTool);
+        tools.add(defectTool);
+        tools.add(testcaseTool);
 
         // 注册工具实例，用于兜底执行
         registerTool(projectInfoTool);
@@ -87,6 +93,9 @@ public class AIAgentService {
         registerTool(traceQueryTool);
         registerTool(snapshotTool);
         registerTool(codeRelationTool);
+        registerTool(performanceTool);
+        registerTool(defectTool);
+        registerTool(testcaseTool);
 
         return tools;
     }
