@@ -313,14 +313,15 @@ public class ClassInfo {
                                     ("java/util/concurrent/CompletableFuture".equals(ownerCalled) && "runAsync".equals(nameCalled))
                                             || ("java/util/concurrent/CompletableFuture".equals(ownerCalled) &&
                                             "supplyAsync".equals(nameCalled))
-//                                            || (ownerCalled.contains("Executor") && "execute".equals(nameCalled))
+                                            || ("java/util/concurrent/Executor".equals(ownerCalled)
+                                            && ("execute".equals(nameCalled) || "submit".equals(nameCalled)))
+                                            || (ownerCalled.endsWith("Executor")
+                                            && ("execute".equals(nameCalled) || "submit".equals(nameCalled)))
+                                            || (ownerCalled.endsWith("ExecutorService")
+                                            && ("execute".equals(nameCalled) || "submit".equals(nameCalled)))
+                                            || (ownerCalled.contains("ThreadPoolTaskExecutor")
+                                            && ("execute".equals(nameCalled) || "submit".equals(nameCalled)))
                                             || (ownerCalled.contains("Thread") && "start".equals(nameCalled));
-                            // 支持 Spring 的 ThreadPoolTaskExecutor 的 execute/submit 方法
-//                                            || ("org/springframework/scheduling/concurrent/ThreadPoolTaskExecutor"
-//                                            .equals(ownerCalled)
-//                                                && ("execute".equals(nameCalled) || "submit".equals(nameCalled)))
-//                                            || (ownerCalled.contains("ThreadPoolTaskExecutor") && ("execute".equals
-//                                            (nameCalled) || "submit".equals(nameCalled)));
 
                             if (isAsyncCall) {
                                 asyncMethodMap.put(className + " " + methodKey, true);

@@ -6,6 +6,7 @@ import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.StringUtils;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.context.AgentContext;
 import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.jacoco.data.StackNodeVoBuilder;
 import com.oAT.agent.model.HttpTraceNode;
@@ -24,11 +25,13 @@ import java.io.OutputStream;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 
 public class HttpServletCollect extends AbstractByteTransformCollect {
     private final static Log logger = LogFactory.getLog(HttpServletCollect.class);
+    private static final Map<String, HttpServletTraceNodeWrapper> PENDING_ASYNC_HTTP_NODES = new ConcurrentHashMap<>();
 
     public static HttpServletCollect INSTANCE;
     private final List<String> httpDrivers;
@@ -281,6 +284,8 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         if (traceId == null && (StringUtils.hasText(this.traceContext.getConfig("codeStack.include"))
                 || StringUtils.hasText(this.traceContext.getConfig("conf_codeStack.include")))) {
             nodeWrapper.coverageCollector = CoverageCollector.begin();
+            AgentContext.setCoverageCollector(nodeWrapper.coverageCollector);
+            AgentContext.setActiveAsyncTaskCount(new java.util.concurrent.atomic.AtomicInteger(0));
         }
 
         if (Boolean.parseBoolean(this.traceContext.getConfig("collect.systemLog", "true"))) {
@@ -295,6 +300,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         if (nodeWrapper == null || this.traceContext.getTraceSession() == null) {
             return;
         }
+        boolean deferred = false;
         try {
             TraceSession traceSession = traceContext.getTraceSession();
             HttpTraceNode node = nodeWrapper.node;
@@ -340,36 +346,29 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
                 node.setStatus(TraceNode.Status.succeed.toString());
             }
             if (nodeWrapper.coverageCollector != null) {
-                nodeWrapper.coverageCollector = CoverageCollector.end();
-                // 在 agent 端从探针快照 + ClassProbeInfo 元信息构建 codeNodes
-                if (nodeWrapper.coverageCollector != null && !nodeWrapper.coverageCollector.getProbeSnapshots().isEmpty()) {
-                    try {
-                        StackNodeVo[] codeNodes = new StackNodeVoBuilder()
-                                .buildCodeNodes(nodeWrapper.coverageCollector);
-                        node.setCodeNodes(codeNodes);
-                    } catch (Throwable t) {
-                        logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
-                    }
+                boolean hasPendingAsyncTasks = AgentContext.hasPendingAsyncTasks();
+                if (!hasPendingAsyncTasks) {
+                    finalizeCoverageAndSaveNode(nodeWrapper, traceSession);
+                } else {
+                    deferred = true;
+                    nodeWrapper.markDeferred();
+                    PENDING_ASYNC_HTTP_NODES.put(traceSession.getTraceId(), nodeWrapper);
+                    logger.info("[Agent-info]检测到异步任务仍在执行，延迟当前 HTTP 请求的覆盖率汇总，pendingAsyncTasks="
+                            + AgentContext.getActiveAsyncTaskCount().get());
                 }
+            } else {
+                traceSession.saveNode(node);
             }
-
-            if (nodeWrapper.logOut != null) {
-                String logStr = nodeWrapper.logOut.toString().trim();
-                if (logStr.length() > 1024) {
-                    logStr = logStr.substring(0, 1024) + "...";
-                }
-                node.setLog(logStr);
-            }
-            // 保证 codeNodes 有代码覆盖率
-            traceSession.saveNode(node);
         } catch (Throwable e) {
             logger.error("[Agent-EXCError]HttpServletCollect end error: " + StackTraceFormatter.formatExceptionWithAgentMark(e));
         } finally {
-            try {
-                //关闭会话
-                nodeWrapper.doDestroy();
-            } catch (Throwable t) {
-                logger.error("[Agent-EXCError]doDestroy error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            if (!deferred) {
+                try {
+                    //关闭会话
+                    nodeWrapper.doDestroy();
+                } catch (Throwable t) {
+                    logger.error("[Agent-EXCError]doDestroy error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                }
             }
         }
     }
@@ -383,6 +382,66 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]error method error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         }
+    }
+
+    public static void tryFinalizeDeferredNode() {
+        if (INSTANCE == null) {
+            return;
+        }
+        TraceSession traceSession = AgentContext.getTraceSession();
+        if (traceSession == null) {
+            return;
+        }
+        if (AgentContext.hasPendingAsyncTasks()) {
+            return;
+        }
+        HttpServletTraceNodeWrapper nodeWrapper = PENDING_ASYNC_HTTP_NODES.remove(traceSession.getTraceId());
+        if (nodeWrapper == null) {
+            return;
+        }
+        try {
+            INSTANCE.finalizeCoverageAndSaveNode(nodeWrapper, traceSession);
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError]异步覆盖率补报失败: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+        } finally {
+            try {
+                nodeWrapper.clearDeferred();
+                nodeWrapper.doDestroy();
+            } catch (Throwable t) {
+                logger.error("[Agent-EXCError]异步补报 doDestroy 失败: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            }
+        }
+    }
+
+    private void finalizeCoverageAndSaveNode(HttpServletTraceNodeWrapper nodeWrapper, TraceSession traceSession) {
+        if (nodeWrapper == null || traceSession == null) {
+            return;
+        }
+        HttpTraceNode node = nodeWrapper.node;
+        if (nodeWrapper.logOut != null) {
+            String logStr = nodeWrapper.logOut.toString().trim();
+            if (logStr.length() > 1024) {
+                logStr = logStr.substring(0, 1024) + "...";
+            }
+            node.setLog(logStr);
+        }
+        if (nodeWrapper.coverageCollector != null) {
+            CoverageCollector collector = AgentContext.getCoverageCollector();
+            if (collector != null) {
+                nodeWrapper.coverageCollector = collector;
+            }
+            nodeWrapper.coverageCollector.collectSnapshots();
+            if (!nodeWrapper.coverageCollector.getProbeSnapshots().isEmpty()) {
+                try {
+                    StackNodeVo[] codeNodes = new StackNodeVoBuilder()
+                            .buildCodeNodes(nodeWrapper.coverageCollector);
+                    node.setCodeNodes(codeNodes);
+                } catch (Throwable t) {
+                    logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                }
+            }
+        }
+        traceSession.saveNode(node);
     }
 
     private Object resolveResponseWrapper(Object[] params) {
@@ -413,18 +472,37 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         private final HttpTraceNode node;
         private CoverageCollector coverageCollector;
         private OutputStream logOut;
+        private boolean deferred;
+        private boolean destroyed;
 
         public HttpServletTraceNodeWrapper(TraceSession traceSession, HttpTraceNode node) {
             this.traceSession = traceSession;
             this.node = node;
         }
 
+        public void markDeferred() {
+            this.deferred = true;
+        }
+
+        public void clearDeferred() {
+            this.deferred = false;
+        }
+
         @Override
-        public void doDestroy() {
+        public synchronized void doDestroy() {
+            if (destroyed) {
+                return;
+            }
+            if (deferred) {
+                return;
+            }
+            destroyed = true;
             try {
                 if (coverageCollector != null) {
                     CoverageCollector.remove();
                 }
+                AgentContext.removeCoverageCollector();
+                AgentContext.removeActiveAsyncTaskCount();
                 if (logOut != null) {
                     SystemLogCollect.INSTANCE.removeOutput(logOut);
                 }

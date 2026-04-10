@@ -1,12 +1,17 @@
 package com.oAT.agent.context;
 
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.trace.TraceSession;
+
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 统一上下文管理，解决跨线程透传问题
  */
 public class AgentContext {
     private static final ThreadLocal<TraceSession> TRACE_SESSION = new InheritableThreadLocal<>();
+    private static final ThreadLocal<AtomicInteger> ACTIVE_ASYNC_TASK_COUNT = new InheritableThreadLocal<>();
+    private static final ThreadLocal<CoverageCollector> COVERAGE_COLLECTOR = new InheritableThreadLocal<>();
 
     public static TraceSession getTraceSession() {
         return TRACE_SESSION.get();
@@ -20,18 +25,75 @@ public class AgentContext {
         TRACE_SESSION.remove();
     }
 
+    public static CoverageCollector getCoverageCollector() {
+        return COVERAGE_COLLECTOR.get();
+    }
+
+    public static void setCoverageCollector(CoverageCollector coverageCollector) {
+        if (coverageCollector == null) {
+            COVERAGE_COLLECTOR.remove();
+        } else {
+            COVERAGE_COLLECTOR.set(coverageCollector);
+        }
+    }
+
+    public static void removeCoverageCollector() {
+        COVERAGE_COLLECTOR.remove();
+    }
+
+    public static AtomicInteger getActiveAsyncTaskCount() {
+        return ACTIVE_ASYNC_TASK_COUNT.get();
+    }
+
+    public static void setActiveAsyncTaskCount(AtomicInteger count) {
+        if (count == null) {
+            ACTIVE_ASYNC_TASK_COUNT.remove();
+        } else {
+            ACTIVE_ASYNC_TASK_COUNT.set(count);
+        }
+    }
+
+    public static void removeActiveAsyncTaskCount() {
+        ACTIVE_ASYNC_TASK_COUNT.remove();
+    }
+
+    public static void registerAsyncTask() {
+        AtomicInteger count = ACTIVE_ASYNC_TASK_COUNT.get();
+        if (count != null) {
+            count.incrementAndGet();
+        }
+    }
+
+    public static int completeAsyncTask() {
+        AtomicInteger count = ACTIVE_ASYNC_TASK_COUNT.get();
+        if (count == null) {
+            return -1;
+        }
+        return count.decrementAndGet();
+    }
+
+    public static boolean hasPendingAsyncTasks() {
+        AtomicInteger count = ACTIVE_ASYNC_TASK_COUNT.get();
+        return count != null && count.get() > 0;
+    }
+
     /**
      * 获取当前上下文快照
      */
     public static ContextSnapshot capture() {
-        return new ContextSnapshot(TRACE_SESSION.get());
+        return new ContextSnapshot(TRACE_SESSION.get(), ACTIVE_ASYNC_TASK_COUNT.get(), COVERAGE_COLLECTOR.get());
     }
 
     public static class ContextSnapshot {
         private final TraceSession traceSession;
+        private final AtomicInteger activeAsyncTaskCount;
+        private final CoverageCollector coverageCollector;
 
-        public ContextSnapshot(TraceSession traceSession) {
+        public ContextSnapshot(TraceSession traceSession, AtomicInteger activeAsyncTaskCount,
+                               CoverageCollector coverageCollector) {
             this.traceSession = traceSession;
+            this.activeAsyncTaskCount = activeAsyncTaskCount;
+            this.coverageCollector = coverageCollector;
         }
 
         /**
@@ -40,20 +102,37 @@ public class AgentContext {
          */
         public Scope restore() {
             TraceSession previousTrace = TRACE_SESSION.get();
+            AtomicInteger previousAsyncTaskCount = ACTIVE_ASYNC_TASK_COUNT.get();
+            CoverageCollector previousCoverageCollector = COVERAGE_COLLECTOR.get();
 
             if (this.traceSession != null) {
                 TRACE_SESSION.set(this.traceSession);
             }
+            if (this.activeAsyncTaskCount != null) {
+                ACTIVE_ASYNC_TASK_COUNT.set(this.activeAsyncTaskCount);
+            } else {
+                ACTIVE_ASYNC_TASK_COUNT.remove();
+            }
+            if (this.coverageCollector != null) {
+                COVERAGE_COLLECTOR.set(this.coverageCollector);
+            } else {
+                COVERAGE_COLLECTOR.remove();
+            }
 
-            return new Scope(previousTrace);
+            return new Scope(previousTrace, previousAsyncTaskCount, previousCoverageCollector);
         }
     }
 
     public static class Scope implements AutoCloseable {
         private final TraceSession previousTrace;
+        private final AtomicInteger previousAsyncTaskCount;
+        private final CoverageCollector previousCoverageCollector;
 
-        public Scope(TraceSession previousTrace) {
+        public Scope(TraceSession previousTrace, AtomicInteger previousAsyncTaskCount,
+                     CoverageCollector previousCoverageCollector) {
             this.previousTrace = previousTrace;
+            this.previousAsyncTaskCount = previousAsyncTaskCount;
+            this.previousCoverageCollector = previousCoverageCollector;
         }
 
         @Override
@@ -62,6 +141,18 @@ public class AgentContext {
                 TRACE_SESSION.set(previousTrace);
             } else {
                 TRACE_SESSION.remove();
+            }
+
+            if (previousAsyncTaskCount != null) {
+                ACTIVE_ASYNC_TASK_COUNT.set(previousAsyncTaskCount);
+            } else {
+                ACTIVE_ASYNC_TASK_COUNT.remove();
+            }
+
+            if (previousCoverageCollector != null) {
+                COVERAGE_COLLECTOR.set(previousCoverageCollector);
+            } else {
+                COVERAGE_COLLECTOR.remove();
             }
         }
     }
@@ -99,6 +190,10 @@ public class AgentContext {
         public void run() {
             try (Scope ignored = snapshot.restore()) {
                 delegate.run();
+            } finally {
+                if (completeAsyncTask() == 0) {
+                    com.oAT.agent.collect.HttpServletCollect.tryFinalizeDeferredNode();
+                }
             }
         }
     }
@@ -116,6 +211,10 @@ public class AgentContext {
         public V call() throws Exception {
             try (Scope ignored = snapshot.restore()) {
                 return delegate.call();
+            } finally {
+                if (completeAsyncTask() == 0) {
+                    com.oAT.agent.collect.HttpServletCollect.tryFinalizeDeferredNode();
+                }
             }
         }
     }
