@@ -199,17 +199,17 @@ public class ClassInfo {
                                                  final String signature,
                                                  String[] exceptions) {
                     final Set<Integer> lineNumberSet = new HashSet<Integer>();
-                    Set<String> skipMethods = new HashSet<String>(Arrays.asList("<init>", InstrSupport.CLINIT_NAME,
-                            InstrSupport.INITMETHOD_NAME, "equals", "canEqual", "hashCode", "toString", "clone"));
+                    Set<String> skipMethods = new HashSet<String>(Arrays.asList("equals", "canEqual", "hashCode", "toString", "clone"));
                     boolean isInitWithParams = "<init>".equals(name) &&
                             ((descriptor != null && descriptor.contains("(") && !descriptor.contains("()")) ||
                                     (signature != null && signature.contains("(") && !signature.contains("()")));
                     boolean isAnonymousConstructor = "<init>".equals(name) && isAnonymousClassName(className);
                     boolean isCompilerGeneratedMethod = isCompilerGeneratedMethod(access);
+                    boolean shouldCollectMethod = (!skipMethods.contains(name) || isInitWithParams)
+                            && !isAnonymousConstructor
+                            && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE | Opcodes.ACC_INTERFACE)) == 0;
 
-                    if ((!skipMethods.contains(name) || isInitWithParams) && !isAnonymousConstructor
-                            && !isCompilerGeneratedMethod
-                            && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE | Opcodes.ACC_INTERFACE)) == 0) {
+                    if (shouldCollectMethod) {
                         if (signature == null || descriptor != null) {
                             methodName = name;
                             methodDesc = descriptor;

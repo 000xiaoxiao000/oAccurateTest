@@ -1,13 +1,3 @@
-/*******************************************************************************
- * Copyright (c) 2009, 2016 Mountainminds GmbH & Co. KG and Contributors
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
- * Contributors:
- *    Marc R. Hoffmann - initial API and implementation
- *
- *******************************************************************************/
 package com.oAT.agent.jacoco.data;
 
 import com.oAT.agent.Agent;
@@ -18,10 +8,8 @@ import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.trace.TraceContext;
 import com.oAT.server.model.ClientSessionVo;
 
-import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -34,50 +22,64 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class CompactDataOutput {
 
     // ================= 静态上报控制 =================
-    private static final AtomicBoolean STATIC_SENT = new AtomicBoolean(false);
+    private static final AtomicBoolean STATIC_UPLOAD_STARTED = new AtomicBoolean(false);
+    private static final AtomicBoolean STATIC_UPLOAD_COMPLETED = new AtomicBoolean(false);
     private static final Log logger = LogFactory.getLog(CompactDataOutput.class);
 
     /**
      * 首次写入前尝试上报静态代码信息。
-     * 幂等：仅成功进入 compareAndSet 的线程构造和发送，上报失败不会重试（避免频繁重负载），如需可后续扩展重试机制。
+     * 仅在有静态数据时启动上报；仅在上报成功后标记完成，失败允许后续重试。
      */
-    public void trySendStaticInfo() {
-        if (!STATIC_SENT.compareAndSet(false, true)) {
-            return; // 已发送
+    public static void trySendStaticInfo() {
+        if (STATIC_UPLOAD_COMPLETED.get()) {
+            return;
+        }
+        if (CompactDataInput.getAllClassStaticInfo().isEmpty()) {
+            return;
+        }
+        if (!STATIC_UPLOAD_STARTED.compareAndSet(false, true)) {
+            return;
         }
         try {
-            // 组装 JSON 数据
             String json = CompactDataInput.exportAsJson();
+            if (StringUtils.isEmpty(json) || "{}".equals(json)) {
+                STATIC_UPLOAD_STARTED.set(false);
+                return;
+            }
             int byteSize = json.getBytes(StandardCharsets.UTF_8).length;
             final double mbSize = byteSize / (1024.0 * 1024.0);
-            // 全局上下文
+
             TraceContext ctx = Agent.traceContext;
             if (ctx == null) {
+                STATIC_UPLOAD_STARTED.set(false);
                 logger.warn("[Agent-warn]静态代码信息上报跳过: TraceContext 为 null");
                 return;
             }
             String remote = ctx.getRemoteServer();
             if (StringUtils.isEmpty(remote)) {
+                STATIC_UPLOAD_STARTED.set(false);
                 logger.warn("[Agent-warn]静态代码信息上报跳过: remoteServer 为空");
                 return;
             }
             ClientSessionVo session = ctx.getClientSession();
-            String appId = (session == null || StringUtils.isEmpty(session.getApplication().getAppId())) ? "" :
-                    session.getApplication().getAppId();
+            String appId = (session == null || session.getApplication() == null || StringUtils.isEmpty(session.getApplication().getAppId()))
+                    ? "" : session.getApplication().getAppId();
             if (StringUtils.isEmpty(appId)) {
-                logger.warn("[Agent-warn]静态代码信息上报: sessionId 为空，仍尝试发送");
+                logger.warn("[Agent-warn]静态代码信息上报: appId 为空，仍尝试发送");
             }
 
-            // 构造，上传路径/参数 — appId 通过 query param 传递，data 通过 raw body 发送避免 form-urlencoded 大小限制
             String uploadUrl = remote + "/client/uploadStaticData?appId=" + URLEncoder.encode(appId, "UTF-8");
             byte[] bodyBytes = json.getBytes(StandardCharsets.UTF_8);
 
-            logger.info(String.format("[Agent-info]开始上报静态代码信息: dataSize=%.4f MB, classCount=%d, url=%s", mbSize, CompactDataInput.getAllClassStaticInfo().size(), uploadUrl));
+            logger.info(String.format("[Agent-info]开始上报静态代码信息: dataSize=%.4f MB, classCount=%d, url=%s",
+                    mbSize, CompactDataInput.getAllClassStaticInfo().size(), uploadUrl));
 
-            String resp  = HttpClient.execHttpRawBody(uploadUrl, "application/json; charset=UTF-8", bodyBytes).get(30, TimeUnit.SECONDS);
+            String resp = HttpClient.execHttpRawBody(uploadUrl, "application/json; charset=UTF-8", bodyBytes)
+                    .get(30, TimeUnit.SECONDS);
+            STATIC_UPLOAD_COMPLETED.set(true);
             logger.info(String.format("[Agent-succeed]静态代码信息上报成功: resp=%s, size=%.4fMB", resp, mbSize));
         } catch (Throwable t) {
-            // 捕获所有异常，防止影响原有写流程
+            STATIC_UPLOAD_STARTED.set(false);
             try {
                 if (t instanceof java.util.concurrent.TimeoutException) {
                     logger.error("[Agent-EXCError]静态代码信息上报超时: 等待超过 30 秒, " + t.getMessage());
