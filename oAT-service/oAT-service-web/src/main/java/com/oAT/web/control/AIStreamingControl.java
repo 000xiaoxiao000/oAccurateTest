@@ -18,7 +18,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -507,18 +506,18 @@ public class AIStreamingControl {
     private void sendTypingEffect(SseEmitter emitter, String response) throws IOException, InterruptedException {
         int chunkSize = 10; // 每次发送10个字符
         int length = response.length();
-        
+
         for (int i = 0; i < length; i += chunkSize) {
             int end = Math.min(i + chunkSize, length);
             String chunk = response.substring(i, end);
-            
+
             SseEmitter.SseEventBuilder event = SseEmitter.event()
                 .name("content")
                 .data(chunk)
                 .reconnectTime(3000);
-            
+
             emitter.send(event);
-            
+
             // 延迟50ms，模拟打字速度
             Thread.sleep(50);
         }
