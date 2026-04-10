@@ -148,7 +148,8 @@ public class TraceContext {
                         // 元数据验证
                         Map<String, String> manifestAttrs = PackageVerifier.verifyManifest(
                                 jarPath,
-                                Arrays.asList("Manifest-Version", "Main-Class", "Implementation-Version", "Implementation" +
+                                Arrays.asList("Manifest-Version", "Main-Class", "Implementation-Version",
+                                        "Implementation" +
                                         "-Vendor")
                         );
                         if (logger.isDebugEnabled()) {
@@ -220,7 +221,8 @@ public class TraceContext {
     private void initializeServices() {
         transferService = new HttpTransferServiceImpl(this);
         // 减少 corePoolSize，避免为大量短任务创建过多线程导致 GC 压力
-        scheduledPool = new ThreadPoolExecutor(4, 20, 1L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>(1000));
+        scheduledPool = new ThreadPoolExecutor(4, 20, 1L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>(1000));
         initHeartbeat();    // 初始化心跳任务
         initLogCleanup(); // 初始化日志清理任务
     }
@@ -405,7 +407,7 @@ public class TraceContext {
 
     private void logJvmAndAsmInfo() {
         if (logger.isDebugEnabled()) {
-            logger.debug("===================================================" +
+            logger.debug("===================================================\n" +
                     "Java 版本与 class file version 对照表：\n" +
                     "Java 1.1: 45.3 " + "Java 1.2: 46.0 " + "Java 1.3: 47.0 " + "Java 1.4: 48.0 " + "Java 5 : 49.0\n" +
                     "Java 6  : 50.0 " + "Java 7  : 51.0 " + "Java 8  : 52.0 " + "Java 9  : 53.0 " + "Java 10: 54.0\n" +
@@ -476,9 +478,11 @@ public class TraceContext {
             logger.warn("[Agent-warn]登录server失败，未获取到应用信息");
             return false;
         }
-        logger.info(String.format("[Agent-doLogin]登录 server 成功。目标服务应用名称: %s, appKey: %s, sessionId: %s",
+        logger.info(String.format("===================================================\n" +
+                        "[Agent-doLogin]登录 server 成功。目标服务应用名称: %s, appKey: %s, sessionId: %s\n",
                 clientSession.getApplication().getAppName(), clientSession.getClientInfo().getAppKey(),
-                clientSession.getSessionId()));
+                clientSession.getSessionId()) +
+                "===================================================");
         return true;
     }
 
@@ -496,7 +500,7 @@ public class TraceContext {
                 sendAgentLogs();
                 agentLogsSent = true;
 
-                new CompactDataOutput().trySendStaticInfo();
+                CompactDataOutput.trySendStaticInfo();
             }
         }
 
@@ -588,10 +592,6 @@ public class TraceContext {
     }
 
     public TraceSession getTraceSession() {
-        return AgentContext.getTraceSession();
-    }
-
-    public static TraceSession getCurrentTraceSession() {
         return AgentContext.getTraceSession();
     }
 

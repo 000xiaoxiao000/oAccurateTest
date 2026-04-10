@@ -6,6 +6,7 @@ import com.oAT.agent.common.WildcardMatcher;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.jacoco.data.CompactDataInput;
+import com.oAT.agent.jacoco.data.CompactDataOutput;
 import com.oAT.agent.jacoco.instr.ClassInfo;
 import com.oAT.agent.jacoco.instr.InstrSupport;
 import com.oAT.agent.trace.TraceContext;

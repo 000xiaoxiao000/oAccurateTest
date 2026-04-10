@@ -15,9 +15,7 @@ final class CoverageNamingSupport {
         if (vmClassName == null || vmClassName.isEmpty()) {
             return vmClassName;
         }
-        int nestedIndex = vmClassName.indexOf('$');
-        String ownerClassName = nestedIndex >= 0 ? vmClassName.substring(0, nestedIndex) : vmClassName;
-        return ownerClassName.replace('/', '.');
+        return vmClassName.replace('/', '.');
     }
 
     static String buildMethodMergeKey(String vmClassName, String rawMethodName, String methodDesc) {
