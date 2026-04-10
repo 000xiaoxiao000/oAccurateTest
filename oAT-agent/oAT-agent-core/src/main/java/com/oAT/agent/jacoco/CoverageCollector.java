@@ -94,7 +94,7 @@ public class CoverageCollector {
      * 从全局 CoverageData 收集所有已注册类的探针快照。
      * 在请求结束时调用。
      */
-    private void collectSnapshots() {
+    public void collectSnapshots() {
         try {
             // 收集所有已注册的 classId 的探针快照
             long[] classIds = CoverageData.getRegisteredClassIds();
