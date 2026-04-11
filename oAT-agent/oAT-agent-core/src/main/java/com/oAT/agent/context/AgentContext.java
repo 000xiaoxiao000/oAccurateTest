@@ -119,7 +119,32 @@ public class AgentContext {
                 COVERAGE_COLLECTOR.remove();
             }
 
-            return new Scope(previousTrace, previousAsyncTaskCount, previousCoverageCollector);
+            return new Scope(previousTrace, previousAsyncTaskCount, previousCoverageCollector, true);
+        }
+
+        public Scope restoreForAsyncExecution() {
+            TraceSession previousTrace = TRACE_SESSION.get();
+            AtomicInteger previousAsyncTaskCount = ACTIVE_ASYNC_TASK_COUNT.get();
+            CoverageCollector previousCoverageCollector = COVERAGE_COLLECTOR.get();
+            boolean shouldRestorePrevious = previousTrace == null || previousTrace == this.traceSession;
+
+            if (this.traceSession != null) {
+                TRACE_SESSION.set(this.traceSession);
+            } else {
+                TRACE_SESSION.remove();
+            }
+            if (this.activeAsyncTaskCount != null) {
+                ACTIVE_ASYNC_TASK_COUNT.set(this.activeAsyncTaskCount);
+            } else {
+                ACTIVE_ASYNC_TASK_COUNT.remove();
+            }
+            if (this.coverageCollector != null) {
+                COVERAGE_COLLECTOR.set(this.coverageCollector);
+            } else {
+                COVERAGE_COLLECTOR.remove();
+            }
+
+            return new Scope(previousTrace, previousAsyncTaskCount, previousCoverageCollector, shouldRestorePrevious);
         }
     }
 
@@ -127,16 +152,21 @@ public class AgentContext {
         private final TraceSession previousTrace;
         private final AtomicInteger previousAsyncTaskCount;
         private final CoverageCollector previousCoverageCollector;
+        private final boolean restorePrevious;
 
         public Scope(TraceSession previousTrace, AtomicInteger previousAsyncTaskCount,
-                     CoverageCollector previousCoverageCollector) {
+                     CoverageCollector previousCoverageCollector, boolean restorePrevious) {
             this.previousTrace = previousTrace;
             this.previousAsyncTaskCount = previousAsyncTaskCount;
             this.previousCoverageCollector = previousCoverageCollector;
+            this.restorePrevious = restorePrevious;
         }
 
         @Override
         public void close() {
+            if (!restorePrevious) {
+                return;
+            }
             if (previousTrace != null) {
                 TRACE_SESSION.set(previousTrace);
             } else {
@@ -177,6 +207,12 @@ public class AgentContext {
         return new ContextAwareCallable<>(callable, snapshot);
     }
 
+    private static void completeAsyncTaskAndFinalizeIfNeeded() {
+        if (completeAsyncTask() == 0) {
+            com.oAT.agent.collect.HttpServletCollect.tryFinalizeDeferredNode();
+        }
+    }
+
     private static class ContextAwareRunnable implements Runnable {
         private final Runnable delegate;
         private final ContextSnapshot snapshot;
@@ -188,11 +224,11 @@ public class AgentContext {
 
         @Override
         public void run() {
-            try (Scope ignored = snapshot.restore()) {
-                delegate.run();
-            } finally {
-                if (completeAsyncTask() == 0) {
-                    com.oAT.agent.collect.HttpServletCollect.tryFinalizeDeferredNode();
+            try (Scope ignored = snapshot.restoreForAsyncExecution()) {
+                try {
+                    delegate.run();
+                } finally {
+                    completeAsyncTaskAndFinalizeIfNeeded();
                 }
             }
         }
@@ -209,11 +245,11 @@ public class AgentContext {
 
         @Override
         public V call() throws Exception {
-            try (Scope ignored = snapshot.restore()) {
-                return delegate.call();
-            } finally {
-                if (completeAsyncTask() == 0) {
-                    com.oAT.agent.collect.HttpServletCollect.tryFinalizeDeferredNode();
+            try (Scope ignored = snapshot.restoreForAsyncExecution()) {
+                try {
+                    return delegate.call();
+                } finally {
+                    completeAsyncTaskAndFinalizeIfNeeded();
                 }
             }
         }
