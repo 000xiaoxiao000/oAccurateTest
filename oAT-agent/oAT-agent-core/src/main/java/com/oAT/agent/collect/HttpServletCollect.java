@@ -25,13 +25,11 @@ import java.io.OutputStream;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 
 public class HttpServletCollect extends AbstractByteTransformCollect {
     private final static Log logger = LogFactory.getLog(HttpServletCollect.class);
-    private static final Map<String, HttpServletTraceNodeWrapper> PENDING_ASYNC_HTTP_NODES = new ConcurrentHashMap<>();
 
     public static HttpServletCollect INSTANCE;
     private final List<String> httpDrivers;
@@ -99,6 +97,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
     }
 
     private final TraceContext traceContext;
+    private final DeferredHttpTraceNodeRegistry deferredNodeRegistry = new DeferredHttpTraceNodeRegistry();
 
     public HttpServletCollect(TraceContext context, Instrumentation instrumentation, String... httpDrivers) {
         super(instrumentation);
@@ -352,9 +351,12 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
                 } else {
                     deferred = true;
                     nodeWrapper.markDeferred();
-                    PENDING_ASYNC_HTTP_NODES.put(traceSession.getTraceId(), nodeWrapper);
+                    deferredNodeRegistry.register(traceSession, nodeWrapper);
+                    java.util.concurrent.atomic.AtomicInteger activeAsyncTaskCount = AgentContext.getActiveAsyncTaskCount();
+                    int pendingAsyncTasks = activeAsyncTaskCount == null ? 0 : activeAsyncTaskCount.get();
+                    nodeWrapper.detachCurrentThreadContext();
                     logger.info("[Agent-info]检测到异步任务仍在执行，延迟当前 HTTP 请求的覆盖率汇总，pendingAsyncTasks="
-                            + AgentContext.getActiveAsyncTaskCount().get());
+                            + pendingAsyncTasks);
                 }
             } else {
                 traceSession.saveNode(node);
@@ -395,14 +397,12 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         if (AgentContext.hasPendingAsyncTasks()) {
             return;
         }
-        HttpServletTraceNodeWrapper nodeWrapper = PENDING_ASYNC_HTTP_NODES.remove(traceSession.getTraceId());
-        if (nodeWrapper == null) {
-            return;
-        }
+        INSTANCE.deferredNodeRegistry.finalizeIfReady(traceSession, INSTANCE);
+    }
+
+    void finalizeDeferredNode(HttpServletTraceNodeWrapper nodeWrapper, TraceSession traceSession) {
         try {
-            INSTANCE.finalizeCoverageAndSaveNode(nodeWrapper, traceSession);
-        } catch (Throwable t) {
-            logger.error("[Agent-EXCError]异步覆盖率补报失败: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            finalizeCoverageAndSaveNode(nodeWrapper, traceSession);
         } finally {
             try {
                 nodeWrapper.clearDeferred();
@@ -498,11 +498,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             }
             destroyed = true;
             try {
-                if (coverageCollector != null) {
-                    CoverageCollector.remove();
-                }
-                AgentContext.removeCoverageCollector();
-                AgentContext.removeActiveAsyncTaskCount();
+                detachCurrentThreadContext();
                 if (logOut != null) {
                     SystemLogCollect.INSTANCE.removeOutput(logOut);
                 }
@@ -510,6 +506,14 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]doDestroy error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
+        }
+
+        private void detachCurrentThreadContext() {
+            if (coverageCollector != null) {
+                CoverageCollector.remove();
+            }
+            AgentContext.removeCoverageCollector();
+            AgentContext.removeActiveAsyncTaskCount();
         }
 
         public HttpTraceNode getHttpTraceNode() {
