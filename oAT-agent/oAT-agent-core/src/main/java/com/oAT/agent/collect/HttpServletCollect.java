@@ -524,7 +524,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
     @Override
     public byte[] transform(ClassLoader loader, String className, ProtectionDomain protectionDomain,
                             byte[] classfileBuffer) {
-        if (!this.httpDrivers.contains(className)) {
+        if (this.httpDrivers == null || !this.httpDrivers.contains(className)) {
             return null;
         }
         getJarAndVersion(protectionDomain);
