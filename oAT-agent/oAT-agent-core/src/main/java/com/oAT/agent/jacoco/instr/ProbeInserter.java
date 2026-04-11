@@ -193,7 +193,7 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     }
 
     private boolean codeStackMethodExclude() {
-        if (compilerGeneratedMethod) {
+        if (compilerGeneratedMethod && !methodName.startsWith("lambda$")) {
             return true;
         }
         if ("<init>".equals(this.methodName) && this.methodDesc.contains("(") && !this.methodDesc.contains("()")) {
