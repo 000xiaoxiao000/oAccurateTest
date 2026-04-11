@@ -5,7 +5,6 @@ import com.oAT.agent.common.StringUtils;
 import com.oAT.agent.common.WildcardMatcher;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
-import com.oAT.agent.jacoco.data.CompactDataInput;
 import com.oAT.agent.jacoco.flow.ClassProbesAdapter;
 import com.oAT.agent.jacoco.instr.ClassInfo;
 import com.oAT.agent.jacoco.instr.ClassInstrumenter;
@@ -23,16 +22,13 @@ import java.security.ProtectionDomain;
  */
 public class CodeStackCollect implements ClassFileTransformer {
     private final static Log logger = LogFactory.getLog(CodeStackCollect.class);
-
     public static CodeStackCollect INSTANCE;
-    private final TraceContext traceContext;
     private final WildcardMatcher excludeInner;
     private final WildcardMatcher excludes;
     private final WildcardMatcher includes;
     private final WildcardMatcher excludeClassloader;
 
     public CodeStackCollect(TraceContext context, Instrumentation instrumentation) {
-        this.traceContext = context;
         try {
             //包含的代码堆栈表达式
             String includeExpr = context.getConfig("codeStack.include");
@@ -178,11 +174,31 @@ public class CodeStackCollect implements ClassFileTransformer {
             if (excludes.matches(className)) {
                 return false;
             }
-            return includes.matches(className);
+            return matchesIncludedClass(className);
         } catch (Throwable t) {
             logger.warn("[Agent-EXCError]doFilter 异常: " + className, t);
             return false;
         }
+    }
+
+    private boolean matchesIncludedClass(String className) {
+        if (includes.matches(className)) {
+            return true;
+        }
+        if (className == null || className.indexOf('$') < 0) {
+            return false;
+        }
+
+        String candidate = className;
+        int dollarIndex = candidate.lastIndexOf('$');
+        while (dollarIndex > 0) {
+            candidate = candidate.substring(0, dollarIndex);
+            if (includes.matches(candidate)) {
+                return true;
+            }
+            dollarIndex = candidate.lastIndexOf('$');
+        }
+        return false;
     }
 
     /**
