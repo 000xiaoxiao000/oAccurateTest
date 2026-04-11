@@ -18,20 +18,21 @@ public class StackNodeVo implements java.io.Serializable {
      */
     private ArrayList<Integer> doLines = new ArrayList<>(8);
 
-    //方法覆盖率
-    //执行到的方法数
     private ArrayList<Integer> executeMethodTotal = new ArrayList<>(1);
 
-    //分支覆盖率
-    //执行到的分支数
+    /**
+     * 已命中的分支行
+     */
     private ArrayList<Integer> executeBranch = new ArrayList<>(4);
-    // 执行到的分支条件: 分支行 -> 已命中的条件编号集合
-    private Map<String, List<Integer>> executeBranchConditionMap;
+    /**
+     * JaCoCo 风格分支目标命中：分支行 -> 已命中的目标探针编号集合
+     */
+    private Map<String, List<Integer>> executeBranchTargetProbeMap;
 
     /**
      * 圈复杂度
      */
-    private String execCyclo = "0";  //方法中执行的圈复杂度
+    private String execCyclo = "0";
 
     /**
      * 是否是递归方法
@@ -48,8 +49,6 @@ public class StackNodeVo implements java.io.Serializable {
      * nano time
      */
     private Long useTime;
-
-    // ========== Getter 和 Setter 方法 ==========
 
     public String getId() {
         return id;
@@ -170,12 +169,12 @@ public class StackNodeVo implements java.io.Serializable {
         this.executeBranch = executeBranch;
     }
 
-    public Map<String, List<Integer>> getExecuteBranchConditionMap() {
-        return executeBranchConditionMap;
+    public Map<String, List<Integer>> getExecuteBranchTargetProbeMap() {
+        return executeBranchTargetProbeMap;
     }
 
-    public void setExecuteBranchConditionMap(Map<String, List<Integer>> executeBranchConditionMap) {
-        this.executeBranchConditionMap = executeBranchConditionMap;
+    public void setExecuteBranchTargetProbeMap(Map<String, List<Integer>> executeBranchTargetProbeMap) {
+        this.executeBranchTargetProbeMap = executeBranchTargetProbeMap;
     }
 
 }

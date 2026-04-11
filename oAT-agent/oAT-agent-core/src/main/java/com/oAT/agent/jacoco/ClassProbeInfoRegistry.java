@@ -41,6 +41,10 @@ public final class ClassProbeInfoRegistry {
         return REGISTRY.size();
     }
 
+    public static Iterable<ClassProbeInfo> all() {
+        return REGISTRY.values();
+    }
+
     private ClassProbeInfoRegistry() {
     }
 }

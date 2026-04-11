@@ -7,17 +7,16 @@ public class CoverageTreeNode implements Serializable {
     private String parentId;
     private String name;
     private String fullName;
-    private String type; // 'package', 'class', or 'method'
+    private String type;
     private boolean hasChildren;
-    private String anchor; // For jumping to method
+    private String anchor;
 
-    // Coverage stats
     private int totalMethods;
     private int coveredMethods;
     private int totalBranches;
     private int coveredBranches;
-    private int totalBranchConditions;
-    private int coveredBranchConditions;
+    private int totalBranchTargets;
+    private int coveredBranchTargets;
     private int totalLines;
     private int coveredLines;
     private int totalComplexity;
@@ -40,8 +39,6 @@ public class CoverageTreeNode implements Serializable {
     public void setHasChildren(boolean hasChildren) { this.hasChildren = hasChildren; }
     public String getAnchor() { return anchor; }
     public void setAnchor(String anchor) { this.anchor = anchor; }
-
-    // Coverage stats Getters and Setters
     public int getTotalMethods() { return totalMethods; }
     public void setTotalMethods(int totalMethods) { this.totalMethods = totalMethods; }
     public int getCoveredMethods() { return coveredMethods; }
@@ -50,10 +47,10 @@ public class CoverageTreeNode implements Serializable {
     public void setTotalBranches(int totalBranches) { this.totalBranches = totalBranches; }
     public int getCoveredBranches() { return coveredBranches; }
     public void setCoveredBranches(int coveredBranches) { this.coveredBranches = coveredBranches; }
-    public int getTotalBranchConditions() { return totalBranchConditions; }
-    public void setTotalBranchConditions(int totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
-    public int getCoveredBranchConditions() { return coveredBranchConditions; }
-    public void setCoveredBranchConditions(int coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
+    public int getTotalBranchTargets() { return totalBranchTargets; }
+    public void setTotalBranchTargets(int totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
+    public int getCoveredBranchTargets() { return coveredBranchTargets; }
+    public void setCoveredBranchTargets(int coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
     public int getTotalLines() { return totalLines; }
     public void setTotalLines(int totalLines) { this.totalLines = totalLines; }
     public int getCoveredLines() { return coveredLines; }

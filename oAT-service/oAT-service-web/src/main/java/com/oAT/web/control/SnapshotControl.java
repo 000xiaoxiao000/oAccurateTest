@@ -205,8 +205,8 @@ public class SnapshotControl {
         Map<String, Integer> methodComplexity = new HashMap<>();
         Map<String, Set<Integer>> methodTotalBranches = new HashMap<>();
         Map<String, Set<Integer>> methodCoveredBranches = new HashMap<>();
-        Map<String, Set<String>> methodTotalBranchConditions = new HashMap<>();
-        Map<String, Set<String>> methodCoveredBranchConditions = new HashMap<>();
+        Map<String, Set<String>> methodTotalBranchTargets = new HashMap<>();
+        Map<String, Set<String>> methodCoveredBranchTargets = new HashMap<>();
 
         // 用于类级汇总
         Map<String, Set<String>> classMethods = new HashMap<>();
@@ -253,7 +253,7 @@ public class SnapshotControl {
                         if (node.getExecuteBranch() != null) {
                             methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
                         }
-                        addBranchConditionKeys(methodCoveredBranchConditions, methodKey, node.getExecuteBranchConditionMap(), null);
+                        addBranchTargetKeys(methodCoveredBranchTargets, methodKey, node.getExecuteBranchTargetProbeMap(), null);
                     }
                 }
             }
@@ -274,12 +274,12 @@ public class SnapshotControl {
                         methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
                         methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
                                 .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
-                        addBranchConditionKeys(methodTotalBranchConditions, mKey, mInfo.getBranchLineAndConditionNumberMap(), null);
-                        if (methodCoveredBranchConditions.containsKey(mKey)) {
+                        addBranchTargetKeys(methodTotalBranchTargets, mKey, mInfo.getBranchLineAndTargetProbeMap(), null);
+                        if (methodCoveredBranchTargets.containsKey(mKey)) {
                             Set<String> normalizedKeys = new LinkedHashSet<>();
-                            addBranchConditionKeysToSet(normalizedKeys, mInfo.getBranchLineAndConditionNumberMap(),
-                                    decodeBranchConditionKeys(methodCoveredBranchConditions.get(mKey)));
-                            methodCoveredBranchConditions.put(mKey, normalizedKeys);
+                            addBranchTargetKeysToSet(normalizedKeys, mInfo.getBranchLineAndTargetProbeMap(),
+                                    decodeBranchTargetKeys(methodCoveredBranchTargets.get(mKey)));
+                            methodCoveredBranchTargets.put(mKey, normalizedKeys);
                         }
                     }
                 }
@@ -299,11 +299,11 @@ public class SnapshotControl {
             totalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
             coveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
         }
-        long totalBranchConditions = 0;
-        long coveredBranchConditions = 0;
+        long totalBranchTargets = 0;
+        long coveredBranchTargets = 0;
         for (String mKey : methodTotalLines.keySet()) {
-            totalBranchConditions += methodTotalBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
-            coveredBranchConditions += methodCoveredBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
+            totalBranchTargets += methodTotalBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
+            coveredBranchTargets += methodCoveredBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
         }
 
         // 生成类级详细统计，供页面 Table 展示 (参考 CoverageReportIndex 结构)
@@ -318,8 +318,8 @@ public class SnapshotControl {
             long cCoveredLines = 0;
             long cTotalBranches = 0;
             long cCoveredBranches = 0;
-            long cTotalBranchConditions = 0;
-            long cCoveredBranchConditions = 0;
+            long cTotalBranchTargets = 0;
+            long cCoveredBranchTargets = 0;
             int cTotalComplexity = 0;
 
             for (String mKey : methods) {
@@ -331,8 +331,8 @@ public class SnapshotControl {
                 cTotalComplexity += methodComplexity.getOrDefault(mKey, 0);
                 cTotalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
                 cCoveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
-                cTotalBranchConditions += methodTotalBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
-                cCoveredBranchConditions += methodCoveredBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
+                cTotalBranchTargets += methodTotalBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
+                cCoveredBranchTargets += methodCoveredBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
             }
 
             Map<String, Object> cStat = new HashMap<>();
@@ -344,7 +344,7 @@ public class SnapshotControl {
             cStat.put("coveredLines", cCoveredLines);
             cStat.put("totalBranches", cTotalBranches);
             cStat.put("coveredBranches", cCoveredBranches);
-            cStat.put("branchRate", cTotalBranchConditions > 0 ? cCoveredBranchConditions * 100.0 / cTotalBranchConditions : 0);
+            cStat.put("branchRate", cTotalBranchTargets > 0 ? cCoveredBranchTargets * 100.0 / cTotalBranchTargets : 0);
             cStat.put("totalComplexity", cTotalComplexity);
             classStats.add(cStat);
         }
@@ -360,8 +360,8 @@ public class SnapshotControl {
         summary.setCoveredLines(coveredLines);
         summary.setTotalBranches(totalBranches);
         summary.setCoveredBranches(coveredBranches);
-        summary.setTotalBranchConditions(totalBranchConditions);
-        summary.setCoveredBranchConditions(coveredBranchConditions);
+        summary.setTotalBranchTargets(totalBranchTargets);
+        summary.setCoveredBranchTargets(coveredBranchTargets);
         summary.setTotalComplexity(totalComplexity);
         // 类覆盖率在快照中较难准确统计全量（因为不知道没碰到的类），这里取触达过的类
         summary.setTotalClasses(classMethods.size());
@@ -429,16 +429,16 @@ public class SnapshotControl {
                             newMd.setTotalLines(totalLines.size());
                             newMd.setTotalBranches(staticMethod != null && staticMethod.getTotalBranchCount() != null
                                     ? staticMethod.getTotalBranchCount() : 0);
-                            newMd.setTotalBranchConditionNumbers(staticMethod != null
-                                    ? staticMethod.getBranchLineAndConditionNumberMap() : null);
-                            newMd.setTotalBranchConditions(countBranchConditions(newMd.getTotalBranchConditionNumbers()));
-                            newMd.setCoveredBranchConditionNumbers(new LinkedHashMap<>());
-                            newMd.setCoveredBranchConditions(0);
+                            newMd.setTotalBranchTargetProbeMap(staticMethod != null
+                                    ? staticMethod.getBranchLineAndTargetProbeMap() : null);
+                            newMd.setTotalBranchTargets(countBranchTargets(newMd.getTotalBranchTargetProbeMap()));
+                            newMd.setCoveredBranchTargetProbeMap(new LinkedHashMap<>());
+                            newMd.setCoveredBranchTargets(0);
                             newMd.setBranchRate(0.0);
                             newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
                                     ? staticMethod.getCyclomaticComplexityMap() : 0);
                             newMd.setCoveredLineNumbers(new ArrayList<>());
-                            newMd.setCoveredBranchIds(new ArrayList<>());
+                            newMd.setCoveredBranchLines(new ArrayList<>());
                             return newMd;
                         });
 
@@ -450,19 +450,19 @@ public class SnapshotControl {
                             md.setCovered(md.getCoveredLines() > 0);
                         }
                         if (sn.getExecuteBranch() != null) {
-                            Set<Integer> coveredBranchIds = new LinkedHashSet<>(md.getCoveredBranchIds());
-                            coveredBranchIds.addAll(sn.getExecuteBranch());
-                            md.setCoveredBranchIds(new ArrayList<>(coveredBranchIds));
-                            md.setCoveredBranches(md.getCoveredBranchIds().size());
+                            Set<Integer> coveredBranchLines = new LinkedHashSet<>(md.getCoveredBranchLines());
+                            coveredBranchLines.addAll(sn.getExecuteBranch());
+                            md.setCoveredBranchLines(new ArrayList<>(coveredBranchLines));
+                            md.setCoveredBranches(md.getCoveredBranchLines().size());
                         }
-                        if (sn.getExecuteBranchConditionMap() != null) {
-                            Map<String, List<Integer>> coveredBranchConditionNumbers = mergeBranchConditionNumbers(
-                                    md.getCoveredBranchConditionNumbers(), sn.getExecuteBranchConditionMap());
-                            coveredBranchConditionNumbers = normalizeCoveredBranchConditionNumbers(
-                                    md.getTotalBranchConditionNumbers(), coveredBranchConditionNumbers);
-                            md.setCoveredBranchConditionNumbers(coveredBranchConditionNumbers);
-                            md.setCoveredBranchConditions(countBranchConditions(coveredBranchConditionNumbers));
-                            md.setBranchRate(calculateBranchRate(md.getCoveredBranchConditions(), md.getTotalBranchConditions()));
+                        if (sn.getExecuteBranchTargetProbeMap() != null) {
+                            Map<String, List<Integer>> coveredBranchTargetProbeMap = mergeBranchTargetProbeMap(
+                                    md.getCoveredBranchTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
+                            coveredBranchTargetProbeMap = normalizeCoveredBranchTargetProbeMap(
+                                    md.getTotalBranchTargetProbeMap(), coveredBranchTargetProbeMap);
+                            md.setCoveredBranchTargetProbeMap(coveredBranchTargetProbeMap);
+                            md.setCoveredBranchTargets(countBranchTargets(coveredBranchTargetProbeMap));
+                            md.setBranchRate(calculateBranchRate(md.getCoveredBranchTargets(), md.getTotalBranchTargets()));
                         }
                     }
                 }
@@ -647,11 +647,11 @@ public class SnapshotControl {
         return new ResultNotified<>(true, "快照更新成功");
     }
 
-    private Map<String, List<Integer>> mergeBranchConditionNumbers(Map<String, List<Integer>> current,
-                                                                   Map<String, List<Integer>> incoming) {
+    private Map<String, List<Integer>> mergeBranchTargetProbeMap(Map<String, List<Integer>> current,
+                                                                 Map<String, List<Integer>> incoming) {
         Map<String, LinkedHashSet<Integer>> merged = new LinkedHashMap<>();
-        appendBranchConditionNumbers(merged, current);
-        appendBranchConditionNumbers(merged, incoming);
+        appendBranchTargetProbeMap(merged, current);
+        appendBranchTargetProbeMap(merged, incoming);
         Map<String, List<Integer>> result = new LinkedHashMap<>();
         for (Map.Entry<String, LinkedHashSet<Integer>> entry : merged.entrySet()) {
             result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
@@ -659,8 +659,8 @@ public class SnapshotControl {
         return result;
     }
 
-    private void appendBranchConditionNumbers(Map<String, LinkedHashSet<Integer>> target,
-                                              Map<String, List<Integer>> source) {
+    private void appendBranchTargetProbeMap(Map<String, LinkedHashSet<Integer>> target,
+                                            Map<String, List<Integer>> source) {
         if (source == null || source.isEmpty()) {
             return;
         }
@@ -672,19 +672,19 @@ public class SnapshotControl {
         }
     }
 
-    private int countBranchConditions(Map<String, List<Integer>> branchConditionNumbers) {
-        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+    private int countBranchTargets(Map<String, List<Integer>> branchTargetProbeMap) {
+        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
             return 0;
         }
         int total = 0;
-        for (List<Integer> values : branchConditionNumbers.values()) {
+        for (List<Integer> values : branchTargetProbeMap.values()) {
             total += values == null ? 0 : new LinkedHashSet<>(values).size();
         }
         return total;
     }
 
-    private Map<String, List<Integer>> normalizeCoveredBranchConditionNumbers(Map<String, List<Integer>> total,
-                                                                              Map<String, List<Integer>> covered) {
+    private Map<String, List<Integer>> normalizeCoveredBranchTargetProbeMap(Map<String, List<Integer>> total,
+                                                                            Map<String, List<Integer>> covered) {
         if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
             return new LinkedHashMap<>();
         }
@@ -712,52 +712,52 @@ public class SnapshotControl {
         return normalized;
     }
 
-    private double calculateBranchRate(int coveredBranchConditions, int totalBranchConditions) {
-        return totalBranchConditions > 0 ? (double) coveredBranchConditions / totalBranchConditions * 100 : 0.0;
+    private double calculateBranchRate(int coveredBranchTargets, int totalBranchTargets) {
+        return totalBranchTargets > 0 ? (double) coveredBranchTargets / totalBranchTargets * 100 : 0.0;
     }
 
-    private void addBranchConditionKeys(Map<String, Set<String>> target,
-                                        String methodKey,
-                                        Map<String, List<Integer>> branchConditionNumbers,
-                                        Map<String, List<Integer>> allowedBranchConditionNumbers) {
-        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+    private void addBranchTargetKeys(Map<String, Set<String>> target,
+                                     String methodKey,
+                                     Map<String, List<Integer>> branchTargetProbeMap,
+                                     Map<String, List<Integer>> allowedBranchTargetProbeMap) {
+        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
             return;
         }
         Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
-        Map<String, List<Integer>> effective = allowedBranchConditionNumbers == null
-                ? branchConditionNumbers
-                : normalizeCoveredBranchConditionNumbers(allowedBranchConditionNumbers, branchConditionNumbers);
+        Map<String, List<Integer>> effective = allowedBranchTargetProbeMap == null
+                ? branchTargetProbeMap
+                : normalizeCoveredBranchTargetProbeMap(allowedBranchTargetProbeMap, branchTargetProbeMap);
         for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
             if (entry.getValue() == null) {
                 continue;
             }
-            for (Integer conditionNumber : entry.getValue()) {
-                if (conditionNumber != null) {
-                    keys.add(entry.getKey() + "#" + conditionNumber);
+            for (Integer branchTarget : entry.getValue()) {
+                if (branchTarget != null) {
+                    keys.add(entry.getKey() + "#" + branchTarget);
                 }
             }
         }
     }
 
-    private void addBranchConditionKeysToSet(Set<String> target,
-                                             Map<String, List<Integer>> allowedBranchConditionNumbers,
-                                             Map<String, List<Integer>> branchConditionNumbers) {
-        Map<String, List<Integer>> effective = allowedBranchConditionNumbers == null
-                ? branchConditionNumbers
-                : normalizeCoveredBranchConditionNumbers(allowedBranchConditionNumbers, branchConditionNumbers);
+    private void addBranchTargetKeysToSet(Set<String> target,
+                                          Map<String, List<Integer>> allowedBranchTargetProbeMap,
+                                          Map<String, List<Integer>> branchTargetProbeMap) {
+        Map<String, List<Integer>> effective = allowedBranchTargetProbeMap == null
+                ? branchTargetProbeMap
+                : normalizeCoveredBranchTargetProbeMap(allowedBranchTargetProbeMap, branchTargetProbeMap);
         for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
             if (entry.getValue() == null) {
                 continue;
             }
-            for (Integer conditionNumber : entry.getValue()) {
-                if (conditionNumber != null) {
-                    target.add(entry.getKey() + "#" + conditionNumber);
+            for (Integer branchTarget : entry.getValue()) {
+                if (branchTarget != null) {
+                    target.add(entry.getKey() + "#" + branchTarget);
                 }
             }
         }
     }
 
-    private Map<String, List<Integer>> decodeBranchConditionKeys(Set<String> keys) {
+    private Map<String, List<Integer>> decodeBranchTargetKeys(Set<String> keys) {
         Map<String, List<Integer>> decoded = new LinkedHashMap<>();
         if (keys == null || keys.isEmpty()) {
             return decoded;
@@ -771,8 +771,8 @@ public class SnapshotControl {
                 continue;
             }
             try {
-                int conditionNumber = Integer.parseInt(key.substring(split + 1));
-                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(conditionNumber);
+                int branchTarget = Integer.parseInt(key.substring(split + 1));
+                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(branchTarget);
             } catch (NumberFormatException ignore) {
             }
         }

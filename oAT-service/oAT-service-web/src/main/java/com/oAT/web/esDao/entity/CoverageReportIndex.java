@@ -26,21 +26,20 @@ public class CoverageReportIndex implements Serializable {
     @Field(type = FieldType.Keyword)
     private String lastProcessedTime;
 
-    // Summary Statistics
     private long totalClasses;
     private long coveredClasses;
     private long totalMethods;
     private long coveredMethods;
     private long totalBranches;
     private long coveredBranches;
-    private long totalBranchConditions;
-    private long coveredBranchConditions;
+    private long totalBranchTargets;
+    private long coveredBranchTargets;
     private long totalLines;
     private long coveredLines;
     private int totalComplexity;
 
     @Field(type = FieldType.Integer)
-    private Integer reportType; // 0: Full, 1: Incremental
+    private Integer reportType;
 
     @Field(type = FieldType.Keyword)
     private String baseVersionNumber;
@@ -60,7 +59,6 @@ public class CoverageReportIndex implements Serializable {
     @Field(type = FieldType.Text)
     private String snapshotIds;
 
-    // Incremental Summary
     private long incTotalClasses;
     private long incCoveredClasses;
     private long incTotalLines;
@@ -69,8 +67,8 @@ public class CoverageReportIndex implements Serializable {
     private long incCoveredMethods;
     private long incTotalBranches;
     private long incCoveredBranches;
-    private long incTotalBranchConditions;
-    private long incCoveredBranchConditions;
+    private long incTotalBranchTargets;
+    private long incCoveredBranchTargets;
     private int incTotalComplexity;
 
     public String getId() { return id; }
@@ -99,10 +97,10 @@ public class CoverageReportIndex implements Serializable {
     public void setTotalBranches(long totalBranches) { this.totalBranches = totalBranches; }
     public long getCoveredBranches() { return coveredBranches; }
     public void setCoveredBranches(long coveredBranches) { this.coveredBranches = coveredBranches; }
-    public long getTotalBranchConditions() { return totalBranchConditions; }
-    public void setTotalBranchConditions(long totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
-    public long getCoveredBranchConditions() { return coveredBranchConditions; }
-    public void setCoveredBranchConditions(long coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
+    public long getTotalBranchTargets() { return totalBranchTargets; }
+    public void setTotalBranchTargets(long totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
+    public long getCoveredBranchTargets() { return coveredBranchTargets; }
+    public void setCoveredBranchTargets(long coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
     public long getTotalLines() { return totalLines; }
     public void setTotalLines(long totalLines) { this.totalLines = totalLines; }
     public long getCoveredLines() { return coveredLines; }
@@ -112,30 +110,22 @@ public class CoverageReportIndex implements Serializable {
 
     public Integer getReportType() { return reportType; }
     public void setReportType(Integer reportType) { this.reportType = reportType; }
-
     public String getBaseVersionNumber() { return baseVersionNumber; }
     public void setBaseVersionNumber(String baseVersionNumber) { this.baseVersionNumber = baseVersionNumber; }
-
     public String getBaseRepoCommitId() { return baseRepoCommitId; }
     public void setBaseRepoCommitId(String baseRepoCommitId) { this.baseRepoCommitId = baseRepoCommitId; }
-
     public String getSnapshotFingerprint() { return snapshotFingerprint; }
     public void setSnapshotFingerprint(String snapshotFingerprint) { this.snapshotFingerprint = snapshotFingerprint; }
-
     public String getSnapshotLastUpdateTime() { return snapshotLastUpdateTime; }
     public void setSnapshotLastUpdateTime(String snapshotLastUpdateTime) { this.snapshotLastUpdateTime = snapshotLastUpdateTime; }
-
     public Integer getSnapshotCount() { return snapshotCount; }
     public void setSnapshotCount(Integer snapshotCount) { this.snapshotCount = snapshotCount; }
-
     public String getSnapshotIds() { return snapshotIds; }
     public void setSnapshotIds(String snapshotIds) { this.snapshotIds = snapshotIds; }
-
     public long getIncTotalClasses() { return incTotalClasses; }
     public void setIncTotalClasses(long incTotalClasses) { this.incTotalClasses = incTotalClasses; }
     public long getIncCoveredClasses() { return incCoveredClasses; }
     public void setIncCoveredClasses(long incCoveredClasses) { this.incCoveredClasses = incCoveredClasses; }
-
     public long getIncTotalLines() { return incTotalLines; }
     public void setIncTotalLines(long incTotalLines) { this.incTotalLines = incTotalLines; }
     public long getIncCoveredLines() { return incCoveredLines; }
@@ -148,11 +138,10 @@ public class CoverageReportIndex implements Serializable {
     public void setIncTotalBranches(long incTotalBranches) { this.incTotalBranches = incTotalBranches; }
     public long getIncCoveredBranches() { return incCoveredBranches; }
     public void setIncCoveredBranches(long incCoveredBranches) { this.incCoveredBranches = incCoveredBranches; }
-    public long getIncTotalBranchConditions() { return incTotalBranchConditions; }
-    public void setIncTotalBranchConditions(long incTotalBranchConditions) { this.incTotalBranchConditions = incTotalBranchConditions; }
-    public long getIncCoveredBranchConditions() { return incCoveredBranchConditions; }
-    public void setIncCoveredBranchConditions(long incCoveredBranchConditions) { this.incCoveredBranchConditions = incCoveredBranchConditions; }
-
+    public long getIncTotalBranchTargets() { return incTotalBranchTargets; }
+    public void setIncTotalBranchTargets(long incTotalBranchTargets) { this.incTotalBranchTargets = incTotalBranchTargets; }
+    public long getIncCoveredBranchTargets() { return incCoveredBranchTargets; }
+    public void setIncCoveredBranchTargets(long incCoveredBranchTargets) { this.incCoveredBranchTargets = incCoveredBranchTargets; }
     public int getIncTotalComplexity() { return incTotalComplexity; }
     public void setIncTotalComplexity(int incTotalComplexity) { this.incTotalComplexity = incTotalComplexity; }
 }

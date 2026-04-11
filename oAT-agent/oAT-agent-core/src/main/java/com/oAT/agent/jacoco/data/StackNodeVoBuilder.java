@@ -14,24 +14,10 @@ import java.util.*;
 
 /**
  * 构建 StackNodeVo[] 数组，从 CoverageCollector 的探针快照 + ClassProbeInfo 元信息生成覆盖率报告。
- * <p>
- * 替代旧的从 StackSession + StackNode 树构建的方式。
- * 新方案在服务端（oAT-service-web）端合并，减轻目标系统运行时压力。
- * </p>
  */
 public class StackNodeVoBuilder {
     private final static Log logger = LogFactory.getLog(StackNodeVoBuilder.class);
 
-    /**
-     * 从 CoverageCollector 的探针快照构建 codeNodes。
-     * <p>
-     * 遍历所有有覆盖率数据的 classId，结合 ClassProbeInfo 元信息，
-     * 将 boolean[] 探针数据转换为结构化的 StackNodeVo 数组。
-     * </p>
-     *
-     * @param collector 请求结束时收集的覆盖率数据聚合器
-     * @return StackNodeVo[] 覆盖率节点数组
-     */
     public StackNodeVo[] buildCodeNodes(CoverageCollector collector) {
         try {
             Map<Long, boolean[]> snapshots = collector.getProbeSnapshots();
@@ -121,7 +107,7 @@ public class StackNodeVoBuilder {
         nodeVo.setDoLines(new ArrayList<>(coverageLines.executedLines));
         nodeVo.setExecuteMethodTotal(buildExecutedMethodEntries(methodEntryIdx, probeInfo));
         nodeVo.setExecuteBranch(new ArrayList<>(coverageLines.executedBranchLines));
-        nodeVo.setExecuteBranchConditionMap(coverageLines.executedBranchConditionMap);
+        nodeVo.setExecuteBranchTargetProbeMap(coverageLines.executedBranchTargetProbeMap);
         nodeVo.setExecCyclo(String.valueOf(coverageLines.executedBranchLines.size()));
         nodeVo.setRecursive(Boolean.TRUE.equals(probeInfo.getMethodEntryToRecursive().get(methodEntryIdx)));
         nodeVo.setAsync(Boolean.TRUE.equals(probeInfo.getMethodEntryToAsync().get(methodEntryIdx)));
@@ -142,7 +128,7 @@ public class StackNodeVoBuilder {
     private CoverageLines collectCoverageLines(List<Integer> executedProbeIndices, ClassProbeInfo probeInfo) {
         LinkedHashSet<Integer> executedLines = new LinkedHashSet<>();
         LinkedHashSet<Integer> executedBranchLines = new LinkedHashSet<>();
-        Map<String, LinkedHashSet<Integer>> executedBranchConditionSets = new LinkedHashMap<>();
+        Map<String, LinkedHashSet<Integer>> executedBranchTargetProbeSets = new LinkedHashMap<>();
         boolean[] branchFlags = probeInfo.getProbeIsBranch();
         int[] probeLineNumbers = probeInfo.getProbeLineNumbers();
 
@@ -150,13 +136,13 @@ public class StackNodeVoBuilder {
             boolean isBranch = probeIdx < branchFlags.length && branchFlags[probeIdx];
             if (isBranch) {
                 Integer branchLine = probeInfo.getBranchProbeToLine().get(probeIdx);
+                Integer branchTargetId = probeInfo.getBranchProbeToPathId().get(probeIdx);
                 if (branchLine != null && branchLine > 0) {
                     executedBranchLines.add(branchLine);
-                    Integer conditionNumber = probeInfo.getBranchProbeToConditionNumber().get(probeIdx);
-                    if (conditionNumber != null && conditionNumber > 0) {
-                        executedBranchConditionSets
+                    if (branchTargetId != null && branchTargetId > 0) {
+                        executedBranchTargetProbeSets
                                 .computeIfAbsent(String.valueOf(branchLine), key -> new LinkedHashSet<>())
-                                .add(conditionNumber);
+                                .add(branchTargetId);
                     }
                 }
                 continue;
@@ -170,10 +156,10 @@ public class StackNodeVoBuilder {
 
         executedLines.removeAll(executedBranchLines);
         return new CoverageLines(executedLines, executedBranchLines,
-                toConditionMap(executedBranchConditionSets));
+                toTargetProbeMap(executedBranchTargetProbeSets));
     }
 
-    private Map<String, List<Integer>> toConditionMap(Map<String, LinkedHashSet<Integer>> source) {
+    private Map<String, List<Integer>> toTargetProbeMap(Map<String, LinkedHashSet<Integer>> source) {
         if (source == null || source.isEmpty()) {
             return null;
         }
@@ -206,15 +192,14 @@ public class StackNodeVoBuilder {
     private static final class CoverageLines {
         private final LinkedHashSet<Integer> executedLines;
         private final LinkedHashSet<Integer> executedBranchLines;
-        private final Map<String, List<Integer>> executedBranchConditionMap;
+        private final Map<String, List<Integer>> executedBranchTargetProbeMap;
 
         private CoverageLines(LinkedHashSet<Integer> executedLines,
                               LinkedHashSet<Integer> executedBranchLines,
-                              Map<String, List<Integer>> executedBranchConditionMap) {
+                              Map<String, List<Integer>> executedBranchTargetProbeMap) {
             this.executedLines = executedLines;
             this.executedBranchLines = executedBranchLines;
-            this.executedBranchConditionMap = executedBranchConditionMap;
+            this.executedBranchTargetProbeMap = executedBranchTargetProbeMap;
         }
     }
-
 }

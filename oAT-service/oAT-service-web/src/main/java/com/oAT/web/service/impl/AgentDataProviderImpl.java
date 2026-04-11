@@ -168,7 +168,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                     reportMap.put("createTime", report.getCreateTime());
                     // 计算覆盖率
                     reportMap.put("lineRate", calculateRate(report.getCoveredLines(), report.getTotalLines()));
-                    reportMap.put("branchRate", calculateRate(report.getCoveredBranchConditions(), report.getTotalBranchConditions()));
+                    reportMap.put("branchRate", calculateRate(report.getCoveredBranchTargets(), report.getTotalBranchTargets()));
                     reportMap.put("methodRate", calculateRate(report.getCoveredMethods(), report.getTotalMethods()));
                     reportMap.put("reportType", report.getReportType());
                     result.add(reportMap);
@@ -203,7 +203,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                 result.put("appName", getAppName(report.getAppId()));
                 result.put("createTime", report.getCreateTime());
                 result.put("lineRate", calculateRate(report.getCoveredLines(), report.getTotalLines()));
-                result.put("branchRate", calculateRate(report.getCoveredBranchConditions(), report.getTotalBranchConditions()));
+                result.put("branchRate", calculateRate(report.getCoveredBranchTargets(), report.getTotalBranchTargets()));
                 result.put("methodRate", calculateRate(report.getCoveredMethods(), report.getTotalMethods()));
                 result.put("reportType", report.getReportType());
                 result.put("classCount", report.getTotalClasses());

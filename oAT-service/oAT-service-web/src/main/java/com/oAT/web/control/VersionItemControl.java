@@ -485,8 +485,8 @@ public class VersionItemControl {
         Map<String, Integer> methodComplexity = new HashMap<>();
         Map<String, Set<Integer>> methodTotalBranches = new HashMap<>();
         Map<String, Set<Integer>> methodCoveredBranches = new HashMap<>();
-        Map<String, Set<String>> methodTotalBranchConditions = new HashMap<>();
-        Map<String, Set<String>> methodCoveredBranchConditions = new HashMap<>();
+        Map<String, Set<String>> methodTotalBranchTargets = new HashMap<>();
+        Map<String, Set<String>> methodCoveredBranchTargets = new HashMap<>();
 
         // 用于类级汇总
         Map<String, Set<String>> classMethods = new HashMap<>();
@@ -521,7 +521,7 @@ public class VersionItemControl {
                         if (node.getExecuteBranch() != null) {
                             methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
                         }
-                        addBranchConditionKeys(methodCoveredBranchConditions, methodKey, node.getExecuteBranchConditionMap());
+                        addBranchConditionKeys(methodCoveredBranchTargets, methodKey, node.getExecuteBranchTargetProbeMap());
                     }
                 }
             }
@@ -539,12 +539,12 @@ public class VersionItemControl {
                     methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
                     methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
                             .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
-                    addBranchConditionKeys(methodTotalBranchConditions, mKey, mInfo.getBranchLineAndConditionNumberMap());
-                    if (methodCoveredBranchConditions.containsKey(mKey)) {
+                    addBranchConditionKeys(methodTotalBranchTargets, mKey, mInfo.getBranchLineAndTargetProbeMap());
+                    if (methodCoveredBranchTargets.containsKey(mKey)) {
                         Set<String> normalizedKeys = new LinkedHashSet<>();
-                        addBranchConditionKeysToSet(normalizedKeys, mInfo.getBranchLineAndConditionNumberMap(),
-                                decodeBranchConditionKeys(methodCoveredBranchConditions.get(mKey)));
-                        methodCoveredBranchConditions.put(mKey, normalizedKeys);
+                        addBranchConditionKeysToSet(normalizedKeys, mInfo.getBranchLineAndTargetProbeMap(),
+                                decodeBranchConditionKeys(methodCoveredBranchTargets.get(mKey)));
+                        methodCoveredBranchTargets.put(mKey, normalizedKeys);
                     }
                 }
             }
@@ -552,8 +552,8 @@ public class VersionItemControl {
 
         // 计算汇总
         totalMethods = methodTotalLines.size();
-        long totalBranchConditions = 0;
-        long coveredBranchConditions = 0;
+        long totalBranchTargets = 0;
+        long coveredBranchTargets = 0;
         for (String mKey : methodTotalLines.keySet()) {
             totalLines += methodTotalLines.get(mKey).size();
             coveredLines += methodCoveredLines.getOrDefault(mKey, Collections.emptySet()).size();
@@ -563,8 +563,8 @@ public class VersionItemControl {
             totalComplexity += methodComplexity.getOrDefault(mKey, 0);
             totalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
             coveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
-            totalBranchConditions += methodTotalBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
-            coveredBranchConditions += methodCoveredBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
+            totalBranchTargets += methodTotalBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
+            coveredBranchTargets += methodCoveredBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
         }
 
         // 生成类级详细统计
@@ -580,8 +580,8 @@ public class VersionItemControl {
             long cCoveredLines = 0;
             long cTotalBranches = 0;
             long cCoveredBranches = 0;
-            long cTotalBranchConditions = 0;
-            long cCoveredBranchConditions = 0;
+            long cTotalBranchTargets = 0;
+            long cCoveredBranchTargets = 0;
             int cTotalComplexity = 0;
 
             for (String mKey : methods) {
@@ -593,8 +593,8 @@ public class VersionItemControl {
                 cTotalComplexity += methodComplexity.getOrDefault(mKey, 0);
                 cTotalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
                 cCoveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
-                cTotalBranchConditions += methodTotalBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
-                cCoveredBranchConditions += methodCoveredBranchConditions.getOrDefault(mKey, Collections.emptySet()).size();
+                cTotalBranchTargets += methodTotalBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
+                cCoveredBranchTargets += methodCoveredBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
             }
 
             Map<String, Object> cStat = new HashMap<>();
@@ -606,7 +606,7 @@ public class VersionItemControl {
             cStat.put("coveredLines", cCoveredLines);
             cStat.put("totalBranches", cTotalBranches);
             cStat.put("coveredBranches", cCoveredBranches);
-            cStat.put("branchRate", calculateBranchRate(cCoveredBranchConditions, cTotalBranchConditions));
+            cStat.put("branchRate", calculateBranchRate(cCoveredBranchTargets, cTotalBranchTargets));
             cStat.put("totalComplexity", cTotalComplexity);
             classStats.add(cStat);
         }
@@ -618,8 +618,8 @@ public class VersionItemControl {
         summary.setCoveredLines(coveredLines);
         summary.setTotalBranches(totalBranches);
         summary.setCoveredBranches(coveredBranches);
-        summary.setTotalBranchConditions(totalBranchConditions);
-        summary.setCoveredBranchConditions(coveredBranchConditions);
+        summary.setTotalBranchTargets(totalBranchTargets);
+        summary.setCoveredBranchTargets(coveredBranchTargets);
         summary.setTotalComplexity(totalComplexity);
         summary.setTotalClasses(classMethods.size());
         summary.setCoveredClasses(summary.getTotalClasses());
@@ -635,8 +635,8 @@ public class VersionItemControl {
         return "/snapshot/mySnapshotsCodeReport";
     }
 
-    private double calculateBranchRate(long coveredBranchConditions, long totalBranchConditions) {
-        return totalBranchConditions > 0 ? (double) coveredBranchConditions / totalBranchConditions * 100 : 0.0;
+    private double calculateBranchRate(long coveredBranchTargets, long totalBranchTargets) {
+        return totalBranchTargets > 0 ? (double) coveredBranchTargets / totalBranchTargets * 100 : 0.0;
     }
 
     private void addBranchConditionKeys(Map<String, Set<String>> target,
@@ -658,8 +658,8 @@ public class VersionItemControl {
         }
     }
 
-    private Map<String, List<Integer>> normalizeCoveredBranchConditionNumbers(Map<String, List<Integer>> total,
-                                                                              Map<String, List<Integer>> covered) {
+    private Map<String, List<Integer>> normalizeCoveredBranchTargetProbeMap(Map<String, List<Integer>> total,
+                                                                            Map<String, List<Integer>> covered) {
         if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
             return new LinkedHashMap<>();
         }
@@ -690,7 +690,7 @@ public class VersionItemControl {
     private void addBranchConditionKeysToSet(Set<String> target,
                                              Map<String, List<Integer>> allowedBranchConditionNumbers,
                                              Map<String, List<Integer>> branchConditionNumbers) {
-        Map<String, List<Integer>> effective = normalizeCoveredBranchConditionNumbers(
+        Map<String, List<Integer>> effective = normalizeCoveredBranchTargetProbeMap(
                 allowedBranchConditionNumbers, branchConditionNumbers);
         for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
             if (entry.getValue() == null) {
