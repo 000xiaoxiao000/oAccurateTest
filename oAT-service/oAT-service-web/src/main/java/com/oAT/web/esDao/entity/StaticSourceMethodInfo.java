@@ -19,7 +19,7 @@ public class StaticSourceMethodInfo implements Serializable {
     private String methodDesc;
     private List<Integer> methodLineNumberMap;
     private List<Integer> branchLineNumberSet;
-    private Map<String, List<Integer>> branchLineAndConditionNumberMap;
+    private Map<String, List<Integer>> branchLineAndTargetProbeMap;
     private Integer totalBranchCount;
     private Integer cyclomaticComplexityMap;
     private Boolean recursiveMap;
@@ -58,17 +58,24 @@ public class StaticSourceMethodInfo implements Serializable {
         this.branchLineNumberSet = branchLineNumberSet;
     }
 
-    public Map<String, List<Integer>> getBranchLineAndConditionNumberMap() {
-        return branchLineAndConditionNumberMap;
+    public Map<String, List<Integer>> getBranchLineAndTargetProbeMap() {
+        return branchLineAndTargetProbeMap;
     }
 
-    public void setBranchLineAndConditionNumberMap(Map<String, List<Integer>> branchLineAndConditionNumberMap) {
-        this.branchLineAndConditionNumberMap = branchLineAndConditionNumberMap;
+    public void setBranchLineAndTargetProbeMap(Map<String, List<Integer>> branchLineAndTargetProbeMap) {
+        this.branchLineAndTargetProbeMap = branchLineAndTargetProbeMap;
+    }
+
+    @JsonSetter("branchLineAndTargetProbeMap")
+    public void setBranchLineAndTargetProbeMapNode(JsonNode branchLineAndTargetProbeMapNode) {
+        this.branchLineAndTargetProbeMap = normalizeIntegerMap(branchLineAndTargetProbeMapNode);
     }
 
     @JsonSetter("branchLineAndConditionNumberMap")
-    public void setBranchLineAndConditionNumberMapNode(JsonNode branchLineAndConditionNumberMapNode) {
-        this.branchLineAndConditionNumberMap = normalizeBranchLineAndConditionNumberMap(branchLineAndConditionNumberMapNode);
+    public void setLegacyBranchLineAndConditionNumberMapNode(JsonNode branchLineAndConditionNumberMapNode) {
+        if (this.branchLineAndTargetProbeMap == null || this.branchLineAndTargetProbeMap.isEmpty()) {
+            this.branchLineAndTargetProbeMap = normalizeIntegerMap(branchLineAndConditionNumberMapNode);
+        }
     }
 
     public Integer getTotalBranchCount() {
@@ -111,7 +118,7 @@ public class StaticSourceMethodInfo implements Serializable {
         this.methodUri = methodUri;
     }
 
-    private Map<String, List<Integer>> normalizeBranchLineAndConditionNumberMap(JsonNode node) {
+    private Map<String, List<Integer>> normalizeIntegerMap(JsonNode node) {
         if (node == null || node.isNull()) {
             return null;
         }

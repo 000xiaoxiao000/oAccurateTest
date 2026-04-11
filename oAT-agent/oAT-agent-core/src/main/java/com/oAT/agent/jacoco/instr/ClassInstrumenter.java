@@ -165,7 +165,7 @@ public class ClassInstrumenter extends ClassProbesVisitor {
             }
             for (Map.Entry<Integer, ProbeInserter.BranchMeta> entry : assignment.branchMetaMap.entrySet()) {
                 ProbeInserter.BranchMeta meta = entry.getValue();
-                probeInfo.setBranchInfo(entry.getKey(), meta.branchLine, meta.conditionNumber);
+                probeInfo.setBranchInfo(entry.getKey(), meta.branchLine, meta.branchTargetId);
             }
 
             ClassProbeInfoRegistry.register(probeArrayStrategy.getClassId(), probeInfo);

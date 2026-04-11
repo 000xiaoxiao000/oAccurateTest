@@ -219,6 +219,11 @@ public final class LabelInfo {
 		return info == null ? NO_PROBE : info.probeid;
 	}
 
+	public static int getLine(final Label label) {
+		final LabelInfo info = get(label);
+		return info == null ? -1 : info.line;
+	}
+
 	/**
 	 * Defines an intermediate label for the given label. Such intermediate
 	 * labels are required during instrumentation to add probes to jump targets.

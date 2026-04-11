@@ -286,8 +286,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             Map<String, Set<Integer>> methodCoveredLinesMap = new HashMap<>();
             Map<String, Set<Integer>> methodTotalBranchesMap = new HashMap<>();
             Map<String, Set<Integer>> methodCoveredBranchesMap = new HashMap<>();
-            Map<String, Set<String>> methodTotalBranchConditionsMap = new HashMap<>();
-            Map<String, Set<String>> methodCoveredBranchConditionsMap = new HashMap<>();
+            Map<String, Set<String>> methodTotalBranchTargetsMap = new HashMap<>();
+            Map<String, Set<String>> methodCoveredBranchTargetsMap = new HashMap<>();
             Map<String, Integer> methodComplexityMap = new HashMap<>();
 
             for (TraceNode node : traceNodes) {
@@ -316,24 +316,24 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
                             methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
                                     .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
-                            addBranchConditionKeys(methodTotalBranchConditionsMap, methodKey, staticMethod.getBranchLineAndConditionNumberMap());
+                            addBranchTargetKeys(methodTotalBranchTargetsMap, methodKey, staticMethod.getBranchLineAndTargetProbeMap());
                             if (sn.getExecuteBranch() != null) {
                                 methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
                             }
-                            addBranchConditionKeys(methodCoveredBranchConditionsMap, methodKey, sn.getExecuteBranchConditionMap());
-                            if (methodCoveredBranchConditionsMap.containsKey(methodKey)) {
+                            addBranchTargetKeys(methodCoveredBranchTargetsMap, methodKey, sn.getExecuteBranchTargetProbeMap());
+                            if (methodCoveredBranchTargetsMap.containsKey(methodKey)) {
                                 Set<String> normalizedKeys = new LinkedHashSet<>();
-                                addBranchConditionKeysToSet(normalizedKeys, staticMethod.getBranchLineAndConditionNumberMap(),
-                                        decodeBranchConditionKeys(methodCoveredBranchConditionsMap.get(methodKey)));
-                                methodCoveredBranchConditionsMap.put(methodKey, normalizedKeys);
+                                addBranchTargetKeysToSet(normalizedKeys, staticMethod.getBranchLineAndTargetProbeMap(),
+                                        decodeBranchTargetKeys(methodCoveredBranchTargetsMap.get(methodKey)));
+                                methodCoveredBranchTargetsMap.put(methodKey, normalizedKeys);
                             }
                         }
                     }
                 }
             }
 
-            long totalBranchConditions = 0;
-            long coveredBranchConditions = 0;
+            long totalBranchTargets = 0;
+            long coveredBranchTargets = 0;
             totalMethods = methodTotalLinesMap.size();
             for (String mKey : methodTotalLinesMap.keySet()) {
                 totalLines += methodTotalLinesMap.get(mKey).size();
@@ -344,8 +344,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                 totalComplexity += methodComplexityMap.getOrDefault(mKey, 0);
                 totalBranches += methodTotalBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
                 coveredBranches += methodCoveredBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
-                totalBranchConditions += methodTotalBranchConditionsMap.getOrDefault(mKey, Collections.emptySet()).size();
-                coveredBranchConditions += methodCoveredBranchConditionsMap.getOrDefault(mKey, Collections.emptySet()).size();
+                totalBranchTargets += methodTotalBranchTargetsMap.getOrDefault(mKey, Collections.emptySet()).size();
+                coveredBranchTargets += methodCoveredBranchTargetsMap.getOrDefault(mKey, Collections.emptySet()).size();
             }
 
             CoverageReportIndex report = new CoverageReportIndex();
@@ -359,8 +359,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             report.setCoveredLines(coveredLines);
             report.setTotalBranches(totalBranches);
             report.setCoveredBranches(coveredBranches);
-            report.setTotalBranchConditions(totalBranchConditions);
-            report.setCoveredBranchConditions(coveredBranchConditions);
+            report.setTotalBranchTargets(totalBranchTargets);
+            report.setCoveredBranchTargets(coveredBranchTargets);
             report.setTotalComplexity(totalComplexity);
 
             snapshot.setCoverageReport(report);
@@ -372,48 +372,48 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             repository.save(snapshot);
         }
     }
-    private void addBranchConditionKeys(Map<String, Set<String>> target,
-                                        String methodKey,
-                                        Map<String, List<Integer>> branchConditionNumbers) {
-        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+    private void addBranchTargetKeys(Map<String, Set<String>> target,
+                                     String methodKey,
+                                     Map<String, List<Integer>> branchTargetProbeMap) {
+        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
             return;
         }
         Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
-        for (Map.Entry<String, List<Integer>> entry : branchConditionNumbers.entrySet()) {
+        for (Map.Entry<String, List<Integer>> entry : branchTargetProbeMap.entrySet()) {
             if (entry.getValue() == null) {
                 continue;
             }
-            for (Integer conditionNumber : entry.getValue()) {
-                if (conditionNumber != null) {
-                    keys.add(entry.getKey() + "#" + conditionNumber);
+            for (Integer branchTarget : entry.getValue()) {
+                if (branchTarget != null) {
+                    keys.add(entry.getKey() + "#" + branchTarget);
                 }
             }
         }
     }
 
-    private void addBranchConditionKeysToSet(Set<String> target,
-                                             Map<String, List<Integer>> allowedBranchConditionNumbers,
-                                             Map<String, List<Integer>> branchConditionNumbers) {
-        if (allowedBranchConditionNumbers == null || allowedBranchConditionNumbers.isEmpty()
-                || branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
+    private void addBranchTargetKeysToSet(Set<String> target,
+                                          Map<String, List<Integer>> allowedBranchTargets,
+                                          Map<String, List<Integer>> coveredBranchTargets) {
+        if (allowedBranchTargets == null || allowedBranchTargets.isEmpty()
+                || coveredBranchTargets == null || coveredBranchTargets.isEmpty()) {
             return;
         }
-        for (Map.Entry<String, List<Integer>> entry : allowedBranchConditionNumbers.entrySet()) {
+        for (Map.Entry<String, List<Integer>> entry : allowedBranchTargets.entrySet()) {
             List<Integer> allowedValues = entry.getValue();
-            List<Integer> coveredValues = branchConditionNumbers.get(entry.getKey());
+            List<Integer> coveredValues = coveredBranchTargets.get(entry.getKey());
             if (allowedValues == null || allowedValues.isEmpty() || coveredValues == null || coveredValues.isEmpty()) {
                 continue;
             }
             Set<Integer> allowed = new LinkedHashSet<>(allowedValues);
-            for (Integer conditionNumber : coveredValues) {
-                if (conditionNumber != null && allowed.contains(conditionNumber)) {
-                    target.add(entry.getKey() + "#" + conditionNumber);
+            for (Integer branchTarget : coveredValues) {
+                if (branchTarget != null && allowed.contains(branchTarget)) {
+                    target.add(entry.getKey() + "#" + branchTarget);
                 }
             }
         }
     }
 
-    private Map<String, List<Integer>> decodeBranchConditionKeys(Set<String> keys) {
+    private Map<String, List<Integer>> decodeBranchTargetKeys(Set<String> keys) {
         Map<String, List<Integer>> decoded = new LinkedHashMap<>();
         if (keys == null || keys.isEmpty()) {
             return decoded;
@@ -427,8 +427,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                 continue;
             }
             try {
-                int conditionNumber = Integer.parseInt(key.substring(split + 1));
-                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(conditionNumber);
+                int branchTarget = Integer.parseInt(key.substring(split + 1));
+                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(branchTarget);
             } catch (NumberFormatException ignore) {
             }
         }

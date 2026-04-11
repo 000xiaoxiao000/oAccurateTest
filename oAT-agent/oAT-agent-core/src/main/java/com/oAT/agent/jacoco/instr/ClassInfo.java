@@ -57,7 +57,7 @@ public class ClassInfo {
      * 分支代码行和条件个数
      * Map<行号, 条件个数集合>
      */
-    private final Map<Integer, Set<Integer>> branchLineAndConditionNumberMap = new HashMap<Integer, Set<Integer>>();
+    private final Map<Integer, Set<Integer>> branchLineAndTargetProbeMap = new HashMap<Integer, Set<Integer>>();
 
     /*
      * 方法圈复杂度
@@ -240,7 +240,7 @@ public class ClassInfo {
                     return new MethodVisitor(asmApiVersion) {
                         private int currentLine = -1;   // 当前代码行
                         private int decisionPoints = 0; // 判定节点数
-                        private int branchConditionNumber = 0;  // 分支中条件个数
+                        private final Map<Integer, Integer> branchLineTargetCounters = new HashMap<>();
                         private String methodUri = "";
                         private boolean isHttpInterface = false;
 
@@ -413,13 +413,13 @@ public class ClassInfo {
                         public void visitJumpInsn(final int opcode, final Label label) {
                             if ((opcode >= Opcodes.IFEQ && opcode <= Opcodes.IF_ACMPNE) || opcode == Opcodes.IFNULL || opcode == Opcodes.IFNONNULL) {
                                 decisionPoints++;   // 每个跳转指令都是一个判定节点
-                                Set<Integer> conditions = branchLineAndConditionNumberMap.get(this.currentLine);
-                                if (conditions == null) {
-                                    conditions = new HashSet<Integer>();
-                                    this.branchConditionNumber = 0;
-                                    branchLineAndConditionNumberMap.put(this.currentLine, conditions);
+                                if (this.currentLine > 0) {
+                                    int nextTarget = branchLineTargetCounters.getOrDefault(this.currentLine, 0) + 1;
+                                    branchLineTargetCounters.put(this.currentLine, nextTarget);
+                                    branchLineAndTargetProbeMap
+                                            .computeIfAbsent(this.currentLine, key -> new LinkedHashSet<Integer>())
+                                            .add(nextTarget);
                                 }
-                                conditions.add(this.branchConditionNumber += 1);
                                 lineNumberSet.add(currentLine);
                             } else if (opcode != Opcodes.GOTO && opcode != Opcodes.JSR) {
                                 decisionPoints++;
@@ -521,8 +521,8 @@ public class ClassInfo {
         return totalBranchMap;
     }
 
-    public Map<Integer, Set<Integer>> getBranchLineAndConditionNumberMap() {
-        return branchLineAndConditionNumberMap;
+    public Map<Integer, Set<Integer>> getBranchLineAndTargetProbeMap() {
+        return branchLineAndTargetProbeMap;
     }
 
     public Map<String, Integer> getCyclomaticComplexityMap() {

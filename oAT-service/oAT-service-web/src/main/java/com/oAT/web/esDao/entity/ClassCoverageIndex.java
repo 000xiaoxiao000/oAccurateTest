@@ -15,7 +15,7 @@ import java.util.Map;
 public class ClassCoverageIndex implements Serializable {
     @Id
     @ExcelIgnore
-    private String id; // reportId + className hash
+    private String id;
     @Field(type = FieldType.Keyword)
     @ExcelIgnore
     private String reportId;
@@ -26,7 +26,6 @@ public class ClassCoverageIndex implements Serializable {
     @ExcelProperty("类名")
     private String className;
 
-    // Class Stats
     @ExcelProperty("方法总数")
     private int totalMethods;
     @ExcelProperty("已覆盖方法数")
@@ -36,9 +35,9 @@ public class ClassCoverageIndex implements Serializable {
     @ExcelProperty("已覆盖分支数")
     private int coveredBranches;
     @ExcelIgnore
-    private int totalBranchConditions;
+    private int totalBranchTargets;
     @ExcelIgnore
-    private int coveredBranchConditions;
+    private int coveredBranchTargets;
     @ExcelProperty("总行数")
     private int totalLines;
     @ExcelProperty("已覆盖行数")
@@ -55,7 +54,6 @@ public class ClassCoverageIndex implements Serializable {
     @Field(type = FieldType.Double)
     private Double methodRate;
 
-    // Method Details
     @Field(type = FieldType.Object)
     @ExcelIgnore
     private List<MethodCoverageDetail> methods;
@@ -69,16 +67,13 @@ public class ClassCoverageIndex implements Serializable {
         private int coveredBranches;
         private int complexity;
         private boolean isCovered;
-        // Covered line numbers for coloring
         private List<Integer> coveredLineNumbers;
-        // All line numbers from static info
         private List<Integer> totalLineNumbers;
-        // Covered branch identifiers for idempotency
-        private List<Integer> coveredBranchIds;
-        private Map<String, List<Integer>> totalBranchConditionNumbers;
-        private Map<String, List<Integer>> coveredBranchConditionNumbers;
-        private int totalBranchConditions;
-        private int coveredBranchConditions;
+        private List<Integer> coveredBranchLines;
+        private Map<String, List<Integer>> totalBranchTargetProbeMap;
+        private Map<String, List<Integer>> coveredBranchTargetProbeMap;
+        private int totalBranchTargets;
+        private int coveredBranchTargets;
         private Double branchRate;
         public String getMethodName() { return methodName; }
         public void setMethodName(String methodName) { this.methodName = methodName; }
@@ -100,16 +95,16 @@ public class ClassCoverageIndex implements Serializable {
         public void setCoveredLineNumbers(List<Integer> coveredLineNumbers) { this.coveredLineNumbers = coveredLineNumbers; }
         public List<Integer> getTotalLineNumbers() { return totalLineNumbers; }
         public void setTotalLineNumbers(List<Integer> totalLineNumbers) { this.totalLineNumbers = totalLineNumbers; }
-        public List<Integer> getCoveredBranchIds() { return coveredBranchIds; }
-        public void setCoveredBranchIds(List<Integer> coveredBranchIds) { this.coveredBranchIds = coveredBranchIds; }
-        public Map<String, List<Integer>> getTotalBranchConditionNumbers() { return totalBranchConditionNumbers; }
-        public void setTotalBranchConditionNumbers(Map<String, List<Integer>> totalBranchConditionNumbers) { this.totalBranchConditionNumbers = totalBranchConditionNumbers; }
-        public Map<String, List<Integer>> getCoveredBranchConditionNumbers() { return coveredBranchConditionNumbers; }
-        public void setCoveredBranchConditionNumbers(Map<String, List<Integer>> coveredBranchConditionNumbers) { this.coveredBranchConditionNumbers = coveredBranchConditionNumbers; }
-        public int getTotalBranchConditions() { return totalBranchConditions; }
-        public void setTotalBranchConditions(int totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
-        public int getCoveredBranchConditions() { return coveredBranchConditions; }
-        public void setCoveredBranchConditions(int coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
+        public List<Integer> getCoveredBranchLines() { return coveredBranchLines; }
+        public void setCoveredBranchLines(List<Integer> coveredBranchLines) { this.coveredBranchLines = coveredBranchLines; }
+        public Map<String, List<Integer>> getTotalBranchTargetProbeMap() { return totalBranchTargetProbeMap; }
+        public void setTotalBranchTargetProbeMap(Map<String, List<Integer>> totalBranchTargetProbeMap) { this.totalBranchTargetProbeMap = totalBranchTargetProbeMap; }
+        public Map<String, List<Integer>> getCoveredBranchTargetProbeMap() { return coveredBranchTargetProbeMap; }
+        public void setCoveredBranchTargetProbeMap(Map<String, List<Integer>> coveredBranchTargetProbeMap) { this.coveredBranchTargetProbeMap = coveredBranchTargetProbeMap; }
+        public int getTotalBranchTargets() { return totalBranchTargets; }
+        public void setTotalBranchTargets(int totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
+        public int getCoveredBranchTargets() { return coveredBranchTargets; }
+        public void setCoveredBranchTargets(int coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
         public Double getBranchRate() { return branchRate; }
         public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
     }
@@ -130,10 +125,10 @@ public class ClassCoverageIndex implements Serializable {
     public void setTotalBranches(int totalBranches) { this.totalBranches = totalBranches; }
     public int getCoveredBranches() { return coveredBranches; }
     public void setCoveredBranches(int coveredBranches) { this.coveredBranches = coveredBranches; }
-    public int getTotalBranchConditions() { return totalBranchConditions; }
-    public void setTotalBranchConditions(int totalBranchConditions) { this.totalBranchConditions = totalBranchConditions; }
-    public int getCoveredBranchConditions() { return coveredBranchConditions; }
-    public void setCoveredBranchConditions(int coveredBranchConditions) { this.coveredBranchConditions = coveredBranchConditions; }
+    public int getTotalBranchTargets() { return totalBranchTargets; }
+    public void setTotalBranchTargets(int totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
+    public int getCoveredBranchTargets() { return coveredBranchTargets; }
+    public void setCoveredBranchTargets(int coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
     public int getTotalLines() { return totalLines; }
     public void setTotalLines(int totalLines) { this.totalLines = totalLines; }
     public int getCoveredLines() { return coveredLines; }

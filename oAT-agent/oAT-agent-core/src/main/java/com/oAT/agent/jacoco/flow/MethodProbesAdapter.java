@@ -1,13 +1,3 @@
-/*******************************************************************************
- * Copyright (c) 2009, 2016 Mountainminds GmbH & Co. KG and Contributors
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
- * Contributors:
- *    Marc R. Hoffmann - initial API and implementation
- *
- *******************************************************************************/
 package com.oAT.agent.jacoco.flow;
 
 import com.oAT.agent.jacoco.instr.InstrSupport;
@@ -25,6 +15,8 @@ import java.util.Map;
  */
 public final class MethodProbesAdapter extends MethodVisitor {
 
+    private static final int NO_BRANCH_TARGET = -1;
+
     private final MethodProbesVisitor probesVisitor;
 
     private final IProbeIdGenerator idGenerator;
@@ -32,13 +24,9 @@ public final class MethodProbesAdapter extends MethodVisitor {
     private AnalyzerAdapter analyzer;
 
     private final Map<Label, Label> tryCatchProbeLabels;
+    private int currentLine = -1;
+    private final Map<Integer, Integer> branchTargetCounterByLine = new HashMap<>();
 
-    /**
-     * Create a new adapter instance.
-     *
-     * @param probesVisitor visitor to delegate to
-     * @param idGenerator   generator for unique probe ids
-     */
     public MethodProbesAdapter(final MethodProbesVisitor probesVisitor,
                                final IProbeIdGenerator idGenerator) {
         super(InstrSupport.ASM_API_VERSION, probesVisitor);
@@ -47,12 +35,6 @@ public final class MethodProbesAdapter extends MethodVisitor {
         this.tryCatchProbeLabels = new HashMap<>();
     }
 
-    /**
-     * If an analyzer is set {@link IFrame} handles are calculated and emitted
-     * to the probes methods.
-     *
-     * @param analyzer optional analyzer to set
-     */
     public void setAnalyzer(final AnalyzerAdapter analyzer) {
         this.analyzer = analyzer;
     }
@@ -60,8 +42,6 @@ public final class MethodProbesAdapter extends MethodVisitor {
     @Override
     public void visitTryCatchBlock(Label start, final Label end,
                                    final Label handler, final String type) {
-        // If a probe will be inserted before the start label, we'll need to use
-        // a different label for the try-catch block.
         if (tryCatchProbeLabels.containsKey(start)) {
             start = tryCatchProbeLabels.get(start);
         } else if (LabelInfo.needsProbe(start)) {
@@ -74,12 +54,19 @@ public final class MethodProbesAdapter extends MethodVisitor {
     }
 
     @Override
+    public void visitLineNumber(final int line, final Label start) {
+        currentLine = line;
+        probesVisitor.visitLineNumber(line, start);
+    }
+
+    @Override
     public void visitLabel(final Label label) {
         if (LabelInfo.needsProbe(label)) {
             if (tryCatchProbeLabels.containsKey(label)) {
                 probesVisitor.visitLabel(tryCatchProbeLabels.get(label));
             }
-            probesVisitor.visitProbe(idGenerator.nextId());
+            final int probeId = idGenerator.nextId();
+            probesVisitor.visitProbe(probeId, false, -1, NO_BRANCH_TARGET);
         }
         probesVisitor.visitLabel(label);
     }
@@ -94,7 +81,7 @@ public final class MethodProbesAdapter extends MethodVisitor {
             case Opcodes.ARETURN:
             case Opcodes.RETURN:
             case Opcodes.ATHROW:
-                probesVisitor.visitInsnWithProbe(opcode, idGenerator.nextId());
+                probesVisitor.visitInsnWithProbe(opcode, idGenerator.nextId(), -1, NO_BRANCH_TARGET);
                 break;
             default:
                 probesVisitor.visitInsn(opcode);
@@ -105,8 +92,15 @@ public final class MethodProbesAdapter extends MethodVisitor {
     @Override
     public void visitJumpInsn(final int opcode, final Label label) {
         if (LabelInfo.isMultiTarget(label)) {
-            probesVisitor.visitJumpInsnWithProbe(opcode, label,
-                    idGenerator.nextId(), frame(jumpPopCount(opcode)));
+            if (opcode == Opcodes.GOTO) {
+                probesVisitor.visitJumpInsnWithProbe(opcode, label,
+                        idGenerator.nextId(), frame(jumpPopCount(opcode)), -1,
+                        NO_BRANCH_TARGET);
+            } else {
+                probesVisitor.visitJumpInsnWithProbe(opcode, label,
+                        idGenerator.nextId(), frame(jumpPopCount(opcode)), currentLine,
+                        nextBranchTargetId(currentLine));
+            }
         } else {
             probesVisitor.visitJumpInsn(opcode, label);
         }
@@ -125,7 +119,7 @@ public final class MethodProbesAdapter extends MethodVisitor {
             case Opcodes.IFNULL:
             case Opcodes.IFNONNULL:
                 return 1;
-            default: // IF_CMPxx and IF_ACMPxx
+            default:
                 return 2;
         }
     }
@@ -133,9 +127,10 @@ public final class MethodProbesAdapter extends MethodVisitor {
     @Override
     public void visitLookupSwitchInsn(final Label dflt, final int[] keys,
                                       final Label[] labels) {
+        int[] branchTargetIds = allocateBranchTargetIds(labels.length + 1);
         if (markLabels(dflt, labels)) {
             probesVisitor.visitLookupSwitchInsnWithProbes(dflt, keys, labels,
-                    frame(1));
+                    frame(1), currentLine, branchTargetIds);
         } else {
             probesVisitor.visitLookupSwitchInsn(dflt, keys, labels);
         }
@@ -144,12 +139,33 @@ public final class MethodProbesAdapter extends MethodVisitor {
     @Override
     public void visitTableSwitchInsn(final int min, final int max,
                                      final Label dflt, final Label... labels) {
+        int[] branchTargetIds = allocateBranchTargetIds(labels.length + 1);
         if (markLabels(dflt, labels)) {
             probesVisitor.visitTableSwitchInsnWithProbes(min, max, dflt,
-                    labels, frame(1));
+                    labels, frame(1), currentLine, branchTargetIds);
         } else {
             probesVisitor.visitTableSwitchInsn(min, max, dflt, labels);
         }
+    }
+
+    private int nextBranchTargetId(final int line) {
+        if (line <= 0) {
+            return NO_BRANCH_TARGET;
+        }
+        int nextId = branchTargetCounterByLine.getOrDefault(line, 0) + 1;
+        branchTargetCounterByLine.put(line, nextId);
+        return nextId;
+    }
+
+    private int[] allocateBranchTargetIds(final int count) {
+        if (count <= 0) {
+            return new int[0];
+        }
+        int[] ids = new int[count];
+        for (int i = 0; i < count; i++) {
+            ids[i] = nextBranchTargetId(currentLine);
+        }
+        return ids;
     }
 
     private boolean markLabels(final Label dflt, final Label[] labels) {
@@ -173,44 +189,4 @@ public final class MethodProbesAdapter extends MethodVisitor {
     private IFrame frame(final int popCount) {
         return FrameSnapshot.create(analyzer, popCount);
     }
-
-    // new methods for probes
-    @Override
-    public void visitVarInsn(final int opcode, final int var) {
-        switch (opcode) {
-            case Opcodes.ILOAD:
-            case Opcodes.ISTORE:
-            case Opcodes.RET:
-                probesVisitor.visitVarInsnWithProbes(opcode, var, idGenerator.nextId());
-            default:
-                probesVisitor.visitVarInsn(opcode, var);
-        }
-    }
-
-    // new methods for probes
-    @Override
-    public void visitFieldInsn(final int opcode, final String owner, final String name, final String desc) {
-        switch (opcode) {
-            case Opcodes.GETSTATIC:
-            case Opcodes.PUTSTATIC:
-            case Opcodes.GETFIELD:
-            case Opcodes.PUTFIELD:
-                probesVisitor.visitFieldInsnWithProbes(opcode, owner, name, desc, idGenerator.nextId());
-            default:
-                probesVisitor.visitFieldInsn(opcode, owner, name, desc);
-        }
-    }
-
-    // new methods for probes
-    @Override
-    public void visitMethodInsn(final int opcode, final String owner, final String name, final String desc,
-                                final boolean itf) {
-        probesVisitor.visitMethodInsnWithProbes(opcode, owner, name, desc, itf, idGenerator.nextId());
-    }
-
-    @Override
-    public void visitLineNumber(int line, Label start) {
-        probesVisitor.visitLineNumberWithProbes(line, start, idGenerator.nextId());
-    }
-
 }

@@ -1,13 +1,3 @@
-/*******************************************************************************
- * Copyright (c) 2009, 2016 Mountainminds GmbH & Co. KG and Contributors
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
- * Contributors:
- *    Marc R. Hoffmann - initial API and implementation
- *
- *******************************************************************************/
 package com.oAT.agent.jacoco.instr;
 
 import com.oAT.agent.jacoco.flow.IFrame;
@@ -25,41 +15,36 @@ class MethodInstrumenter extends MethodProbesVisitor {
 
     private final IProbeInserter probeInserter;
 
-    /**
-     * Create a new instrumenter instance for the given method.
-     *
-     * @param mv            next method visitor in the chain
-     * @param probeInserter call-back to insert probes where required
-     */
     public MethodInstrumenter(final MethodVisitor mv,
                               final IProbeInserter probeInserter) {
         super(mv);
         this.probeInserter = probeInserter;
     }
 
-    // === IMethodProbesVisitor ===
-
     @Override
-    public void visitProbe(final int probeId) {
-        probeInserter.insertProbe(probeId);
+    public void visitProbe(final int probeId, final boolean branchProbe,
+                           final int branchLine, final int branchTargetId) {
+        probeInserter.insertProbe(probeId, branchProbe, branchLine, branchTargetId);
     }
 
     @Override
-    public void visitInsnWithProbe(final int opcode, final int probeId) {
-        probeInserter.insertProbe(probeId);
+    public void visitInsnWithProbe(final int opcode, final int probeId,
+                                   final int branchLine, final int branchTargetId) {
+        probeInserter.insertProbe(probeId, false, -1, -1);
         mv.visitInsn(opcode);
     }
 
     @Override
     public void visitJumpInsnWithProbe(final int opcode, final Label label,
-                                       final int probeId, final IFrame frame) {
+                                       final int probeId, final IFrame frame,
+                                       final int branchLine, final int branchTargetId) {
         if (opcode == Opcodes.GOTO) {
-            probeInserter.insertProbe(probeId);
+            probeInserter.insertProbe(probeId, true, branchLine, branchTargetId);
             mv.visitJumpInsn(Opcodes.GOTO, label);
         } else {
             final Label intermediate = new Label();
             mv.visitJumpInsn(getInverted(opcode), intermediate);
-            probeInserter.insertProbe(probeId);
+            probeInserter.insertProbe(probeId, true, branchLine, branchTargetId);
             mv.visitJumpInsn(Opcodes.GOTO, label);
             mv.visitLabel(intermediate);
             frame.accept(mv);
@@ -106,30 +91,26 @@ class MethodInstrumenter extends MethodProbesVisitor {
 
     @Override
     public void visitTableSwitchInsnWithProbes(final int min, final int max,
-                                               final Label dflt, final Label[] labels, final IFrame frame) {
-        // 1. Calculate intermediate labels:
+                                               final Label dflt, final Label[] labels, final IFrame frame,
+                                               final int branchLine, final int[] branchTargetIds) {
         LabelInfo.resetDone(dflt);
         LabelInfo.resetDone(labels);
         final Label newDflt = createIntermediate(dflt);
         final Label[] newLabels = createIntermediates(labels);
         mv.visitTableSwitchInsn(min, max, newDflt, newLabels);
-
-        // 2. Insert probes:
-        insertIntermediateProbes(dflt, labels, frame);
+        insertIntermediateProbes(dflt, labels, frame, branchLine, branchTargetIds);
     }
 
     @Override
     public void visitLookupSwitchInsnWithProbes(final Label dflt,
-                                                final int[] keys, final Label[] labels, final IFrame frame) {
-        // 1. Calculate intermediate labels:
+                                                final int[] keys, final Label[] labels, final IFrame frame,
+                                                final int branchLine, final int[] branchTargetIds) {
         LabelInfo.resetDone(dflt);
         LabelInfo.resetDone(labels);
         final Label newDflt = createIntermediate(dflt);
         final Label[] newLabels = createIntermediates(labels);
         mv.visitLookupSwitchInsn(newDflt, keys, newLabels);
-
-        // 2. Insert probes:
-        insertIntermediateProbes(dflt, labels, frame);
+        insertIntermediateProbes(dflt, labels, frame, branchLine, branchTargetIds);
     }
 
     private Label[] createIntermediates(final Label[] labels) {
@@ -156,63 +137,30 @@ class MethodInstrumenter extends MethodProbesVisitor {
         return intermediate;
     }
 
-    private void insertIntermediateProbe(final Label label, final IFrame frame) {
+    private void insertIntermediateProbe(final Label label, final IFrame frame,
+                                         final int branchLine, final int branchTargetId) {
         final int probeId = LabelInfo.getProbeId(label);
         if (probeId != LabelInfo.NO_PROBE && !LabelInfo.isDone(label)) {
             mv.visitLabel(LabelInfo.getIntermediateLabel(label));
             frame.accept(mv);
-            probeInserter.insertProbe(probeId);
+            probeInserter.insertProbe(probeId, true, branchLine, branchTargetId);
             mv.visitJumpInsn(Opcodes.GOTO, label);
             LabelInfo.setDone(label);
         }
     }
 
-    private void insertIntermediateProbes(final Label dflt, final Label[] labels, final IFrame frame) {
+    private void insertIntermediateProbes(final Label dflt, final Label[] labels, final IFrame frame,
+                                          final int branchLine, final int[] branchTargetIds) {
         LabelInfo.resetDone(dflt);
         LabelInfo.resetDone(labels);
-        insertIntermediateProbe(dflt, frame);
+        int idx = 0;
+        insertIntermediateProbe(dflt, frame, branchLine,
+                branchTargetIds != null && idx < branchTargetIds.length ? branchTargetIds[idx] : -1);
+        idx++;
         for (final Label l : labels) {
-            insertIntermediateProbe(l, frame);
+            insertIntermediateProbe(l, frame, branchLine,
+                    branchTargetIds != null && idx < branchTargetIds.length ? branchTargetIds[idx] : -1);
+            idx++;
         }
-    }
-
-    // new methods for probes
-    @Override
-    public void visitVarInsnWithProbes(final int opcode, final int var, final int probeId) {
-        switch (opcode) {
-//            case Opcodes.ILOAD:
-            case Opcodes.ISTORE:
-            case Opcodes.RET:
-                probeInserter.insertProbe(probeId);
-        }
-    }
-
-    // new methods for probes
-    @Override
-    public void visitFieldInsnWithProbes(final int opcode, final String owner, final String name, final String desc,
-                                         final int probeId) {
-        switch (opcode) {
-            case Opcodes.GETSTATIC:
-            case Opcodes.PUTSTATIC:
-            case Opcodes.GETFIELD:
-            case Opcodes.PUTFIELD:
-                probeInserter.insertProbe(probeId);
-        }
-    }
-
-    // new methods for probes
-    @Override
-    public void visitMethodInsnWithProbes(final int opcode, final String owner, final String name, final String desc,
-                                          final boolean itf, final int probeId) {
-        probeInserter.insertProbe(probeId);
-        mv.visitMethodInsn(opcode, owner, name, desc, itf);
-    }
-
-    @Override
-    public void visitLineNumberWithProbes(int line, Label start, final int probeId) {
-        // 不需要在这里插入探针，因为行号本身不需要探针
-        probeInserter.insertProbe(probeId); // 如果需要行号探针，可以在这里添加
-        // 直接调用父类方法，避免重复插入行号
-        super.visitLineNumber(line, start);
     }
 }

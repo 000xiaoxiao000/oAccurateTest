@@ -1,13 +1,3 @@
-/*******************************************************************************
- * Copyright (c) 2009, 2016 Mountainminds GmbH & Co. KG and Contributors
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * which accompanies this distribution, and is available at
- * http://www.eclipse.org/legal/epl-v10.html
- * Contributors:
- *    Marc R. Hoffmann - initial API and implementation
- *
- *******************************************************************************/
 package com.oAT.agent.jacoco.instr;
 
 /**
@@ -19,9 +9,12 @@ interface IProbeInserter {
 	/**
 	 * Inserts the probe with the given id.
 	 *
-	 * @param id
-	 *            id of the probe to insert
+	 * @param id id of the probe to insert
+	 * @param branchProbe whether this probe represents a JaCoCo-style branch target probe
+	 * @param branchLine source branch line for the probe, or -1 if not a branch probe
+	 * @param branchTargetId target ordinal within the branch line, or -1 if unavailable
 	 */
-	void insertProbe(final int id);
+	void insertProbe(final int id, final boolean branchProbe, final int branchLine,
+				 final int branchTargetId);
 
 }
