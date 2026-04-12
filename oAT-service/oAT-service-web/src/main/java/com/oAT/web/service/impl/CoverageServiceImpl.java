@@ -1229,6 +1229,37 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         return result;
     }
 
+    private Map<String, List<Integer>> normalizeMethodBranchTargetProbeMap(Map<String, List<Integer>> total,
+                                                                            Map<String, List<Integer>> covered) {
+        if (total == null || total.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        if (covered == null || covered.isEmpty()) {
+            return copyBranchTargetProbeMap(total);
+        }
+        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
+            String branchLine = entry.getKey();
+            List<Integer> totalValues = entry.getValue();
+            if (totalValues == null || totalValues.isEmpty()) {
+                continue;
+            }
+            LinkedHashSet<Integer> totalSet = new LinkedHashSet<>(totalValues);
+            List<Integer> coveredValues = covered.get(branchLine);
+            if (coveredValues == null || coveredValues.isEmpty()) {
+                normalized.put(branchLine, new ArrayList<>(totalSet));
+                continue;
+            }
+            LinkedHashSet<Integer> coveredSet = new LinkedHashSet<>(coveredValues);
+            if (totalSet.containsAll(coveredSet)) {
+                normalized.put(branchLine, new ArrayList<>(coveredSet));
+            } else {
+                normalized.put(branchLine, new ArrayList<>(totalSet));
+            }
+        }
+        return normalized.isEmpty() ? copyBranchTargetProbeMap(total) : normalized;
+    }
+
     private Map<String, List<Integer>> normalizeCoveredBranchTargetProbeMap(Map<String, List<Integer>> total,
                                                                          Map<String, List<Integer>> covered) {
         if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
@@ -1365,8 +1396,12 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             }
             Map<String, List<Integer>> coveredBranchTargetProbeMap = mergeBranchTargetProbeMap(
                     md.getCoveredBranchTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
-            coveredBranchTargetProbeMap = normalizeCoveredBranchTargetProbeMap(
+            Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
                     md.getTotalBranchTargetProbeMap(), coveredBranchTargetProbeMap);
+            coveredBranchTargetProbeMap = normalizeCoveredBranchTargetProbeMap(
+                    normalizedTotalBranchTargetProbeMap, coveredBranchTargetProbeMap);
+            md.setTotalBranchTargetProbeMap(normalizedTotalBranchTargetProbeMap);
+            md.setTotalBranchTargets(countBranchTargets(normalizedTotalBranchTargetProbeMap));
             md.setCoveredBranchTargetProbeMap(coveredBranchTargetProbeMap);
             md.setCoveredBranchTargets(countBranchTargets(coveredBranchTargetProbeMap));
             md.setBranchRate(calculateBranchRate(md.getCoveredBranchTargets(), md.getTotalBranchTargets()));
@@ -1685,14 +1720,19 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             if (branchLine == null) {
                 continue;
             }
-            int totalCount = entry.getValue() == null ? 0 : entry.getValue().size();
+            int totalCount = entry.getValue() == null ? 0 : new LinkedHashSet<>(entry.getValue()).size();
             int coveredCount = 0;
             if (coveredBranchTargetProbeMap != null) {
                 List<Integer> covered = coveredBranchTargetProbeMap.get(entry.getKey());
-                coveredCount = covered == null ? 0 : covered.size();
+                coveredCount = covered == null ? 0 : new LinkedHashSet<>(covered).size();
             }
             String color = coveredCount <= 0 ? "red" : (coveredCount >= totalCount ? "green" : "orange");
-            branchLineColors.put(branchLine, pickCoverageColor(branchLineColors.get(branchLine), color));
+            String currentColor = branchLineColors.get(branchLine);
+            if ("green".equals(color)) {
+                branchLineColors.put(branchLine, currentColor == null ? "green" : currentColor);
+            } else {
+                branchLineColors.put(branchLine, pickCoverageColor(currentColor, color));
+            }
         }
     }
 
@@ -1700,11 +1740,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         if (currentColor == null) {
             return newColor;
         }
-        if ("orange".equals(currentColor) || "orange".equals(newColor)) {
-            return "orange";
-        }
         if ("red".equals(currentColor) || "red".equals(newColor)) {
             return "red";
+        }
+        if ("orange".equals(currentColor) || "orange".equals(newColor)) {
+            return "orange";
         }
         return "green";
     }

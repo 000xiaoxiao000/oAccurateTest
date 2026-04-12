@@ -316,14 +316,18 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
                             methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
                                     .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
-                            addBranchTargetKeys(methodTotalBranchTargetsMap, methodKey, staticMethod.getBranchLineAndTargetProbeMap());
+                            addBranchTargetKeys(methodTotalBranchTargetsMap, methodKey,
+                                    normalizeStaticBranchTargets(staticMethod.getBranchLineAndTargetProbeMap(),
+                                            sn.getExecuteBranchTargetProbeMap()));
                             if (sn.getExecuteBranch() != null) {
                                 methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
                             }
                             addBranchTargetKeys(methodCoveredBranchTargetsMap, methodKey, sn.getExecuteBranchTargetProbeMap());
                             if (methodCoveredBranchTargetsMap.containsKey(methodKey)) {
                                 Set<String> normalizedKeys = new LinkedHashSet<>();
-                                addBranchTargetKeysToSet(normalizedKeys, staticMethod.getBranchLineAndTargetProbeMap(),
+                                Map<String, List<Integer>> normalizedStaticBranchTargets = normalizeStaticBranchTargets(
+                                        staticMethod.getBranchLineAndTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
+                                addBranchTargetKeysToSet(normalizedKeys, normalizedStaticBranchTargets,
                                         decodeBranchTargetKeys(methodCoveredBranchTargetsMap.get(methodKey)));
                                 methodCoveredBranchTargetsMap.put(methodKey, normalizedKeys);
                             }
@@ -389,6 +393,38 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                 }
             }
         }
+    }
+
+    private Map<String, List<Integer>> normalizeStaticBranchTargets(Map<String, List<Integer>> staticBranchTargets,
+                                                                     Map<String, List<Integer>> executedBranchTargets) {
+        if (staticBranchTargets == null || staticBranchTargets.isEmpty()) {
+            return staticBranchTargets;
+        }
+        if (executedBranchTargets == null || executedBranchTargets.isEmpty()) {
+            return staticBranchTargets;
+        }
+
+        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : staticBranchTargets.entrySet()) {
+            String branchLine = entry.getKey();
+            List<Integer> staticTargets = entry.getValue();
+            List<Integer> executedTargets = executedBranchTargets.get(branchLine);
+            if (staticTargets == null || staticTargets.isEmpty()) {
+                continue;
+            }
+            if (executedTargets == null || executedTargets.isEmpty()) {
+                normalized.put(branchLine, new ArrayList<>(new LinkedHashSet<>(staticTargets)));
+                continue;
+            }
+            Set<Integer> staticSet = new LinkedHashSet<>(staticTargets);
+            LinkedHashSet<Integer> executedSet = new LinkedHashSet<>(executedTargets);
+            if (staticSet.containsAll(executedSet)) {
+                normalized.put(branchLine, new ArrayList<>(executedSet));
+            } else {
+                normalized.put(branchLine, new ArrayList<>(staticSet));
+            }
+        }
+        return normalized.isEmpty() ? staticBranchTargets : normalized;
     }
 
     private void addBranchTargetKeysToSet(Set<String> target,
