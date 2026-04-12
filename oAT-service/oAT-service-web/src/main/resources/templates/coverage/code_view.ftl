@@ -167,8 +167,10 @@
                         <a href="#method_${m?index}" class="ui mini blue basic button">查看代码</a>
                     </td>
                     <td>
-                        <#if m.coveredLines gt 0>
-                            <span class="ui green label small">已覆盖</span>
+                        <#if linePct == 100 && (m.totalBranches == 0 || branchPct == 100)>
+                            <span class="ui green label small">全覆盖</span>
+                        <#elseif linePct gt 0 || branchPct gt 0>
+                            <span class="ui orange label small">部分覆盖</span>
                         <#else>
                             <span class="ui red label small">未覆盖</span>
                         </#if>
@@ -288,9 +290,10 @@
             $methodRows.each(function() {
                 var $row = $(this);
                 var methodName = $row.find('.method-name').text().toLowerCase();
-                var labelText = $row.find('.label').text();
+                var labelText = $.trim($row.find('.label').first().text());
 
-                var isCovered = labelText.indexOf('已覆盖') !== -1;
+                var isFull = labelText.indexOf('全覆盖') !== -1;
+                var isPartial = labelText.indexOf('部分覆盖') !== -1;
                 var isUncovered = labelText.indexOf('未覆盖') !== -1;
 
                 var matchName = methodName.indexOf(searchTerm) !== -1;
@@ -298,8 +301,10 @@
 
                 if (statusTerm === 'all') {
                     matchStatus = true;
-                } else if (statusTerm === 'full' || statusTerm === 'partial') {
-                    matchStatus = isCovered;
+                } else if (statusTerm === 'full') {
+                    matchStatus = isFull;
+                } else if (statusTerm === 'partial') {
+                    matchStatus = isPartial;
                 } else if (statusTerm === 'uncovered') {
                     matchStatus = isUncovered;
                 }
