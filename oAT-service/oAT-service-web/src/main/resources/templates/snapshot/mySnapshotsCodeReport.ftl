@@ -67,8 +67,8 @@
                 <div class="content">
                     <div class="header center aligned">分支覆盖率</div>
                     <div class="description center aligned">
-                        <#assign branchPct = ((report.totalBranchConditions!0) > 0)?then((report.coveredBranchConditions!0) * 100.0 / (report.totalBranchConditions!0), 0)>
-                        <div class="stat-value">${report.coveredBranches} / ${report.totalBranches}</div>
+                        <#assign branchPct = (report.totalBranchTargets > 0)?then(report.coveredBranchTargets * 100.0 / report.totalBranchTargets, 0)>
+                        <div class="stat-value">${report.coveredBranchTargets} / ${report.totalBranchTargets}</div>
                         <div class="ui orange progress" data-percent="${branchPct?string("0")}">
                             <div class="bar" style="width: ${branchPct?string("0.00")}%"></div>
                         </div>

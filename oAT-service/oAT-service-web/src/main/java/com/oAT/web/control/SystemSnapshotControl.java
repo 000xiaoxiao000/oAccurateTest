@@ -402,10 +402,13 @@ public class SystemSnapshotControl {
                     methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
                     methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
                             .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
-                    addBranchTargetKeys(methodTotalBranchTargets, mKey, mInfo.getBranchLineAndTargetProbeMap());
+                    Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
+                            mInfo.getBranchLineAndTargetProbeMap(),
+                            decodeBranchTargetKeys(methodCoveredBranchTargets.get(mKey)));
+                    addBranchTargetKeys(methodTotalBranchTargets, mKey, normalizedTotalBranchTargetProbeMap);
                     if (methodCoveredBranchTargets.containsKey(mKey)) {
                         Set<String> normalizedKeys = new LinkedHashSet<>();
-                        addBranchTargetKeysToSet(normalizedKeys, mInfo.getBranchLineAndTargetProbeMap(),
+                        addBranchTargetKeysToSet(normalizedKeys, normalizedTotalBranchTargetProbeMap,
                                 decodeBranchTargetKeys(methodCoveredBranchTargets.get(mKey)));
                         methodCoveredBranchTargets.put(mKey, normalizedKeys);
                     }
@@ -524,9 +527,11 @@ public class SystemSnapshotControl {
                             newMd.setTotalLines(totalLines.size());
                             newMd.setTotalBranches(staticMethod != null && staticMethod.getTotalBranchCount() != null
                                     ? staticMethod.getTotalBranchCount() : 0);
-                            newMd.setTotalBranchTargetProbeMap(staticMethod != null
-                                    ? staticMethod.getBranchLineAndTargetProbeMap() : null);
-                            newMd.setTotalBranchTargets(countBranchTargets(newMd.getTotalBranchTargetProbeMap()));
+                            Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
+                                    staticMethod != null ? staticMethod.getBranchLineAndTargetProbeMap() : null,
+                                    sn.getExecuteBranchTargetProbeMap());
+                            newMd.setTotalBranchTargetProbeMap(normalizedTotalBranchTargetProbeMap);
+                            newMd.setTotalBranchTargets(countBranchTargets(normalizedTotalBranchTargetProbeMap));
                             newMd.setCoveredBranchTargetProbeMap(new LinkedHashMap<>());
                             newMd.setCoveredBranchTargets(0);
                             newMd.setBranchRate(0.0);

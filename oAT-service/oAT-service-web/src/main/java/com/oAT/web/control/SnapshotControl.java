@@ -274,10 +274,13 @@ public class SnapshotControl {
                         methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
                         methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
                                 .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
-                        addBranchTargetKeys(methodTotalBranchTargets, mKey, mInfo.getBranchLineAndTargetProbeMap(), null);
+                        Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
+                                mInfo.getBranchLineAndTargetProbeMap(),
+                                decodeBranchTargetKeys(methodCoveredBranchTargets.get(mKey)));
+                        addBranchTargetKeys(methodTotalBranchTargets, mKey, normalizedTotalBranchTargetProbeMap, null);
                         if (methodCoveredBranchTargets.containsKey(mKey)) {
                             Set<String> normalizedKeys = new LinkedHashSet<>();
-                            addBranchTargetKeysToSet(normalizedKeys, mInfo.getBranchLineAndTargetProbeMap(),
+                            addBranchTargetKeysToSet(normalizedKeys, normalizedTotalBranchTargetProbeMap,
                                     decodeBranchTargetKeys(methodCoveredBranchTargets.get(mKey)));
                             methodCoveredBranchTargets.put(mKey, normalizedKeys);
                         }
@@ -429,9 +432,11 @@ public class SnapshotControl {
                             newMd.setTotalLines(totalLines.size());
                             newMd.setTotalBranches(staticMethod != null && staticMethod.getTotalBranchCount() != null
                                     ? staticMethod.getTotalBranchCount() : 0);
-                            newMd.setTotalBranchTargetProbeMap(staticMethod != null
-                                    ? staticMethod.getBranchLineAndTargetProbeMap() : null);
-                            newMd.setTotalBranchTargets(countBranchTargets(newMd.getTotalBranchTargetProbeMap()));
+                            Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
+                                    staticMethod != null ? staticMethod.getBranchLineAndTargetProbeMap() : null,
+                                    sn.getExecuteBranchTargetProbeMap());
+                            newMd.setTotalBranchTargetProbeMap(normalizedTotalBranchTargetProbeMap);
+                            newMd.setTotalBranchTargets(countBranchTargets(normalizedTotalBranchTargetProbeMap));
                             newMd.setCoveredBranchTargetProbeMap(new LinkedHashMap<>());
                             newMd.setCoveredBranchTargets(0);
                             newMd.setBranchRate(0.0);
@@ -458,8 +463,12 @@ public class SnapshotControl {
                         if (sn.getExecuteBranchTargetProbeMap() != null) {
                             Map<String, List<Integer>> coveredBranchTargetProbeMap = mergeBranchTargetProbeMap(
                                     md.getCoveredBranchTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
-                            coveredBranchTargetProbeMap = normalizeCoveredBranchTargetProbeMap(
+                            Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
                                     md.getTotalBranchTargetProbeMap(), coveredBranchTargetProbeMap);
+                            coveredBranchTargetProbeMap = normalizeCoveredBranchTargetProbeMap(
+                                    normalizedTotalBranchTargetProbeMap, coveredBranchTargetProbeMap);
+                            md.setTotalBranchTargetProbeMap(normalizedTotalBranchTargetProbeMap);
+                            md.setTotalBranchTargets(countBranchTargets(normalizedTotalBranchTargetProbeMap));
                             md.setCoveredBranchTargetProbeMap(coveredBranchTargetProbeMap);
                             md.setCoveredBranchTargets(countBranchTargets(coveredBranchTargetProbeMap));
                             md.setBranchRate(calculateBranchRate(md.getCoveredBranchTargets(), md.getTotalBranchTargets()));
@@ -645,6 +654,49 @@ public class SnapshotControl {
     public ResultNotified<Serializable> doUpdate(@PathVariable String projectId, String id, Snapshot snapshot) {
         snapshotService.doUpdate(id, snapshot);
         return new ResultNotified<>(true, "快照更新成功");
+    }
+
+    private Map<String, List<Integer>> normalizeMethodBranchTargetProbeMap(Map<String, List<Integer>> total,
+                                                                            Map<String, List<Integer>> covered) {
+        if (total == null || total.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        if (covered == null || covered.isEmpty()) {
+            return copyBranchTargetProbeMap(total);
+        }
+        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
+            String branchLine = entry.getKey();
+            List<Integer> totalValues = entry.getValue();
+            if (totalValues == null || totalValues.isEmpty()) {
+                continue;
+            }
+            LinkedHashSet<Integer> totalSet = new LinkedHashSet<>(totalValues);
+            List<Integer> coveredValues = covered.get(branchLine);
+            if (coveredValues == null || coveredValues.isEmpty()) {
+                normalized.put(branchLine, new ArrayList<>(totalSet));
+                continue;
+            }
+            LinkedHashSet<Integer> coveredSet = new LinkedHashSet<>(coveredValues);
+            if (totalSet.containsAll(coveredSet)) {
+                normalized.put(branchLine, new ArrayList<>(coveredSet));
+            } else {
+                normalized.put(branchLine, new ArrayList<>(totalSet));
+            }
+        }
+        return normalized.isEmpty() ? copyBranchTargetProbeMap(total) : normalized;
+    }
+
+    private Map<String, List<Integer>> copyBranchTargetProbeMap(Map<String, List<Integer>> source) {
+        if (source == null || source.isEmpty()) {
+            return null;
+        }
+        Map<String, List<Integer>> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
+            List<Integer> values = entry.getValue() == null ? Collections.emptyList() : new ArrayList<>(new LinkedHashSet<>(entry.getValue()));
+            copy.put(entry.getKey(), values);
+        }
+        return copy;
     }
 
     private Map<String, List<Integer>> mergeBranchTargetProbeMap(Map<String, List<Integer>> current,
