@@ -57,6 +57,9 @@ public final class MethodProbesAdapter extends MethodVisitor {
     public void visitLineNumber(final int line, final Label start) {
         currentLine = line;
         probesVisitor.visitLineNumber(line, start);
+        if (line > 0) {
+            probesVisitor.visitProbe(idGenerator.nextId(), false, -1, NO_BRANCH_TARGET);
+        }
     }
 
     @Override

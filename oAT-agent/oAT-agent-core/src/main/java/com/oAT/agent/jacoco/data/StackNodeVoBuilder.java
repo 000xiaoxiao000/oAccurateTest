@@ -139,6 +139,7 @@ public class StackNodeVoBuilder {
                 Integer branchTargetId = probeInfo.getBranchProbeToPathId().get(probeIdx);
                 if (branchLine != null && branchLine > 0) {
                     executedBranchLines.add(branchLine);
+                    executedLines.add(branchLine);
                     if (branchTargetId != null && branchTargetId > 0) {
                         executedBranchTargetProbeSets
                                 .computeIfAbsent(String.valueOf(branchLine), key -> new LinkedHashSet<>())
@@ -154,7 +155,6 @@ public class StackNodeVoBuilder {
             }
         }
 
-        executedLines.removeAll(executedBranchLines);
         return new CoverageLines(executedLines, executedBranchLines,
                 toTargetProbeMap(executedBranchTargetProbeSets));
     }
