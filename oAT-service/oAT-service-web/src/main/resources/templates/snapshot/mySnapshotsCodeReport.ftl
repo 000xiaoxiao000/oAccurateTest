@@ -158,7 +158,8 @@
                                     <tr>
                                         <th>类名</th>
                                         <th>方法名</th>
-                                        <th class="center aligned">覆盖行 / 总行</th>
+                                        <th class="center aligned">代码行覆盖率</th>
+                                        <th class="center aligned">分支覆盖率</th>
                                         <th class="center aligned">覆盖状态</th>
                                         <th class="center aligned">操作</th>
                                     </tr>
@@ -168,13 +169,19 @@
                                     <#list lists as list>
                                         <#if !(list.doLines?seq_contains(-1)) && list.lineTotal?? && list.lineTotal?size gt 0>
                                             <#assign mPct = (list.lineTotal?size > 0)?then(list.doLines?size * 100.0 / list.lineTotal?size, 0)>
+                                            <#assign methodBranchTotal = (list.branchTotal??)?then(list.branchTotal?size, 0)>
+                                            <#assign methodBranchCovered = (list.executeBranch??)?then(list.executeBranch?size, 0)>
+                                            <#assign methodBranchPct = (methodBranchTotal > 0)?then(methodBranchCovered * 100.0 / methodBranchTotal, 0)>
                                             <tr>
                                                 <td title="${list.className!}">${list.className?keep_after_last(".")}</td>
                                                 <td>${list.methodName!}</td>
-                                                <td class="center aligned">${list.doLines?size} / ${list.lineTotal?size}</td>
+                                                <td class="center aligned">${list.doLines?size} / ${list.lineTotal?size} (${mPct?string("0.00")}%)</td>
                                                 <td class="center aligned">
-                                                    <#if mPct == 100><div class="ui mini green empty circular label" title="全覆盖"></div>
-                                                    <#elseif mPct gt 0><div class="ui mini orange empty circular label" title="部分覆盖"></div>
+                                                    <#if methodBranchTotal gt 0>${methodBranchCovered} / ${methodBranchTotal} (${methodBranchPct?string("0.00")}%)<#else>N/A</#if>
+                                                </td>
+                                                <td class="center aligned">
+                                                    <#if mPct == 100 && (methodBranchTotal == 0 || methodBranchPct == 100)><div class="ui mini green empty circular label" title="全覆盖"></div>
+                                                    <#elseif mPct gt 0 || methodBranchPct gt 0><div class="ui mini orange empty circular label" title="部分覆盖"></div>
                                                     <#else><div class="ui mini empty circular label" title="未覆盖"></div></#if>
                                                 </td>
                                                 <td class="center aligned">

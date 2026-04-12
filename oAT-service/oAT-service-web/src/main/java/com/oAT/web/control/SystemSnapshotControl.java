@@ -151,9 +151,12 @@ public class SystemSnapshotControl {
      * @return
      */
     @RequestMapping("/detail/{id}")
-    public String open(@PathVariable String projectId, @PathVariable String id, Model model) {
+    public String open(@PathVariable String projectId, @PathVariable String id,
+                       @RequestParam(value = "tab", required = false) String tab,
+                       Model model) {
         SystemSnapshot snapshot = systemSnapshotService.getById(id);
         model.addAttribute("snapshot", snapshot);
+        model.addAttribute("activeTab", StringUtils.hasText(tab) ? tab : "definition");
         // 加载所有标签
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.snapshot);
         model.addAttribute("labels", labels);

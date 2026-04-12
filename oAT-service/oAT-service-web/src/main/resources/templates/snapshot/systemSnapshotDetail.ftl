@@ -406,16 +406,36 @@
 <script>
     // 是否初始化选项卡
     var initFlow = false;
+    var activeTab = '${activeTab!"definition"}';
+
+    function getSnapshotDetailUrlWithTab(tab) {
+        var url = new URL(window.location.href);
+        url.searchParams.set('tab', tab);
+        return url.toString();
+    }
+
+    function refreshCurrentTab() {
+        window.location = getSnapshotDetailUrlWithTab(activeTab || 'definition');
+    }
+
     $(function () {
+        var defaultTab = '${activeTab!"definition"}';
+        if (defaultTab) {
+            activeTab = defaultTab;
+        }
         // 初始化选项卡
         $('.ui.menu .item').tab({
             onVisible: function (tabPath) {
+                activeTab = tabPath;
                 if (tabPath == "flow" && !initFlow) {
                     buildFlow();
 
                 }
             }
         });
+        if (defaultTab) {
+            $('.ui.menu .item').tab('change tab', defaultTab);
+        }
         //  如果程图初始激活页 就需要先调用该方法
         // buildFlow();
 
@@ -472,6 +492,7 @@
         }
 
         form = target.parents("form").first();
+        form.attr('action', getSnapshotDetailUrlWithTab(activeTab || 'definition'));
         // ajax 提交
         form.addClass("loading");
         $.ajax({
@@ -519,7 +540,7 @@
         if (resultInform.result) {
             notifyToast(resultInform.message, 'success');
             // 刷新当前页 ，并传递删除成功的消息
-            window.location = window.location;
+            refreshCurrentTab();
         } else {
             notifyToast(resultInform.message, 'error');
         }
@@ -538,7 +559,7 @@
             if (resultInform.result) {
                 notifyToast(resultInform.message, 'success');
                 // 刷新当前页 ，并传递删除成功的消息
-                window.location = window.location;
+                refreshCurrentTab();
             } else {
                 notifyToast(resultInform.message, 'error');
             }
@@ -551,7 +572,7 @@
         $.post("/p/${project.id}/${app.id}/snapshot/report/calculate/${snapshot.id}", function(res) {
             if (res.result) {
                 showToast("任务已启动", "info");
-                location.reload();
+                window.location = getSnapshotDetailUrlWithTab('coverage');
             } else {
                 showToast(res.message, "error");
             }
@@ -564,7 +585,7 @@
         $.get("/p/${project.id}/${app.id}/snapshot/report/status/${snapshot.id}", function(res) {
             if (res.result && res.data.reportStatus != 1) {
                 clearInterval(reportInterval);
-                location.reload();
+                window.location = getSnapshotDetailUrlWithTab('coverage');
             }
         });
     }, 3000);

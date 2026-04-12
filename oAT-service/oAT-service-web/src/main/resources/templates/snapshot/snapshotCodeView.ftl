@@ -10,6 +10,11 @@
         .ui.progress { margin: 0; min-width: 80px; }
         .method-table td { vertical-align: middle !important; }
         .method-table .method-name { font-weight: 600; color: #1e70bf; }
+        .stat-txt { font-size: 0.9em; white-space: normal; }
+        .col-name { width: 30%; }
+        .col-pct { width: 20%; }
+        .col-jump { width: 10%; }
+        .col-status { width: 10%; }
         #backToTop {
             position: fixed !important;
             bottom: 40px !important;
@@ -58,31 +63,39 @@
         <table class="ui compact basic celled table method-table" id="methodTable">
             <thead>
                 <tr>
-                    <th>方法名称</th>
-                    <th class="center aligned">代码行覆盖率</th>
-                    <th class="center aligned">跳转</th>
-                    <th class="center aligned">覆盖状态</th>
+                    <th class="col-name">方法名称</th>
+                    <th class="center aligned col-pct">代码行覆盖率</th>
+                    <th class="center aligned col-pct">分支覆盖率</th>
+                    <th class="center aligned col-jump">跳转</th>
+                    <th class="center aligned col-status">覆盖状态</th>
                 </tr>
             </thead>
             <tbody>
             <#if classCov?? && classCov.methods??>
             <#list classCov.methods as m>
                 <#assign linePct = (m.totalLines > 0)?then(m.coveredLines * 1.0 / m.totalLines * 100, 0)>
+                <#assign branchPct = m.branchRate!0>
                 <tr>
                     <td class="method-name">${m.methodName}</td>
                     <td>
-                        <div class="ui tiny progress ${(linePct == 100)?then('success', (linePct > 0)?then('warning', ''))}" data-percent="${linePct?string("0")}">
-                            <div class="bar" style="width: ${linePct?string("0.00")}%"></div>
-                            <div class="label" style="font-size: 0.85em;">${m.coveredLines} / ${m.totalLines} (${linePct?string("0.00")}%)</div>
+                        <span class="stat-txt">${m.coveredLines}/${m.totalLines} (${linePct?string("0.0")}%)</span>
+                        <div class="ui tiny progress <#if linePct == 100>success<#elseif linePct gt 0>warning<#elseif m.totalLines gt 0>error</#if>" data-percent="${linePct}">
+                            <div class="bar" style="width: ${linePct}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="stat-txt">${m.coveredBranches}/${m.totalBranches} (${branchPct?string("0.0")}%)</span>
+                        <div class="ui tiny progress <#if branchPct == 100>success<#elseif branchPct gt 0>warning<#elseif m.totalBranches gt 0>error</#if>" data-percent="${branchPct}">
+                            <div class="bar" style="width: ${branchPct}%"></div>
                         </div>
                     </td>
                     <td class="center aligned">
                         <a href="#method_${m_index}" class="ui mini compact basic blue button">查看代码</a>
                     </td>
                     <td class="center aligned">
-                        <#if linePct == 100>
+                        <#if linePct == 100 && (m.totalBranches == 0 || branchPct == 100)>
                             <div class="ui tiny green label">全覆盖</div>
-                        <#elseif linePct gt 0>
+                        <#elseif linePct gt 0 || branchPct gt 0>
                             <div class="ui tiny orange label">部分覆盖</div>
                         <#else>
                             <div class="ui tiny horizontal label">未覆盖</div>
@@ -91,7 +104,7 @@
                 </tr>
             </#list>
             <#else>
-                <tr><td colspan="4" class="center aligned">暂无方法覆盖数据</td></tr>
+                <tr><td colspan="5" class="center aligned">暂无方法覆盖数据</td></tr>
             </#if>
             </tbody>
         </table>
