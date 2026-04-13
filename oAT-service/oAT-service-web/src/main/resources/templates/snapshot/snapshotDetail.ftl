@@ -36,7 +36,11 @@
 <div class="ui breadcrumb" style="margin: 5px">
     <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
     <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/snapshot/list">快照列表</a>
+    <#if snapshots?? && (snapshots?size > 0) && snapshots[0].appId??>
+        <a class="section" href="/p/${project.id}/${snapshots[0].appId}/snapshot/list">系统快照</a>
+    <#else>
+        <div class="section">系统快照</div>
+    </#if>
     <span class="divider">/</span>
     <div class="active section">详情</div>
 </div>

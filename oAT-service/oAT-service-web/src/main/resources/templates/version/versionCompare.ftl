@@ -46,14 +46,14 @@
                     </div>
                 </div>
             </div>
-            <a class="item" href="/p/${project.id}/${app.id}/snapshot/list">
-                系统快照
+            <a class="item" href="/p/${project.id}/${app.id}/version/list">
+                版本列表
+            </a>
+            <a class="item" href="/p/${project.id}/${app.id}/version/report/list">
+                报告列表
             </a>
             <a class="item active" href="/p/${project.id}/${app.id}/version/compare">
                 版本比对
-            </a>
-            <a class="ui item" href="/p/${project.id}/app/${app.id}/settings">
-                设置
             </a>
         </div>
     </div>

@@ -45,9 +45,6 @@
 
                 </div>
             </a>
-            <#--<a class="${usecaseItemActive!} teal item" href="/p/${project.id}/usecase/list">
-                用例中心
-            </a>-->
             <#--   <a class="${versionItemActive!} teal item" href="/p/${project.id}/version/apps">
                   版本比对
               </a>-->
@@ -111,7 +108,7 @@
                     </div>
                 </div>
                 <a class="icon item popup" href="/p/${project.id}/edit"
-                   data-content="项目设置"
+                   data-content="设置"
                    data-variation="mini inverted"
                    data-position="bottom center">
 

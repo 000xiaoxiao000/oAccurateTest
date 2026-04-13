@@ -9,10 +9,19 @@
 <#assign settingItemActive="active">
 <#include "../projectHeader.ftl">
 
+<div class="ui small breadcrumb" style="margin: 5px">
+    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+    <span class="divider">/</span>
+    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
+    <span class="divider">/</span>
+    <div class="active section">设置</div>
+</div>
+
 <!--内容主体-->
 <div id="center-content" class="ui grid attached container" style="margin-top: 5px">
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
+     <#assign settingsManageCodeActive="active"/>
      <#assign manageAppCodeActive="active"/>
      <#assign loginRole=loginNameRole />
      <#include "LeftNavigationMenu.ftl">

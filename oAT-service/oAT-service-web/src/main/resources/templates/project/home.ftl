@@ -3,7 +3,7 @@
 <!-- 项目主页 -->
 <head>
     <meta charset="UTF-8">
-    <title>${project.name}-主页</title>
+    <title>${project.name}-项目首页</title>
     <#include "../common.ftl">
 </head>
 <body>
@@ -65,14 +65,24 @@
         </div>
 
         <div class="ui block top attached header left aligned">
-            我最近的快照
-            <a class="ui" style="float: right" href="/p/${project.id}/snapshot/list">更多</a>
+            我最近的系统快照
+            <#if apps?? && (apps?size > 0)>
+                <a class="ui" style="float: right" href="/p/${project.id}/${apps[0].id}/snapshot/list">更多</a>
+            <#else>
+                <a class="ui" style="float: right" href="/p/${project.id}/snapshot/my">更多</a>
+            </#if>
         </div>
         <div class="ui attached segment" style="min-height: 100px;padding: 0px">
             <table class="ui basic table " style="border: none">
                 <#list snapshots as snap>
                     <tr>
-                        <td><a href="/p/${project.id}/snapshot/detail/${snap.id}">${snap.name}</a></td>
+                        <td>
+                            <#if snap.appId??>
+                                <a href="/p/${project.id}/${snap.appId}/snapshot/detail/${snap.id}">${snap.name}</a>
+                            <#else>
+                                <span>${snap.name}</span>
+                            </#if>
+                        </td>
                         <td class="right aligned" style="color: grey">${snap.createTime?datetime}</td>
                     </tr>
                 </#list>

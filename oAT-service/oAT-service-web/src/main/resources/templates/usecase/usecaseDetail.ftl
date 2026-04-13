@@ -26,7 +26,7 @@
 <#assign usecaseItemActive="active">
 <#include "../projectHeader.ftl">
 
-<div class="ui breadcrumb" style="margin: 5px">
+<div class="ui small breadcrumb" style="margin: 5px">
     <a class="section" href="/p/${project.id}/home">${project.name}</a>
     <span class="divider">/</span>
     <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
@@ -101,7 +101,13 @@
             <tbody>
            <#list snapshots as snap>
            <tr>
-               <td><a href="/p/${project.id}/snapshot/detail/${snap.id}">${snap.name}</a></td>
+               <td>
+                   <#if snap.appId??>
+                       <a href="/p/${project.id}/${snap.appId}/snapshot/detail/${snap.id}">${snap.name}</a>
+                   <#else>
+                       <span>${snap.name}</span>
+                   </#if>
+               </td>
                <td>${snap.describe!''}</td>
                <td class="right aligned">${snap.createTime?date}</td>
            </tr>

@@ -84,7 +84,7 @@ public class ToolRecommender {
                 "在线", "offline", "运行状态", "部署", "启动"));
         INTENT_KEYWORDS.put("trace", Set.of("链路", "trace", "调用链", "请求链路",
                 "span", "上下游", "依赖关系"));
-        INTENT_KEYWORDS.put("snapshot", Set.of("快照", "snapshot", "版本对比",
+        INTENT_KEYWORDS.put("snapshot", Set.of("快照", "snapshot", "版本比对",
                 "历史数据", "快照详情"));
         INTENT_KEYWORDS.put("code_relation", Set.of("代码", "code", "类依赖",
                 "调用关系", "callgraph", "接口关系", "影响分析"));

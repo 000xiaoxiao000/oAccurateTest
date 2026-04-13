@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>我的历史快照 Source View - ${className}</title>
+    <title>我的快照代码视图 - ${className}</title>
     <#include "../common.ftl">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; }

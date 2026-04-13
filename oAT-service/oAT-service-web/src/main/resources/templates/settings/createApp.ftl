@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>${project.name}-新增应用</title>
+    <title>设置-新增应用</title>
 
 <#--<link href="/css/font-awesome.min.css" rel="stylesheet">
 <link href="https://cdn.bootcss.com/semantic-ui/2.3.1/semantic.min.css" rel="stylesheet">
@@ -37,14 +37,15 @@
 </head>
 <body>
 <#assign settingItemActive="active">
+<#assign settingsAppActive="active"/>
 <#include "../projectHeader.ftl">
 <!-- 面包屑导航 -->
-<div class="ui breadcrumb" style="margin: 5px">
-    <a class="section">项目设置</a>
+<div class="ui small breadcrumb" style="margin: 5px">
+    <a class="section" href="/p/${project.id}/home">${project.name}</a>
     <span class="divider">/</span>
-    <a href="list" class="section">应用列表</a>
+    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
     <span class="divider">/</span>
-    <div class="active section">新增</div>
+    <div class="active section">设置</div>
 </div>
 
 

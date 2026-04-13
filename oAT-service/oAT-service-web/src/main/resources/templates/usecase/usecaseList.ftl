@@ -9,7 +9,7 @@
 <#assign usecaseItemActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 5px">
+<div class="ui small breadcrumb" style="margin: 5px">
     <a class="section" href="/p/${project.id}/home">${project.name}</a>
     <span class="divider">/</span>
     <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
@@ -80,12 +80,21 @@
     <div class="ui four wide column">
         <div class="ui vertical menu">
             <div class="header item">用例中心</div>
-            <a class="teal active item" href="/p/${project.id}/usecase/list">
-                用例文档
+            <a class="active item" href="/p/${project.id}/usecase/list">
+                用例中心
             </a>
-            <a class="item" href="/p/${project.id}/snapshot/list">
-                快照列表
-            </a>
+            <#if app??>
+                <a class="item" href="/p/${project.id}/${app.id}/snapshot/list">
+                    系统快照
+                </a>
+                <a class="ui item" href="/p/${project.id}/app/${app.id}/settings">
+                    设置
+                </a>
+            <#else>
+                <a class="ui item" href="/p/${project.id}/edit">
+                    设置
+                </a>
+            </#if>
         </div>
     </div>
     <!-- 中间内容 -->
