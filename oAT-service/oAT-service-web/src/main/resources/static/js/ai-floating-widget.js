@@ -22,7 +22,7 @@
         var projectName = $root.data('project-name') || '当前项目';
         var askUrl = $root.data('ask-url');
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
-        var aiTimeout = ($root.data('ai-timeout') || 1800) * 1000;
+        var aiTimeout = ($root.data('ai-timeout') || 300) * 1000;
         var storagePrefix = 'ai-floating-widget:' + projectId;
         var historyKey = storagePrefix + ':history';
         var hiddenKey = storagePrefix + ':hidden';

@@ -70,7 +70,7 @@ public class AIConfig implements AIConfigProperties {
     /**
      * 请求超时时间(秒)
      */
-    private int timeout = 1800;
+    private int timeout = 300;
 
     /**
      * 系统提示词前缀

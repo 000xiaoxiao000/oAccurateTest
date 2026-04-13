@@ -23,7 +23,7 @@
         var askUrl = $root.data('ask-url');
         var assistantName = $root.data('assistant-name') || 'AI';
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
-        var aiTimeout = ($root.data('ai-timeout') || 1800) * 1000;
+        var aiTimeout = ($root.data('ai-timeout') || 300) * 1000;
         var projectId = $root.data('project-id') || 'default';
         var projectName = $root.data('project-name') || '当前项目';
 
