@@ -27,9 +27,16 @@
 <#include "../projectHeader.ftl">
 
 <div class="ui breadcrumb" style="margin: 5px">
+    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+    <span class="divider">/</span>
     <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
     <span class="divider">/</span>
     <div class="active section">用例详情</div>
+</div>
+<div class="ui container" style="margin-bottom: 10px">
+    <a class="ui tiny teal basic button" href="/p/${project.id}/usecase/list">
+        <i class="home icon"></i>用例中心
+    </a>
 </div>
 <div class="ui vertical menu" style="position: fixed;top: 150px;left: 50px">
     <a class="item" href="#snapshotHeader">

@@ -75,6 +75,7 @@ public class UsecaseControl {
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase);
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("usecase", usecase);
+        model.addAttribute("currentDir", usecase.getDirectory());
         model.addAttribute("labels", labels);
         model.addAttribute("selectLabels", arrayToString(usecase.getLabels()));// 已选中的节点
         model.addAttribute("selectSnapshots", arrayToString(usecase.getSnapshots()));//已选中的快照

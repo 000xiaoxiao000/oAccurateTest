@@ -17,6 +17,7 @@ public class VersionItemVo implements Serializable {
     private String sourceType;
     private String repoBranch;
     private String repoCommitId;
+    private String setAsCurrent;
 
     private Date createTime;
     private boolean fileExist;
@@ -124,6 +125,14 @@ public class VersionItemVo implements Serializable {
 
     public void setRepoCommitId(String repoCommitId) {
         this.repoCommitId = repoCommitId;
+    }
+
+    public String getSetAsCurrent() {
+        return setAsCurrent;
+    }
+
+    public void setSetAsCurrent(String setAsCurrent) {
+        this.setAsCurrent = setAsCurrent;
     }
 
     public Date getCreateTime() {

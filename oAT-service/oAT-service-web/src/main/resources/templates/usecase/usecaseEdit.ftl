@@ -18,9 +18,17 @@
 <#include "../projectHeader.ftl">
 
 <div class="ui breadcrumb" style="margin: 5px">
+    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+    <span class="divider">/</span>
     <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
     <span class="divider">/</span>
-    <span class="section">编辑用例</span>
+    <div class="active section">编辑用例</div>
+</div>
+
+<div class="ui container" style="margin-bottom: 10px">
+    <a class="ui tiny teal basic button" href="/p/${project.id}/usecase/list">
+        <i class="home icon"></i>用例中心
+    </a>
 </div>
 
 <div class="ui container segment">
@@ -155,11 +163,11 @@
     }
 
     function doCancelUsecase() {
-        $("#cancelUsecaseDialog").modal('show');
-        $("#cancelUsecaseButton").click(function () {
-            //返回上一页刷新页面
-            window.location.href='./list'
+        var backUrl = "/p/${project.id}/usecase/list?directory=${currentDir}";
+        $("#cancelUsecaseButton").off('click').on('click', function () {
+            window.location.href = backUrl;
         });
+        $("#cancelUsecaseDialog").modal('show');
     }
 </script>
 <script>
