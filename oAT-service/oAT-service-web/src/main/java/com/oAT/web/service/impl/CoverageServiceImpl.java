@@ -1700,21 +1700,25 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             } else if ("red".equals(color)) {
                 style += "background-color: #f5c6cb;";
             }
-            String titleAttr = "";
             String branchClassAttr = "";
             String branchDataAttr = "";
             if (branchLineDetails.containsKey(lineNum)) {
-                titleAttr = " title='" + escapeHtmlAttribute(branchLineDetails.get(lineNum)) + "'";
-                branchClassAttr = " class='branch-line'";
-                branchDataAttr = " data-branch-detail='" + escapeHtmlAttribute(branchLineDetails.get(lineNum)) + "'";
+                branchClassAttr = " class='branch-line branch-" + (color == null ? "green" : color) + "'";
+                branchDataAttr = " style='--line-number-width: " + lineWidth + ".2em;'";
             }
-            sb.append("<div style='display:flex;min-width:max-content;").append(style).append("'")
-                    .append(branchClassAttr)
-                    .append(branchDataAttr)
-                    .append(titleAttr)
-                    .append(">");
+            sb.append("<div style='display:flex;min-width:max-content;").append(style).append("'");
+            if (StringUtils.hasText(branchClassAttr)) {
+                sb.append(branchClassAttr).append(branchDataAttr);
+            }
+            sb.append(">");
             sb.append("<span style='color: #999; flex-shrink:0; width: ").append(lineWidth).append(".2em; text-align: right; display: inline-block; user-select:none; margin-right: 20px;'>").append(lineNum).append("</span>")
                     .append(escapeHtml(lines[i]));
+            if (branchLineDetails.containsKey(lineNum)) {
+                sb.append("<span class='branch-flag' aria-hidden='true'></span>");
+                sb.append("<span class='branch-tooltip'>")
+                        .append(escapeHtml(branchLineDetails.get(lineNum)))
+                        .append("</span>");
+            }
             if (showBranchDetails && branchLineDetails.containsKey(lineNum)) {
                 sb.append("<span style='margin-left: 16px; color: #666; font-size: 12px; white-space: nowrap;'>// ")
                         .append(escapeHtml(branchLineDetails.get(lineNum)))
@@ -1887,17 +1891,6 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             }
             return list;
         });
-    }
-
-    private String escapeHtmlAttribute(String text) {
-        if (text == null) {
-            return "";
-        }
-        return escapeHtml(text)
-                .replace("\n", "&#10;")
-                .replace("\r", "&#13;")
-                .replace("[", "［")
-                .replace("]", "］");
     }
 
     private String escapeHtml(String text) {

@@ -7,10 +7,56 @@
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; }
         .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; max-width: 100%; overflow-x: auto; overflow-y: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .branch-line { position: relative; }
-        .branch-line::after {
-            content: attr(data-branch-detail);
+        .branch-line .branch-flag {
             position: absolute;
-            left: calc(100% + 12px);
+            left: calc(var(--line-number-width, 3em) + 6px);
+            top: 50%;
+            transform: translateY(-50%);
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #1e88e5;
+            box-shadow: 0 0 0 2px rgba(30,136,229,0.18);
+            pointer-events: auto;
+            z-index: 2;
+            transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+        }
+        .branch-line .branch-flag:hover {
+            transform: translateY(-50%) scale(1.2);
+            box-shadow: 0 0 0 3px rgba(30,136,229,0.26), 0 0 10px rgba(30,136,229,0.28);
+        }
+        .branch-line.branch-green .branch-flag {
+            background: #2e7d32;
+            box-shadow: 0 0 0 2px rgba(46,125,50,0.18);
+        }
+        .branch-line.branch-green .branch-flag:hover {
+            box-shadow: 0 0 0 3px rgba(46,125,50,0.26), 0 0 10px rgba(46,125,50,0.26);
+        }
+        .branch-line.branch-orange .branch-flag {
+            background: #ef6c00;
+            box-shadow: 0 0 0 2px rgba(239,108,0,0.18);
+        }
+        .branch-line.branch-orange .branch-flag:hover {
+            box-shadow: 0 0 0 3px rgba(239,108,0,0.26), 0 0 10px rgba(239,108,0,0.26);
+        }
+        .branch-line.branch-red .branch-flag {
+            background: #c62828;
+            box-shadow: 0 0 0 2px rgba(198,40,40,0.18);
+        }
+        .branch-line.branch-red .branch-flag:hover {
+            box-shadow: 0 0 0 3px rgba(198,40,40,0.26), 0 0 10px rgba(198,40,40,0.26);
+        }
+        .branch-line::after {
+            content: '';
+            display: none;
+        }
+        .branch-line .branch-flag:hover + .branch-tooltip,
+        .branch-line .branch-tooltip:hover {
+            opacity: 1;
+        }
+        .branch-tooltip {
+            position: absolute;
+            left: calc(var(--line-number-width, 3em) + 24px);
             top: 50%;
             transform: translateY(-50%);
             background: rgba(20, 24, 33, 0.96);
@@ -29,7 +75,6 @@
             z-index: 20;
             transition: opacity .12s ease;
         }
-        .branch-line:hover::after { opacity: 1; }
         .method-list { margin-bottom: 25px; }
         .ui.progress { margin: 0; min-width: 80px; }
         .method-table td { vertical-align: middle !important; }
