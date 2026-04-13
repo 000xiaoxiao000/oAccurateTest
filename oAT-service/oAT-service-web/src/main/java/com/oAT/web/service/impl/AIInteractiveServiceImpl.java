@@ -56,7 +56,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     @Autowired(required = false)
     private AgentDataProvider agentDataProvider;
 
-    @Value("${ai.llm.timeout:1800}")
+    @Value("${ai.llm.timeout:300}")
     private int aiTimeout;
 
     @Override

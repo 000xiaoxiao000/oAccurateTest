@@ -297,7 +297,7 @@ public class SemanticCacheService {
         private final String usedTools;
         private final long createTime;
         private volatile long hitCount;
-        private static final long TTL_MS = 30 * 60 * 1000; // 30分钟
+        private static final long TTL_MS = 5 * 60 * 1000; // 5分钟
 
         SemanticCacheEntry(String originalQuestion, String answer, String usedTools, long createTime) {
             this.originalQuestion = originalQuestion;

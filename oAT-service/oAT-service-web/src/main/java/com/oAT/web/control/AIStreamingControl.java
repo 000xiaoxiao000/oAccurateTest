@@ -46,7 +46,7 @@ public class AIStreamingControl {
     private static final Logger logger = LoggerFactory.getLogger(AIStreamingControl.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private static final Long SSE_TIMEOUT = 1800_000L; // 30分钟
+    private static final Long SSE_TIMEOUT = 300_000L; // 5分钟
 
     private final ExecutorService sseExecutor = Executors.newFixedThreadPool(10);
 
