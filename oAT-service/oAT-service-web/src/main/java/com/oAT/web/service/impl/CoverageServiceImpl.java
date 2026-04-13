@@ -1640,15 +1640,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             return "Source code for " + className + " not found in " + codeFile.getName();
         }
 
-        return applyColoring(content, classCov);
+        return applyColoring(content, classCov, false);
     }
 
-    private String applyColoring(String content, ClassCoverageIndex classCov) {
+    private String applyColoring(String content, ClassCoverageIndex classCov, boolean showBranchDetails) {
         String[] lines = content.split("\\r?\\n");
         StringBuilder sb = new StringBuilder();
 
         Map<Integer, String> lineColors = new HashMap<>();
         Map<Integer, String> branchLineColors = new HashMap<>();
+        Map<Integer, String> branchLineDetails = new HashMap<>();
         Map<String, Integer> methodStartLines = new HashMap<>();
 
         if (classCov.getMethods() != null) {
@@ -1671,12 +1672,12 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                     }
                 }
                 mergeBranchLineColors(branchLineColors,
+                        branchLineDetails,
                         md.getTotalBranchTargetProbeMap(),
                         md.getCoveredBranchTargetProbeMap());
             }
         }
 
-        // 计算行号所需的最小宽度（基于总行数的位数）
         int totalLineCount = lines.length;
         int lineWidth = String.valueOf(totalLineCount).length();
 
@@ -1699,10 +1700,27 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             } else if ("red".equals(color)) {
                 style += "background-color: #f5c6cb;";
             }
-            sb.append("<div style='display:flex;min-width:max-content;").append(style).append("'>")
-                    .append("<span style='color: #999; flex-shrink:0; width: ").append(lineWidth).append(".2em; text-align: right; display: inline-block; user-select:none; margin-right: 20px;'>").append(lineNum).append("</span>")
-                    .append(escapeHtml(lines[i]))
-                    .append("</div>");
+            String titleAttr = "";
+            String branchClassAttr = "";
+            String branchDataAttr = "";
+            if (branchLineDetails.containsKey(lineNum)) {
+                titleAttr = " title='" + escapeHtmlAttribute(branchLineDetails.get(lineNum)) + "'";
+                branchClassAttr = " class='branch-line'";
+                branchDataAttr = " data-branch-detail='" + escapeHtmlAttribute(branchLineDetails.get(lineNum)) + "'";
+            }
+            sb.append("<div style='display:flex;min-width:max-content;").append(style).append("'")
+                    .append(branchClassAttr)
+                    .append(branchDataAttr)
+                    .append(titleAttr)
+                    .append(">");
+            sb.append("<span style='color: #999; flex-shrink:0; width: ").append(lineWidth).append(".2em; text-align: right; display: inline-block; user-select:none; margin-right: 20px;'>").append(lineNum).append("</span>")
+                    .append(escapeHtml(lines[i]));
+            if (showBranchDetails && branchLineDetails.containsKey(lineNum)) {
+                sb.append("<span style='margin-left: 16px; color: #666; font-size: 12px; white-space: nowrap;'>// ")
+                        .append(escapeHtml(branchLineDetails.get(lineNum)))
+                        .append("</span>");
+            }
+            sb.append("</div>");
         }
         sb.append("</pre>");
 
@@ -1710,6 +1728,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     }
 
     private void mergeBranchLineColors(Map<Integer, String> branchLineColors,
+                                       Map<Integer, String> branchLineDetails,
                                        Map<String, List<Integer>> totalBranchTargetProbeMap,
                                        Map<String, List<Integer>> coveredBranchTargetProbeMap) {
         if (totalBranchTargetProbeMap == null || totalBranchTargetProbeMap.isEmpty()) {
@@ -1720,12 +1739,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             if (branchLine == null) {
                 continue;
             }
-            int totalCount = entry.getValue() == null ? 0 : new LinkedHashSet<>(entry.getValue()).size();
-            int coveredCount = 0;
+            LinkedHashSet<Integer> totalSet = entry.getValue() == null ? new LinkedHashSet<>() : new LinkedHashSet<>(entry.getValue());
+            LinkedHashSet<Integer> coveredSet = new LinkedHashSet<>();
             if (coveredBranchTargetProbeMap != null) {
                 List<Integer> covered = coveredBranchTargetProbeMap.get(entry.getKey());
-                coveredCount = covered == null ? 0 : new LinkedHashSet<>(covered).size();
+                if (covered != null) {
+                    coveredSet.addAll(covered);
+                }
             }
+            int totalCount = totalSet.size();
+            int coveredCount = coveredSet.size();
             String color = coveredCount <= 0 ? "red" : (coveredCount >= totalCount ? "green" : "orange");
             String currentColor = branchLineColors.get(branchLine);
             if ("green".equals(color)) {
@@ -1733,7 +1756,30 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             } else {
                 branchLineColors.put(branchLine, pickCoverageColor(currentColor, color));
             }
+            branchLineDetails.put(branchLine, mergeBranchDetailText(
+                    branchLineDetails.get(branchLine),
+                    buildBranchDetailText(totalSet, coveredSet)));
         }
+    }
+
+    private String mergeBranchDetailText(String currentDetail, String newDetail) {
+        if (!StringUtils.hasText(currentDetail)) {
+            return newDetail;
+        }
+        if (!StringUtils.hasText(newDetail) || currentDetail.equals(newDetail)) {
+            return currentDetail;
+        }
+        return currentDetail + " | " + newDetail;
+    }
+
+    private String buildBranchDetailText(Set<Integer> totalSet, Set<Integer> coveredSet) {
+        String totalText = totalSet == null || totalSet.isEmpty()
+                ? "[]"
+                : totalSet.stream().sorted().map(String::valueOf).collect(Collectors.joining(", ", "[", "]"));
+        String coveredText = coveredSet == null || coveredSet.isEmpty()
+                ? "[]"
+                : coveredSet.stream().sorted().map(String::valueOf).collect(Collectors.joining(", ", "[", "]"));
+        return "branch handled: " + coveredText + " / total: " + totalText;
     }
 
     private String pickCoverageColor(String currentColor, String newColor) {
@@ -1841,6 +1887,17 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             }
             return list;
         });
+    }
+
+    private String escapeHtmlAttribute(String text) {
+        if (text == null) {
+            return "";
+        }
+        return escapeHtml(text)
+                .replace("\n", "&#10;")
+                .replace("\r", "&#13;")
+                .replace("[", "［")
+                .replace("]", "］");
     }
 
     private String escapeHtml(String text) {
