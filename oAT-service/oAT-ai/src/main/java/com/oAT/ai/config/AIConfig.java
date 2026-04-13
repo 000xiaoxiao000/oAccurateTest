@@ -55,7 +55,7 @@ public class AIConfig implements AIConfigProperties {
     /**
      * 模型名称
      */
-    private String model = "qwen2.5-coder:7b";
+    private String model = "gemma4:e2b";
 
     /**
      * 最大 token 数
@@ -77,6 +77,7 @@ public class AIConfig implements AIConfigProperties {
      */
     private String systemPromptPrefix = "你是一个专业的代码覆盖率分析助手，专注于帮助用户进行链路分析、问题排查和数据洞察。";
 
+    @Override
     public boolean isEnabled() {
         return enabled;
     }
@@ -85,6 +86,7 @@ public class AIConfig implements AIConfigProperties {
         this.enabled = enabled;
     }
 
+    @Override
     public String getProvider() {
         return provider;
     }
@@ -93,6 +95,7 @@ public class AIConfig implements AIConfigProperties {
         this.provider = provider;
     }
 
+    @Override
     public String getBaseUrl() {
         return baseUrl;
     }
@@ -109,6 +112,7 @@ public class AIConfig implements AIConfigProperties {
         this.apiKey = apiKey;
     }
 
+    @Override
     public String getModel() {
         return model;
     }
@@ -141,6 +145,7 @@ public class AIConfig implements AIConfigProperties {
         this.timeout = timeout;
     }
 
+    @Override
     public String getSystemPromptPrefix() {
         return systemPromptPrefix;
     }
