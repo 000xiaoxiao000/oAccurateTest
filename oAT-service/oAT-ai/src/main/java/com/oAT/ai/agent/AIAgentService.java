@@ -1,12 +1,13 @@
 package com.oAT.ai.agent;
 
 import com.oAT.agent.AISelfLearningService;
-import com.oAT.ai.agent.cache.RedisCacheService;
 import com.oAT.ai.agent.cache.SemanticCacheService;
 import com.oAT.ai.agent.tools.*;
 import com.oAT.ai.config.AIConfig;
 import com.oAT.ai.config.AIConfigProperties;
 import com.oAT.ai.config.AIEnhancedConfig;
+import dev.langchain4j.agent.tool.P;
+import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -16,8 +17,22 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.security.MessageDigest;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,9 +49,30 @@ public class AIAgentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AIAgentService.class);
 
+    private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = Arrays.asList(
+            DateTimeFormatter.ISO_LOCAL_DATE,
+            DateTimeFormatter.ofPattern("yyyy/MM/dd"),
+            DateTimeFormatter.ofPattern("yyyyMMdd")
+    );
+
+    private static final List<DateTimeFormatter> LOCAL_DATE_TIME_FORMATTERS = Arrays.asList(
+            DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
+            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"),
+            DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
+    );
+
+    private static final Set<String> NULL_LIKE_VALUES = new HashSet<>(Arrays.asList(
+            "", "null", "none", "nil", "n/a", "na", "undefined", "empty"
+    ));
+
+    private static final Map<String, List<String>> SAFE_FALLBACK_TOOL_CANDIDATES = createSafeFallbackToolCandidates();
+
     /** 匹配 {"name": "xxx", "arguments": {...}} 格式的工具调用（支持 ```json 代码块包裹） */
     private static final Pattern TOOL_CALL_PATTERN = Pattern.compile(
-            "(?:```\\s*json\\s*)?\\{\\s*\"name\"\\s*:\\s*\"(\\w+)\"\\s*,\\s*\"arguments\"\\s*:\\s*(\\{.*?})\\s*\\}(?:```)?",
+            "(?:```\\s*json\\s*)?\\{\\s*\"name\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"arguments\"\\s*:\\s*(\\{.*?})\\s*\\}(?:```)?",
             Pattern.DOTALL);
 
     private final AIAgent aiAgent;
@@ -45,6 +81,17 @@ public class AIAgentService {
 
     /** 工具实例映射：方法名 → 工具对象 */
     private final Map<String, Object> toolInstances = new LinkedHashMap<>();
+
+    /** 工具方法映射：兼容别名/规范化名称 → 方法绑定 */
+    private final Map<String, ToolMethodBinding> toolMethodBindings = new LinkedHashMap<>();
+
+    /** 工具 schema 缓存：规范化工具名 → 参数结构信息 */
+    private final Map<String, ToolMethodSchema> toolMethodSchemas = new LinkedHashMap<>();
+
+    /** 最近的 fallback 执行报告缓存 */
+    private final Deque<FallbackReport> recentFallbackReports = new ArrayDeque<>();
+
+    private static final int MAX_FALLBACK_REPORTS = 20;
 
     /** 语义缓存服务（用于相似问题命中） */
     private final SemanticCacheService semanticCacheService;
@@ -148,15 +195,51 @@ public class AIAgentService {
 
     /**
      * 注册工具实例到映射表
-     * 扫描工具类中所有带 @Tool 注解的方法，建立 方法名→工具对象 的映射
+     * 扫描工具类中所有带 @Tool 注解的方法，建立 方法名/别名→工具绑定 的映射
      */
     private void registerTool(Object toolInstance) {
         for (Method method : toolInstance.getClass().getDeclaredMethods()) {
-            if (method.isAnnotationPresent(dev.langchain4j.agent.tool.Tool.class)) {
-                toolInstances.put(method.getName(), toolInstance);
-                logger.debug("Registered fallback tool: {} -> {}", method.getName(), toolInstance.getClass().getSimpleName());
+            Tool toolAnnotation = method.getAnnotation(Tool.class);
+            if (toolAnnotation == null) {
+                continue;
             }
+
+            ToolMethodBinding binding = new ToolMethodBinding(toolInstance, method);
+            ToolMethodSchema schema = buildToolMethodSchema(method);
+            registerToolBinding(method.getName(), binding, schema);
+            registerToolBinding(toolInstance.getClass().getSimpleName() + "." + method.getName(), binding, schema);
+
+            logger.debug("Registered fallback tool: {} -> {}", method.getName(), toolInstance.getClass().getSimpleName());
         }
+    }
+
+    private void registerToolBinding(String alias, ToolMethodBinding binding, ToolMethodSchema schema) {
+        String normalizedAlias = normalizeName(alias);
+        if (normalizedAlias.isEmpty()) {
+            return;
+        }
+        toolMethodBindings.put(normalizedAlias, binding);
+        toolMethodSchemas.put(normalizedAlias, schema);
+        toolInstances.putIfAbsent(binding.method.getName(), binding.toolInstance);
+    }
+
+    private ToolMethodSchema buildToolMethodSchema(Method method) {
+        List<ToolParameterSchema> parameters = new ArrayList<>();
+        for (java.lang.reflect.Parameter parameter : method.getParameters()) {
+            if (isInjectableParameter(parameter)) {
+                continue;
+            }
+            String annotatedName = getAnnotatedParameterName(parameter);
+            List<String> candidates = buildCandidateNames(parameter.getName(), annotatedName);
+            parameters.add(new ToolParameterSchema(
+                    parameter.getName(),
+                    annotatedName,
+                    parameter.getType(),
+                    parameter.getParameterizedType(),
+                    candidates
+            ));
+        }
+        return new ToolMethodSchema(method.getName(), parameters);
     }
 
     public boolean isAvailable() {
@@ -314,11 +397,12 @@ public class AIAgentService {
      */
     @SuppressWarnings("unchecked")
     private String tryFallbackToolExecution(String response) {
+        FallbackReport report = new FallbackReport();
+        report.startedAt = System.currentTimeMillis();
         if (response == null || response.trim().isEmpty()) {
             return null;
         }
 
-        // 快速判断：如果包含 {"name": ... 且匹配已知工具名，则可能是原始工具调用
         Matcher matcher = TOOL_CALL_PATTERN.matcher(response.trim());
         if (!matcher.find()) {
             return null;
@@ -326,124 +410,188 @@ public class AIAgentService {
 
         String toolName = matcher.group(1);
         String argsJson = matcher.group(2);
+        String normalizedToolName = normalizeName(toolName);
+        report.toolName = toolName;
 
-        // 验证工具名是否已注册
-        Object toolInstance = toolInstances.get(toolName);
-        if (toolInstance == null) {
+        ToolMethodBinding binding = toolMethodBindings.get(normalizedToolName);
+        if (binding == null) {
             logger.debug("Response contains tool-like format but '{}' is not a registered tool, treating as normal response", toolName);
             return null;
         }
 
+        ToolMethodSchema schema = toolMethodSchemas.get(normalizedToolName);
+        report.schemaDescription = schema != null ? schema.describe() : null;
+
         logger.info("Fallback: executing tool '{}' with raw arguments: {}", toolName, argsJson);
 
         try {
-            // 解析参数 JSON
             Map<String, Object> args = parseArgsJson(argsJson);
-
-            // 查找目标方法
-            Method targetMethod = findTargetMethod(toolInstance.getClass(), toolName, args);
-            if (targetMethod == null) {
-                logger.error("Fallback: cannot find matching method for tool '{}' with args {}", toolName, args.keySet());
-                return "抱歉，AI 助手在查询数据时遇到了问题（方法签名不匹配），请稍后重试。";
+            if (schema != null) {
+                logger.debug("Fallback schema [{}]: {}", toolName, schema.describe());
+            }
+            FallbackExecutionResult executionResult = executeFallbackBinding(binding, args, schema, false, report);
+            if (!executionResult.success && isBindingFailure(executionResult.error)) {
+                FallbackExecutionResult candidateResult = tryFallbackCandidateTools(toolName, args, report);
+                if (candidateResult.success) {
+                    executionResult = candidateResult;
+                }
+            }
+            if (!executionResult.success) {
+                report.retried = true;
+                logger.warn("Fallback strict binding failed for tool '{}', retry with relaxed strategy: {}",
+                        toolName, executionResult.errorMessage);
+                executionResult = executeFallbackBinding(binding, args, schema, true, report);
+            }
+            if (!executionResult.success) {
+                throw executionResult.error != null ? executionResult.error
+                        : new IllegalArgumentException(executionResult.errorMessage);
             }
 
-            // 构造方法参数
-            Object[] invokeArgs = buildMethodArguments(targetMethod, args);
-
-            // 执行方法
-            targetMethod.setAccessible(true);
-            Object result = targetMethod.invoke(toolInstance, invokeArgs);
-
-            String resultStr = result != null ? result.toString() : "（无返回数据）";
+            String resultStr = executionResult.result != null ? executionResult.result.toString() : "（无返回数据）";
+            report.success = true;
+            report.resultLength = resultStr.length();
+            report.finishedAt = System.currentTimeMillis();
             logger.info("Fallback: tool '{}' executed successfully, result length: {}", toolName, resultStr.length());
+            storeFallbackReport(report);
+            logger.debug("Fallback report: {}", report.describe());
             return resultStr;
 
         } catch (Exception e) {
+            report.success = false;
+            report.errorMessage = e.getMessage();
+            report.finishedAt = System.currentTimeMillis();
             logger.error("Fallback: failed to execute tool '{}': {}", toolName, e.getMessage(), e);
+            storeFallbackReport(report);
+            logger.debug("Fallback report: {}", report.describe());
             return "抱歉，AI 助手在查询数据时遇到了错误：" + e.getMessage();
         }
     }
 
-    /**
-     * 简单的 JSON 参数解析（仅支持简单的键值对）
-     */
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private Map<String, Object> parseArgsJson(String argsJson) {
-        Map<String, Object> args = new HashMap<>();
-        if (argsJson == null || "{}".equals(argsJson.trim())) {
-            return args;
+    private FallbackExecutionResult tryFallbackCandidateTools(String originalToolName, Map<String, Object> args,
+                                                              FallbackReport report) {
+        List<String> candidates = SAFE_FALLBACK_TOOL_CANDIDATES.get(normalizeName(originalToolName));
+        if (candidates == null || candidates.isEmpty()) {
+            return FallbackExecutionResult.failure(new IllegalArgumentException("no fallback candidate"));
         }
-        try {
-            // 去除首尾空白和花括号
-            String inner = argsJson.trim();
-            if (inner.startsWith("{")) inner = inner.substring(1);
-            if (inner.endsWith("}")) inner = inner.substring(0, inner.length() - 1);
-
-            // 简单解析 key:value 对（不依赖外部JSON库）
-            String[] pairs = inner.split(",\\s*");
-            for (String pair : pairs) {
-                int colonIdx = pair.indexOf(':');
-                if (colonIdx <= 0) continue;
-                String key = pair.substring(0, colonIdx).trim().replace("\"", "");
-                String value = pair.substring(colonIdx + 1).trim();
-
-                // 解析值类型
-                if (value.startsWith("\"") && value.endsWith("\"")) {
-                    args.put(key, value.substring(1, value.length() - 1));
-                } else if ("true".equals(value)) {
-                    args.put(key, Boolean.TRUE);
-                } else if ("false".equals(value)) {
-                    args.put(key, Boolean.FALSE);
-                } else if ("null".equals(value)) {
-                    args.put(key, null);
-                } else {
-                    try {
-                        // 尝试解析为数字（支持整数和小数）
-                        if (value.contains(".")) {
-                            args.put(key, Double.parseDouble(value));
-                        } else {
-                            long lv = Long.parseLong(value);
-                            // 如果是 int 范围内，用 Integer
-                            args.put(key, (int) lv);
-                        }
-                    } catch (NumberFormatException nfe) {
-                        args.put(key, value);
-                    }
-                }
+        for (String candidateToolName : candidates) {
+            ToolMethodBinding candidateBinding = toolMethodBindings.get(normalizeName(candidateToolName));
+            ToolMethodSchema candidateSchema = toolMethodSchemas.get(normalizeName(candidateToolName));
+            if (candidateBinding == null) {
+                continue;
             }
-        } catch (Exception e) {
-            logger.warn("Failed to parse tool arguments JSON: {}, error: {}", argsJson, e.getMessage());
+            FallbackReport candidateReport = report != null ? report.copy() : null;
+            if (candidateReport != null) {
+                candidateReport.candidateToolName = candidateToolName;
+            }
+            FallbackExecutionResult candidateResult = executeFallbackBinding(candidateBinding, args,
+                    candidateSchema, false, candidateReport);
+            if (candidateResult.success) {
+                if (report != null && candidateReport != null) {
+                    report.candidateToolName = candidateToolName;
+                    report.strategy = candidateReport.strategy;
+                    report.parameterReports.clear();
+                    report.parameterReports.addAll(candidateReport.parameterReports);
+                }
+                return candidateResult;
+            }
         }
-        return args;
+        return FallbackExecutionResult.failure(new IllegalArgumentException("fallback candidates failed"));
+    }
+
+    private boolean isBindingFailure(Throwable error) {
+        if (error == null) {
+            return false;
+        }
+        Throwable current = error;
+        while (current != null) {
+            if (current instanceof IllegalArgumentException || current instanceof NumberFormatException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static Map<String, List<String>> createSafeFallbackToolCandidates() {
+        Map<String, List<String>> candidates = new LinkedHashMap<>();
+        candidates.put(normalizeStaticName("getProjectOverview"), Arrays.asList("getProjectInfo", "getProjectStatistics"));
+        candidates.put(normalizeStaticName("getAppCoverageReport"), Collections.singletonList("getAppCoverageTrend"));
+        candidates.put(normalizeStaticName("getAppCoverageTrend"), Collections.singletonList("getAppCoverageReport"));
+        candidates.put(normalizeStaticName("getTracesByApp"), Collections.singletonList("getRecentTraces"));
+        candidates.put(normalizeStaticName("getTracesByAppName"), Collections.singletonList("getRecentTraces"));
+        candidates.put(normalizeStaticName("getMySnapshots"), Collections.singletonList("getSnapshots"));
+        candidates.put(normalizeStaticName("getClassCallGraph"), Collections.singletonList("getCallGraph"));
+        return candidates;
+    }
+
+    private static String normalizeStaticName(String rawName) {
+        if (rawName == null) {
+            return "";
+        }
+        return rawName.replaceAll("[^a-zA-Z0-9]", "").toLowerCase(Locale.ROOT);
+    }
+
+    private void storeFallbackReport(FallbackReport report) {
+        if (report == null) {
+            return;
+        }
+        synchronized (recentFallbackReports) {
+            recentFallbackReports.addFirst(report.copy());
+            while (recentFallbackReports.size() > MAX_FALLBACK_REPORTS) {
+                recentFallbackReports.removeLast();
+            }
+        }
+    }
+
+    public FallbackReport getLatestFallbackReport() {
+        synchronized (recentFallbackReports) {
+            FallbackReport latest = recentFallbackReports.peekFirst();
+            return latest != null ? latest.copy() : null;
+        }
+    }
+
+    public List<FallbackReport> getRecentFallbackReports(int limit) {
+        synchronized (recentFallbackReports) {
+            List<FallbackReport> reports = new ArrayList<>();
+            int count = 0;
+            for (FallbackReport report : recentFallbackReports) {
+                if (limit > 0 && count >= limit) {
+                    break;
+                }
+                reports.add(report.copy());
+                count++;
+            }
+            return reports;
+        }
     }
 
     /**
-     * 查找与参数匹配的目标方法
+     * 使用标准 JSON 解析参数，支持嵌套对象、数组和转义字符。
      */
-    private Method findTargetMethod(Class<?> toolClass, String methodName, Map<String, Object> args) {
-        for (Method method : toolClass.getDeclaredMethods()) {
-            if (!methodName.equals(method.getName())) {
-                continue;
-            }
-            // 检查参数数量是否匹配（忽略非 String/基本类型的参数）
-            java.lang.reflect.Parameter[] params = method.getParameters();
-            int requiredParams = 0;
-            for (java.lang.reflect.Parameter p : params) {
-                if (!isInjectableParameter(p)) {
-                    requiredParams++;
-                }
-            }
-            if (args.size() <= requiredParams) {
-                return method;
-            }
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseArgsJson(String argsJson) {
+        if (argsJson == null || argsJson.trim().isEmpty() || "{}".equals(argsJson.trim())) {
+            return new LinkedHashMap<>();
         }
-        // 回退：按名称查找第一个匹配的
-        for (Method method : toolClass.getDeclaredMethods()) {
-            if (methodName.equals(method.getName())) {
-                return method;
-            }
+        Object parsed = new JsonParser(argsJson).parseValue();
+        if (!(parsed instanceof Map<?, ?> parsedMap)) {
+            throw new IllegalArgumentException("工具参数必须是 JSON 对象");
         }
-        return null;
+        return (Map<String, Object>) parsedMap;
+    }
+
+    /**
+     * 解析工具名，兼容大小写、连接符、前缀变化
+     */
+    private String normalizeName(String rawName) {
+        if (rawName == null) {
+            return "";
+        }
+        String normalized = rawName.trim();
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        return normalized.replaceAll("[^a-zA-Z0-9]", "").toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -454,48 +602,303 @@ public class AIAgentService {
                 || param.isAnnotationPresent(dev.langchain4j.service.MemoryId.class);
     }
 
-    /**
-     * 根据参数映射构建方法调用的实参数组
-     */
-    private Object[] buildMethodArguments(Method method, Map<String, Object> args) {
+    private Object[] buildMethodArguments(Method method, Map<String, Object> args,
+                                          ToolMethodSchema schema, boolean relaxedMode,
+                                          FallbackReport report) {
         java.lang.reflect.Parameter[] params = method.getParameters();
         Object[] invokeArgs = new Object[params.length];
+        Map<String, Object> normalizedArgs = new LinkedHashMap<>();
+        Map<String, Object> originalArgs = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : args.entrySet()) {
+            originalArgs.put(entry.getKey(), entry.getValue());
+            normalizedArgs.put(normalizeName(entry.getKey()), entry.getValue());
+        }
 
+        Set<String> consumedKeys = new LinkedHashSet<>();
+        List<String> bindingDiagnostics = new ArrayList<>();
         for (int i = 0; i < params.length; i++) {
             java.lang.reflect.Parameter param = params[i];
             String paramName = param.getName();
             Class<?> paramType = param.getType();
 
-            // 跳过 LangChain4j 框架注入的参数 (@V 等)
             if (isInjectableParameter(param)) {
-                invokeArgs[i] = null; // 框架会自动注入，反射调用时传 null 即可
-                continue;
-            }
-
-            // 从 args 中获取参数值
-            Object value = args.get(paramName);
-            if (value == null && args.containsKey(paramName)) {
-                // 显式传入的 null 值
                 invokeArgs[i] = null;
+                bindingDiagnostics.add(paramName + "=<injectable>");
                 continue;
             }
 
-            // 类型转换
+            String annotatedName = getAnnotatedParameterName(param);
+            List<String> candidates = schema != null
+                    ? schema.getCandidatesFor(paramName, annotatedName)
+                    : buildCandidateNames(paramName, annotatedName);
+            MatchedArgument matchedArgument = getArgumentValue(originalArgs, normalizedArgs, candidates,
+                    relaxedMode, consumedKeys, schema, paramType);
+            Object value = matchedArgument.value;
+            if (value == null && (containsArgument(originalArgs, normalizedArgs, paramName)
+                    || containsArgument(originalArgs, normalizedArgs, annotatedName))) {
+                invokeArgs[i] = null;
+                bindingDiagnostics.add(paramName + "=<explicit-null via " + matchedArgument.matchedKey + ">"
+                        + (matchedArgument.strategy != null ? " [" + matchedArgument.strategy + "]" : ""));
+                if (report != null) {
+                    report.parameterReports.add(FallbackParameterReport.explicitNull(
+                            paramName, matchedArgument.matchedKey, matchedArgument.strategy, paramType.getSimpleName()));
+                }
+                if (matchedArgument.matchedKey != null && !matchedArgument.matchedKey.startsWith("<")) {
+                    consumedKeys.add(normalizeName(matchedArgument.matchedKey));
+                }
+                continue;
+            }
+
             if (value != null) {
-                invokeArgs[i] = convertType(value, paramType);
+                try {
+                    invokeArgs[i] = convertType(value, paramType, param.getParameterizedType());
+                    bindingDiagnostics.add(paramName + "<-" + matchedArgument.matchedKey
+                            + " [" + matchedArgument.strategy + "] "
+                            + describeConversion(value, invokeArgs[i], paramType));
+                    if (report != null) {
+                        report.parameterReports.add(FallbackParameterReport.success(
+                                paramName, matchedArgument.matchedKey, matchedArgument.strategy,
+                                safeTypeName(value), paramType.getSimpleName(), false, false,
+                                describeConversion(value, invokeArgs[i], paramType)));
+                    }
+                    if (matchedArgument.matchedKey != null && !matchedArgument.matchedKey.startsWith("<")) {
+                        consumedKeys.add(normalizeName(matchedArgument.matchedKey));
+                    }
+                } catch (Exception conversionError) {
+                    bindingDiagnostics.add(paramName + "<-" + matchedArgument.matchedKey
+                            + " [" + matchedArgument.strategy + "] conversion-failed: "
+                            + describeConversionFailure(value, paramType, conversionError));
+                    if (report != null) {
+                        report.parameterReports.add(FallbackParameterReport.failure(
+                                paramName, matchedArgument.matchedKey, matchedArgument.strategy,
+                                safeTypeName(value), paramType.getSimpleName(),
+                                describeConversionFailure(value, paramType, conversionError)));
+                    }
+                    throw conversionError;
+                }
             } else {
-                // 未提供该参数，使用默认值或 null
+                if (report != null) {
+                    report.parameterReports.add(FallbackParameterReport.defaulted(
+                            paramName, paramType.getSimpleName()));
+                }
                 invokeArgs[i] = getDefaultForType(paramType);
+                bindingDiagnostics.add(paramName + "=<default> => " + paramType.getSimpleName());
             }
         }
 
+        logger.debug("Fallback binding diagnostics [{}][{}]: {}", method.getName(),
+                relaxedMode ? "relaxed" : "strict", String.join(", ", bindingDiagnostics));
         return invokeArgs;
+    }
+
+    private String describeConversion(Object originalValue, Object convertedValue, Class<?> targetType) {
+        return "convert " + safeTypeName(originalValue) + " -> " + targetType.getSimpleName()
+                + " => " + safeTypeName(convertedValue);
+    }
+
+    private String describeConversionFailure(Object originalValue, Class<?> targetType, Exception error) {
+        return safeTypeName(originalValue) + " -> " + targetType.getSimpleName() + " failed: " + error.getMessage();
+    }
+
+    private String safeTypeName(Object value) {
+        return value == null ? "null" : value.getClass().getSimpleName();
+    }
+
+    private String getAnnotatedParameterName(java.lang.reflect.Parameter param) {
+        P annotation = param.getAnnotation(P.class);
+        if (annotation == null) {
+            return null;
+        }
+        return annotation.value();
+    }
+
+    private boolean containsArgument(Map<String, Object> originalArgs, Map<String, Object> normalizedArgs, String... candidates) {
+        for (String candidate : candidates) {
+            if (candidate == null || candidate.trim().isEmpty()) {
+                continue;
+            }
+            if (originalArgs.containsKey(candidate) || normalizedArgs.containsKey(normalizeName(candidate))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private MatchedArgument getArgumentValue(Map<String, Object> originalArgs, Map<String, Object> normalizedArgs,
+                                             List<String> candidates, boolean relaxedMode,
+                                             Set<String> consumedKeys, ToolMethodSchema schema, Class<?> targetType) {
+        List<ArgumentMatchScore> scoredMatches = scoreArgumentMatches(originalArgs, normalizedArgs, candidates,
+                consumedKeys, schema, targetType);
+        if (!scoredMatches.isEmpty()) {
+            ArgumentMatchScore bestMatch = scoredMatches.get(0);
+            return MatchedArgument.of(bestMatch.value, bestMatch.matchedKey, bestMatch.strategy);
+        }
+        if (!relaxedMode) {
+            if (candidates.size() == 1 && !originalArgs.isEmpty()) {
+                return MatchedArgument.of(originalArgs.values().iterator().next(), "<single-arg>", "single-value-fallback");
+            }
+            return MatchedArgument.notMatched();
+        }
+
+        String candidateKey = selectRelaxedArgumentKey(normalizedArgs.keySet(), candidates, consumedKeys);
+        if (candidateKey != null) {
+            return MatchedArgument.of(normalizedArgs.get(candidateKey), candidateKey, "relaxed-contains");
+        }
+        if (normalizedArgs.size() == 1) {
+            return MatchedArgument.of(normalizedArgs.values().iterator().next(), "<single-normalized-arg>", "relaxed-single-value");
+        }
+        return MatchedArgument.notMatched();
+    }
+
+    private List<ArgumentMatchScore> scoreArgumentMatches(Map<String, Object> originalArgs,
+                                                          Map<String, Object> normalizedArgs,
+                                                          List<String> candidates,
+                                                          Set<String> consumedKeys,
+                                                          ToolMethodSchema schema,
+                                                          Class<?> targetType) {
+        List<ArgumentMatchScore> matches = new ArrayList<>();
+        for (String candidate : candidates) {
+            if (originalArgs.containsKey(candidate)) {
+                String normalizedKey = normalizeName(candidate);
+                if (!consumedKeys.contains(normalizedKey)) {
+                    matches.add(new ArgumentMatchScore(originalArgs.get(candidate), candidate, "exact",
+                            scoreMatch(candidate, targetType, schema, true, false)));
+                }
+            }
+            String normalizedCandidate = normalizeName(candidate);
+            if (!normalizedCandidate.isEmpty() && normalizedArgs.containsKey(normalizedCandidate)
+                    && !consumedKeys.contains(normalizedCandidate)) {
+                matches.add(new ArgumentMatchScore(normalizedArgs.get(normalizedCandidate), normalizedCandidate,
+                        "normalized", scoreMatch(normalizedCandidate, targetType, schema, false, true)));
+            }
+        }
+        matches.sort(Comparator.comparingInt(ArgumentMatchScore::score).reversed());
+        return matches;
+    }
+
+    private int scoreMatch(String key, Class<?> targetType, ToolMethodSchema schema,
+                           boolean exact, boolean normalized) {
+        int score = exact ? 100 : 70;
+        if (normalized) {
+            score += 5;
+        }
+        if (schema != null && schema.matchesTypeHint(key, targetType)) {
+            score += 20;
+        }
+        return score;
+    }
+
+    private List<String> buildCandidateNames(String paramName, String annotatedName) {
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        addCandidateName(candidates, paramName);
+        addCandidateName(candidates, annotatedName);
+        return new ArrayList<>(candidates);
+    }
+
+    private void addCandidateName(Set<String> candidates, String rawName) {
+        if (rawName == null || rawName.trim().isEmpty()) {
+            return;
+        }
+        String trimmed = rawName.trim();
+        candidates.add(trimmed);
+        candidates.add(toSnakeCase(trimmed));
+        candidates.add(toKebabCase(trimmed));
+        candidates.addAll(extractSemanticAliases(trimmed));
+    }
+
+    private Set<String> extractSemanticAliases(String rawName) {
+        LinkedHashSet<String> aliases = new LinkedHashSet<>();
+        String compact = rawName.replaceAll("[（(].*?[)）]", " ")
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}\\p{IsIdeographic}]+", " ")
+                .trim();
+        if (compact.isEmpty()) {
+            return aliases;
+        }
+        aliases.add(compact);
+        String[] segments = compact.split("\\s+");
+        for (String segment : segments) {
+            if (!segment.isEmpty()) {
+                aliases.add(segment);
+                aliases.add(toSnakeCase(segment));
+                aliases.add(toKebabCase(segment));
+            }
+        }
+        return aliases;
+    }
+
+    private String toSnakeCase(String value) {
+        return splitCamelCase(value, "_");
+    }
+
+    private String toKebabCase(String value) {
+        return splitCamelCase(value, "-");
+    }
+
+    private String splitCamelCase(String value, String delimiter) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        return value.replaceAll("([a-z0-9])([A-Z])", "$1" + delimiter + "$2").toLowerCase(Locale.ROOT);
+    }
+
+    private String selectRelaxedArgumentKey(Set<String> availableKeys, List<String> candidates, Set<String> consumedKeys) {
+        for (String candidate : candidates) {
+            String normalizedCandidate = normalizeName(candidate);
+            for (String availableKey : availableKeys) {
+                if (consumedKeys.contains(availableKey)) {
+                    continue;
+                }
+                if (availableKey.contains(normalizedCandidate) || normalizedCandidate.contains(availableKey)) {
+                    return availableKey;
+                }
+            }
+        }
+        return null;
+    }
+
+    private FallbackExecutionResult executeFallbackBinding(ToolMethodBinding binding, Map<String, Object> args,
+                                                           ToolMethodSchema schema, boolean relaxedMode,
+                                                           FallbackReport report) {
+        try {
+            if (report != null) {
+                report.strategy = relaxedMode ? "relaxed" : "strict";
+            }
+            Object[] invokeArgs = buildMethodArguments(binding.method, args, schema, relaxedMode, report);
+            binding.method.setAccessible(true);
+            Object result = binding.method.invoke(binding.toolInstance, invokeArgs);
+            return FallbackExecutionResult.success(result);
+        } catch (Exception e) {
+            String strategy = relaxedMode ? "relaxed" : "strict";
+            logger.debug("Fallback {} binding failed for tool {}: {}",
+                    strategy, binding.method.getName(), e.getMessage(), e);
+            return FallbackExecutionResult.failure(e);
+        }
     }
 
     /**
      * 将参数值转换为目标类型
      */
     private Object convertType(Object value, Class<?> targetType) {
+        return convertType(value, targetType, targetType);
+    }
+
+    private Object convertType(Object value, Class<?> targetType, Type genericType) {
+        if (value == null) {
+            return null;
+        }
+        Object emptyStructureValue = convertEmptyStructureString(value, targetType, genericType);
+        if (emptyStructureValue != null) {
+            return emptyStructureValue;
+        }
+        if (isNullLikeValue(value, targetType)) {
+            return null;
+        }
+        if (targetType == Object.class) {
+            return value;
+        }
+        if (Optional.class == targetType) {
+            return convertOptional(value, genericType);
+        }
         if (targetType.isAssignableFrom(value.getClass())) {
             return value;
         }
@@ -503,26 +906,607 @@ public class AIAgentService {
             return value.toString();
         }
         if (targetType == int.class || targetType == Integer.class) {
-            if (value instanceof Number) return ((Number) value).intValue();
-            return Integer.parseInt(value.toString());
+            return convertInteger(value);
         }
         if (targetType == long.class || targetType == Long.class) {
-            if (value instanceof Number) return ((Number) value).longValue();
-            return Long.parseLong(value.toString());
+            return convertLong(value);
         }
         if (targetType == double.class || targetType == Double.class) {
-            if (value instanceof Number) return ((Number) value).doubleValue();
-            return Double.parseDouble(value.toString());
+            return convertDouble(value);
+        }
+        if (targetType == float.class || targetType == Float.class) {
+            return convertFloat(value);
+        }
+        if (targetType == short.class || targetType == Short.class) {
+            return convertShort(value);
+        }
+        if (targetType == byte.class || targetType == Byte.class) {
+            return convertByte(value);
         }
         if (targetType == boolean.class || targetType == Boolean.class) {
-            if (value instanceof Boolean) return value;
-            return Boolean.parseBoolean(value.toString());
+            return convertBoolean(value);
         }
-        // 对于包装类型，尝试数字转换
+        if (targetType == char.class || targetType == Character.class) {
+            String str = value.toString();
+            return str.isEmpty() ? '\0' : str.charAt(0);
+        }
+        if (targetType == BigDecimal.class) {
+            return value instanceof BigDecimal ? value : new BigDecimal(value.toString());
+        }
+        if (targetType == BigInteger.class) {
+            return value instanceof BigInteger ? value : new BigInteger(value.toString());
+        }
+        if (targetType == LocalDate.class) {
+            return convertToLocalDate(value);
+        }
+        if (targetType == LocalDateTime.class) {
+            return convertToLocalDateTime(value);
+        }
+        if (targetType == Instant.class) {
+            return convertToInstant(value);
+        }
+        if (targetType == OffsetDateTime.class) {
+            return convertToOffsetDateTime(value);
+        }
+        if (targetType == ZonedDateTime.class) {
+            return convertToZonedDateTime(value);
+        }
+        if (targetType.isEnum()) {
+            return convertEnum(value, targetType);
+        }
+        if (targetType.isArray() && value instanceof List<?> listValue) {
+            return convertArray(listValue, targetType.getComponentType());
+        }
+        if (Collection.class.isAssignableFrom(targetType) && value instanceof List<?> listValue) {
+            return convertCollection(listValue, targetType, genericType);
+        }
+        if (Map.class.isAssignableFrom(targetType) && value instanceof Map<?, ?> mapValue) {
+            return convertMap(mapValue, genericType);
+        }
+        if (value instanceof String stringValue) {
+            Object convertedFromString = convertStructuredString(stringValue, targetType, genericType);
+            if (convertedFromString != null) {
+                return convertedFromString;
+            }
+            Object splitConverted = convertDelimitedString(stringValue, targetType, genericType);
+            if (splitConverted != null) {
+                return splitConverted;
+            }
+        }
+        if (value instanceof Map<?, ?> mapValue) {
+            return convertBean(mapValue, targetType);
+        }
+        if (value instanceof List<?> listValue && targetType.isArray()) {
+            return convertArray(listValue, targetType.getComponentType());
+        }
         if (Number.class.isAssignableFrom(targetType) && value instanceof Number) {
             return value;
         }
         return value;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Object convertEnum(Object value, Class<?> targetType) {
+        String enumName = value.toString();
+        for (Object constant : targetType.getEnumConstants()) {
+            if (((Enum) constant).name().equalsIgnoreCase(enumName)) {
+                return constant;
+            }
+        }
+        throw new IllegalArgumentException("无法转换枚举值: " + enumName + " -> " + targetType.getSimpleName());
+    }
+
+    private Boolean convertBoolean(Object value) {
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof Number number) {
+            return number.intValue() != 0;
+        }
+        String text = value == null ? null : value.toString().trim();
+        if (text == null || text.isEmpty()) {
+            return null;
+        }
+        String normalized = text.toLowerCase(Locale.ROOT);
+        if (Arrays.asList("true", "yes", "y", "on", "1", "enabled", "enable", "ok").contains(normalized)) {
+            return Boolean.TRUE;
+        }
+        if (Arrays.asList("false", "no", "n", "off", "0", "disabled", "disable").contains(normalized)) {
+            return Boolean.FALSE;
+        }
+        throw new IllegalArgumentException("无法解析布尔值: " + text);
+    }
+
+    private Integer convertInteger(Object value) {
+        return toIntegralNumber(normalizeNumber(value), Integer.MIN_VALUE, Integer.MAX_VALUE, "Integer").intValueExact();
+    }
+
+    private Long convertLong(Object value) {
+        return toIntegralNumber(normalizeNumber(value), Long.MIN_VALUE, Long.MAX_VALUE, "Long").longValueExact();
+    }
+
+    private Double convertDouble(Object value) {
+        BigDecimal decimal = normalizeNumber(value);
+        double doubleValue = decimal.doubleValue();
+        if (Double.isInfinite(doubleValue)) {
+            throw new IllegalArgumentException("数值超出 Double 范围: " + decimal);
+        }
+        return doubleValue;
+    }
+
+    private Float convertFloat(Object value) {
+        BigDecimal decimal = normalizeNumber(value);
+        float floatValue = decimal.floatValue();
+        if (Float.isInfinite(floatValue)) {
+            throw new IllegalArgumentException("数值超出 Float 范围: " + decimal);
+        }
+        return floatValue;
+    }
+
+    private Short convertShort(Object value) {
+        return toIntegralNumber(normalizeNumber(value), Short.MIN_VALUE, Short.MAX_VALUE, "Short").shortValueExact();
+    }
+
+    private Byte convertByte(Object value) {
+        return toIntegralNumber(normalizeNumber(value), Byte.MIN_VALUE, Byte.MAX_VALUE, "Byte").byteValueExact();
+    }
+
+    private BigDecimal toIntegralNumber(BigDecimal decimal, long min, long max, String targetType) {
+        try {
+            BigDecimal normalized = decimal.stripTrailingZeros();
+            if (normalized.scale() > 0) {
+                throw new IllegalArgumentException("数值包含非零小数部分，无法转换为 " + targetType + ": " + decimal);
+            }
+            long value = normalized.longValueExact();
+            if (value < min || value > max) {
+                throw new IllegalArgumentException("数值超出 " + targetType + " 范围: " + decimal);
+            }
+            return BigDecimal.valueOf(value);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("数值无法精确转换为 " + targetType + ": " + decimal, e);
+        }
+    }
+
+    private BigDecimal normalizeNumber(Object value) {
+        if (value instanceof BigDecimal bigDecimal) {
+            return bigDecimal;
+        }
+        if (value instanceof BigInteger bigInteger) {
+            return new BigDecimal(bigInteger);
+        }
+        if (value instanceof Number number) {
+            return new BigDecimal(number.toString());
+        }
+        String text = value == null ? null : value.toString().trim();
+        if (text == null || text.isEmpty()) {
+            throw new IllegalArgumentException("无法解析数字：空值");
+        }
+        String normalized = text.replaceAll(",", "").replaceAll("_", "");
+        if (normalized.matches("^-?\\d+\\.0+$")) {
+            normalized = normalized.substring(0, normalized.indexOf('.'));
+        }
+        return new BigDecimal(normalized);
+    }
+
+    private boolean isNullLikeValue(Object value, Class<?> targetType) {
+        if (!(value instanceof String stringValue)) {
+            return false;
+        }
+        if (targetType == String.class || targetType == Object.class || targetType.isEnum()) {
+            return false;
+        }
+        String normalized = stringValue.trim().toLowerCase(Locale.ROOT);
+        if (NULL_LIKE_VALUES.contains(normalized)) {
+            return true;
+        }
+        return false;
+    }
+
+    private Object convertEmptyStructureString(Object value, Class<?> targetType, Type genericType) {
+        if (!(value instanceof String stringValue)) {
+            return null;
+        }
+        String normalized = stringValue.trim().toLowerCase(Locale.ROOT);
+        if ("[]".equals(normalized)) {
+            if (targetType.isArray()) {
+                return Array.newInstance(targetType.getComponentType(), 0);
+            }
+            if (Collection.class.isAssignableFrom(targetType)) {
+                return convertCollection(Collections.emptyList(), targetType, genericType);
+            }
+        }
+        if ("{}".equals(normalized) && Map.class.isAssignableFrom(targetType)) {
+            return convertMap(Collections.emptyMap(), genericType);
+        }
+        return null;
+    }
+
+    private Object convertArray(List<?> listValue, Class<?> componentType) {
+        if (componentType == null) {
+            return listValue.toArray();
+        }
+        Object array = Array.newInstance(componentType, listValue.size());
+        for (int i = 0; i < listValue.size(); i++) {
+            Array.set(array, i, convertType(listValue.get(i), componentType));
+        }
+        return array;
+    }
+
+    private Object convertCollection(List<?> listValue, Class<?> targetType, Type genericType) {
+        Collection<Object> collection = instantiateCollection(targetType);
+        Class<?> elementType = extractCollectionElementType(genericType);
+        Type elementGenericType = extractCollectionElementGenericType(genericType);
+        for (Object item : listValue) {
+            collection.add(elementType != null ? convertType(item, elementType,
+                    elementGenericType != null ? elementGenericType : elementType) : item);
+        }
+        return collection;
+    }
+
+    private Map<Object, Object> convertMap(Map<?, ?> mapValue, Type genericType) {
+        Map<Object, Object> result = new LinkedHashMap<>();
+        Type keyType = extractMapKeyType(genericType);
+        Type valueType = extractMapValueType(genericType);
+        Class<?> keyClass = resolveRawClass(keyType);
+        Class<?> valueClass = resolveRawClass(valueType);
+        for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
+            Object convertedKey = keyClass != null
+                    ? convertType(entry.getKey(), keyClass, keyType != null ? keyType : keyClass)
+                    : entry.getKey();
+            Object convertedValue = valueClass != null
+                    ? convertType(entry.getValue(), valueClass, valueType != null ? valueType : valueClass)
+                    : entry.getValue();
+            result.put(convertedKey, convertedValue);
+        }
+        return result;
+    }
+
+    private Optional<?> convertOptional(Object value, Type genericType) {
+        Type wrappedType = extractOptionalWrappedType(genericType);
+        Class<?> wrappedClass = resolveRawClass(wrappedType);
+        if (wrappedClass == null) {
+            return Optional.ofNullable(value);
+        }
+        return Optional.ofNullable(convertType(value, wrappedClass, wrappedType != null ? wrappedType : wrappedClass));
+    }
+
+    private Object convertStructuredString(String stringValue, Class<?> targetType, Type genericType) {
+        String trimmed = stringValue == null ? null : stringValue.trim();
+        if (trimmed == null || trimmed.isEmpty()) {
+            return null;
+        }
+        if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
+            return null;
+        }
+        try {
+            Object parsed = new JsonParser(trimmed).parseValue();
+            return convertType(parsed, targetType, genericType);
+        } catch (Exception e) {
+            logger.debug("Structured string conversion skipped for target {}: {}",
+                    targetType.getSimpleName(), e.getMessage());
+            return null;
+        }
+    }
+
+    private Object convertDelimitedString(String stringValue, Class<?> targetType, Type genericType) {
+        String trimmed = stringValue == null ? null : stringValue.trim();
+        if (trimmed == null || trimmed.isEmpty() || !(trimmed.contains(",") || trimmed.contains(";"))) {
+            return null;
+        }
+        List<String> tokens = splitDelimitedValues(trimmed);
+        if (tokens.isEmpty()) {
+            return null;
+        }
+        if (targetType.isArray()) {
+            return convertArray(tokens, targetType.getComponentType());
+        }
+        if (Collection.class.isAssignableFrom(targetType)) {
+            return convertCollection(tokens, targetType, genericType);
+        }
+        return null;
+    }
+
+    private List<String> splitDelimitedValues(String input) {
+        List<String> values = new ArrayList<>();
+        for (String part : input.split("\\s*[;,]\\s*")) {
+            if (!part.isEmpty()) {
+                values.add(part.trim());
+            }
+        }
+        return values;
+    }
+
+    private LocalDate convertToLocalDate(Object value) {
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof Number number) {
+            return instantFromEpoch(number.longValue()).atZone(ZoneId.systemDefault()).toLocalDate();
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (isEpochText(text)) {
+            return instantFromEpoch(Long.parseLong(text)).atZone(ZoneId.systemDefault()).toLocalDate();
+        }
+        for (DateTimeFormatter formatter : LOCAL_DATE_FORMATTERS) {
+            try {
+                return LocalDate.parse(text, formatter);
+            } catch (DateTimeParseException ignored) {
+            }
+        }
+        return convertToLocalDateTime(text).toLocalDate();
+    }
+
+    private LocalDateTime convertToLocalDateTime(Object value) {
+        if (value instanceof LocalDateTime localDateTime) {
+            return localDateTime;
+        }
+        if (value instanceof Number number) {
+            return LocalDateTime.ofInstant(instantFromEpoch(number.longValue()), ZoneId.systemDefault());
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (isEpochText(text)) {
+            return LocalDateTime.ofInstant(instantFromEpoch(Long.parseLong(text)), ZoneId.systemDefault());
+        }
+        for (DateTimeFormatter formatter : LOCAL_DATE_TIME_FORMATTERS) {
+            try {
+                return LocalDateTime.parse(text, formatter);
+            } catch (DateTimeParseException ignored) {
+            }
+        }
+        try {
+            return OffsetDateTime.parse(text).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return ZonedDateTime.parse(text).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return Instant.parse(text).atZone(ZoneId.systemDefault()).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+        }
+        throw new IllegalArgumentException("无法解析日期时间: " + text);
+    }
+
+    private Instant convertToInstant(Object value) {
+        if (value instanceof Instant instant) {
+            return instant;
+        }
+        if (value instanceof Number number) {
+            return instantFromEpoch(number.longValue());
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (isEpochText(text)) {
+            return instantFromEpoch(Long.parseLong(text));
+        }
+        try {
+            return Instant.parse(text);
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return OffsetDateTime.parse(text).toInstant();
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return ZonedDateTime.parse(text).toInstant();
+        } catch (DateTimeParseException ignored) {
+        }
+        return convertToLocalDateTime(text).atZone(ZoneId.systemDefault()).toInstant();
+    }
+
+    private OffsetDateTime convertToOffsetDateTime(Object value) {
+        if (value instanceof OffsetDateTime offsetDateTime) {
+            return offsetDateTime;
+        }
+        if (value instanceof Number number) {
+            return instantFromEpoch(number.longValue()).atZone(ZoneId.systemDefault()).toOffsetDateTime();
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (isEpochText(text)) {
+            return instantFromEpoch(Long.parseLong(text)).atZone(ZoneId.systemDefault()).toOffsetDateTime();
+        }
+        try {
+            return OffsetDateTime.parse(text);
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return ZonedDateTime.parse(text).toOffsetDateTime();
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return Instant.parse(text).atZone(ZoneId.systemDefault()).toOffsetDateTime();
+        } catch (DateTimeParseException ignored) {
+        }
+        return convertToLocalDateTime(text).atZone(ZoneId.systemDefault()).toOffsetDateTime();
+    }
+
+    private ZonedDateTime convertToZonedDateTime(Object value) {
+        if (value instanceof ZonedDateTime zonedDateTime) {
+            return zonedDateTime;
+        }
+        if (value instanceof Number number) {
+            return instantFromEpoch(number.longValue()).atZone(ZoneId.systemDefault());
+        }
+        String text = value.toString().trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (isEpochText(text)) {
+            return instantFromEpoch(Long.parseLong(text)).atZone(ZoneId.systemDefault());
+        }
+        try {
+            return ZonedDateTime.parse(text);
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return OffsetDateTime.parse(text).toZonedDateTime();
+        } catch (DateTimeParseException ignored) {
+        }
+        try {
+            return Instant.parse(text).atZone(ZoneId.systemDefault());
+        } catch (DateTimeParseException ignored) {
+        }
+        return convertToLocalDateTime(text).atZone(ZoneId.systemDefault());
+    }
+
+    private boolean isEpochText(String text) {
+        return text.matches("^-?\\d{10,17}$");
+    }
+
+    private Instant instantFromEpoch(long epochValue) {
+        long normalized = Math.abs(epochValue) < 100_000_000_000L ? epochValue * 1000 : epochValue;
+        return Instant.ofEpochMilli(normalized);
+    }
+
+    private Collection<Object> instantiateCollection(Class<?> targetType) {
+        if (targetType.isInterface()) {
+            if (Set.class.isAssignableFrom(targetType)) {
+                return new LinkedHashSet<>();
+            }
+            return new ArrayList<>();
+        }
+        try {
+            @SuppressWarnings("unchecked")
+            Collection<Object> collection = (Collection<Object>) targetType.getDeclaredConstructor().newInstance();
+            return collection;
+        } catch (Exception e) {
+            if (Set.class.isAssignableFrom(targetType)) {
+                return new LinkedHashSet<>();
+            }
+            return new ArrayList<>();
+        }
+    }
+
+    private Class<?> extractCollectionElementType(Type genericType) {
+        return resolveRawClass(extractCollectionElementGenericType(genericType));
+    }
+
+    private Type extractCollectionElementGenericType(Type genericType) {
+        if (!(genericType instanceof ParameterizedType parameterizedType)) {
+            return null;
+        }
+        Type[] actualTypes = parameterizedType.getActualTypeArguments();
+        return actualTypes.length == 0 ? null : actualTypes[0];
+    }
+
+    private Type extractMapKeyType(Type genericType) {
+        if (!(genericType instanceof ParameterizedType parameterizedType)) {
+            return null;
+        }
+        Type[] actualTypes = parameterizedType.getActualTypeArguments();
+        return actualTypes.length > 0 ? actualTypes[0] : null;
+    }
+
+    private Type extractMapValueType(Type genericType) {
+        if (!(genericType instanceof ParameterizedType parameterizedType)) {
+            return null;
+        }
+        Type[] actualTypes = parameterizedType.getActualTypeArguments();
+        return actualTypes.length > 1 ? actualTypes[1] : null;
+    }
+
+    private Type extractOptionalWrappedType(Type genericType) {
+        if (!(genericType instanceof ParameterizedType parameterizedType)) {
+            return null;
+        }
+        Type[] actualTypes = parameterizedType.getActualTypeArguments();
+        return actualTypes.length > 0 ? actualTypes[0] : null;
+    }
+
+    private Class<?> resolveRawClass(Type type) {
+        if (type instanceof Class<?> clazz) {
+            return clazz;
+        }
+        if (type instanceof ParameterizedType parameterizedType && parameterizedType.getRawType() instanceof Class<?> rawClass) {
+            return rawClass;
+        }
+        return null;
+    }
+
+    private Object convertBean(Map<?, ?> mapValue, Class<?> targetType) {
+        try {
+            Object bean = targetType.getDeclaredConstructor().newInstance();
+            Map<String, Object> normalizedSource = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
+                if (entry.getKey() != null) {
+                    registerAlias(normalizedSource, String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+            Set<String> assignedFields = new HashSet<>();
+            for (Field field : getAllFields(targetType)) {
+                if (Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                String normalizedFieldName = normalizeName(field.getName());
+                if (!normalizedSource.containsKey(normalizedFieldName)) {
+                    continue;
+                }
+                Object rawFieldValue = normalizedSource.get(normalizedFieldName);
+                field.setAccessible(true);
+                field.set(bean, convertType(rawFieldValue, field.getType(), field.getGenericType()));
+                assignedFields.add(normalizedFieldName);
+            }
+            applySetterValues(bean, targetType, normalizedSource, assignedFields);
+            return bean;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("复杂参数类型转换失败: " + targetType.getSimpleName(), e);
+        }
+    }
+
+    private void registerAlias(Map<String, Object> target, String rawKey, Object value) {
+        if (rawKey == null || rawKey.trim().isEmpty()) {
+            return;
+        }
+        String trimmed = rawKey.trim();
+        target.putIfAbsent(normalizeName(trimmed), value);
+        target.putIfAbsent(normalizeName(toSnakeCase(trimmed)), value);
+        target.putIfAbsent(normalizeName(toKebabCase(trimmed)), value);
+    }
+
+    private List<Field> getAllFields(Class<?> type) {
+        List<Field> fields = new ArrayList<>();
+        Class<?> current = type;
+        while (current != null && current != Object.class) {
+            fields.addAll(Arrays.asList(current.getDeclaredFields()));
+            current = current.getSuperclass();
+        }
+        return fields;
+    }
+
+    private void applySetterValues(Object bean, Class<?> targetType, Map<String, Object> normalizedSource,
+                                   Set<String> assignedFields) throws ReflectiveOperationException {
+        for (Method method : targetType.getMethods()) {
+            if (!isSetter(method)) {
+                continue;
+            }
+            String propertyName = normalizeName(method.getName().substring(3));
+            if (assignedFields.contains(propertyName) || !normalizedSource.containsKey(propertyName)) {
+                continue;
+            }
+            Object rawValue = normalizedSource.get(propertyName);
+            Object convertedValue = convertType(rawValue, method.getParameterTypes()[0], method.getGenericParameterTypes()[0]);
+            method.invoke(bean, convertedValue);
+            assignedFields.add(propertyName);
+        }
+    }
+
+    private boolean isSetter(Method method) {
+        return method.getName().startsWith("set")
+                && method.getName().length() > 3
+                && method.getParameterCount() == 1
+                && method.getReturnType() == void.class;
     }
 
     /**
@@ -539,6 +1523,441 @@ public class AIAgentService {
         return null;
     }
 
+    /**
+     * 轻量 JSON 解析器，避免额外依赖。
+     */
+    private static final class JsonParser {
+        private final String text;
+        private int index;
+
+        private JsonParser(String text) {
+            this.text = text;
+        }
+
+        private Object parseValue() {
+            skipWhitespace();
+            if (index >= text.length()) {
+                throw new IllegalArgumentException("JSON 内容为空");
+            }
+            char current = text.charAt(index);
+            return switch (current) {
+                case '{' -> parseObject();
+                case '[' -> parseArray();
+                case '"' -> parseString();
+                case 't' -> parseLiteral("true", Boolean.TRUE);
+                case 'f' -> parseLiteral("false", Boolean.FALSE);
+                case 'n' -> parseLiteral("null", null);
+                default -> {
+                    if (current == '-' || Character.isDigit(current)) {
+                        yield parseNumber();
+                    }
+                    throw new IllegalArgumentException("非法 JSON 字符: " + current);
+                }
+            };
+        }
+
+        private Map<String, Object> parseObject() {
+            expect('{');
+            Map<String, Object> result = new LinkedHashMap<>();
+            skipWhitespace();
+            if (peek('}')) {
+                index++;
+                return result;
+            }
+            while (true) {
+                skipWhitespace();
+                String key = parseString();
+                skipWhitespace();
+                expect(':');
+                Object value = parseValue();
+                result.put(key, value);
+                skipWhitespace();
+                if (peek('}')) {
+                    index++;
+                    return result;
+                }
+                expect(',');
+            }
+        }
+
+        private List<Object> parseArray() {
+            expect('[');
+            List<Object> result = new ArrayList<>();
+            skipWhitespace();
+            if (peek(']')) {
+                index++;
+                return result;
+            }
+            while (true) {
+                result.add(parseValue());
+                skipWhitespace();
+                if (peek(']')) {
+                    index++;
+                    return result;
+                }
+                expect(',');
+            }
+        }
+
+        private String parseString() {
+            expect('"');
+            StringBuilder sb = new StringBuilder();
+            while (index < text.length()) {
+                char current = text.charAt(index++);
+                if (current == '"') {
+                    return sb.toString();
+                }
+                if (current == '\\') {
+                    if (index >= text.length()) {
+                        throw new IllegalArgumentException("非法 JSON 转义");
+                    }
+                    char escaped = text.charAt(index++);
+                    switch (escaped) {
+                        case '"' -> sb.append('"');
+                        case '\\' -> sb.append('\\');
+                        case '/' -> sb.append('/');
+                        case 'b' -> sb.append('\b');
+                        case 'f' -> sb.append('\f');
+                        case 'n' -> sb.append('\n');
+                        case 'r' -> sb.append('\r');
+                        case 't' -> sb.append('\t');
+                        case 'u' -> sb.append(parseUnicode());
+                        default -> throw new IllegalArgumentException("未知 JSON 转义: \\" + escaped);
+                    }
+                    continue;
+                }
+                sb.append(current);
+            }
+            throw new IllegalArgumentException("JSON 字符串未闭合");
+        }
+
+        private char parseUnicode() {
+            if (index + 4 > text.length()) {
+                throw new IllegalArgumentException("非法 Unicode 转义");
+            }
+            String hex = text.substring(index, index + 4);
+            index += 4;
+            return (char) Integer.parseInt(hex, 16);
+        }
+
+        private Object parseNumber() {
+            int start = index;
+            if (text.charAt(index) == '-') {
+                index++;
+            }
+            consumeDigits();
+            boolean floating = false;
+            if (peek('.')) {
+                floating = true;
+                index++;
+                consumeDigits();
+            }
+            if (peek('e') || peek('E')) {
+                floating = true;
+                index++;
+                if (peek('+') || peek('-')) {
+                    index++;
+                }
+                consumeDigits();
+            }
+            String numberText = text.substring(start, index);
+            if (floating) {
+                return Double.parseDouble(numberText);
+            }
+            long longValue = Long.parseLong(numberText);
+            return (longValue >= Integer.MIN_VALUE && longValue <= Integer.MAX_VALUE)
+                    ? (int) longValue
+                    : longValue;
+        }
+
+        private Object parseLiteral(String literal, Object value) {
+            if (!text.startsWith(literal, index)) {
+                throw new IllegalArgumentException("非法 JSON 字面量");
+            }
+            index += literal.length();
+            return value;
+        }
+
+        private void consumeDigits() {
+            int start = index;
+            while (index < text.length() && Character.isDigit(text.charAt(index))) {
+                index++;
+            }
+            if (start == index) {
+                throw new IllegalArgumentException("非法数字格式");
+            }
+        }
+
+        private void expect(char expected) {
+            skipWhitespace();
+            if (index >= text.length() || text.charAt(index) != expected) {
+                throw new IllegalArgumentException("期望字符 '" + expected + "'");
+            }
+            index++;
+        }
+
+        private boolean peek(char expected) {
+            return index < text.length() && text.charAt(index) == expected;
+        }
+
+        private void skipWhitespace() {
+            while (index < text.length() && Character.isWhitespace(text.charAt(index))) {
+                index++;
+            }
+        }
+    }
+
+    private static final class FallbackParameterReport {
+        private final String parameterName;
+        private final String matchedKey;
+        private final String strategy;
+        private final String sourceType;
+        private final String targetType;
+        private final boolean usedDefault;
+        private final boolean explicitNull;
+        private final String message;
+
+        private FallbackParameterReport(String parameterName, String matchedKey, String strategy,
+                                        String sourceType, String targetType,
+                                        boolean usedDefault, boolean explicitNull, String message) {
+            this.parameterName = parameterName;
+            this.matchedKey = matchedKey;
+            this.strategy = strategy;
+            this.sourceType = sourceType;
+            this.targetType = targetType;
+            this.usedDefault = usedDefault;
+            this.explicitNull = explicitNull;
+            this.message = message;
+        }
+
+        private FallbackParameterReport copy() {
+            return new FallbackParameterReport(parameterName, matchedKey, strategy, sourceType, targetType,
+                    usedDefault, explicitNull, message);
+        }
+
+        private static FallbackParameterReport success(String parameterName, String matchedKey, String strategy,
+                                                       String sourceType, String targetType,
+                                                       boolean usedDefault, boolean explicitNull, String message) {
+            return new FallbackParameterReport(parameterName, matchedKey, strategy, sourceType, targetType,
+                    usedDefault, explicitNull, message);
+        }
+
+        private static FallbackParameterReport failure(String parameterName, String matchedKey, String strategy,
+                                                       String sourceType, String targetType, String message) {
+            return new FallbackParameterReport(parameterName, matchedKey, strategy, sourceType, targetType,
+                    false, false, message);
+        }
+
+        private static FallbackParameterReport defaulted(String parameterName, String targetType) {
+            return new FallbackParameterReport(parameterName, "<default>", "default",
+                    null, targetType, true, false, "used default value");
+        }
+
+        private static FallbackParameterReport explicitNull(String parameterName, String matchedKey,
+                                                            String strategy, String targetType) {
+            return new FallbackParameterReport(parameterName, matchedKey, strategy,
+                    null, targetType, false, true, "explicit null");
+        }
+
+        private String describe() {
+            return parameterName + "<-" + matchedKey + " [" + strategy + "] " + message;
+        }
+    }
+
+    private static final class FallbackReport {
+        private String toolName;
+        private String candidateToolName;
+        private String strategy;
+        private boolean retried;
+        private boolean success;
+        private String errorMessage;
+        private String schemaDescription;
+        private int resultLength;
+        private long startedAt;
+        private long finishedAt;
+        private final List<FallbackParameterReport> parameterReports = new ArrayList<>();
+
+        private FallbackReport copy() {
+            FallbackReport copied = new FallbackReport();
+            copied.toolName = toolName;
+            copied.candidateToolName = candidateToolName;
+            copied.strategy = strategy;
+            copied.retried = retried;
+            copied.success = success;
+            copied.errorMessage = errorMessage;
+            copied.schemaDescription = schemaDescription;
+            copied.resultLength = resultLength;
+            copied.startedAt = startedAt;
+            copied.finishedAt = finishedAt;
+            for (FallbackParameterReport parameterReport : parameterReports) {
+                copied.parameterReports.add(parameterReport.copy());
+            }
+            return copied;
+        }
+
+        private String describe() {
+            List<String> paramDescriptions = new ArrayList<>();
+            for (FallbackParameterReport parameterReport : parameterReports) {
+                paramDescriptions.add(parameterReport.describe());
+            }
+            return "tool=" + toolName
+                    + ", candidateTool=" + candidateToolName
+                    + ", strategy=" + strategy
+                    + ", retried=" + retried
+                    + ", success=" + success
+                    + ", durationMs=" + Math.max(0, finishedAt - startedAt)
+                    + ", resultLength=" + resultLength
+                    + ", error=" + errorMessage
+                    + ", schema=" + schemaDescription
+                    + ", params=" + paramDescriptions;
+        }
+    }
+
+    private static final class ToolParameterSchema {
+        private final String paramName;
+        private final String annotatedName;
+        private final Class<?> paramType;
+        private final Type genericType;
+        private final List<String> candidates;
+
+        private ToolParameterSchema(String paramName, String annotatedName, Class<?> paramType,
+                                    Type genericType, List<String> candidates) {
+            this.paramName = paramName;
+            this.annotatedName = annotatedName;
+            this.paramType = paramType;
+            this.genericType = genericType;
+            this.candidates = candidates;
+        }
+    }
+
+    private static final class ToolMethodSchema {
+        private final String methodName;
+        private final List<ToolParameterSchema> parameters;
+
+        private ToolMethodSchema(String methodName, List<ToolParameterSchema> parameters) {
+            this.methodName = methodName;
+            this.parameters = parameters;
+        }
+
+        private List<String> getCandidatesFor(String paramName, String annotatedName) {
+            for (ToolParameterSchema parameter : parameters) {
+                boolean sameParamName = Objects.equals(parameter.paramName, paramName);
+                boolean sameAnnotatedName = Objects.equals(parameter.annotatedName, annotatedName);
+                if (sameParamName || sameAnnotatedName) {
+                    return parameter.candidates;
+                }
+            }
+            return Collections.emptyList();
+        }
+
+        private boolean matchesTypeHint(String key, Class<?> targetType) {
+            String normalizedKey = key == null ? "" : key.toLowerCase(Locale.ROOT);
+            if ((normalizedKey.contains("time") || normalizedKey.contains("date"))
+                    && (targetType == LocalDate.class || targetType == LocalDateTime.class
+                    || targetType == Instant.class || targetType == OffsetDateTime.class
+                    || targetType == ZonedDateTime.class)) {
+                return true;
+            }
+            if ((normalizedKey.contains("count") || normalizedKey.contains("limit") || normalizedKey.contains("size")
+                    || normalizedKey.contains("num"))
+                    && Number.class.isAssignableFrom(targetType)) {
+                return true;
+            }
+            if ((normalizedKey.contains("flag") || normalizedKey.contains("enabled") || normalizedKey.contains("disable")
+                    || normalizedKey.contains("switch") || normalizedKey.contains("is"))
+                    && (targetType == boolean.class || targetType == Boolean.class)) {
+                return true;
+            }
+            if ((normalizedKey.contains("list") || normalizedKey.contains("ids") || normalizedKey.contains("names"))
+                    && (targetType.isArray() || Collection.class.isAssignableFrom(targetType))) {
+                return true;
+            }
+            return false;
+        }
+
+        private String describe() {
+            List<String> parameterDescriptions = new ArrayList<>();
+            for (ToolParameterSchema parameter : parameters) {
+                parameterDescriptions.add(parameter.paramName + ":" + parameter.paramType.getSimpleName()
+                        + " candidates=" + parameter.candidates);
+            }
+            return methodName + " -> " + String.join("; ", parameterDescriptions);
+        }
+    }
+
+    private static final class ArgumentMatchScore {
+        private final Object value;
+        private final String matchedKey;
+        private final String strategy;
+        private final int score;
+
+        private ArgumentMatchScore(Object value, String matchedKey, String strategy, int score) {
+            this.value = value;
+            this.matchedKey = matchedKey;
+            this.strategy = strategy;
+            this.score = score;
+        }
+
+        private int score() {
+            return score;
+        }
+    }
+
+    private static final class MatchedArgument {
+        private final Object value;
+        private final String matchedKey;
+        private final String strategy;
+
+        private MatchedArgument(Object value, String matchedKey, String strategy) {
+            this.value = value;
+            this.matchedKey = matchedKey;
+            this.strategy = strategy;
+        }
+
+        private static MatchedArgument of(Object value, String matchedKey, String strategy) {
+            return new MatchedArgument(value, matchedKey, strategy);
+        }
+
+        private static MatchedArgument notMatched() {
+            return new MatchedArgument(null, "<unmatched>", "none");
+        }
+    }
+
+    private static final class FallbackExecutionResult {
+        private final boolean success;
+        private final Object result;
+        private final Exception error;
+        private final String errorMessage;
+
+        private FallbackExecutionResult(boolean success, Object result, Exception error, String errorMessage) {
+            this.success = success;
+            this.result = result;
+            this.error = error;
+            this.errorMessage = errorMessage;
+        }
+
+        private static FallbackExecutionResult success(Object result) {
+            return new FallbackExecutionResult(true, result, null, null);
+        }
+
+        private static FallbackExecutionResult failure(Exception error) {
+            return new FallbackExecutionResult(false, null, error, error != null ? error.getMessage() : null);
+        }
+    }
+
+    /**
+     * 工具方法绑定
+     */
+    private static final class ToolMethodBinding {
+        private final Object toolInstance;
+        private final Method method;
+
+        private ToolMethodBinding(Object toolInstance, Method method) {
+            this.toolInstance = toolInstance;
+            this.method = method;
+        }
+    }
+
     // ==================== 增强功能方法 ====================
 
     /**
@@ -546,7 +1965,6 @@ public class AIAgentService {
      */
     private String buildEnhancedQuestion(AgentContext context, String question) {
         StringBuilder enhanced = new StringBuilder();
-        String sessionKey = context.getUserId() + ":" + context.getProjectId();
 
         // 尝试获取会话上下文
         ConversationMemoryService.ConversationSession activeSession = conversationMemory.getActiveSession(context.getUserId());
