@@ -1,11 +1,5 @@
 package com.oAT.web.service.entity;
 
-import com.oAT.web.esDao.entity.UsecaseDirectory;
-import com.oAT.web.esDao.entity.UsecaseRemote;
-import com.oAT.web.esDao.entity.UsecaseSql;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
-
 import java.io.Serializable;
 import java.util.Date;
 
@@ -22,6 +16,16 @@ public class UsecaseVo implements Serializable {
     private String directory;
     // 绑定的快照id
     private String snapshots[];
+    // 绑定的系统快照id
+    private String systemSnapshots[];
+    // 绑定的测试缺陷id
+    private String defects[];
+    // 绑定的PRD需求id
+    private String prdRequirements[];
+    // 多行录入的测试缺陷文本
+    private String defectsText;
+    // 多行录入的PRD需求文本
+    private String prdRequirementsText;
     //  标签
     private String labels[];
     //  作者
@@ -86,6 +90,46 @@ public class UsecaseVo implements Serializable {
 
     public void setSnapshots(String[] snapshots) {
         this.snapshots = snapshots;
+    }
+
+    public String[] getSystemSnapshots() {
+        return systemSnapshots;
+    }
+
+    public void setSystemSnapshots(String[] systemSnapshots) {
+        this.systemSnapshots = systemSnapshots;
+    }
+
+    public String[] getDefects() {
+        return defects;
+    }
+
+    public void setDefects(String[] defects) {
+        this.defects = defects;
+    }
+
+    public String[] getPrdRequirements() {
+        return prdRequirements;
+    }
+
+    public void setPrdRequirements(String[] prdRequirements) {
+        this.prdRequirements = prdRequirements;
+    }
+
+    public String getDefectsText() {
+        return defectsText;
+    }
+
+    public void setDefectsText(String defectsText) {
+        this.defectsText = defectsText;
+    }
+
+    public String getPrdRequirementsText() {
+        return prdRequirementsText;
+    }
+
+    public void setPrdRequirementsText(String prdRequirementsText) {
+        this.prdRequirementsText = prdRequirementsText;
     }
 
     public String[] getLabels() {

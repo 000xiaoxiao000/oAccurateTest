@@ -73,6 +73,27 @@
                     </select>
                 </div>
                 <div class="field">
+                    <span> 系统快照：</span>
+                    <div class="ui multiple search selection dropdown">
+                        <input type="hidden" name="systemSnapshots">
+                        <i class="dropdown icon"></i>
+                        <div class="default text">关联系统快照</div>
+                        <div class="menu">
+                            <#list systemSnapshots as item>
+                                <div class="item" data-value="${item.id}">${item.name}</div>
+                            </#list>
+                        </div>
+                    </div>
+                </div>
+                <div class="field">
+                    <span> 测试缺陷：</span>
+                    <textarea name="defectsText" rows="4" placeholder="每行一个缺陷编号，例如：BUG-1001"></textarea>
+                </div>
+                <div class="field">
+                    <span> PRD需求：</span>
+                    <textarea name="prdRequirementsText" rows="4" placeholder="每行一个PRD需求编号，例如：PRD-2026-001"></textarea>
+                </div>
+                <div class="field">
                     <span> 标签：</span>
                     <div class="ui multiple  search selection dropdown">
                         <input type="hidden" name="labels">

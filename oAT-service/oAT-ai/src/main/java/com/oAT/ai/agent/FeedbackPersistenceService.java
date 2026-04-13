@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 public class FeedbackPersistenceService {
 
     private static final Logger logger = LoggerFactory.getLogger(FeedbackPersistenceService.class);
+    private static volatile int defaultRetentionDays = 30;
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -43,7 +44,12 @@ public class FeedbackPersistenceService {
     public FeedbackPersistenceService(String oatDataPath) {
         this.dataPath = oatDataPath != null ? oatDataPath : System.getProperty("user.home") + "/oAT/codeData";
         loadTodayFeedback();
-        logger.info("FeedbackPersistenceService initialized, path={}", getTodayFilePath());
+        cleanup(defaultRetentionDays);
+        logger.info("FeedbackPersistenceService initialized, path={}, retentionDays={}", getTodayFilePath(), defaultRetentionDays);
+    }
+
+    public static void setDefaultRetentionDays(int retentionDays) {
+        defaultRetentionDays = retentionDays;
     }
 
     /**

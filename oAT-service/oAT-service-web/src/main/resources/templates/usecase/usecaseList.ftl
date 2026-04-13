@@ -56,8 +56,6 @@
                                     </div>
                                 </div>
                                 <div id="newAction" class="ui pointing dropdown item" tabindex="-1">
-                                    <#-- <i class="add icon"> </i>
-                                     <span class="text "> 新建</span>-->
                                     <div class="ui primary button">&nbsp新建&nbsp</div>
                                     <div class="menu" tabindex="1">
                                         <div class="item" onclick="openAddFolderDialog()"><i class="folder icon"></i>新建目录
@@ -104,6 +102,7 @@
             <thead>
             <tr>
                 <th>文件名</th>
+                <th class="two wide">关联概览</th>
                 <th class="three wide">更新时间</th>
                 <th class="one wide">操作</th>
             </tr>
@@ -115,6 +114,7 @@
                         <a href="/p/${project.id}/usecase/list?directory=${dir.id}"> <i class="folder icon"></i> ${dir.name}
                         </a>
                     </td>
+                    <td>-</td>
                     <td>${dir.updateTime?datetime}</td>
                     <td>
                         <div class="ui dropdown quickMenu">
@@ -138,6 +138,14 @@
                     <td>
                         <a href="/p/${project.id}/usecase/detail?id=${cas.id}"> <i
                                     class="file outline icon"></i> ${cas.title}</a>
+                    </td>
+                    <td>
+                        <div class="ui mini labels">
+                            <span class="ui basic label">快照 ${(cas.snapshots?size)!0}</span>
+                            <span class="ui basic label">系统快照 ${(cas.systemSnapshots?size)!0}</span>
+                            <span class="ui basic label">缺陷 ${(cas.defects?size)!0}</span>
+                            <span class="ui basic label">PRD ${(cas.prdRequirements?size)!0}</span>
+                        </div>
                     </td>
                     <td>${cas.updateTime?datetime}</td>
                     <td>
@@ -260,7 +268,6 @@
                 async: false
             }).responseJSON;
             if (resultInform.result) {
-                // 刷新当前页 ，并传递删除成功的消息
                  window.location = window.location;
             } else {
                 showToast(resultInform.message, 'error');
@@ -269,11 +276,6 @@
         $('#delFolder').modal('show');
     }
 
-    /**
-     *打开删除对话框并删除用例
-     * @param id 用例id
-     * @param name 用例名称
-     */
     function openDeleteCaseDialog(id, name) {
         $("#deleteUsecaseContent").html(name)
         $("#deleteUsecaseButton").click(function () {
@@ -283,8 +285,6 @@
                 async: false
             }).responseJSON;
             if (resultInform.result) {
-                console.log(resultInform)
-                // 刷新当前页 ，并传递删除成功的消息
                  window.location = window.location;
             } else {
                 showToast(resultInform.errorMessage, 'error');
@@ -300,7 +300,6 @@
             async: false
         }).responseJSON;
         if (resultInform.result) {
-            // 刷新当前页
              window.location = window.location;
         } else {
             showToast(resultInform.errorMessage, 'error');
@@ -314,7 +313,6 @@
             async: false
         }).responseJSON;
         if (resultInform.result) {
-            // 刷新当前页
              window.location = window.location;
         } else {
             showToast(resultInform.errorMessage, 'error');

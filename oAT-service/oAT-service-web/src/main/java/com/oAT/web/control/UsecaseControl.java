@@ -2,15 +2,18 @@ package com.oAT.web.control;
 
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.LabelGroup;
+import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SnapshotService;
+import com.oAT.web.service.SystemSnapshotService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.UserService;
 import com.oAT.web.service.entity.*;
 import org.apache.commons.lang3.ArrayUtils;
 import org.pegdown.PegDownProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.Assert;
@@ -21,8 +24,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -34,6 +40,8 @@ public class UsecaseControl {
     private SnapshotService snapshotService;
     @Autowired
     private UsecaseService usecaseService;
+    @Autowired
+    private SystemSnapshotService systemSnapshotService;
 
     @Autowired
     private ProjectService projectService;
@@ -44,6 +52,12 @@ public class UsecaseControl {
     @Autowired
     private AppService appService;
 
+    @Value("${oat.usecase.defect-link-template:}")
+    private String defectLinkTemplate;
+
+    @Value("${oat.usecase.prd-link-template:}")
+    private String prdLinkTemplate;
+
     /**
      * 打开用例文档编辑页面
      */
@@ -53,6 +67,7 @@ public class UsecaseControl {
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId());
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase);
         model.addAttribute("snapshots", snapshots);
+        model.addAttribute("systemSnapshots", getSystemSnapshotOptions(projectId));
         model.addAttribute("currentDir", directory);
         model.addAttribute("labels", labels);
         return "/usecase/usecaseNew";
@@ -74,14 +89,30 @@ public class UsecaseControl {
             }
         }
 
+        List<SimpleRelationOption> systemSnapshots = getSystemSnapshotOptions(projectId);
+        if (ArrayUtils.isNotEmpty(usecase.getSystemSnapshots())) {
+            for (String relationId : usecase.getSystemSnapshots()) {
+                if (systemSnapshots.stream().noneMatch(item -> item.getId().equals(relationId))) {
+                    SimpleRelationOption option = getSystemSnapshotOption(relationId);
+                    if (option != null) {
+                        systemSnapshots.add(option);
+                    }
+                }
+            }
+        }
+
         // 获取当前项目下所有关于用例的所有标签
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase);
         model.addAttribute("snapshots", snapshots);
+        model.addAttribute("systemSnapshots", systemSnapshots);
         model.addAttribute("usecase", usecase);
         model.addAttribute("currentDir", usecase.getDirectory());
         model.addAttribute("labels", labels);
         model.addAttribute("selectLabels", arrayToString(usecase.getLabels()));// 已选中的节点
         model.addAttribute("selectSnapshots", arrayToString(usecase.getSnapshots()));//已选中的快照
+        model.addAttribute("selectSystemSnapshots", arrayToString(usecase.getSystemSnapshots()));
+        model.addAttribute("defectsText", arrayToMultiLine(usecase.getDefects()));
+        model.addAttribute("prdRequirementsText", arrayToMultiLine(usecase.getPrdRequirements()));
 
         return "/usecase/usecaseEdit";
     }
@@ -100,6 +131,13 @@ public class UsecaseControl {
         return sb.toString();
     }
 
+    private String arrayToMultiLine(String[] values) {
+        if (values == null || values.length == 0) {
+            return "";
+        }
+        return String.join("\n", values);
+    }
+
     @RequestMapping("/detail")
     public String openDetails(@PathVariable String projectId, String id, Model model) {
         UsecaseDetailVo usecase = usecaseService.getUsecaseDetail(projectId, id);
@@ -112,6 +150,22 @@ public class UsecaseControl {
         if (!ObjectUtils.isEmpty(usecase.getSnapshots())) {
             List<SnapshotVo> snapshots = snapshotService.getByIds(usecase.getSnapshots());
             model.addAttribute("snapshots", snapshots);
+        }
+
+        if (!ObjectUtils.isEmpty(usecase.getSystemSnapshots())) {
+            List<SimpleRelationOption> systemSnapshots = Arrays.stream(usecase.getSystemSnapshots())
+                    .map(this::getSystemSnapshotOption)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            model.addAttribute("systemSnapshots", systemSnapshots);
+        }
+
+        if (!ObjectUtils.isEmpty(usecase.getDefects())) {
+            model.addAttribute("defects", buildTextLinks(usecase.getDefects(), defectLinkTemplate));
+        }
+
+        if (!ObjectUtils.isEmpty(usecase.getPrdRequirements())) {
+            model.addAttribute("prdRequirements", buildTextLinks(usecase.getPrdRequirements(), prdLinkTemplate));
         }
 
         // 获取当前项目下的标签
@@ -138,6 +192,8 @@ public class UsecaseControl {
     public ResultNotified doSave(@PathVariable String projectId, @SessionAttribute UserVo user, UsecaseVo usecase) {
         Assert.hasText(usecase.getTitle(), "用户名称不能为空");
         Assert.hasText(usecase.getDirectory(), "目录不能为空");
+        usecase.setDefects(parseMultiLine(usecase.getDefectsText()));
+        usecase.setPrdRequirements(parseMultiLine(usecase.getPrdRequirementsText()));
         ResultNotified result;
 
         if (usecase.getId() == null) {
@@ -236,4 +292,61 @@ public class UsecaseControl {
         return new ResultNotified(false, "用例目录不为空，删除失败");
     }
 
+    private String[] parseMultiLine(String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+        return Arrays.stream(text.split("\\r?\\n"))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toArray(String[]::new);
+    }
+
+    private List<SimpleRelationOption> getSystemSnapshotOptions(String projectId) {
+        List<SimpleRelationOption> result = new ArrayList<>();
+        for (AppVo app : appService.getAppList(projectId)) {
+            for (SystemSnapshot snapshot : systemSnapshotService.findAll(projectId, app.getId())) {
+                result.add(new SimpleRelationOption(
+                        snapshot.getId(),
+                        app.getName() + " / " + snapshot.getTitle(),
+                        "/p/" + projectId + "/" + app.getId() + "/snapshot/detail/" + snapshot.getId(),
+                        false
+                ));
+            }
+        }
+        return result;
+    }
+
+    private SimpleRelationOption getSystemSnapshotOption(String snapshotId) {
+        if (!StringUtils.hasText(snapshotId)) {
+            return null;
+        }
+        SystemSnapshot snapshot = systemSnapshotService.getById(snapshotId);
+        AppVo app = appService.getApp(snapshot.getAppId());
+        return new SimpleRelationOption(
+                snapshot.getId(),
+                app.getName() + " / " + snapshot.getTitle(),
+                "/p/" + snapshot.getProjectId() + "/" + app.getId() + "/snapshot/detail/" + snapshot.getId(),
+                false
+        );
+    }
+
+    private List<SimpleRelationOption> buildTextLinks(String[] values, String linkTemplate) {
+        return Arrays.stream(values)
+                .map(value -> buildTextLink(value, linkTemplate))
+                .collect(Collectors.toList());
+    }
+
+    private SimpleRelationOption buildTextLink(String value, String linkTemplate) {
+        String text = value == null ? "" : value.trim();
+        if (text.startsWith("http://") || text.startsWith("https://")) {
+            return new SimpleRelationOption(text, text, text, true);
+        }
+        if (StringUtils.hasText(linkTemplate) && linkTemplate.contains("{id}")) {
+            String url = linkTemplate.replace("{id}", text);
+            return new SimpleRelationOption(text, text, url, true);
+        }
+        return new SimpleRelationOption(text, text, null, false);
+    }
 }

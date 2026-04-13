@@ -43,6 +43,18 @@
         快照列表
         <div class="ui label">${(snapshots?size)!'0'}</div>
     </a>
+    <a class="item" href="#systemSnapshotHeader">
+        系统快照
+        <div class="ui label">${(systemSnapshots?size)!'0'}</div>
+    </a>
+    <a class="item" href="#defectHeader">
+        测试缺陷
+        <div class="ui label">${(defects?size)!'0'}</div>
+    </a>
+    <a class="item" href="#prdHeader">
+        PRD需求
+        <div class="ui label">${(prdRequirements?size)!'0'}</div>
+    </a>
     <a class="item" href="#contentHeader">
         详情描述
     </a>
@@ -117,6 +129,73 @@
     <#else >
         <p>该用例未添加任何快照</p>
     </#if>
+
+    <h3 class="ui header" id="systemSnapshotHeader">
+        系统快照
+    </h3>
+    <#if systemSnapshots??>
+        <div class="ui relaxed list">
+            <#list systemSnapshots as item>
+                <div class="item">
+                    <i class="clone outline middle aligned icon"></i>
+                    <div class="content">
+                        <#if item.url?? && item.url?length gt 0>
+                            <a href="${item.url}" <#if item.external>target="_blank" rel="noopener noreferrer"</#if>>${item.name}</a>
+                        <#else>
+                            ${item.name}
+                        </#if>
+                    </div>
+                </div>
+            </#list>
+        </div>
+    <#else>
+        <p>该用例未关联系统快照</p>
+    </#if>
+
+    <h3 class="ui header" id="defectHeader">
+        测试缺陷
+    </h3>
+    <#if defects??>
+        <div class="ui relaxed list">
+            <#list defects as defect>
+                <div class="item">
+                    <i class="bug icon"></i>
+                    <div class="content">
+                        <#if defect.url?? && defect.url?length gt 0>
+                            <a href="${defect.url}" <#if defect.external>target="_blank" rel="noopener noreferrer"</#if>>${defect.name}</a>
+                        <#else>
+                            ${defect.name}
+                        </#if>
+                    </div>
+                </div>
+            </#list>
+        </div>
+    <#else>
+        <p>该用例未关联测试缺陷</p>
+    </#if>
+
+    <h3 class="ui header" id="prdHeader">
+        PRD需求
+    </h3>
+    <#if prdRequirements??>
+        <div class="ui relaxed list">
+            <#list prdRequirements as item>
+                <div class="item">
+                    <i class="clipboard list icon"></i>
+                    <div class="content">
+                        <#if item.url?? && item.url?length gt 0>
+                            <a href="${item.url}" <#if item.external>target="_blank" rel="noopener noreferrer"</#if>>${item.name}</a>
+                        <#else>
+                            ${item.name}
+                        </#if>
+                    </div>
+                </div>
+            </#list>
+        </div>
+    <#else>
+        <p>该用例未关联PRD需求</p>
+    </#if>
+
     <h3 class="ui dividing header" id="contentHeader">
         详情描述
     </h3>

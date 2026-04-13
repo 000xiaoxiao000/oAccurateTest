@@ -32,7 +32,7 @@ public class AISelfLearningService {
     private static final Logger logger = LoggerFactory.getLogger(AISelfLearningService.class);
 
     /** 学习报告周期（小时） */
-    private static final int LEARNING_REPORT_INTERVAL_HOURS = 6;
+    private final int learningReportIntervalHours;
 
     /** 知识库条目最大数量 */
     private static final int MAX_KNOWLEDGE_ENTRIES = 200;
@@ -63,10 +63,11 @@ public class AISelfLearningService {
     /** 工具推荐器引用（用于学习工具调用模式） */
     private ToolRecommender toolRecommender;
 
-    public AISelfLearningService(FeedbackPersistenceService feedbackPersistence) {
+    public AISelfLearningService(FeedbackPersistenceService feedbackPersistence, int learningReportIntervalHours) {
         this.feedbackPersistence = feedbackPersistence;
+        this.learningReportIntervalHours = learningReportIntervalHours;
         startPeriodicLearning();
-        logger.info("AISelfLearningService initialized");
+        logger.info("AISelfLearningService initialized, intervalHours={}", learningReportIntervalHours);
     }
 
     public void setToolRecommender(ToolRecommender recommender) {
@@ -388,7 +389,7 @@ public class AISelfLearningService {
             } catch (Exception e) {
                 logger.error("Periodic learning cycle failed", e);
             }
-        }, LEARNING_REPORT_INTERVAL_HOURS, LEARNING_REPORT_INTERVAL_HOURS, TimeUnit.HOURS);
+        }, learningReportIntervalHours, learningReportIntervalHours, TimeUnit.HOURS);
     }
 
     // ==================== 内部类 ====================
