@@ -69,6 +69,7 @@ public class VersionItemControl {
     @RequestMapping("{appId}/version/new")
     public String addVersion(@PathVariable String projectId, @PathVariable String appId, Model model) {
         model.addAttribute("appId", appId);
+        model.addAttribute("app", appService.getApp(appId));
         model.addAttribute("project", projectService.getProject(projectId));
         model.addAttribute("hasVersion", !versionService.getVersionItemList(projectId, appId).isEmpty());
         return "version/versionAdd";

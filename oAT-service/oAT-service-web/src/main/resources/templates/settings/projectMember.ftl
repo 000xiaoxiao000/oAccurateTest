@@ -24,7 +24,6 @@
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
         <#assign settingsMemberActive="active"/>
-        <#assign memberItemActive="active"/>
         <#assign loginRole=loginNameRole />
         <#include "LeftNavigationMenu.ftl">
     </div>

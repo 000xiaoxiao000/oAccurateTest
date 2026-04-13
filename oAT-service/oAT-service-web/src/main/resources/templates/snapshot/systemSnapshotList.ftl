@@ -73,36 +73,11 @@
 <div class="ui grid attached container">
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
-        <div class="ui vertical attached menu">
-            <div class=" header item " style="background: #f3f4f5">
-                <div class="ui inline click dropdown">
-                    <span>${app.name}</span>
-                    <i class="icon click dropdown"></i>
-                    <div class="menu">
-                        <div class="ui search  icon input">
-                            <i class="search icon"></i>
-                            <input type="text" name="search" placeholder="搜索...">
-                        </div>
-                        <div class="header">选择应用</div>
-                        <div class="divider"></div>
-                        <#list apps as a>
-                            <a class="item" href="/p/${project.id}/${a.id}/snapshot/list">
-                                ${a.name}
-                            </a>
-                        </#list>
-                    </div>
-                </div>
-            </div>
-            <a class="item" href="/p/${project.id}/usecase/list">
-                用例中心
-            </a>
-            <a class="active item" href="/p/${project.id}/${app.id}/snapshot/list">
-                系统快照
-            </a>
-            <a class="ui item" href="/p/${project.id}/app/${app.id}/settings">
-                设置
-            </a>
-        </div>
+        <#assign snapshotGroupName=app.name/>
+        <#assign snapshotListHref="/p/${project.id}/${app.id}/snapshot/list"/>
+        <#assign settingsHref="/p/${project.id}/app/${app.id}/settings"/>
+        <#assign systemSnapshotListActive="active"/>
+        <#include "LeftNavigationMenu.ftl">
     </div>
     <!-- 中间内容 -->
     <div class="ui twelve wide column">
