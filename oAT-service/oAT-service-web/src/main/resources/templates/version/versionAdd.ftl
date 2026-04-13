@@ -124,6 +124,12 @@
                 </div>
 
                 <br>
+                <div class="field">
+                    <div class="ui checkbox">
+                        <input type="checkbox" name="setAsCurrent" value="on" <#if isFirstVersion!false>checked="checked"</#if>>
+                        <label>设为当前版本</label>
+                    </div>
+                </div>
                 <div class="ui" style="float: right">
                     <button class="ui button positive" type="submit">创建新的版本</button>
                     <button class="ui button" type="reset">重置</button>
@@ -141,6 +147,7 @@
     $('.ui.dropdown').dropdown({
         on: 'hover'
     });
+    $('.ui.checkbox').checkbox();
     $('.ui.filter.dropdown').dropdown({
         on: 'click'
     });

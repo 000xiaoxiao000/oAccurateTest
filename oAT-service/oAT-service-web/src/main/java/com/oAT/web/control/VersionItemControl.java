@@ -70,6 +70,7 @@ public class VersionItemControl {
     public String addVersion(@PathVariable String projectId, @PathVariable String appId, Model model) {
         model.addAttribute("appId", appId);
         model.addAttribute("project", projectService.getProject(projectId));
+        model.addAttribute("isFirstVersion", versionService.getVersionItemList(projectId, appId).isEmpty());
         return "version/versionAdd";
     }
 
@@ -98,6 +99,14 @@ public class VersionItemControl {
         }
 
         versionService.addVersionItem(itemVo);
+
+        if (versionService.getVersionItemList(projectId, appId).size() == 1 && "on".equals(itemVo.getSetAsCurrent())) {
+            AppVo app = appService.getApp(appId);
+            app.setCurrentVersion(itemVo.getVersionNumber());
+            app.setCurrentBranch(itemVo.getRepoBranch());
+            app.setCurrentCommitId(itemVo.getRepoCommitId());
+            appService.updateApp(projectId, app);
+        }
         return new ResultNotified<>(true, "版本创建成功");
     }
 

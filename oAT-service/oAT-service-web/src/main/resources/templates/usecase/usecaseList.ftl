@@ -8,6 +8,15 @@
 <body>
 <#assign usecaseItemActive="active">
 <#include "../projectHeader.ftl">
+<!--面包屑导航-->
+<div class="ui breadcrumb" style="margin: 5px">
+    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+    <span class="divider">/</span>
+    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
+    <span class="divider">/</span>
+    <div class="active section">用例列表</div>
+</div>
+
 <!--过滤条件-->
 <div class="ui container">
     <div class="ui grid">
@@ -18,6 +27,10 @@
             <table class="ui basic compact table" style="border: none">
                 <tr>
                     <td>
+                        <a class="ui tiny teal basic button" href="/p/${project.id}/usecase/list">
+                            <i class="home icon"></i>用例中心
+                        </a>
+                        &nbsp;&nbsp;
                         <a href="/p/${project.id}/usecase/list">/ROOT</a>
                         <#if dirTiers??>
                             <#list dirTiers as tie>
