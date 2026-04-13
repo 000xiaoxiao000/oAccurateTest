@@ -6,6 +6,30 @@
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; line-height: 1.5; }
         .source-container { border: 1px solid #ddd; padding: 10px; border-radius: 5px; background: #fff; max-width: 100%; overflow-x: auto; overflow-y: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .branch-line { position: relative; }
+        .branch-line::after {
+            content: attr(data-branch-detail);
+            position: absolute;
+            left: calc(100% + 12px);
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(20, 24, 33, 0.96);
+            color: #f7f7f2;
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            min-width: 220px;
+            max-width: 420px;
+            box-shadow: 0 10px 24px rgba(0,0,0,0.18);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 20;
+            transition: opacity .12s ease;
+        }
+        .branch-line:hover::after { opacity: 1; }
         .method-list { margin-bottom: 25px; }
         .ui.progress { margin: 0; min-width: 80px; }
         .method-table td { vertical-align: middle !important; }
