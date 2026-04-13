@@ -8,13 +8,13 @@
 <body>
 
 <!--头部菜单 引入-->
-<#assign appCenterActive="active">
+<#assign versionItemActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui small breadcrumb">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+<div class="ui breadcrumb" style="margin: 5px">
+    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
     <span class="divider">/</span>
-    <div class=" section"> ${appInfo.name} </div>
+    <a class=" section" href="/p/${project.id}/${appInfo.id}/version/list">${appInfo.name}</a>
     <span class="divider">/</span>
     <div class="active section">版本比对</div>
 </div>
@@ -22,38 +22,10 @@
 <!--内容主体-->
 <div class="ui grid attached container" style="margin-top: 14px">
     <div class="ui four wide column">
-        <div class="ui vertical attached menu">
-            <div class=" header item " style="background: #f3f4f5">
-                <div class="ui inline click dropdown">
-                    <span>${appInfo.name}</span>
-                    <i class="icon click dropdown"></i>
-                    <div class="menu">
-                        <div class="ui search icon input">
-                            <i class="search icon"></i>
-                            <input type="text" name="search" placeholder="搜索...">
-                        </div>
-                        <div class="header">
-                            选择应用
-                        </div>
-                        <div class="divider"></div>
-                    <#list apps as a>
-                        <a class="item" href="/p/${project.id}/${a.id}/version/compare">
-                            ${a.name}
-                        </a>
-                    </#list>
-                    </div>
-                </div>
-            </div>
-            <a class="item" href="/p/${project.id}/${appInfo.id}/version/list">
-                版本列表
-            </a>
-            <a class="item" href="/p/${project.id}/${appInfo.id}/version/report/list">
-                报告列表
-            </a>
-            <a class="item active" href="/p/${project.id}/${appInfo.id}/version/compare">
-                版本比对
-            </a>
-        </div>
+        <#assign appId=appInfo.id/>
+        <#assign appName=appInfo.name/>
+        <#assign versionCompareActive="active"/>
+        <#include "LeftNavigationMenu.ftl">
     </div>
 
     <div class="ui twelve wide column">

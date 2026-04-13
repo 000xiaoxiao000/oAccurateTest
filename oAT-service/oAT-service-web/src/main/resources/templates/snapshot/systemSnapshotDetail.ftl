@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>用例中心-快照详情</title>
+    <title>系统快照-快照详情</title>
     <#include "../common.ftl">
     <link href="/css/treeTable.css" rel="stylesheet">
     <link href="/css/tipsy.css" rel="stylesheet">
@@ -143,6 +143,11 @@
 <!--头部菜单 引入-->
 <#assign appCenterActive="active">
 <#include "../projectHeader.ftl">
+
+<#assign snapshotListHref='/p/' + project.id + '/' + app.id + '/snapshot/list'/>
+<#assign settingsHref='/p/' + project.id + '/app/' + app.id + '/settings'/>
+<#assign snapshotDetailHref='/p/' + project.id + '/' + app.id + '/snapshot/detail/' + snapshot.id/>
+
 <!--面包屑导航-->
 <div class="ui small breadcrumb" style="margin: 5px">
     <a class="section" href="/p/${project.id}/home">${project.name}</a>
@@ -154,7 +159,14 @@
     <div class="active section">快照详情</div>
 </div>
 <!--过滤条件-->
-<div class="ui text container">
+<div class="ui grid attached container" style="margin-top: 14px">
+    <div class="ui four wide column">
+        <#assign snapshotGroupName=app.name/>
+        <#assign snapshotDetailActive="active"/>
+        <#include "LeftNavigationMenu.ftl">
+    </div>
+    <div class="ui twelve wide column">
+        <div class="ui text container" style="margin: 0; width: 100%;">
     <div class="text">
         <a href="javascript:window.history.go(-1)"><i class="icon arrow left"></i>返回</a>
     </div>
@@ -388,6 +400,8 @@
             </div>
             <div class="ui primary button" onclick="calculateCoverage()">重新生成</div>
         </#if>
+    </div>
+    </div>
     </div>
 </div>
 

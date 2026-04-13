@@ -39,7 +39,6 @@
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
         <#assign settingsAppActive="active"/>
-        <#assign appListItemActive="active"/>
         <#assign loginRole=loginNameRole />
         <#include "LeftNavigationMenu.ftl">
     </div>

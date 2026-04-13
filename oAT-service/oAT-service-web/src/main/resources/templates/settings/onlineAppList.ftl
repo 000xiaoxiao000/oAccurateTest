@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>在线应用列表</title>
+    <title>设置-在线应用</title>
     <#include "../common.ftl">
 </head>
 <body>
@@ -28,7 +28,7 @@
     </div>
     <!-- 中间内容 -->
     <div class="ui twelve wide column">
-        <h4 class="ui top attached block header">应用列表</h4>
+        <h4 class="ui top attached block header">在线应用</h4>
         <div class="ui attached segment">
             <table class="ui fixed table">
                 <thead>

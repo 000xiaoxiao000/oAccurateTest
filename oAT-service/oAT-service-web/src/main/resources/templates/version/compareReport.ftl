@@ -17,10 +17,10 @@
 <#include "../projectHeader.ftl">
 
 <!--面包屑导航-->
-<div class="ui small breadcrumb">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+<div class="ui breadcrumb" style="margin: 5px">
+    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
     <span class="divider">/</span>
-    <a class=" section" href="/p/${project.id}/${app.id}/version/compare"> ${app.name} </a>
+    <a class=" section" href="/p/${project.id}/${app.id}/version/list">${app.name}</a>
     <span class="divider">/</span>
     <div class="active section">比对报告</div>
 </div>

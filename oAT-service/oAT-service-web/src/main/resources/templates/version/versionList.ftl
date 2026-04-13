@@ -24,18 +24,9 @@
 <div class="ui grid attached  container" style="margin-top: 14px">
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
-        <div class="ui vertical menu">
-            <div class="header item">版本中心</div>
-            <a class="item active " href="/p/${project.id}/${appId}/version/list">
-                版本列表
-            </a>
-            <a class="item" href="/p/${project.id}/${appId}/version/report/list">
-                报告列表
-            </a>
-            <a class="teal teal item" href="/p/${project.id}/${appId}/version/compare">
-                <i class="ui icon law"></i>版本比对
-            </a>
-        </div>
+        <#assign appName=appInfo.name/>
+        <#assign versionListActive="active"/>
+        <#include "LeftNavigationMenu.ftl">
     </div>
     <!-- 中间内容 -->
     <div class="ui twelve wide column">
