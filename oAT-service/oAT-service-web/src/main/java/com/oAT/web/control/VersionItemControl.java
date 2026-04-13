@@ -70,7 +70,7 @@ public class VersionItemControl {
     public String addVersion(@PathVariable String projectId, @PathVariable String appId, Model model) {
         model.addAttribute("appId", appId);
         model.addAttribute("project", projectService.getProject(projectId));
-        model.addAttribute("isFirstVersion", versionService.getVersionItemList(projectId, appId).isEmpty());
+        model.addAttribute("hasVersion", !versionService.getVersionItemList(projectId, appId).isEmpty());
         return "version/versionAdd";
     }
 

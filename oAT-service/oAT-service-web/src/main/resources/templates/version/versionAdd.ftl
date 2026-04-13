@@ -126,7 +126,7 @@
                 <br>
                 <div class="field">
                     <div class="ui checkbox">
-                        <input type="checkbox" name="setAsCurrent" value="on" <#if isFirstVersion!false>checked="checked"</#if>>
+                        <input type="checkbox" name="setAsCurrent" value="on" <#if !hasVersion!true>checked="checked"</#if>>
                         <label>设为当前版本</label>
                     </div>
                 </div>
@@ -396,6 +396,11 @@
                     // Prevent default form submission
                     event.preventDefault();
 
+                    var successMessage = '版本创建成功';
+                    if ($('input[name="setAsCurrent"]').is(':checked')) {
+                        successMessage += '，并已设为当前版本';
+                    }
+
                     var $form = $(this);
                     var action = $form.attr('action');
 
@@ -407,7 +412,9 @@
                         success: function(res) {
                             $form.removeClass('loading');
                             if (res.success || res.result) {
-                                showToast(res.message || '版本创建成功', 'success');
+                                sessionStorage.setItem('toastMessage', successMessage);
+                                sessionStorage.setItem('toastMessageType', 'success');
+                                showToast(successMessage, 'success');
                                 setTimeout(function() {
                                     window.location.href = "/p/${project.id}/${appId}/version/list";
                                 }, 1000);
