@@ -397,6 +397,7 @@ public class VersionItemControl {
             return "redirect:/p/" + projectId + "/version/report/" + jobId;
         }
         model.addAttribute("appInfo", appService.getApp(job.getAppId()));
+        model.addAttribute("apps", appService.getAppList(projectId));
         model.addAttribute("compareJob", job);
         return "/version/compareConsole";
     }

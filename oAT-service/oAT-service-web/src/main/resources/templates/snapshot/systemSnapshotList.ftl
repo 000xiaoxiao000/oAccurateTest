@@ -11,10 +11,10 @@
 <#assign appCenterActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui small breadcrumb">
+<div class="ui small breadcrumb" style="margin: 5px">
     <a class="section" href="/p/${project.id}/home">${project.name}</a>
     <span class="divider">/</span>
-    <div class=" section"> ${app.name} </div>
+    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
     <span class="divider">/</span>
     <div class="active section">系统快照</div>
 </div>
@@ -93,11 +93,11 @@
                     </div>
                 </div>
             </div>
-            <a class=" active item  " href="/p/${project.id}/${app.id}/snapshot/list">
-                系统快照
+            <a class="item" href="/p/${project.id}/usecase/list">
+                用例中心
             </a>
-            <a class="item" href="/p/${project.id}/${app.id}/version/compare">
-                版本比对
+            <a class="active item" href="/p/${project.id}/${app.id}/snapshot/list">
+                系统快照
             </a>
             <a class="ui item" href="/p/${project.id}/app/${app.id}/settings">
                 设置

@@ -11,14 +11,14 @@
 <body>
 
 <!--头部菜单 引入-->
-<#assign versionItemActive="active">
+<#assign appCenterActive="active">
 <#include "../projectHeader.ftl">
 
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 5px">
-    <a class="section" href="appList.html">版本中心</a>
-<#--    <span class="divider">/</span>-->
-<#--    <a class="active section" href="versionList.html">商品详情页</a>-->
+<div class="ui small breadcrumb">
+    <a class="section" href="/p/${project.id}/home">${project.name}</a>
+    <span class="divider">/</span>
+    <div class=" section"> ${appId} </div>
     <span class="divider">/</span>
     <div class="active section">新增版本</div>
 </div>
@@ -27,16 +27,16 @@
 <div class="ui grid attached container" style="margin-top: 14px">
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
-        <div class="ui vertical menu">
+        <div class="ui vertical attached menu">
             <div class="header item">版本中心</div>
-            <a class="item active " href="/p/${project.id}/${appId}/version/list">
+            <a class="item" href="/p/${project.id}/${appId}/version/list">
                 版本列表
             </a>
             <a class="item" href="/p/${project.id}/${appId}/version/report/list">
                 报告列表
             </a>
-            <a class="teal teal item" href="/p/${project.id}/${appId}/version/compare">
-                <i class="ui icon law"></i>版本比对
+            <a class="item active" href="/p/${project.id}/${appId}/version/compare">
+                版本比对
             </a>
         </div>
     </div>

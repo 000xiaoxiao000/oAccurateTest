@@ -2,31 +2,31 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>${project.name}-主页</title>
+    <title>设置-应用设置</title>
     <#include "../common.ftl">
 </head>
 <body>
 
 <!--头部菜单引入-->
 <div class="include">
-    <#assign appCenterActive="active">
+    <#assign settingItemActive="active">
     <#include  "../projectHeader.ftl">
 </div>
 <!--面包屑导航-->
 <div class="ui small breadcrumb">
     <a class="section" href="/p/${project.id}/home">${project.name}</a>
     <span class="divider">/</span>
-    <div class=" section"> ${app.name} </div>
+    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
     <span class="divider">/</span>
-    <div class="active section">应用设置</div>
+    <div class="active section">设置</div>
 </div>
 
 <!--内容主体-->
 <div class="ui grid attached  container" style="margin-top: 14px">
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
-        <div class="ui vertical attached menu">
-            <div class=" header item " style="background: #f3f4f5">
+        <div class="ui vertical attached menu settings-nav">
+            <div class="section-title item">
                 <div class="ui inline click dropdown">
                     <span>${app.name}</span>
                     <i class="icon click dropdown"></i>
@@ -47,15 +47,18 @@
                     </div>
                 </div>
             </div>
-            <a class="  item  " href="/p/${project.id}/${app.id}/snapshot/list">
+            <a class="top-level item" href="/p/${project.id}/usecase/list">
+                用例中心
+            </a>
+            <a class="top-level item" href="/p/${project.id}/${app.id}/snapshot/list">
                 系统快照
             </a>
-            <a class="item" href="/p/${project.id}/${app.id}/version/compare">
-                版本比对
-            </a>
-            <a class="active item" href="/p/${project.id}/app/${app.id}/settings#basicInfo">
-                设置
-            </a>
+            <div class="subnav-group item">
+                <div class="subnav-label">设置</div>
+                <div class="subnav-menu">
+                    <a class="item subnav-item active" href="/p/${project.id}/app/${app.id}/settings#basicInfo">应用设置</a>
+                </div>
+            </div>
         </div>
     </div>
     <script>

@@ -144,10 +144,12 @@
 <#assign appCenterActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui small breadcrumb">
+<div class="ui small breadcrumb" style="margin: 5px">
     <a class="section" href="/p/${project.id}/home">${project.name}</a>
     <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/${app.id}/snapshot/list"> ${app.name} </a>
+    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
+    <span class="divider">/</span>
+    <a class="section" href="/p/${project.id}/${app.id}/snapshot/list">系统快照</a>
     <span class="divider">/</span>
     <div class="active section">快照详情</div>
 </div>

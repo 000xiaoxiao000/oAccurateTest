@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>用例中心-快照列表</title>
+    <title>系统快照-快照列表</title>
     <#include "../common.ftl">
 </head>
 <body>
@@ -60,18 +60,21 @@
     <div class="ui four wide column">
         <div class="ui vertical menu">
             <div class="header item">用例中心</div>
-            <a class="teal item " href="/p/${project.id}/usecase/list">
-                用例文档
+            <a class="item" href="/p/${project.id}/usecase/list">
+                用例中心
             </a>
-            <a class="item active" href="/p/${project.id}/snapshot/list">
-                快照列表
-            </a>
-            <#-- <a class="item" href="#">
-                 系统表结构
-             </a>
-             <a class="item" href="#">
-                 服务接口
-             </a>-->
+            <#if snapshots?? && (snapshots?size > 0) && snapshots[0].appId??>
+                <a class="item" href="/p/${project.id}/${snapshots[0].appId}/snapshot/list">
+                    系统快照
+                </a>
+                <a class="ui item" href="/p/${project.id}/app/${snapshots[0].appId}/settings">
+                    设置
+                </a>
+            <#else>
+                <a class="ui item" href="/p/${project.id}/edit">
+                    设置
+                </a>
+            </#if>
         </div>
     </div>
     <!-- 中间内容 -->
@@ -88,7 +91,7 @@
             <#list snapshots as snap>
                 <tr>
                     <td>
-                        <a class="text" href="/p/${project.id}/snapshot/detail/${snap.id}">
+                        <a class="text" href="<#if snap.appId??>/p/${project.id}/${snap.appId}/snapshot/detail/${snap.id}<#else>/p/${project.id}/snapshot/detail/${snap.id}</#if>">
                             ${snap.name}
                         </a>
                         <#if snap.labels??>

@@ -188,8 +188,10 @@ public class AppControl {
     @RequestMapping("online")
     public String openOnlineList(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
         List<ClientSessionVo> list = new ArrayList<>();
+        List<AppVo> apps = appService.getAppList(projectId);
+        model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
         List<String> appIds = new ArrayList<>();
-        for (AppVo appVo : appService.getAppList(projectId)) {
+        for (AppVo appVo : apps) {
             appIds.add(appVo.getId());
         }
         for (ClientSessionVo onlineSession : sessionService.getOnlineSessions()) {

@@ -36,6 +36,7 @@ public class manageAppCodeControl {
     public String manageAppCode(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
         List<AppVo> list = appService.getAppList(projectId);
         model.addAttribute("apps", list);
+        model.addAttribute("defaultApp", list.isEmpty() ? null : list.get(0));
         for (AppVo appVo : list) {
             appVo.setOnlineCount(sessionService.getOnlineSessionsByAppId(appVo.getId()).size());
         }

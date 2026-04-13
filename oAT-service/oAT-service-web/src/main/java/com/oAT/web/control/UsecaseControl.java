@@ -2,6 +2,7 @@ package com.oAT.web.control;
 
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.LabelGroup;
+import com.oAT.web.service.AppService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SnapshotService;
 import com.oAT.web.service.UsecaseService;
@@ -25,9 +26,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-
 @Controller
-@RequestMapping("/p/{projectId}/usecase/")
+@RequestMapping({"/p/{projectId}/usecase", "/p/{projectId}/usecase/"})
 public class UsecaseControl {
 
     @Autowired
@@ -40,6 +40,9 @@ public class UsecaseControl {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private AppService appService;
 
     /**
      * 打开用例文档编辑页面
@@ -174,6 +177,9 @@ public class UsecaseControl {
             Collections.reverse(dirTier);
             model.addAttribute("dirTiers", dirTier);
         }
+        List<AppVo> apps = appService.getAppList(projectId);
+        AppVo app = apps.isEmpty() ? null : apps.get(0);
+        model.addAttribute("app", app);
         model.addAttribute("cases", list);
         model.addAttribute("dirs", directorys);
         model.addAttribute("currentDir", directory);

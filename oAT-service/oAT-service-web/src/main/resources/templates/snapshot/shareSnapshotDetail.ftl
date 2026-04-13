@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>共享快照</title>
+    <title>系统快照-共享详情</title>
     <link href="/css/font-awesome.min.css" rel="stylesheet">
     <#include "../common.ftl">
     <script src="/js/d3.min.js" charset="utf-8"></script>
@@ -38,7 +38,7 @@
                 <img class="ui image" src="/images/logo.png" style="width: 100px;height:auto;">
             </div>
             <div class="item">
-               <span>系统快照共享</span>
+               <span>系统快照共享详情</span>
             </div>
         <div class="right menu">
             <a class="ui dropdown item" href="/login">

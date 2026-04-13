@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>我的历史快照</title>
+    <title>系统快照-我的快照</title>
     <#include "../common.ftl">
     <script src="/js/tipsy.js?v=${.now}"></script>
     <link href="/css/tipsy.css" rel="stylesheet">
@@ -156,7 +156,7 @@
             </div>
             <div class="ui multiple click dropdown item" tabindex="3">
                 <i class="file icon"> </i>
-                <span class="text" style="margin: auto" title="我的快照列表中所有接口" onclick="openCodeReport()">
+                <span class="text" style="margin: auto" title="我的快照中所有接口" onclick="openCodeReport()">
                     查看报告
                 </span>
             </div>

@@ -67,8 +67,9 @@ public class ProjectControl {
     @RequestMapping("/p/{projectId}/edit")
     public String openEditProjectView(@PathVariable String projectId, @SessionAttribute UserVo user, Model model) {
         ProjectVo projectVo = projectService.getProjectByProjectIdAndMemberId(projectId, user.getId());
-
         String loginName = user.getName();
+        List<AppVo> apps = appService.getAppList(projectId);
+        model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
         List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
 
         // 登录用户权限，原则是最小权限（访客）
@@ -87,6 +88,8 @@ public class ProjectControl {
     @RequestMapping("/p/{projectId}/delete")
     public String openDeleteProjectView(@PathVariable String projectId, @SessionAttribute UserVo user, Model model) {
         String loginName = user.getName();
+        List<AppVo> apps = appService.getAppList(projectId);
+        model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
         List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
 
         // 登录用户权限，原则是最小权限（访客）
@@ -256,6 +259,8 @@ public class ProjectControl {
         List<LabelGroup.Label> usecaseLables = projectService.getLables(projectId, LableType.usecase);
 
         String loginName = user.getName();
+        List<AppVo> apps = appService.getAppList(projectId);
+        model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
         List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
 
         // 登录用户权限，原则是最小权限（访客）
