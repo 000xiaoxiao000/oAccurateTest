@@ -62,7 +62,11 @@
                                        (appInfo.currentCommitId?? && appInfo.currentCommitId == (item.repoCommitId!''))>
                     <tr class="<#if isCurrent>positive </#if><#if item.hasReport>has-coverage<#else>no-coverage</#if>">
                         <td>
-                            <#if isCurrent><i class="ui icon check green"></i></#if>
+                            <#if isCurrent>
+                                <div class="ui tiny green label" style="margin-right: 8px;">
+                                    <i class="check icon"></i>当前版本
+                                </div>
+                            </#if>
                             ${item.versionNumber!""}
                         </td>
                         <td>${item.describe!""}</td>
