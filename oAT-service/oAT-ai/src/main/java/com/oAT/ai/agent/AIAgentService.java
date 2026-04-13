@@ -6,6 +6,7 @@ import com.oAT.ai.agent.cache.SemanticCacheService;
 import com.oAT.ai.agent.tools.*;
 import com.oAT.ai.config.AIConfig;
 import com.oAT.ai.config.AIConfigProperties;
+import com.oAT.ai.config.AIEnhancedConfig;
 import dev.langchain4j.memory.ChatMemory;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
@@ -13,7 +14,6 @@ import dev.langchain4j.service.AiServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Method;
@@ -49,6 +49,9 @@ public class AIAgentService {
     /** 语义缓存服务（用于相似问题命中） */
     private final SemanticCacheService semanticCacheService;
 
+    /** 是否启用语义缓存 */
+    private final boolean semanticCacheEnabled;
+
     /** 智能工具推荐器 */
     private final com.oAT.ai.agent.ToolRecommender toolRecommender;
 
@@ -65,15 +68,18 @@ public class AIAgentService {
     public AIAgentService(ChatLanguageModel chatLanguageModel,
                           AIConfigProperties configProperties,
                           AgentDataProvider dataProvider,
-                          AIConfig aiConfig) {
+                          AIConfig aiConfig,
+                          AIEnhancedConfig enhancedConfig) {
         this.configProperties = configProperties;
         this.dataProvider = dataProvider;
 
         // 初始化增强服务
-        this.semanticCacheService = new SemanticCacheService(0.85, 500, null);
+        this.semanticCacheEnabled = enhancedConfig.getSemanticCache().isEnabled();
+        this.semanticCacheService = new SemanticCacheService(enhancedConfig.getSemanticCache().getThreshold(), 500, null);
         this.toolRecommender = new com.oAT.ai.agent.ToolRecommender();
         this.llmSwitcher = new DynamicLLMSwitcher(aiConfig);
-        this.conversationMemory = new ConversationMemoryService();
+        this.conversationMemory = new ConversationMemoryService(enhancedConfig.getConversation().getMaxRounds(),
+                Math.max(1, enhancedConfig.getConversation().getMaxRounds() / 2));
 
         // 注册所有内置工具到推荐器
         toolRecommender.registerAllBuiltInTools();
@@ -169,11 +175,13 @@ public class AIAgentService {
             AgentContext.setContext(context);
 
             // 1. 语义缓存检查（相似问题命中直接返回）
-            SemanticCacheService.CachedResponse cached = semanticCacheService.get(question);
-            if (cached != null && cached.isFromCache() && cached.getAnswer() != null) {
-                logger.info("Semantic cache hit for question: {}",
-                        question.length() > 50 ? question.substring(0, 50) + "..." : question);
-                return cached.getAnswer();
+            if (semanticCacheEnabled) {
+                SemanticCacheService.CachedResponse cached = semanticCacheService.get(question);
+                if (cached != null && cached.isFromCache() && cached.getAnswer() != null) {
+                    logger.info("Semantic cache hit for question: {}",
+                            question.length() > 50 ? question.substring(0, 50) + "..." : question);
+                    return cached.getAnswer();
+                }
             }
 
             // 2. 智能工具推荐（日志记录，供后续分析）
@@ -197,7 +205,9 @@ public class AIAgentService {
 
             // 5. 将结果存入语义缓存
             if (response != null && !response.isEmpty()) {
-                semanticCacheService.put(question, response, null);
+                if (semanticCacheEnabled) {
+                    semanticCacheService.put(question, response, null);
+                }
                 // 记录工具推荐结果（用于学习优化）
                 toolRecommender.recordToolCall(recommendation.primaryTool, true);
                 llmSwitcher.recordResult(llmSwitcher.getDefaultModelName(), true, responseTime);
@@ -592,7 +602,8 @@ public class AIAgentService {
                     String dataPath = System.getProperty("oat.data.path",
                             System.getProperty("user.home") + "/oAT/codeData");
                     FeedbackPersistenceService fps = new FeedbackPersistenceService(dataPath);
-                    selfLearningService = new AISelfLearningService(fps);
+                    selfLearningService = new AISelfLearningService(fps,
+                            Math.max(1, Integer.getInteger("ai.enhanced.self-learning.interval-hours", 6)));
                     selfLearningService.setToolRecommender(toolRecommender);
                 }
             }

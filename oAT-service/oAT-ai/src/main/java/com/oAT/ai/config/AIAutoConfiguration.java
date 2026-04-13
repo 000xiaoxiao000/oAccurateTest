@@ -2,6 +2,7 @@ package com.oAT.ai.config;
 
 import com.oAT.ai.agent.AIAgentService;
 import com.oAT.ai.agent.FeedbackPersistenceService;
+import com.oAT.ai.config.AIEnhancedConfig;
 import com.oAT.ai.service.impl.LLMServiceImpl;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -15,12 +16,16 @@ import org.springframework.context.annotation.Import;
  */
 @Configuration
 @ConditionalOnClass(name = "dev.langchain4j.model.chat.ChatLanguageModel")
-@Import({AIConfig.class, LLMServiceImpl.class, AIAgentService.class})
+@Import({AIConfig.class, AIEnhancedConfig.class, LLMServiceImpl.class, AIAgentService.class})
 public class AIAutoConfiguration {
 
     @Bean
     public FeedbackPersistenceService feedbackPersistenceService(
-            @Value("${oat.data.path:${user.home}/oAT/codeData}") String oatDataPath) {
+            @Value("${oat.data.path:${user.home}/oAT/codeData}") String oatDataPath,
+            AIEnhancedConfig enhancedConfig) {
+        FeedbackPersistenceService.setDefaultRetentionDays(enhancedConfig.getFeedback().getRetentionDays());
+        System.setProperty("ai.enhanced.self-learning.interval-hours",
+                String.valueOf(enhancedConfig.getSelfLearning().getIntervalHours()));
         return new FeedbackPersistenceService(oatDataPath);
     }
 }

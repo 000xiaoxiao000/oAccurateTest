@@ -25,15 +25,30 @@ public class Usecase implements Serializable, StandardDate{
     @Field(type = FieldType.Keyword)
     private String projectId;
     /**
-     目录 ID
+     * 目录 ID
      */
     @Field(type = FieldType.Keyword)
     private String directory;
     /**
-     绑定的快照id
+     * 绑定的快照id
      */
     @Field(type = FieldType.Keyword)
     private String snapshots[];
+    /**
+     * 绑定的系统快照id
+     */
+    @Field(type = FieldType.Keyword)
+    private String systemSnapshots[];
+    /**
+     * 绑定的测试缺陷id
+     */
+    @Field(type = FieldType.Keyword)
+    private String defects[];
+    /**
+     * 绑定的PRD需求id
+     */
+    @Field(type = FieldType.Keyword)
+    private String prdRequirements[];
     @Field(type = FieldType.Keyword)
     /**
     标签
@@ -111,6 +126,30 @@ public class Usecase implements Serializable, StandardDate{
 
     public void setSnapshots(String[] snapshots) {
         this.snapshots = snapshots;
+    }
+
+    public String[] getSystemSnapshots() {
+        return systemSnapshots;
+    }
+
+    public void setSystemSnapshots(String[] systemSnapshots) {
+        this.systemSnapshots = systemSnapshots;
+    }
+
+    public String[] getDefects() {
+        return defects;
+    }
+
+    public void setDefects(String[] defects) {
+        this.defects = defects;
+    }
+
+    public String[] getPrdRequirements() {
+        return prdRequirements;
+    }
+
+    public void setPrdRequirements(String[] prdRequirements) {
+        this.prdRequirements = prdRequirements;
     }
 
     public String[] getLabels() {
