@@ -1783,7 +1783,19 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         String coveredText = coveredSet == null || coveredSet.isEmpty()
                 ? "[]"
                 : coveredSet.stream().sorted().map(String::valueOf).collect(Collectors.joining(", ", "[", "]"));
-        return "branch handled: " + coveredText + " / total: " + totalText;
+        String status;
+        String statusIcon;
+        if (coveredSet == null || coveredSet.isEmpty()) {
+            status = "未覆盖";
+            statusIcon = "🔴";
+        } else if (totalSet != null && coveredSet.size() >= totalSet.size()) {
+            status = "全覆盖";
+            statusIcon = "🟢";
+        } else {
+            status = "部分覆盖";
+            statusIcon = "🟠";
+        }
+        return statusIcon + " 分支状态：" + status + "\n已处理分支： " + coveredText + "\n总分支目标： " + totalText;
     }
 
     private String pickCoverageColor(String currentColor, String newColor) {
