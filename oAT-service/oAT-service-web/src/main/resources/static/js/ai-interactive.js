@@ -32,9 +32,12 @@
         var sessionsKey = 'ai-interactive-sessions:' + projectId;
         var activeSessionKey = 'ai-interactive-active-session:' + projectId;
         var sessionSortKey = 'ai-interactive-session-sort:' + projectId;
+        var timelineHeightKey = 'ai-interactive-timeline-height:' + projectId;
+        var timelineExpandedKey = 'ai-interactive-timeline-expanded:' + projectId;
 
         /* ===== DOM 引用 ===== */
         var $messageList = $('#aiMessageList');
+        var $chatAnchorsList = $('#aiChatAnchorsList');
         var $questionInput = $('#aiQuestionInput');
         var $sendButton = $('#aiSendButton');
         var $requestState = $('#aiRequestState');
@@ -44,6 +47,10 @@
         var $quickLinkList = $('#aiQuickLinkList');
         var $signalLights = $('#aiSignalLights');
         var $timelineList = $('#aiTimelineList');
+        var $timelinePanel = $('#aiTimelinePanel');
+        var $timelineSummary = $('#aiTimelineSummary');
+        var $timelineToggleButton = $('#aiTimelineToggleButton');
+        var $timelineResizeHandle = $('#aiTimelineResizeHandle');
         var $sessionList = $('#aiSessionList');
         var $newSessionButton = $('#aiNewSessionButton');
         var $sessionSearchInput = $('#aiSessionSearchInput');
@@ -55,6 +62,16 @@
         var loadingTimerInterval = null;
         var loadingStartTime = 0;
         var uploadedImageData = null;
+        var timelineState = {
+            expanded: false,
+            resizing: false,
+            startY: 0,
+            startHeight: 0,
+            minHeight: 96,
+            maxHeight: 320,
+            hasUserPreference: false
+        };
+        var anchorFilterMode = 'all';
 
         /* ============================================================
          *  初始化
@@ -91,6 +108,8 @@
         // 加载会话数据
         loadSessions();
         renderActiveSession();
+        setTimelineHeight(readTimelineHeight());
+        setTimelineExpanded(readTimelineExpanded());
         initWorkbenchAnimation();
 
         /* ============================================================
@@ -137,8 +156,9 @@
             var ripple = $('<span class="ai-btn-ripple"></span>');
             var rect = $sendButton[0].getBoundingClientRect();
             var size = Math.max(rect.width, rect.height) * 2;
-            var x = event.clientX - rect.left - size / 2;
-            var y = event.clientY - rect.top - size / 2;
+            var clientEvent = window.event || event;
+            var x = clientEvent.clientX - rect.left - size / 2;
+            var y = clientEvent.clientY - rect.top - size / 2;
             ripple.css({
                 position: 'absolute', width: size + 'px', height: size + 'px',
                 borderRadius: '50%', background: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.25)',
@@ -212,16 +232,27 @@
         function appendMessage(role, title, message, actions, options) {
             options = options || {};
             var avatar = role === 'assistant' ? assistantName.substring(0, 1) : '我';
+            var cardContentClass = 'ai-message-content' + (options.collapsible ? ' collapsible expanded' : '');
             var contentHtml = options.animate
                 ? '<div class="ai-message-text"></div>'
                 : (options.isHtml ? message : U.formatMessage(message));
-            var $node = $('<div class="ai-message ' + role + '">'
+            var toggleHtml = options.collapsible
+                ? '<button type="button" class="ai-message-toggle" aria-expanded="true">收起</button>'
+                : '';
+            var anchorAttrs = options.anchorId ? ' id="' + U.escapeHtml(options.anchorId) + '" data-anchor-id="' + U.escapeHtml(options.anchorId) + '"' : '';
+            var sectionClass = 'ai-message-section' + (options.isAnchorTarget ? ' ai-message-section-anchor' : '');
+            var $node = $('<div class="' + sectionClass + '"' + anchorAttrs + '>'
+                + '<div class="ai-message ' + role + '">'
                 + '<div class="ai-message-avatar">' + U.escapeHtml(avatar) + '</div>'
                 + '<div class="ai-message-body">'
+                + '<div class="ai-message-head">'
                 + '<div class="ai-message-name">' + U.escapeHtml(title) + '</div>'
-                + '<div class="ai-message-card" style="position:relative">' + contentHtml
+                + toggleHtml
+                + '</div>'
+                + '<div class="ai-message-card" style="position:relative">'
+                + '<div class="' + cardContentClass + '">' + contentHtml + '</div>'
                 + (options.animate ? '' : '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions))
-                + '</div></div></div>');
+                + '</div></div></div></div>');
             $messageList.append($node);
             if (!options.animate) {
                 U.bindCopyButton($node.find('.ai-message-copy'), message);
@@ -229,7 +260,8 @@
             $messageList.scrollTop($messageList[0].scrollHeight);
             if (options.animate) {
                 var $card = $node.find('.ai-message-card');
-                typewriterText($card.find('.ai-message-text'), message, function () {
+                var $content = $card.find('.ai-message-content');
+                typewriterText($content.find('.ai-message-text'), message, function () {
                     var extra = actions && actions.length
                         ? ('<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions))
                         : '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>';
@@ -246,6 +278,247 @@
                 html += '<button class="ai-action-btn" data-question="' + U.escapeHtml(action) + '">' + U.escapeHtml(action) + '</button>';
             });
             return html + '</div>';
+        }
+
+        function createQuestionAnchor(question, index, meta) {
+            return {
+                id: 'ai-question-anchor-' + (index + 1),
+                label: 'Q' + (index + 1),
+                question: question || '未命名提问',
+                answered: !!(meta && meta.answered),
+                responseTime: meta && meta.responseTime ? meta.responseTime : 0,
+                shareUrl: window.location.pathname + '#'+ ('ai-question-anchor-' + (index + 1))
+            };
+        }
+
+        function formatResponseTime(ms) {
+            if (!ms || ms <= 0) return '';
+            if (ms < 1000) return ms + 'ms';
+            return (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + 's';
+        }
+
+        function getQuestionAnchors(session) {
+            var anchors = [];
+            var count = 0;
+            var pendingUser = null;
+            $.each((session && session.history) || [], function (_, item) {
+                if (item.role === 'user') {
+                    pendingUser = item;
+                    anchors.push(createQuestionAnchor(item.message, count, { answered: false, responseTime: 0 }));
+                    count++;
+                    return;
+                }
+                if (item.role === 'assistant' && pendingUser && anchors.length) {
+                    anchors[anchors.length - 1].answered = true;
+                    anchors[anchors.length - 1].responseTime = item.responseTime || 0;
+                    pendingUser = null;
+                }
+            });
+            return anchors;
+        }
+
+        function renderChatAnchors(session) {
+            if (!$chatAnchorsList.length) return;
+            var previousStates = {};
+            $chatAnchorsList.find('.ai-chat-anchor-item').each(function () {
+                previousStates[$(this).data('anchor-id')] = {
+                    answered: $(this).hasClass('answered')
+                };
+            });
+            var anchors = getQuestionAnchors(session);
+            var visibleAnchors = anchors.filter(function (anchor) {
+                return anchorFilterMode === 'all' || !anchor.answered;
+            });
+            if (!visibleAnchors.length) {
+                $chatAnchorsList.html('<div class="ai-chat-anchor-empty">' + (anchorFilterMode === 'pending' ? '当前没有待回复问题。' : '当前还没有提问，先发起一个问题吧。') + '</div>');
+                return;
+            }
+            var html = '';
+            $.each(visibleAnchors, function (_, anchor) {
+                var statusClass = anchor.answered ? 'answered' : 'pending';
+                var statusText = anchor.answered ? '已回复' : '待回复';
+                var durationText = formatResponseTime(anchor.responseTime);
+                html += '<div class="ai-chat-anchor-entry">'
+                    + '<button type="button" class="ai-chat-anchor-item ' + statusClass + '" data-anchor-id="' + U.escapeHtml(anchor.id) + '" title="' + U.escapeHtml(anchor.question) + '">'
+                    + '<div class="ai-chat-anchor-top">'
+                    + '<span class="ai-chat-anchor-index">' + U.escapeHtml(anchor.label) + '</span>'
+                    + '<span class="ai-chat-anchor-status ' + statusClass + '"><span class="ai-chat-anchor-status-dot ' + statusClass + '"></span>' + U.escapeHtml(statusText) + '</span>'
+                    + '</div>'
+                    + '<span class="ai-chat-anchor-text">' + U.escapeHtml(anchor.question) + '</span>'
+                    + '<span class="ai-chat-anchor-duration">' + U.escapeHtml(durationText || '等待回复中') + '</span>'
+                    + '</button>'
+                    + '<button type="button" class="ai-chat-anchor-link-btn" data-anchor-link="' + U.escapeHtml(anchor.shareUrl) + '" title="复制直达链接">复制链接</button>'
+                    + '</div>';
+            });
+            $chatAnchorsList.html(html);
+            $.each(visibleAnchors, function (_, anchor) {
+                var prev = previousStates[anchor.id];
+                if (anchor.answered && prev && !prev.answered) {
+                    $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + anchor.id + '"]').addClass('just-answered');
+                }
+            });
+            syncActiveAnchorByScroll();
+        }
+
+        function setActiveAnchor(anchorId) {
+            $('.ai-chat-anchor-item.active').removeClass('active');
+            $('.ai-message-section-anchor.is-active').removeClass('is-active');
+            if (!anchorId) return;
+            var $active = $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + anchorId + '"]');
+            $active.addClass('active');
+            $('#'+ anchorId).addClass('is-active');
+            if ($active.length && $chatAnchorsList.length) {
+                var container = $chatAnchorsList[0];
+                var item = $active[0];
+                var targetLeft = item.offsetLeft - (container.clientWidth - item.offsetWidth) / 2;
+                container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+            }
+        }
+
+        function syncActiveAnchorByScroll() {
+            if (!$messageList.length) return;
+            var container = $messageList[0];
+            var containerTop = container.scrollTop;
+            var activeAnchorId = null;
+            $messageList.find('.ai-message-section-anchor').each(function () {
+                if (this.offsetTop - 20 <= containerTop) {
+                    activeAnchorId = $(this).data('anchor-id');
+                }
+            });
+            if (!activeAnchorId) {
+                var $first = $messageList.find('.ai-message-section-anchor').first();
+                activeAnchorId = $first.data('anchor-id');
+            }
+            if (anchorFilterMode === 'pending' && activeAnchorId) {
+                var $filtered = $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + activeAnchorId + '"]');
+                if (!$filtered.length) {
+                    setActiveAnchor(null);
+                    return;
+                }
+            }
+            setActiveAnchor(activeAnchorId);
+        }
+
+        function copyAnchorLink(link) {
+            if (!link) return;
+            navigator.clipboard.writeText(window.location.origin + link).then(function () {
+                U.showToast('直达链接已复制', 'success');
+            }, function () {
+                U.showToast('复制失败，请稍后重试', 'warning');
+            });
+        }
+
+        function highlightAnchorTarget(anchorId) {
+            var $target = $('#' + anchorId);
+            if (!$target.length) return;
+            $('.ai-message-section-anchor.is-target').removeClass('is-target');
+            $target.addClass('is-target');
+            setTimeout(function () { $target.removeClass('is-target'); }, 1800);
+        }
+
+        function scrollToAnchor(anchorId) {
+            var $target = $('#' + anchorId);
+            if (!$target.length) return;
+            var container = $messageList[0];
+            var target = $target[0];
+            container.scrollTop = target.offsetTop - 12;
+            setActiveAnchor(anchorId);
+            highlightAnchorTarget(anchorId);
+        }
+
+        function shouldCollapseMessage(message) {
+            var text = $.trim((message || '').replace(/<[^>]*>/g, ''));
+            return text.length > 140 || (message || '').indexOf('\n') !== -1;
+        }
+
+        function updateMessageCollapseState($message, expanded) {
+            var $content = $message.find('.ai-message-content');
+            var $button = $message.find('.ai-message-toggle');
+            if (!$content.length || !$button.length) return;
+            $content.toggleClass('expanded', expanded).toggleClass('collapsed', !expanded);
+            $button.attr('aria-expanded', expanded ? 'true' : 'false').text(expanded ? '收起' : '展开');
+        }
+
+        function clampTimelineHeight(height) {
+            return Math.max(timelineState.minHeight, Math.min(timelineState.maxHeight, height));
+        }
+
+        function readTimelineHeight() {
+            var stored = parseInt(sessionStorage.getItem(timelineHeightKey), 10);
+            return isNaN(stored) ? 140 : clampTimelineHeight(stored);
+        }
+
+        function readTimelineExpanded() {
+            var stored = sessionStorage.getItem(timelineExpandedKey);
+            timelineState.hasUserPreference = stored !== null;
+            return stored === 'true';
+        }
+
+        function persistTimelineState() {
+            sessionStorage.setItem(timelineHeightKey, String(clampTimelineHeight($timelineList.outerHeight() || timelineState.startHeight || 140)));
+            sessionStorage.setItem(timelineExpandedKey, timelineState.expanded ? 'true' : 'false');
+        }
+
+        function updateTimelineSummary(session) {
+            var timeline = (session && session.timeline) || [];
+            if (!timeline.length) {
+                $timelineSummary.html('<span class="ai-timeline-summary-empty">暂无时间线记录</span>');
+                return;
+            }
+            var latest = timeline[timeline.length - 1] || {};
+            $timelineSummary.html('<div class="ai-timeline-summary-time">' + U.escapeHtml(latest.time || '') + '</div>'
+                + '<div class="ai-timeline-summary-body">'
+                + '<div class="ai-timeline-summary-title">' + U.escapeHtml(latest.title || '最近动态') + '</div>'
+                + '<div class="ai-timeline-summary-desc">' + U.escapeHtml(latest.desc || '') + '</div>'
+                + '</div>');
+        }
+
+        function setTimelineExpanded(expanded, options) {
+            options = options || {};
+            timelineState.expanded = expanded;
+            if (options.persist !== false) {
+                timelineState.hasUserPreference = true;
+            }
+            $timelinePanel.toggleClass('collapsed', !expanded);
+            $timelineToggleButton.attr('aria-expanded', expanded ? 'true' : 'false').text(expanded ? '收起' : '展开');
+            $timelineSummary.attr('aria-hidden', expanded ? 'true' : 'false');
+            if (options.persist !== false) {
+                persistTimelineState();
+            }
+        }
+
+        function setTimelineHeight(height) {
+            var nextHeight = clampTimelineHeight(height);
+            $timelinePanel.css('--ai-timeline-height', nextHeight + 'px');
+            sessionStorage.setItem(timelineHeightKey, String(nextHeight));
+            return nextHeight;
+        }
+
+        function resetTimelineHeight() {
+            setTimelineHeight(140);
+        }
+
+        function beginTimelineResize(event) {
+            if (!timelineState.expanded) return;
+            event.preventDefault();
+            timelineState.resizing = true;
+            timelineState.startY = event.clientY;
+            timelineState.startHeight = $timelineList.outerHeight();
+            $('body').addClass('ai-resizing-timeline');
+            $(document).on('mousemove.aiTimelineResize', handleTimelineResize);
+            $(document).on('mouseup.aiTimelineResize', endTimelineResize);
+        }
+
+        function handleTimelineResize(event) {
+            if (!timelineState.resizing) return;
+            event.preventDefault();
+            setTimelineHeight(timelineState.startHeight - (event.clientY - timelineState.startY));
+        }
+
+        function endTimelineResize() {
+            timelineState.resizing = false;
+            $('body').removeClass('ai-resizing-timeline');
+            $(document).off('.aiTimelineResize');
         }
 
         /* ============================================================
@@ -267,7 +540,7 @@
                 + '<button class="ai-resume-btn" data-question="' + U.escapeHtml(questionText) + '">重新发送</button>'
                 + '</div></div></div>');
             $messageList.append($node); $messageList.scrollTop($messageList[0].scrollHeight);
-            saveMessage({ role: 'assistant', title: assistantName, message: '[已停止生成] 原问题: ' + questionText, actions: [] });
+            saveMessage({ role: 'assistant', title: assistantName, message: '[已停止生成] 原问题: ' + questionText, actions: [], responseTime: 0 });
             addTimeline('用户中断', '手动停止了 AI 回复生成');
             resetSendButton(); setRequestState('就绪', false); setSignalState('online');
             var s = getActiveSession(); if (s) { s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
@@ -317,8 +590,8 @@
                 + '1. 大模型服务负载较高或网络延迟较大\n'
                 + '2. 问题涉及大量数据查询需要更长时间\n'
                 + '3. 服务端处理出现异常\n\n'
-                + '建议：可以稍后重试，或换一个更具体的问题。', [], { animate: true });
-            saveMessage({ role: 'assistant', title: assistantName, message: '[请求超时] 等待 ' + elapsed + 's / 阈值 ' + timeoutSeconds + 's', actions: [] });
+                + '建议：可以稍后重试，或换一个更具体的问题。', [], { animate: true, collapsible: true });
+            saveMessage({ role: 'assistant', title: assistantName, message: '[请求超时] 等待 ' + elapsed + 's / 阈值 ' + timeoutSeconds + 's', actions: [], responseTime: elapsed * 1000 });
             addTimeline('请求超时', '等待 ' + elapsed + 's 超过阈值 ' + timeoutSeconds + 's');
         }
 
@@ -448,8 +721,27 @@
         function renderActiveSession() {
             var s = getActiveSession(); if (!s) return;
             $messageList.empty();
-            $.each(s.history || [], function (_, item) { appendMessage(item.role, item.title, item.message, item.actions || [], { animate: false }); });
-            renderQuickLinks(s.quickLinks || []); renderFollowUps(s.suggestions || []); renderTimeline(s);
+            var anchorIndex = 0;
+            $.each(s.history || [], function (_, item) {
+                var messageOptions = {
+                    animate: false,
+                    collapsible: item.role === 'assistant' && shouldCollapseMessage(item.message),
+                    isHtml: false
+                };
+                if (item.role === 'user') {
+                    var anchor = createQuestionAnchor(item.message, anchorIndex);
+                    messageOptions.anchorId = anchor.id;
+                    messageOptions.isAnchorTarget = true;
+                    anchorIndex++;
+                }
+                appendMessage(item.role, item.title, item.message, item.actions || [], messageOptions);
+            });
+            renderChatAnchors(s);
+            renderQuickLinks(s.quickLinks || []); renderFollowUps(s.suggestions || []); renderTimeline(s); updateTimelineSummary(s);
+            if (!timelineState.hasUserPreference) {
+                var firstSessionId = sortSessions(sessions)[0] ? sortSessions(sessions)[0].id : null;
+                setTimelineExpanded(s.id === firstSessionId, { persist: false });
+            }
             renderSessionList(); setSignalState('online'); $questionInput.focus();
         }
 
@@ -508,6 +800,10 @@
                     + '<div class="ai-timeline-title">' + U.escapeHtml(item.title) + '</div>'
                     + '<div class="ai-timeline-desc">' + U.escapeHtml(item.desc) + '</div></div>');
             });
+            updateTimelineSummary(session);
+            if (timelineState.expanded) {
+                setTimelineHeight(readTimelineHeight());
+            }
         }
 
         /* ============================================================
@@ -527,7 +823,12 @@
                 userMsgHtml += (question ? '<br>' : '') + '<img src="' + U.escapeHtml(uploadedImageData) + '" style="max-width:280px;max-height:200px;border-radius:10px;margin-top:6px;" alt="上传的图片">';
                 saveMsgText += (saveMsgText ? ' [附图]' : '[图片]');
             }
-            appendMessage('user', '你', userMsgHtml, [], { isHtml: true });
+            appendMessage('user', '你', userMsgHtml, [], {
+                isHtml: true,
+                anchorId: createQuestionAnchor(saveMsgText || pendingQuestion, getQuestionAnchors(session).length).id,
+                isAnchorTarget: true
+            });
+            renderChatAnchors({ history: session.history.concat([{ role: 'user', message: saveMsgText || pendingQuestion }]) });
             updateSessionTitle(session, question || '[图片提问]');
             saveMessage({ role: 'user', title: '你', message: saveMsgText, actions: [] });
             addTimeline('收到提问', pendingQuestion);
@@ -543,15 +844,15 @@
                 hideLoading();
                 if (!response || response.success === false || response.result === false) {
                     var fail = (response && response.message) || '当前无法完成分析，请稍后重试。';
-                    appendMessage('assistant', assistantName, fail, [], { animate: true });
-                    saveMessage({ role: 'assistant', title: assistantName, message: fail, actions: [] }); addTimeline('分析失败', fail); setSignalState('online'); mascotCanvas.setState('idle'); return;
+                    appendMessage('assistant', assistantName, fail, [], { animate: true, collapsible: shouldCollapseMessage(fail) });
+                    saveMessage({ role: 'assistant', title: assistantName, message: fail, actions: [], responseTime: 0 }); addTimeline('分析失败', fail); setSignalState('online'); mascotCanvas.setState('idle'); return;
                 }
                 var d = response.data || {};
                 var reply = d.answer || response.message || '已收到你的问题。';
-                appendMessage('assistant', assistantName, reply, d.suggestions || [], { animate: true });
+                appendMessage('assistant', assistantName, reply, d.suggestions || [], { animate: true, collapsible: shouldCollapseMessage(reply) });
                 session.quickLinks = d.quickLinks || []; session.suggestions = d.suggestions || [];
                 renderQuickLinks(session.quickLinks); renderFollowUps(session.suggestions);
-                saveMessage({ role: 'assistant', title: assistantName, message: reply, actions: d.suggestions || [], quickLinks: d.quickLinks || [] });
+                saveMessage({ role: 'assistant', title: assistantName, message: reply, actions: d.suggestions || [], quickLinks: d.quickLinks || [], responseTime: d.metadata && d.metadata.responseTime ? d.metadata.responseTime : 0 });
                 addTimeline('生成回复', d.topic || 'general'); setSignalState('reply');
                 mascotCanvas.setState('done');
             }).fail(function (jqXHR, textStatus) {
@@ -560,7 +861,7 @@
                 if (textStatus === 'timeout') { showTimeoutMessage(); mascotCanvas.setState('idle'); return; }
                 var err = '请求失败了（' + textStatus + '），请稍后再试，或者换一个更具体的问题。';
                 appendMessage('assistant', assistantName, err, [], { animate: true });
-                saveMessage({ role: 'assistant', title: assistantName, message: err, actions: [] });
+                saveMessage({ role: 'assistant', title: assistantName, message: err, actions: [], responseTime: 0 });
                 addTimeline('请求异常', textStatus + ' - 请稍后重试或更换问题描述'); setSignalState('online'); mascotCanvas.setState('idle');
             }).always(function () {
                 currentAjaxRequest = null; var s = getActiveSession(); if (s) { s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
@@ -582,6 +883,28 @@
         });
 
         $(document).on('click', '.starter-question, .ai-action-btn', function () { sendQuestion($(this).data('question')); });
+        $(document).on('click', '.ai-chat-anchor-item', function () { scrollToAnchor($(this).data('anchor-id')); });
+        $(document).on('click', '.ai-chat-anchor-link-btn', function (event) { event.stopPropagation(); copyAnchorLink($(this).data('anchor-link')); });
+        $(document).on('click', '.ai-anchor-filter-btn', function () {
+            anchorFilterMode = $(this).data('filter') || 'all';
+            $('.ai-anchor-filter-btn.active').removeClass('active');
+            $(this).addClass('active');
+            renderChatAnchors(getActiveSession());
+        });
+        $messageList.on('scroll', syncActiveAnchorByScroll);
+        $(document).on('click', '.ai-message-toggle', function () {
+            var $message = $(this).closest('.ai-message');
+            updateMessageCollapseState($message, $(this).attr('aria-expanded') !== 'true');
+        });
+        $timelineToggleButton.on('click', function () { setTimelineExpanded(!timelineState.expanded); });
+        $timelineResizeHandle.on('mousedown', beginTimelineResize);
+        $timelineResizeHandle.on('dblclick', function (event) { event.preventDefault(); resetTimelineHeight(); });
+        $timelineSummary.on('click keydown', function (event) {
+            if (event.type === 'click' || event.keyCode === 13 || event.keyCode === 32) {
+                if (event.type === 'keydown') event.preventDefault();
+                setTimelineExpanded(true);
+            }
+        });
         $(document).on('click', '.ai-session-item', function () { activeSessionId = $(this).data('session-id'); persistSessions(); renderActiveSession(); });
         $(document).on('click', '.ai-session-action.rename', function (e) { e.stopPropagation(); renameSession($(this).data('session-id')); });
         $(document).on('click', '.ai-session-action.pin', function (e) { e.stopPropagation(); togglePinSession($(this).data('session-id')); });

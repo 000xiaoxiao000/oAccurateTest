@@ -1,7 +1,5 @@
 package com.oAT.ai.agent.cache;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,8 +28,6 @@ public class SemanticCacheService {
 
     private static final Logger logger = LoggerFactory.getLogger(SemanticCacheService.class);
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-
     /** 相似度阈值（0-1），超过此值认为问题语义相同 */
     private final double similarityThreshold;
 
@@ -44,23 +40,17 @@ public class SemanticCacheService {
     /** 关键词索引：keyword -> questionHash（用于快速检索） */
     private final ConcurrentHashMap<String, List<String>> keywordIndex = new ConcurrentHashMap<>();
 
-    /** Redis 缓存服务（可选，用于持久化） */
-    private final RedisCacheService redisCache;
-
     public SemanticCacheService() {
         this.similarityThreshold = 0.85;
         this.maxCacheSize = 500;
-        this.redisCache = null;
         logger.info("SemanticCacheService initialized (standalone mode, threshold={}, maxSize={})",
                 similarityThreshold, maxCacheSize);
     }
 
-    public SemanticCacheService(double similarityThreshold, int maxCacheSize,
-                                 RedisCacheService redisCache) {
+    public SemanticCacheService(double similarityThreshold, int maxCacheSize) {
         this.similarityThreshold = similarityThreshold;
         this.maxCacheSize = maxCacheSize;
-        this.redisCache = redisCache;
-        logger.info("SemanticCacheService initialized with Redis backend, threshold={}, maxSize={}",
+        logger.info("SemanticCacheService initialized, threshold={}, maxSize={}",
                 similarityThreshold, maxCacheSize);
     }
 
@@ -86,18 +76,7 @@ public class SemanticCacheService {
             return new CachedResponse(exactMatch.getAnswer(), exactMatch.getUsedTools(), true);
         }
 
-        // 2. 检查 Redis
-        if (redisCache != null) {
-            String redisAnswer = redisCache.getSemanticAnswer(questionHash);
-            if (redisAnswer != null) {
-                // 回填本地缓存
-                put(cleanQuestion, redisAnswer, null);
-                logger.debug("Semantic cache Redis hit for hash: {}", questionHash);
-                return new CachedResponse(redisAnswer, null, true);
-            }
-        }
-
-        // 3. 语义相似度匹配
+        // 2. 语义相似度匹配
         String bestMatchKey = findBestMatch(cleanQuestion);
         if (bestMatchKey != null) {
             SemanticCacheEntry entry = cache.get(bestMatchKey);
@@ -134,16 +113,6 @@ public class SemanticCacheService {
 
         // 构建关键词索引
         buildKeywordIndex(cleanQuestion, questionHash);
-
-        // 同步到 Redis
-        if (redisCache != null) {
-            try {
-                redisCache.cacheSemanticAnswer(questionHash,
-                        OBJECT_MAPPER.writeValueAsString(new CachedResponse(answer, usedTools, true)));
-            } catch (JsonProcessingException e) {
-                logger.warn("Failed to sync semantic cache to Redis: {}", e.getMessage());
-            }
-        }
 
         logger.debug("Put to semantic cache: hash={}", questionHash);
     }

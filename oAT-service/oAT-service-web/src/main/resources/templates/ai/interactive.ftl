@@ -167,7 +167,7 @@
 
             <!-- 中间：实时交互流 - 占比最大 -->
             <div class="seven wide column">
-                <div class="ai-panel ai-chat-panel glass">
+                <div class="ai-panel ai-chat-panel glass" id="aiChatPanel">
                     <div class="ai-panel-header">
                         <div>
                             <div class="ai-eyebrow">Animated Console</div>
@@ -176,10 +176,31 @@
                         <div class="ai-panel-desc">像工作台一样连续接收建议、入口和下一步动作</div>
                     </div>
 
+                    <div class="ai-chat-anchors" id="aiChatAnchorsPanel">
+                        <div class="ai-chat-anchors-header">
+                            <div class="ai-sub-title">提问锚点</div>
+                            <div class="ai-chat-anchors-tools">
+                                <div class="ai-chat-anchors-filter" role="group" aria-label="锚点筛选">
+                                    <button type="button" class="ai-anchor-filter-btn active" data-filter="all">全部</button>
+                                    <button type="button" class="ai-anchor-filter-btn" data-filter="pending">仅看未回复</button>
+                                </div>
+                                <div class="ai-chat-anchors-tip">点击可快速定位到对应问答</div>
+                            </div>
+                        </div>
+                        <div id="aiChatAnchorsList" class="ai-chat-anchors-list"></div>
+                    </div>
+
                     <div id="aiMessageList" class="ai-message-list"></div>
 
-                    <div class="ai-timeline-panel">
-                        <div class="ai-sub-title">会话时间线</div>
+                    <div class="ai-timeline-panel" id="aiTimelinePanel">
+                        <div class="ai-timeline-header">
+                            <div class="ai-sub-title">会话时间线</div>
+                            <div class="ai-timeline-tools">
+                                <button type="button" id="aiTimelineToggleButton" class="ai-panel-toggle" aria-expanded="true">收起</button>
+                            </div>
+                        </div>
+                        <div id="aiTimelineResizeHandle" class="ai-timeline-resize-handle" title="拖动调整时间线高度，双击恢复默认高度"></div>
+                        <div id="aiTimelineSummary" class="ai-timeline-summary" role="button" tabindex="0" aria-hidden="true"></div>
                         <div id="aiTimelineList" class="ai-timeline-list"></div>
                     </div>
 

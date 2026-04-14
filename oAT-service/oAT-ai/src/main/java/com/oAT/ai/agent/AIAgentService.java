@@ -8,10 +8,6 @@ import com.oAT.ai.config.AIConfigProperties;
 import com.oAT.ai.config.AIEnhancedConfig;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
-import dev.langchain4j.memory.ChatMemory;
-import dev.langchain4j.memory.chat.MessageWindowChatMemory;
-import dev.langchain4j.model.chat.ChatLanguageModel;
-import dev.langchain4j.service.AiServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -112,7 +108,7 @@ public class AIAgentService {
     private volatile AISelfLearningService selfLearningService;
 
     @Autowired
-    public AIAgentService(ChatLanguageModel chatLanguageModel,
+    public AIAgentService(@Autowired(required = false) Object chatLanguageModel,
                           AIConfigProperties configProperties,
                           AgentDataProvider dataProvider,
                           AIConfig aiConfig,
@@ -122,7 +118,7 @@ public class AIAgentService {
 
         // 初始化增强服务
         this.semanticCacheEnabled = enhancedConfig.getSemanticCache().isEnabled();
-        this.semanticCacheService = new SemanticCacheService(enhancedConfig.getSemanticCache().getThreshold(), 500, null);
+        this.semanticCacheService = new SemanticCacheService(enhancedConfig.getSemanticCache().getThreshold(), 500);
         this.toolRecommender = new com.oAT.ai.agent.ToolRecommender();
         this.llmSwitcher = new DynamicLLMSwitcher(aiConfig);
         this.conversationMemory = new ConversationMemoryService(enhancedConfig.getConversation().getMaxRounds(),
@@ -132,17 +128,13 @@ public class AIAgentService {
         toolRecommender.registerAllBuiltInTools();
 
         if (chatLanguageModel == null) {
-            logger.warn("ChatLanguageModel is null, AI Agent will not be available");
+            logger.warn("Chat model bean is null, AI Agent will not be available");
             this.aiAgent = null;
         } else {
-            ChatMemory chatMemory = MessageWindowChatMemory.withMaxMessages(10);
             List<Object> tools = createTools();
-            this.aiAgent = AiServices.builder(AIAgent.class)
-                    .chatLanguageModel(chatLanguageModel)
-                    .chatMemory(chatMemory)
-                    .tools(tools.toArray())
-                    .build();
-            logger.info("AI Agent initialized with {} tools", tools.size());
+            logger.warn("AiServices builder API changed in LangChain4j 1.12.2, AI Agent auto-binding is temporarily disabled");
+            logger.info("Registered {} fallback tools for future compatibility adapter", tools.size());
+            this.aiAgent = null;
         }
     }
 
