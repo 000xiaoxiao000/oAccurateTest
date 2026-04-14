@@ -27,6 +27,8 @@
         var historyKey = storagePrefix + ':history';
         var hiddenKey = storagePrefix + ':hidden';
         var panelKey = storagePrefix + ':panel';
+        var panelSizeKey = storagePrefix + ':panel-size';
+        var innerLayoutKey = storagePrefix + ':inner-layout';
         var lastPageKey = storagePrefix + ':last-page';
         var positionKey = storagePrefix + ':position';
         var restoreBtnKey = storagePrefix + ':restore-btn-pos';
@@ -49,6 +51,10 @@
         var mouseX = window.innerWidth / 2;
         var mouseY = window.innerHeight / 2;
         var dragState = null;
+        var resizeState = null;
+        var innerLayoutDragState = null;
+        var innerLayoutResizeState = null;
+        var minPanelSize = null;
         var currentContext = detectPageContext(window.location.pathname);
         var $hoveredRow = null;
         var $selectedRow = null;
@@ -655,6 +661,383 @@
             });
         }
 
+        function getPanelMinimumSize() {
+            if (!minPanelSize) {
+                minPanelSize = {
+                    width: $panel.outerWidth(),
+                    height: $panel.outerHeight()
+                };
+            }
+            return minPanelSize;
+        }
+
+        function getPanelSize() {
+            return {
+                width: $panel.outerWidth(),
+                height: $panel.outerHeight()
+            };
+        }
+
+        function savePanelSize() {
+            writeLocalJSON(panelSizeKey, getPanelSize());
+        }
+
+        function getViewportResizeBounds() {
+            var minSize = getPanelMinimumSize();
+            var launcherWidth = $launcher.outerWidth() || 96;
+            var viewportPadding = 8;
+            return {
+                minWidth: minSize.width,
+                minHeight: minSize.height,
+                maxWidth: Math.max(minSize.width, window.innerWidth - launcherWidth - viewportPadding * 3),
+                maxHeight: Math.max(minSize.height, window.innerHeight - viewportPadding * 2)
+            };
+        }
+
+        function applyPanelSize(size) {
+            var bounds = getViewportResizeBounds();
+            var safeWidth = Math.min(Math.max(size.width, bounds.minWidth), bounds.maxWidth);
+            var safeHeight = Math.min(Math.max(size.height, bounds.minHeight), bounds.maxHeight);
+
+            $panel.css({
+                width: safeWidth + 'px',
+                height: safeHeight + 'px'
+            });
+        }
+
+        function restorePanelSize() {
+            var saved = readLocalJSON(panelSizeKey, null);
+            if (!saved) {
+                return;
+            }
+            applyPanelSize(saved);
+        }
+
+        function getInnerLayoutItems() {
+            return $panel.find('.ai-floating-layout-item');
+        }
+
+        function collectInnerLayout() {
+            var layout = {};
+            getInnerLayoutItems().each(function () {
+                var $item = $(this);
+                var key = $item.data('layout-key');
+                if (!key) {
+                    return;
+                }
+                layout[key] = {
+                    left: parseFloat($item.attr('data-left')) || 0,
+                    top: parseFloat($item.attr('data-top')) || 0,
+                    width: parseFloat($item.attr('data-width')) || $item.outerWidth(),
+                    height: parseFloat($item.attr('data-height')) || $item.outerHeight()
+                };
+            });
+            return layout;
+        }
+
+        function saveInnerLayout() {
+            writeLocalJSON(innerLayoutKey, collectInnerLayout());
+        }
+
+        function getLayoutBounds() {
+            var panelWidth = $panel.innerWidth();
+            var panelHeight = $panel.innerHeight();
+            return {
+                width: Math.max(panelWidth, 260),
+                height: Math.max(panelHeight, 320)
+            };
+        }
+
+        function getLayoutItemMinSize($item) {
+            return {
+                width: parseFloat($item.attr('data-min-width')) || 140,
+                height: parseFloat($item.attr('data-min-height')) || 72
+            };
+        }
+
+        function applyLayoutItemBox($item, box) {
+            var bounds = getLayoutBounds();
+            var minSize = getLayoutItemMinSize($item);
+            var width = Math.min(Math.max(box.width, minSize.width), bounds.width);
+            var height = Math.min(Math.max(box.height, minSize.height), bounds.height);
+            var left = Math.min(Math.max(box.left, 0), Math.max(0, bounds.width - width));
+            var top = Math.min(Math.max(box.top, 52), Math.max(52, bounds.height - height));
+
+            $item.css({
+                left: left + 'px',
+                top: top + 'px',
+                width: width + 'px',
+                height: height + 'px'
+            });
+            $item.attr({
+                'data-left': left,
+                'data-top': top,
+                'data-width': width,
+                'data-height': height
+            });
+        }
+
+        function buildDefaultInnerLayout() {
+            var defaults = {};
+            getInnerLayoutItems().each(function () {
+                var $item = $(this);
+                var key = $item.data('layout-key');
+                if (!key) {
+                    return;
+                }
+                defaults[key] = {
+                    left: parseFloat($item.attr('data-default-left')) || 0,
+                    top: parseFloat($item.attr('data-default-top')) || 0,
+                    width: parseFloat($item.attr('data-default-width')) || $item.outerWidth(),
+                    height: parseFloat($item.attr('data-default-height')) || $item.outerHeight()
+                };
+            });
+            return defaults;
+        }
+
+        function restoreInnerLayout() {
+            var saved = readLocalJSON(innerLayoutKey, null) || buildDefaultInnerLayout();
+            getInnerLayoutItems().each(function () {
+                var $item = $(this);
+                var key = $item.data('layout-key');
+                if (!key || !saved[key]) {
+                    return;
+                }
+                applyLayoutItemBox($item, saved[key]);
+            });
+        }
+
+        function refreshInnerLayoutBounds() {
+            getInnerLayoutItems().each(function () {
+                var $item = $(this);
+                applyLayoutItemBox($item, {
+                    left: parseFloat($item.attr('data-left')) || 0,
+                    top: parseFloat($item.attr('data-top')) || 0,
+                    width: parseFloat($item.attr('data-width')) || $item.outerWidth(),
+                    height: parseFloat($item.attr('data-height')) || $item.outerHeight()
+                });
+            });
+        }
+
+        function beginInnerLayoutDrag(event) {
+            if (event.which && event.which !== 1) {
+                return;
+            }
+            if ($(event.target).closest('button, a, textarea, input, .ai-floating-section-toggle, .ai-floating-layout-resize').length) {
+                return;
+            }
+            var $item = $(event.currentTarget).closest('.ai-floating-layout-item');
+            innerLayoutDragState = {
+                $item: $item,
+                startX: event.clientX,
+                startY: event.clientY,
+                originLeft: parseFloat($item.attr('data-left')) || 0,
+                originTop: parseFloat($item.attr('data-top')) || 0
+            };
+            $item.addClass('is-layout-dragging');
+            $(document).on('mousemove.aiFloatingInnerLayoutDrag', onInnerLayoutDragMove);
+            $(document).on('mouseup.aiFloatingInnerLayoutDrag', onInnerLayoutDragEnd);
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        function onInnerLayoutDragMove(event) {
+            if (!innerLayoutDragState) {
+                return;
+            }
+            applyLayoutItemBox(innerLayoutDragState.$item, {
+                left: innerLayoutDragState.originLeft + (event.clientX - innerLayoutDragState.startX),
+                top: innerLayoutDragState.originTop + (event.clientY - innerLayoutDragState.startY),
+                width: parseFloat(innerLayoutDragState.$item.attr('data-width')) || innerLayoutDragState.$item.outerWidth(),
+                height: parseFloat(innerLayoutDragState.$item.attr('data-height')) || innerLayoutDragState.$item.outerHeight()
+            });
+        }
+
+        function onInnerLayoutDragEnd() {
+            if (!innerLayoutDragState) {
+                return;
+            }
+            $(document).off('.aiFloatingInnerLayoutDrag');
+            innerLayoutDragState.$item.removeClass('is-layout-dragging');
+            innerLayoutDragState = null;
+            saveInnerLayout();
+        }
+
+        function beginInnerLayoutResize(event) {
+            if (event.which && event.which !== 1) {
+                return;
+            }
+            var $item = $(event.currentTarget).closest('.ai-floating-layout-item');
+            innerLayoutResizeState = {
+                $item: $item,
+                startX: event.clientX,
+                startY: event.clientY,
+                originLeft: parseFloat($item.attr('data-left')) || 0,
+                originTop: parseFloat($item.attr('data-top')) || 0,
+                originWidth: parseFloat($item.attr('data-width')) || $item.outerWidth(),
+                originHeight: parseFloat($item.attr('data-height')) || $item.outerHeight()
+            };
+            $item.addClass('is-layout-resizing');
+            $(document).on('mousemove.aiFloatingInnerLayoutResize', onInnerLayoutResizeMove);
+            $(document).on('mouseup.aiFloatingInnerLayoutResize', onInnerLayoutResizeEnd);
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        function onInnerLayoutResizeMove(event) {
+            if (!innerLayoutResizeState) {
+                return;
+            }
+            applyLayoutItemBox(innerLayoutResizeState.$item, {
+                left: innerLayoutResizeState.originLeft,
+                top: innerLayoutResizeState.originTop,
+                width: innerLayoutResizeState.originWidth + (event.clientX - innerLayoutResizeState.startX),
+                height: innerLayoutResizeState.originHeight + (event.clientY - innerLayoutResizeState.startY)
+            });
+        }
+
+        function onInnerLayoutResizeEnd() {
+            if (!innerLayoutResizeState) {
+                return;
+            }
+            $(document).off('.aiFloatingInnerLayoutResize');
+            innerLayoutResizeState.$item.removeClass('is-layout-resizing');
+            innerLayoutResizeState = null;
+            saveInnerLayout();
+        }
+
+        function resetPanelSize() {
+            var minSize = getPanelMinimumSize();
+            $panel.css({
+                width: '',
+                height: ''
+            });
+            applyPanelSize(minSize);
+            savePanelSize();
+            applyPosition(getCurrentPosition());
+            writeLocalJSON(positionKey, getCurrentPosition());
+        }
+
+        function detectResizeDirection(event) {
+            var rect = $panel[0].getBoundingClientRect();
+            var edgeSize = 10;
+            var horizontal = '';
+            var vertical = '';
+
+            if (event.clientX <= rect.left + edgeSize) {
+                horizontal = 'w';
+            } else if (event.clientX >= rect.right - edgeSize) {
+                horizontal = 'e';
+            }
+
+            if (event.clientY <= rect.top + edgeSize) {
+                vertical = 'n';
+            } else if (event.clientY >= rect.bottom - edgeSize) {
+                vertical = 's';
+            }
+
+            return vertical + horizontal;
+        }
+
+        function getResizeCursor(direction) {
+            var cursors = {
+                n: 'ns-resize',
+                s: 'ns-resize',
+                e: 'ew-resize',
+                w: 'ew-resize',
+                ne: 'nesw-resize',
+                sw: 'nesw-resize',
+                nw: 'nwse-resize',
+                se: 'nwse-resize'
+            };
+            return cursors[direction] || '';
+        }
+
+        function beginResize(event) {
+            if (event.which && event.which !== 1) {
+                return;
+            }
+
+            var direction = $(event.target).hasClass('ai-floating-resize-handle') ? 'se' : detectResizeDirection(event);
+            if (!direction) {
+                return;
+            }
+
+            var panelRect = $panel[0].getBoundingClientRect();
+            var rootRect = $root[0].getBoundingClientRect();
+            resizeState = {
+                startX: event.clientX,
+                startY: event.clientY,
+                originWidth: panelRect.width,
+                originHeight: panelRect.height,
+                originPanelLeft: panelRect.left,
+                originPanelTop: panelRect.top,
+                originRootLeft: rootRect.left,
+                originRootTop: rootRect.top,
+                direction: direction
+            };
+
+            $(document).on('mousemove.aiFloatingResize', onResizeMove);
+            $(document).on('mouseup.aiFloatingResize', onResizeEnd);
+            $root.addClass('is-resizing');
+            $root[0].style.setProperty('--ai-floating-resize-cursor', getResizeCursor(direction) || 'nwse-resize');
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        function onResizeMove(event) {
+            if (!resizeState) {
+                return;
+            }
+
+            var deltaX = event.clientX - resizeState.startX;
+            var deltaY = event.clientY - resizeState.startY;
+            var bounds = getViewportResizeBounds();
+            var width = resizeState.originWidth;
+            var height = resizeState.originHeight;
+            var left = resizeState.originRootLeft;
+            var top = resizeState.originRootTop;
+
+            if (resizeState.direction.indexOf('e') !== -1) {
+                width = resizeState.originWidth + deltaX;
+            }
+            if (resizeState.direction.indexOf('s') !== -1) {
+                height = resizeState.originHeight + deltaY;
+            }
+            if (resizeState.direction.indexOf('w') !== -1) {
+                width = resizeState.originWidth - deltaX;
+            }
+            if (resizeState.direction.indexOf('n') !== -1) {
+                height = resizeState.originHeight - deltaY;
+            }
+
+            width = Math.min(Math.max(width, bounds.minWidth), bounds.maxWidth);
+            height = Math.min(Math.max(height, bounds.minHeight), bounds.maxHeight);
+
+            if (resizeState.direction.indexOf('w') !== -1) {
+                left = resizeState.originRootLeft + (resizeState.originWidth - width);
+            }
+            if (resizeState.direction.indexOf('n') !== -1) {
+                top = resizeState.originRootTop + (resizeState.originHeight - height);
+            }
+
+            applyPanelSize({ width: width, height: height });
+            applyPosition({ left: left, top: top });
+        }
+
+        function onResizeEnd() {
+            if (!resizeState) {
+                return;
+            }
+
+            $(document).off('.aiFloatingResize');
+            $root.removeClass('is-resizing');
+            $root[0].style.setProperty('--ai-floating-resize-cursor', 'nwse-resize');
+            resizeState = null;
+            savePanelSize();
+            writeLocalJSON(positionKey, getCurrentPosition());
+        }
+
         function snapToBottomRight() {
             var position = defaultPosition();
             applyPosition(position);
@@ -691,6 +1074,12 @@
             } else {
                 snapToBottomRight();
             }
+        }
+
+        function refreshResizeConstraints() {
+            applyPanelSize(getPanelSize());
+            applyPosition(getCurrentPosition());
+            refreshInnerLayoutBounds();
         }
 
         function defaultRestoreBtnPosition() {
@@ -1453,12 +1842,37 @@
         applyMascotTheme();
         setHidden(sessionStorage.getItem(hiddenKey) === '1');
         setPanelOpen(sessionStorage.getItem(panelKey) === '1' && sessionStorage.getItem(hiddenKey) !== '1');
+        getPanelMinimumSize();
+        restorePanelSize();
+        restoreInnerLayout();
         initPosition();
         initRestoreBtnPosition();
         bindLivePageSignals();
         initHistory();
 
         $launcher.on('mousedown', beginDrag);
+        $panel.on('mousedown', beginResize);
+        $panel.on('mousedown', '.ai-floating-layout-handle', beginInnerLayoutDrag);
+        $panel.on('mousedown', '.ai-floating-layout-resize', beginInnerLayoutResize);
+        $panel.on('dblclick', function (event) {
+            if ($(event.target).closest('.ai-floating-panel-tools, textarea, button, a, input, .ai-floating-section-body').length) {
+                return;
+            }
+            resetPanelSize();
+        });
+        $panel.on('mousemove', function (event) {
+            if ($root.hasClass('is-resizing')) {
+                return;
+            }
+            var cursor = getResizeCursor(detectResizeDirection(event));
+            $panel.css('cursor', cursor || 'default');
+        });
+        $panel.on('mouseleave', function () {
+            if (!$root.hasClass('is-resizing')) {
+                $panel.css('cursor', 'default');
+            }
+        });
+        $(window).on('resize.aiFloatingPanel', refreshResizeConstraints);
 
         $('#aiFloatingCollapse').on('click', function () {
             setPanelOpen(false);
