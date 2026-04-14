@@ -6,10 +6,9 @@ import com.oAT.web.esDao.entity.ResourceIndex;
 import com.oAT.web.service.ResourceService;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.document.Document;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
-import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.UpdateQuery;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -19,7 +18,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Comparator;
 
@@ -31,7 +29,7 @@ public class ResourceServiceImpl implements ResourceService, InitializingBean{
     @Autowired
     ResourceRepository resourceRepository;
     @Autowired
-    ElasticsearchRestTemplate elasticsearchTemplate;
+    ElasticsearchOperations elasticsearchOperations;
 
     @org.springframework.beans.factory.annotation.Value("${oat.data.path:${user.home}/.oAT/cache/}")
     private String cacheRoot;
@@ -93,7 +91,7 @@ public class ResourceServiceImpl implements ResourceService, InitializingBean{
             UpdateQuery updateQuery = UpdateQuery.builder(id)
                     .withDocument(doc)
                     .build();
-            elasticsearchTemplate.update(updateQuery, IndexCoordinates.of("resources"));
+            elasticsearchOperations.update(updateQuery, IndexCoordinates.of("resources"));
         }
     }
     // 注：并发调用会出现删除两次的情况

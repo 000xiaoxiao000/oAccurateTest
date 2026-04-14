@@ -184,10 +184,22 @@
                                     <button type="button" class="ai-anchor-filter-btn active" data-filter="all">全部</button>
                                     <button type="button" class="ai-anchor-filter-btn" data-filter="pending">仅看未回复</button>
                                 </div>
+                                <div class="ai-chat-anchors-search">
+                                    <div class="ai-chat-anchors-search-input-wrap">
+                                        <input id="aiAnchorSearchInput" type="text" placeholder="搜索问题关键词">
+                                        <button type="button" id="aiAnchorSearchClear" class="ai-chat-anchors-search-clear" aria-label="清空搜索" title="清空搜索">×</button>
+                                    </div>
+                                    <span id="aiAnchorSearchMeta" class="ai-chat-anchors-search-meta">全部</span>
+                                </div>
                                 <div class="ai-chat-anchors-tip">点击可快速定位到对应问答</div>
                             </div>
                         </div>
                         <div id="aiChatAnchorsList" class="ai-chat-anchors-list"></div>
+                    </div>
+
+                    <div class="ai-floating-anchors" id="aiFloatingAnchors" aria-label="右侧问答锚点导航">
+                        <div id="aiFloatingAnchorsList" class="ai-floating-anchors-list"></div>
+                        <div id="aiFloatingAnchorTooltip" class="ai-floating-anchor-tooltip" aria-hidden="true"></div>
                     </div>
 
                     <div id="aiMessageList" class="ai-message-list"></div>
