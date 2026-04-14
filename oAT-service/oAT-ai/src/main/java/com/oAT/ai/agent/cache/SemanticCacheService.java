@@ -10,6 +10,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 语义缓存服务
@@ -296,7 +297,7 @@ public class SemanticCacheService {
         private final String answer;
         private final String usedTools;
         private final long createTime;
-        private volatile long hitCount;
+        private final AtomicLong hitCount = new AtomicLong(0);
         private static final long TTL_MS = 5 * 60 * 1000; // 5分钟
 
         SemanticCacheEntry(String originalQuestion, String answer, String usedTools, long createTime) {
@@ -304,7 +305,6 @@ public class SemanticCacheService {
             this.answer = answer;
             this.usedTools = usedTools;
             this.createTime = createTime;
-            this.hitCount = 0;
         }
 
         boolean isExpired() {
@@ -312,10 +312,10 @@ public class SemanticCacheService {
         }
 
         void recordHit() {
-            this.hitCount++;
+            this.hitCount.incrementAndGet();
         }
 
-        long getHitCount() { return hitCount; }
+        long getHitCount() { return hitCount.get(); }
         String getAnswer() { return answer; }
         String getUsedTools() { return usedTools; }
         long getCreateTime() { return createTime; }
