@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.util.Locale;
 
 /**
  * AI 大模型配置类
@@ -26,6 +27,7 @@ public class AIConfig implements AIConfigProperties {
      * LLM 提供商类型
      */
     public enum Provider {
+        AUTO,
         OLLAMA,
         OPENAI,
         DEEPSEEK,
@@ -38,9 +40,9 @@ public class AIConfig implements AIConfigProperties {
     private boolean enabled = false;
 
     /**
-     * LLM 提供商 (ollama, openai, deepseek, custom)
+     * LLM 提供商 (auto, ollama, openai, deepseek, custom)
      */
-    private String provider = "ollama";
+    private String provider = "auto";
 
     /**
      * API 基础 URL
@@ -165,8 +167,8 @@ public class AIConfig implements AIConfigProperties {
             return null;
         }
 
-        Provider providerType = parseProvider(this.provider);
-        logger.info("Initializing AI LLM with provider: {}, model: {}", providerType, model);
+        Provider providerType = resolveProvider();
+        logger.info("Initializing AI LLM with provider: {}, model: {}, baseUrl: {}", providerType, model, resolveApiBaseUrl(providerType));
 
         switch (providerType) {
             case OLLAMA:
@@ -174,6 +176,7 @@ public class AIConfig implements AIConfigProperties {
             case OPENAI:
             case DEEPSEEK:
             case CUSTOM:
+            case AUTO:
             default:
                 return createOpenAiCompatibleModel(providerType);
         }
@@ -181,14 +184,42 @@ public class AIConfig implements AIConfigProperties {
 
     private Provider parseProvider(String providerStr) {
         if (!StringUtils.hasText(providerStr)) {
-            return Provider.OLLAMA;
+            return Provider.AUTO;
         }
         try {
-            return Provider.valueOf(providerStr.toUpperCase());
+            return Provider.valueOf(providerStr.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            logger.warn("Unknown provider: {}, using CUSTOM mode", providerStr);
+            logger.warn("Unknown provider: {}, using AUTO mode", providerStr);
+            return Provider.AUTO;
+        }
+    }
+
+    private Provider resolveProvider() {
+        Provider configuredProvider = parseProvider(this.provider);
+        if (configuredProvider == Provider.AUTO) {
+            return detectProviderFromConnectionSettings();
+        }
+
+        if (configuredProvider == Provider.OLLAMA && shouldUseOpenAiCompatibleMode()) {
+            Provider detectedProvider = detectProviderFromConnectionSettings();
+            logger.info("Provider is set to OLLAMA, but baseUrl/apiKey indicate {}. Switching automatically.", detectedProvider);
+            return detectedProvider;
+        }
+
+        return configuredProvider;
+    }
+
+    private Provider detectProviderFromConnectionSettings() {
+        if (looksLikeOllama(baseUrl) && !StringUtils.hasText(apiKey)) {
+            return Provider.OLLAMA;
+        }
+        if (looksLikeDeepSeek(baseUrl)) {
+            return Provider.DEEPSEEK;
+        }
+        if (looksLikeDashScope(baseUrl)) {
             return Provider.CUSTOM;
         }
+        return StringUtils.hasText(apiKey) ? Provider.CUSTOM : Provider.OLLAMA;
     }
 
     /**
@@ -196,7 +227,7 @@ public class AIConfig implements AIConfigProperties {
      */
     private ChatLanguageModel createOllamaModel() {
         return OllamaChatModel.builder()
-                .baseUrl(normalizeBaseUrl(baseUrl))
+                .baseUrl(normalizeOllamaBaseUrl(baseUrl))
                 .modelName(model)
                 .numPredict(maxTokens)
                 .temperature(temperature)
@@ -208,16 +239,9 @@ public class AIConfig implements AIConfigProperties {
      * 创建 OpenAI 兼容模型 (OpenAI, DeepSeek, 自定义)
      */
     private ChatLanguageModel createOpenAiCompatibleModel(Provider providerType) {
-        String apiUrl = normalizeBaseUrl(baseUrl);
-        if (providerType == Provider.DEEPSEEK) {
-            apiUrl = "https://api.deepseek.com/v1";
-        } else if (providerType == Provider.OPENAI && !StringUtils.hasText(baseUrl)) {
-            apiUrl = "https://api.openai.com/v1";
-        }
-
         return OpenAiChatModel.builder()
-                .baseUrl(apiUrl)
-                .apiKey(apiKey != null ? apiKey : "none")
+                .baseUrl(resolveApiBaseUrl(providerType))
+                .apiKey(StringUtils.hasText(apiKey) ? apiKey : "none")
                 .modelName(model)
                 .maxTokens(maxTokens)
                 .temperature(temperature)
@@ -225,20 +249,83 @@ public class AIConfig implements AIConfigProperties {
                 .build();
     }
 
+    private String resolveApiBaseUrl(Provider providerType) {
+        if (providerType == Provider.DEEPSEEK) {
+            return "https://api.deepseek.com/v1";
+        }
+
+        if (!StringUtils.hasText(baseUrl)) {
+            return "https://api.openai.com/v1";
+        }
+
+        if (looksLikeDashScope(baseUrl)) {
+            return normalizeOpenAiCompatibleBaseUrl(appendPathIfMissing(baseUrl, "/compatible-mode/v1"));
+        }
+
+        if (providerType == Provider.OPENAI) {
+            return normalizeOpenAiCompatibleBaseUrl(appendPathIfMissing(baseUrl, "/v1"));
+        }
+
+        return normalizeOpenAiCompatibleBaseUrl(baseUrl);
+    }
+
     /**
-     * 标准化基础 URL（移除末尾的 /v1 或 /）
+     * 标准化 Ollama 基础 URL
      */
-    private String normalizeBaseUrl(String url) {
+    private String normalizeOllamaBaseUrl(String url) {
+        return trimTrailingSlash(url);
+    }
+
+    /**
+     * 标准化 OpenAI 兼容基础 URL
+     */
+    private String normalizeOpenAiCompatibleBaseUrl(String url) {
+        return trimTrailingSlash(url);
+    }
+
+    private String appendPathIfMissing(String url, String suffix) {
+        String normalizedUrl = trimTrailingSlash(url);
+        if (!StringUtils.hasText(normalizedUrl)) {
+            return normalizedUrl;
+        }
+        if (normalizedUrl.endsWith(suffix)) {
+            return normalizedUrl;
+        }
+        return normalizedUrl + suffix;
+    }
+
+    private String trimTrailingSlash(String url) {
         if (!StringUtils.hasText(url)) {
             return url;
-        }
-        // 对于 Ollama，保留基础地址
-        if (url.endsWith("/v1")) {
-            return url.substring(0, url.length() - 3);
         }
         if (url.endsWith("/")) {
             return url.substring(0, url.length() - 1);
         }
         return url;
+    }
+
+    private boolean looksLikeOllama(String url) {
+        return containsIgnoreCase(url, "localhost:11434") || containsIgnoreCase(url, "127.0.0.1:11434");
+    }
+
+    private boolean looksLikeDeepSeek(String url) {
+        return containsIgnoreCase(url, "deepseek.com");
+    }
+
+    private boolean looksLikeDashScope(String url) {
+        return containsIgnoreCase(url, "dashscope.aliyuncs.com");
+    }
+
+    private boolean shouldUseOpenAiCompatibleMode() {
+        return StringUtils.hasText(apiKey)
+                || looksLikeDashScope(baseUrl)
+                || looksLikeDeepSeek(baseUrl)
+                || containsIgnoreCase(baseUrl, "/v1")
+                || containsIgnoreCase(baseUrl, "/compatible-mode");
+    }
+
+    private boolean containsIgnoreCase(String value, String needle) {
+        return StringUtils.hasText(value)
+                && value.toLowerCase(Locale.ROOT).contains(needle.toLowerCase(Locale.ROOT));
     }
 }
