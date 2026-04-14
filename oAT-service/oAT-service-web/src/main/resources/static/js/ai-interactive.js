@@ -374,7 +374,8 @@
             });
         }
 
-        function renderChatAnchors(session) {
+        function renderChatAnchors(session, options) {
+            options = options || {};
             if (!$chatAnchorsList.length) return;
             var previousStates = {};
             $chatAnchorsList.find('.ai-chat-anchor-item').each(function () {
@@ -433,7 +434,10 @@
                     $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + anchor.id + '"]').addClass('just-answered');
                 }
             });
-            syncActiveAnchorByScroll();
+            // 仅在非静默模式下同步滚动状态
+            if (!options.silent) {
+                syncActiveAnchorByScroll();
+            }
         }
 
         function setActiveAnchor(anchorId) {
@@ -456,10 +460,11 @@
         function syncActiveAnchorByScroll() {
             if (!$messageList.length) return;
             var container = $messageList[0];
-            var containerTop = container.scrollTop;
+            var containerRect = container.getBoundingClientRect();
             var activeAnchorId = null;
             $messageList.find('.ai-message-section-anchor').each(function () {
-                if (this.offsetTop - 20 <= containerTop) {
+                var targetRect = this.getBoundingClientRect();
+                if (targetRect.top - containerRect.top - 20 <= 0) {
                     activeAnchorId = $(this).data('anchor-id');
                 }
             });
@@ -521,9 +526,9 @@
         function getAnchorScrollTop(anchorElement) {
             var container = $messageList[0];
             if (!container || !anchorElement) return 0;
-            var containerRect = container.getBoundingClientRect();
-            var targetRect = anchorElement.getBoundingClientRect();
-            return container.scrollTop + (targetRect.top - containerRect.top) - 12;
+            // 计算目标元素相对于容器内容顶部的滚动位置
+            // 方法：当前滚动位置 + (目标元素视口位置 - 容器视口位置)
+            return container.scrollTop + anchorElement.getBoundingClientRect().top - container.getBoundingClientRect().top;
         }
 
         function expandAnchorFromHash() {
@@ -534,11 +539,14 @@
                 anchorFilterMode = 'all';
                 $('.ai-anchor-filter-btn.active').removeClass('active');
                 $('.ai-anchor-filter-btn[data-filter="all"]').addClass('active');
-                renderChatAnchors(getActiveSession());
+                renderChatAnchors(getActiveSession(), { silent: true });
             }
-            setTimeout(function () {
-                scrollToAnchor(anchorId);
-            }, 60);
+            // 延迟确保DOM渲染完成，使用requestAnimationFrame确保布局计算准确
+            requestAnimationFrame(function() {
+                setTimeout(function () {
+                    scrollToAnchor(anchorId);
+                }, 100);
+            });
         }
 
         function highlightAnchorTarget(anchorId) {
@@ -555,11 +563,11 @@
             if (!$target.length) return;
             var container = $messageList[0];
             var target = $target[0];
+            // 先禁用滚动监听，避免滚动动画干扰
+            $messageList.off('scroll', syncActiveAnchorByScroll);
             var nextTop = getAnchorScrollTop(target);
+            // 使用即时滚动确保准确定位，不使用平滑动画避免中间状态干扰
             container.scrollTop = Math.max(0, nextTop);
-            if (typeof container.scrollTo === 'function') {
-                container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
-            }
             if (window.location.hash !== '#' + anchorId) {
                 if (window.history && window.history.replaceState) {
                     window.history.replaceState(null, '', '#' + anchorId);
@@ -569,6 +577,11 @@
             }
             setActiveAnchor(anchorId);
             highlightAnchorTarget(anchorId);
+            // 滚动完成后重新启用监听
+            setTimeout(function() {
+                $messageList.on('scroll', syncActiveAnchorByScroll);
+                syncActiveAnchorByScroll();
+            }, 150);
         }
 
         function shouldCollapseMessage(message) {
@@ -881,7 +894,7 @@
                 }
                 appendMessage(item.role, item.title, item.message, item.actions || [], messageOptions);
             });
-            renderChatAnchors(s);
+            renderChatAnchors(s, { silent: true });
             renderQuickLinks(s.quickLinks || []); renderFollowUps(s.suggestions || []); renderTimeline(s); updateTimelineSummary(s);
             if (!timelineState.hasUserPreference) {
                 var firstSessionId = sortSessions(sessions)[0] ? sortSessions(sessions)[0].id : null;
