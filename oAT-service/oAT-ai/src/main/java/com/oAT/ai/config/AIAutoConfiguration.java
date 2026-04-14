@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Import;
  * 仅在 LangChain4j 类存在时激活 (JDK 17+ 环境)
  */
 @Configuration
-@ConditionalOnClass(name = "dev.langchain4j.model.chat.ChatLanguageModel")
+@ConditionalOnClass(name = {"dev.langchain4j.model.openai.OpenAiChatModel", "dev.langchain4j.model.ollama.OllamaChatModel"})
 @Import({AIConfig.class, AIEnhancedConfig.class, LLMServiceImpl.class, AIAgentService.class})
 public class AIAutoConfiguration {
 

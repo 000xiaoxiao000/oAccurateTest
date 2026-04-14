@@ -1,7 +1,6 @@
 package com.oAT.ai.agent;
 
 import com.oAT.ai.config.AIConfig;
-import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,7 +42,7 @@ public class DynamicLLMSwitcher {
         private final int timeoutSeconds;
         private final String[] strengths;    // 擅长领域: simple/complex/code/long-context/vision
         private final int priority;          // 优先级（数字越小优先越高）
-        private ChatLanguageModel instance;  // 运行时实例
+        private Object instance;  // 运行时实例
 
         public ModelConfig(String name, String provider, String model, String baseUrl,
                           String apiKey, int maxTokens, double temperature,
@@ -79,8 +78,8 @@ public class DynamicLLMSwitcher {
         public int getTimeoutSeconds() { return timeoutSeconds; }
         public String[] getStrengths() { return strengths; }
         public int getPriority() { return priority; }
-        public ChatLanguageModel getInstance() { return instance; }
-        public void setInstance(ChatLanguageModel instance) { this.instance = instance; }
+        public Object getInstance() { return instance; }
+        public void setInstance(Object instance) { this.instance = instance; }
     }
 
     /** 任务复杂度分类 */
@@ -286,10 +285,10 @@ public class DynamicLLMSwitcher {
     }
 
     /**
-     * 获取当前活动模型的 ChatLanguageModel 实例
+     * 获取当前活动模型实例
      * 如果有自定义实例则使用，否则返回 null（由外部创建）
      */
-    public ChatLanguageModel getActiveModelInstance() {
+    public Object getActiveModelInstance() {
         if (activeModelIndex.get() < models.size()) {
             return models.get(activeModelIndex.get()).getInstance();
         }

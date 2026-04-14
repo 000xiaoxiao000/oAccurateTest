@@ -1,6 +1,5 @@
 package com.oAT.ai.config;
 
-import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import org.slf4j.Logger;
@@ -157,11 +156,11 @@ public class AIConfig implements AIConfigProperties {
     }
 
     /**
-     * 创建 ChatLanguageModel Bean
+     * 创建 Chat Model Bean
      * 根据 provider 配置创建对应的模型实例
      */
     @Bean
-    public ChatLanguageModel chatLanguageModel() {
+    public Object chatLanguageModel() {
         if (!enabled) {
             logger.info("AI LLM is disabled, chatLanguageModel bean will not be created");
             return null;
@@ -225,7 +224,7 @@ public class AIConfig implements AIConfigProperties {
     /**
      * 创建 Ollama 模型
      */
-    private ChatLanguageModel createOllamaModel() {
+    private Object createOllamaModel() {
         return OllamaChatModel.builder()
                 .baseUrl(normalizeOllamaBaseUrl(baseUrl))
                 .modelName(model)
@@ -238,13 +237,16 @@ public class AIConfig implements AIConfigProperties {
     /**
      * 创建 OpenAI 兼容模型 (OpenAI, DeepSeek, 自定义)
      */
-    private ChatLanguageModel createOpenAiCompatibleModel(Provider providerType) {
+    private Object createOpenAiCompatibleModel(Provider providerType) {
         return OpenAiChatModel.builder()
                 .baseUrl(resolveApiBaseUrl(providerType))
                 .apiKey(StringUtils.hasText(apiKey) ? apiKey : "none")
                 .modelName(model)
                 .maxTokens(maxTokens)
                 .temperature(temperature)
+                .parallelToolCalls(false)
+                .logRequests(true)
+                .logResponses(true)
                 .timeout(Duration.ofSeconds(timeout))
                 .build();
     }

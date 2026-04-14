@@ -28,7 +28,9 @@
         var hiddenKey = storagePrefix + ':hidden';
         var panelKey = storagePrefix + ':panel';
         var panelSizeKey = storagePrefix + ':panel-size';
-        var innerLayoutKey = storagePrefix + ':inner-layout';
+        var panelLayoutKey = storagePrefix + ':panel-layout';
+        var layoutLockedKey = storagePrefix + ':layout-locked';
+        var panelLayoutUndoKey = storagePrefix + ':panel-layout-undo';
         var lastPageKey = storagePrefix + ':last-page';
         var positionKey = storagePrefix + ':position';
         var restoreBtnKey = storagePrefix + ':restore-btn-pos';
@@ -43,6 +45,11 @@
         var $questionInput = $('#aiFloatingQuestionInput');
         var $sendButton = $('#aiFloatingSendButton');
         var $state = $('#aiFloatingState');
+        var $messageSection = $('#aiFloatingMessageSection');
+        var $contextSection = $('#aiFloatingContextStatus');
+        var $quickSection = $('#aiFloatingQuickLinkSection');
+        var $starterSection = $('#aiFloatingStarterSection');
+        var $compose = $panel.find('.ai-floating-compose');
         var fwCurrentAjaxRequest = null;
         var fwPendingQuestion = '';
         var fwUploadedImageData = null;  // Floating widget 图片数据
@@ -52,8 +59,10 @@
         var mouseY = window.innerHeight / 2;
         var dragState = null;
         var resizeState = null;
-        var innerLayoutDragState = null;
-        var innerLayoutResizeState = null;
+        var layoutDragState = null;
+        var layoutResizeState = null;
+        var $layoutGuides = null;
+        var $layoutPreview = null;
         var minPanelSize = null;
         var currentContext = detectPageContext(window.location.pathname);
         var $hoveredRow = null;
@@ -671,6 +680,694 @@
             return minPanelSize;
         }
 
+        function getLayoutItems() {
+            return [
+                { id: 'message', $el: $messageSection, minWidth: 180, minHeight: 120, preferredHeight: 190 },
+                { id: 'context', $el: $contextSection, minWidth: 160, minHeight: 48, preferredHeight: 68 },
+                { id: 'quick', $el: $quickSection, minWidth: 180, minHeight: 110, preferredHeight: 150 },
+                { id: 'starter', $el: $starterSection, minWidth: 180, minHeight: 86, preferredHeight: 114 },
+                { id: 'compose', $el: $compose, minWidth: 220, minHeight: 122, preferredHeight: 144 }
+            ];
+        }
+
+        function getPanelInnerBounds() {
+            var $header = $panel.find('.ai-floating-panel-header');
+            var panelWidth = $panel.innerWidth();
+            var panelHeight = $panel.innerHeight();
+            var headerBottom = $header.length ? ($header.position().top + $header.outerHeight()) : 0;
+            var padding = 10;
+            var topOffset = headerBottom + 8;
+            var bottomOffset = padding;
+            return {
+                width: Math.max(0, panelWidth - padding * 2),
+                height: Math.max(0, panelHeight),
+                leftOffset: padding,
+                topOffset: topOffset,
+                bottomOffset: bottomOffset,
+                usableHeight: Math.max(0, panelHeight - topOffset - bottomOffset)
+            };
+        }
+
+        function rectsOverlap(a, b) {
+            return !(a.left + a.width <= b.left || b.left + b.width <= a.left || a.top + a.height <= b.top || b.top + b.height <= a.top);
+        }
+
+        function updateUndoLayoutButton() {
+            var hasUndo = !!readLocalJSON(panelLayoutUndoKey, null);
+            $('#aiFloatingUndoLayout').prop('disabled', !hasUndo).toggleClass('is-disabled', !hasUndo);
+        }
+
+        function snapshotPanelLayoutForUndo() {
+            writeLocalJSON(panelLayoutUndoKey, collectLayoutMap());
+            updateUndoLayoutButton();
+        }
+
+        function restoreUndoPanelLayout() {
+            var undoLayout = readLocalJSON(panelLayoutUndoKey, null);
+            if (!undoLayout) {
+                return;
+            }
+            writeLocalJSON(panelLayoutUndoKey, null);
+            applyLayoutMap(undoLayout);
+            savePanelLayout();
+            updateUndoLayoutButton();
+        }
+
+        function setLayoutLocked(locked) {
+            $panel.toggleClass('is-layout-locked', locked);
+            localStorage.setItem(layoutLockedKey, locked ? '1' : '0');
+            var $btn = $('#aiFloatingToggleLayoutLock');
+            $btn.text(locked ? '🔒' : '🔓');
+            $btn.attr('title', locked ? '解锁内部布局，允许拖动和缩放' : '锁定内部布局，防止误拖动');
+        }
+
+        function isLayoutLocked() {
+            return $panel.hasClass('is-layout-locked');
+        }
+
+        function snapValue(value, candidates, threshold) {
+            var snapped = value;
+            var minDelta = threshold + 1;
+            var snappedTo = null;
+            $.each(candidates, function (_, candidate) {
+                var delta = Math.abs(candidate - value);
+                if (delta <= threshold && delta < minDelta) {
+                    snapped = candidate;
+                    minDelta = delta;
+                    snappedTo = candidate;
+                }
+            });
+            return {
+                value: snapped,
+                guide: snappedTo
+            };
+        }
+
+        function ensureLayoutGuides() {
+            if ($layoutGuides && $layoutGuides.length) {
+                return;
+            }
+            $layoutGuides = $('<div class="ai-floating-layout-guide ai-floating-layout-guide-x"></div><div class="ai-floating-layout-guide ai-floating-layout-guide-y"></div>');
+            $panel.append($layoutGuides);
+        }
+
+        function ensureLayoutPreview() {
+            if ($layoutPreview && $layoutPreview.length) {
+                return;
+            }
+            $layoutPreview = $('<div class="ai-floating-layout-preview"></div>');
+            $panel.append($layoutPreview);
+        }
+
+        function hideLayoutPreview() {
+            ensureLayoutPreview();
+            $layoutPreview.removeClass('is-visible');
+        }
+
+        function highlightLayoutTargets(candidate, movingId) {
+            $.each(getLayoutItems(), function (_, item) {
+                item.$el.removeClass('is-layout-target');
+                if (item.id === movingId) {
+                    return;
+                }
+                var rect = {
+                    left: parseFloat(item.$el[0].style.left) || item.$el.position().left,
+                    top: parseFloat(item.$el[0].style.top) || item.$el.position().top,
+                    width: parseFloat(item.$el[0].style.width) || item.$el.outerWidth(),
+                    height: parseFloat(item.$el[0].style.height) || item.$el.outerHeight()
+                };
+                var gapThreshold = 12;
+                var nearHorizontal = Math.abs((candidate.left + candidate.width) - rect.left) <= gapThreshold || Math.abs(candidate.left - (rect.left + rect.width)) <= gapThreshold;
+                var overlapVertical = !(candidate.top + candidate.height < rect.top || rect.top + rect.height < candidate.top);
+                var nearVertical = Math.abs((candidate.top + candidate.height) - rect.top) <= gapThreshold || Math.abs(candidate.top - (rect.top + rect.height)) <= gapThreshold;
+                var overlapHorizontal = !(candidate.left + candidate.width < rect.left || rect.left + rect.width < candidate.left);
+                if ((nearHorizontal && overlapVertical) || (nearVertical && overlapHorizontal)) {
+                    item.$el.addClass('is-layout-target');
+                }
+            });
+        }
+
+        function clearLayoutTargetHighlights() {
+            $.each(getLayoutItems(), function (_, item) {
+                item.$el.removeClass('is-layout-target');
+            });
+        }
+
+        function showLayoutPreview(rect) {
+            ensureLayoutPreview();
+            $layoutPreview.css({
+                left: rect.left + 'px',
+                top: rect.top + 'px',
+                width: rect.width + 'px',
+                height: rect.height + 'px'
+            }).addClass('is-visible');
+        }
+
+        function hideLayoutGuides() {
+            ensureLayoutGuides();
+            $panel.find('.ai-floating-layout-guide').removeClass('is-visible');
+        }
+
+        function showLayoutGuides(guides, rect) {
+            ensureLayoutGuides();
+            var bounds = getPanelInnerBounds();
+            var $guideX = $panel.find('.ai-floating-layout-guide-x');
+            var $guideY = $panel.find('.ai-floating-layout-guide-y');
+            if (guides.x !== null && guides.x !== undefined) {
+                $guideX.css({ left: guides.x + 'px', top: bounds.topOffset + 'px', height: Math.max(0, $panel.innerHeight() - bounds.topOffset - bounds.bottomOffset) + 'px' }).addClass('is-visible');
+            } else {
+                $guideX.removeClass('is-visible');
+            }
+            if (guides.y !== null && guides.y !== undefined) {
+                $guideY.css({ top: guides.y + 'px', left: bounds.leftOffset + 'px', width: Math.max(0, bounds.width) + 'px' }).addClass('is-visible');
+            } else {
+                $guideY.removeClass('is-visible');
+            }
+        }
+
+        function applyLayoutSnap(rect, movingId) {
+            var snapped = $.extend({}, rect);
+            var threshold = 10;
+            var bounds = getPanelInnerBounds();
+            var itemMeta = getLayoutItems().filter(function (item) { return item.id === movingId; })[0];
+            var horizontalCandidates = [bounds.leftOffset, bounds.leftOffset + 10, Math.max(bounds.leftOffset, bounds.leftOffset + bounds.width - rect.width)];
+            var verticalCandidates = [bounds.topOffset, Math.max(bounds.topOffset, bounds.topOffset + bounds.usableHeight - rect.height)];
+
+            $.each(collectLayoutMap(), function (id, otherRect) {
+                if (id === movingId) {
+                    return;
+                }
+                horizontalCandidates.push(otherRect.left);
+                horizontalCandidates.push(otherRect.left + otherRect.width);
+                horizontalCandidates.push(otherRect.left - rect.width);
+                horizontalCandidates.push(otherRect.left + otherRect.width - rect.width);
+                verticalCandidates.push(otherRect.top);
+                verticalCandidates.push(otherRect.top + otherRect.height);
+                verticalCandidates.push(otherRect.top - rect.height);
+                verticalCandidates.push(otherRect.top + otherRect.height - rect.height);
+            });
+
+            var snappedLeft = snapValue(snapped.left, horizontalCandidates, threshold);
+            var snappedTop = snapValue(snapped.top, verticalCandidates, threshold);
+            snapped.left = snappedLeft.value;
+            snapped.top = snappedTop.value;
+            snapped = clampLayoutRect({ left: snapped.left, top: snapped.top, width: snapped.width, height: snapped.height }, itemMeta);
+            snapped.guides = {
+                x: snappedLeft.guide,
+                y: snappedTop.guide
+            };
+            return snapped;
+        }
+
+        function getDefaultLayoutMap() {
+            var bounds = getPanelInnerBounds();
+            var top = bounds.topOffset;
+            var gap = 10;
+            var sideWidth = Math.max(180, Math.round(bounds.width * 0.34));
+            var mainWidth = Math.max(200, bounds.width - sideWidth - gap);
+            var messageHeight = Math.max(160, Math.round(bounds.usableHeight * 0.48));
+            var contextHeight = 68;
+            var quickHeight = 136;
+            var starterHeight = 104;
+            var composeHeight = 142;
+            var sideHeight = Math.max(220, bounds.usableHeight - composeHeight - gap);
+            var quickActualHeight = Math.min(quickHeight, Math.max(110, sideHeight - starterHeight - gap));
+            var starterActualHeight = Math.max(86, sideHeight - quickActualHeight - gap);
+            return {
+                message: { left: bounds.leftOffset, top: top, width: mainWidth, height: messageHeight },
+                context: { left: bounds.leftOffset, top: top + messageHeight + gap, width: mainWidth, height: contextHeight },
+                quick: { left: bounds.leftOffset + mainWidth + gap, top: top, width: sideWidth, height: quickActualHeight },
+                starter: { left: bounds.leftOffset + mainWidth + gap, top: top + quickActualHeight + gap, width: sideWidth, height: starterActualHeight },
+                compose: { left: bounds.leftOffset, top: bounds.topOffset + bounds.usableHeight - composeHeight, width: bounds.width, height: composeHeight }
+            };
+        }
+
+        function clampLayoutRect(rect, item) {
+            var bounds = getPanelInnerBounds();
+            var width = Math.min(Math.max(rect.width, item.minWidth), bounds.width);
+            var height = Math.min(Math.max(rect.height, item.minHeight), Math.max(item.minHeight, bounds.usableHeight));
+            return {
+                left: Math.min(Math.max(rect.left, bounds.leftOffset), Math.max(bounds.leftOffset, bounds.leftOffset + bounds.width - width)),
+                top: Math.min(Math.max(rect.top, bounds.topOffset), Math.max(bounds.topOffset, bounds.topOffset + bounds.usableHeight - height)),
+                width: width,
+                height: height
+            };
+        }
+
+        function collectLayoutMap() {
+            var map = {};
+            $.each(getLayoutItems(), function (_, item) {
+                var style = item.$el[0].style;
+                map[item.id] = {
+                    left: parseFloat(style.left) || item.$el.position().left,
+                    top: parseFloat(style.top) || item.$el.position().top,
+                    width: parseFloat(style.width) || item.$el.outerWidth(),
+                    height: parseFloat(style.height) || item.$el.outerHeight()
+                };
+            });
+            return map;
+        }
+
+        function applyLayoutMap(layoutMap) {
+            $.each(getLayoutItems(), function (_, item) {
+                var rect = layoutMap[item.id];
+                if (!rect) {
+                    return;
+                }
+                var safeRect = clampLayoutRect(rect, item);
+                item.$el.css({
+                    left: safeRect.left + 'px',
+                    top: safeRect.top + 'px',
+                    width: safeRect.width + 'px',
+                    height: safeRect.height + 'px'
+                });
+            });
+        }
+
+        function hasLayoutCollision(layoutMap, movingId) {
+            var ids = [];
+            $.each(getLayoutItems(), function (_, item) {
+                if (layoutMap[item.id]) {
+                    ids.push(item.id);
+                }
+            });
+            for (var i = 0; i < ids.length; i++) {
+                for (var j = i + 1; j < ids.length; j++) {
+                    var idA = ids[i];
+                    var idB = ids[j];
+                    if (movingId && idA !== movingId && idB !== movingId) {
+                        continue;
+                    }
+                    if (rectsOverlap(layoutMap[idA], layoutMap[idB])) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function resolveSoftLayoutReflow(layoutMap, movingId) {
+            var resolved = $.extend(true, {}, layoutMap);
+            var bounds = getPanelInnerBounds();
+            var gap = 10;
+            var items = getLayoutItems();
+            var movingRect = resolved[movingId];
+            if (!movingRect) {
+                return resolved;
+            }
+
+            var sorted = items.slice(0).sort(function (a, b) {
+                if (a.id === movingId) {
+                    return -1;
+                }
+                if (b.id === movingId) {
+                    return 1;
+                }
+                return (resolved[a.id].top - resolved[b.id].top) || (resolved[a.id].left - resolved[b.id].left);
+            });
+
+            $.each(sorted, function (_, itemMeta) {
+                var rect = resolved[itemMeta.id];
+                if (!rect) {
+                    return;
+                }
+                rect = clampLayoutRect(rect, itemMeta);
+                if (itemMeta.id === movingId) {
+                    resolved[itemMeta.id] = rect;
+                    return;
+                }
+
+                var guard = 0;
+                while (rectsOverlap(rect, movingRect) && guard < 24) {
+                    var nextTop = movingRect.top + movingRect.height + gap;
+                    var maxTop = Math.max(bounds.topOffset, bounds.topOffset + bounds.usableHeight - rect.height);
+                    if (nextTop <= maxTop) {
+                        rect.top = nextTop;
+                    } else {
+                        var nextLeft = movingRect.left + movingRect.width + gap;
+                        var maxLeft = Math.max(bounds.leftOffset, bounds.leftOffset + bounds.width - rect.width);
+                        if (nextLeft <= maxLeft) {
+                            rect.left = nextLeft;
+                            rect.top = Math.min(Math.max(movingRect.top, bounds.topOffset), maxTop);
+                        } else {
+                            rect.top = Math.max(bounds.topOffset, movingRect.top - rect.height - gap);
+                            rect.left = Math.min(Math.max(rect.left, bounds.leftOffset), maxLeft);
+                        }
+                    }
+                    rect = clampLayoutRect(rect, itemMeta);
+                    guard += 1;
+                }
+                resolved[itemMeta.id] = rect;
+                movingRect = resolved[movingId];
+            });
+
+            return resolved;
+        }
+
+        function findAutoAvoidRect(layoutMap, movingId, baseRect, item, mode) {
+            var bounds = getPanelInnerBounds();
+            var gap = 10;
+            var attempts = [];
+            var topMin = bounds.topOffset;
+            var topMax = Math.max(bounds.topOffset, bounds.topOffset + bounds.usableHeight - baseRect.height);
+            var leftMax = Math.max(bounds.leftOffset, bounds.leftOffset + bounds.width - baseRect.width);
+
+            $.each(layoutMap, function (id, otherRect) {
+                if (id === movingId) {
+                    return;
+                }
+                attempts.push({ left: baseRect.left, top: otherRect.top - baseRect.height - gap, width: baseRect.width, height: baseRect.height });
+                attempts.push({ left: baseRect.left, top: otherRect.top + otherRect.height + gap, width: baseRect.width, height: baseRect.height });
+                attempts.push({ left: otherRect.left - baseRect.width - gap, top: baseRect.top, width: baseRect.width, height: baseRect.height });
+                attempts.push({ left: otherRect.left + otherRect.width + gap, top: baseRect.top, width: baseRect.width, height: baseRect.height });
+            });
+
+            attempts.push({ left: baseRect.left, top: topMin, width: baseRect.width, height: baseRect.height });
+            attempts.push({ left: baseRect.left, top: topMax, width: baseRect.width, height: baseRect.height });
+            attempts.push({ left: bounds.leftOffset, top: baseRect.top, width: baseRect.width, height: baseRect.height });
+            attempts.push({ left: leftMax, top: baseRect.top, width: baseRect.width, height: baseRect.height });
+
+            var best = null;
+            var bestScore = Number.MAX_VALUE;
+
+            $.each(attempts, function (_, attempt) {
+                var candidate = clampLayoutRect(attempt, item);
+                candidate = applyLayoutSnap(candidate, movingId);
+                var candidateMap = $.extend({}, layoutMap);
+                candidateMap[movingId] = candidate;
+                if (hasLayoutCollision(candidateMap, movingId)) {
+                    return;
+                }
+                var score = Math.abs(candidate.left - baseRect.left) + Math.abs(candidate.top - baseRect.top);
+                if (mode === 'resize') {
+                    score += Math.abs(candidate.width - baseRect.width) + Math.abs(candidate.height - baseRect.height);
+                }
+                if (score < bestScore) {
+                    best = candidate;
+                    bestScore = score;
+                }
+            });
+
+            return best;
+        }
+
+        function scalePanelLayout(previousBounds, nextBounds) {
+            if (!previousBounds || !nextBounds) {
+                restorePanelLayout();
+                return;
+            }
+
+            var prevUsableWidth = Math.max(1, previousBounds.width);
+            var prevUsableHeight = Math.max(1, previousBounds.usableHeight);
+            var nextUsableWidth = Math.max(1, nextBounds.width);
+            var nextUsableHeight = Math.max(1, nextBounds.usableHeight);
+            var widthRatio = nextUsableWidth / prevUsableWidth;
+            var heightRatio = nextUsableHeight / prevUsableHeight;
+            var scaled = {};
+
+            $.each(getLayoutItems(), function (_, item) {
+                var style = item.$el[0].style;
+                var left = parseFloat(style.left) || item.$el.position().left;
+                var top = parseFloat(style.top) || item.$el.position().top;
+                var width = parseFloat(style.width) || item.$el.outerWidth();
+                var height = parseFloat(style.height) || item.$el.outerHeight();
+                var relativeLeft = left - previousBounds.leftOffset;
+                var relativeTop = top - previousBounds.topOffset;
+
+                scaled[item.id] = {
+                    left: nextBounds.leftOffset + relativeLeft * widthRatio,
+                    top: nextBounds.topOffset + relativeTop * heightRatio,
+                    width: width * widthRatio,
+                    height: height * heightRatio
+                };
+            });
+
+            applyLayoutMap(scaled);
+            savePanelLayout();
+        }
+
+        function savePanelLayout() {
+            writeLocalJSON(panelLayoutKey, collectLayoutMap());
+            updateUndoLayoutButton();
+        }
+
+        function restorePanelLayout() {
+            var layout = readLocalJSON(panelLayoutKey, null) || getDefaultLayoutMap();
+            applyLayoutMap(layout);
+            if (hasLayoutCollision(collectLayoutMap())) {
+                applyLayoutMap(getDefaultLayoutMap());
+                savePanelLayout();
+            }
+        }
+
+        function resetPanelLayout() {
+            snapshotPanelLayoutForUndo();
+            applyLayoutMap(getDefaultLayoutMap());
+            clearLayoutTargetHighlights();
+            hideLayoutGuides();
+            hideLayoutPreview();
+            savePanelLayout();
+        }
+
+        function bringLayoutItemToFront($item) {
+            var maxZ = 1;
+            $.each(getLayoutItems(), function (_, item) {
+                maxZ = Math.max(maxZ, parseInt(item.$el.css('z-index'), 10) || 1);
+            });
+            $item.css('z-index', maxZ + 1);
+        }
+
+        function beginLayoutDrag(event) {
+            if (event.which && event.which !== 1) {
+                return;
+            }
+            if (isLayoutLocked()) {
+                return;
+            }
+            if ($(event.target).closest('button, a, textarea, input, .ai-floating-section-toggle, .ai-floating-layout-resizer').length) {
+                return;
+            }
+            var $item = $(event.currentTarget);
+            var item = $item.data('layout-item');
+            if (!item) {
+                return;
+            }
+            var position = $item.position();
+            layoutDragState = {
+                id: item.id,
+                $el: $item,
+                startX: event.clientX,
+                startY: event.clientY,
+                originLeft: position.left,
+                originTop: position.top
+            };
+            bringLayoutItemToFront($item);
+            snapshotPanelLayoutForUndo();
+            $(document).on('mousemove.aiFloatingLayoutDrag', onLayoutDragMove);
+            $(document).on('mouseup.aiFloatingLayoutDrag', onLayoutDragEnd);
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        function onLayoutDragMove(event) {
+            if (!layoutDragState) {
+                return;
+            }
+            var item = layoutDragState.$el.data('layout-item');
+            var current = collectLayoutMap();
+            var candidate = clampLayoutRect({
+                left: layoutDragState.originLeft + (event.clientX - layoutDragState.startX),
+                top: layoutDragState.originTop + (event.clientY - layoutDragState.startY),
+                width: current[layoutDragState.id].width,
+                height: current[layoutDragState.id].height
+            }, item);
+            candidate = applyLayoutSnap(candidate, layoutDragState.id);
+            current[layoutDragState.id] = candidate;
+            if (hasLayoutCollision(current, layoutDragState.id)) {
+                var reflowed = resolveSoftLayoutReflow(current, layoutDragState.id);
+                if (!hasLayoutCollision(reflowed, layoutDragState.id)) {
+                    current = reflowed;
+                    candidate = current[layoutDragState.id];
+                    applyLayoutMap(current);
+                } else {
+                    var autoAvoidCandidate = findAutoAvoidRect(current, layoutDragState.id, candidate, item, 'drag');
+                    if (!autoAvoidCandidate) {
+                        clearLayoutTargetHighlights();
+                        hideLayoutGuides();
+                        hideLayoutPreview();
+                        return;
+                    }
+                    candidate = autoAvoidCandidate;
+                    current[layoutDragState.id] = candidate;
+                }
+            }
+            highlightLayoutTargets(candidate, layoutDragState.id);
+            showLayoutGuides(candidate.guides || {}, candidate);
+            showLayoutPreview(candidate);
+            layoutDragState.$el.css({ left: candidate.left + 'px', top: candidate.top + 'px' });
+        }
+
+        function onLayoutDragEnd() {
+            if (!layoutDragState) {
+                return;
+            }
+            $(document).off('.aiFloatingLayoutDrag');
+            clearLayoutTargetHighlights();
+            hideLayoutGuides();
+            hideLayoutPreview();
+            layoutDragState = null;
+            savePanelLayout();
+        }
+
+        function detectInnerResizeDirection($item, event) {
+            var rect = $item[0].getBoundingClientRect();
+            var edgeSize = 10;
+            var horizontal = '';
+            var vertical = '';
+
+            if (event.clientX <= rect.left + edgeSize) {
+                horizontal = 'w';
+            } else if (event.clientX >= rect.right - edgeSize) {
+                horizontal = 'e';
+            }
+
+            if (event.clientY <= rect.top + edgeSize) {
+                vertical = 'n';
+            } else if (event.clientY >= rect.bottom - edgeSize) {
+                vertical = 's';
+            }
+
+            return vertical + horizontal;
+        }
+
+        function beginLayoutResize(event) {
+            if (event.which && event.which !== 1) {
+                return;
+            }
+            if (isLayoutLocked()) {
+                return;
+            }
+            var $item = $(event.target).closest('.ai-floating-layout-item');
+            if ($item.length === 0) {
+                return;
+            }
+            var direction = $(event.target).closest('.ai-floating-layout-resizer').length ? 'se' : detectInnerResizeDirection($item, event);
+            if (!direction) {
+                return;
+            }
+            var item = $item.data('layout-item');
+            if (!item) {
+                return;
+            }
+            var position = $item.position();
+            layoutResizeState = {
+                id: item.id,
+                $el: $item,
+                startX: event.clientX,
+                startY: event.clientY,
+                originLeft: position.left,
+                originTop: position.top,
+                originWidth: $item.outerWidth(),
+                originHeight: $item.outerHeight(),
+                direction: direction
+            };
+            bringLayoutItemToFront($item);
+            snapshotPanelLayoutForUndo();
+            $(document).on('mousemove.aiFloatingLayoutResize', onLayoutResizeMove);
+            $(document).on('mouseup.aiFloatingLayoutResize', onLayoutResizeEnd);
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        function onLayoutResizeMove(event) {
+            if (!layoutResizeState) {
+                return;
+            }
+            var item = layoutResizeState.$el.data('layout-item');
+            var current = collectLayoutMap();
+            var deltaX = event.clientX - layoutResizeState.startX;
+            var deltaY = event.clientY - layoutResizeState.startY;
+            var candidate = {
+                left: layoutResizeState.originLeft,
+                top: layoutResizeState.originTop,
+                width: layoutResizeState.originWidth,
+                height: layoutResizeState.originHeight
+            };
+
+            if (layoutResizeState.direction.indexOf('e') !== -1) {
+                candidate.width = layoutResizeState.originWidth + deltaX;
+            }
+            if (layoutResizeState.direction.indexOf('s') !== -1) {
+                candidate.height = layoutResizeState.originHeight + deltaY;
+            }
+            if (layoutResizeState.direction.indexOf('w') !== -1) {
+                candidate.width = layoutResizeState.originWidth - deltaX;
+                candidate.left = layoutResizeState.originLeft + deltaX;
+            }
+            if (layoutResizeState.direction.indexOf('n') !== -1) {
+                candidate.height = layoutResizeState.originHeight - deltaY;
+                candidate.top = layoutResizeState.originTop + deltaY;
+            }
+
+            candidate = clampLayoutRect(candidate, item);
+            candidate = applyLayoutSnap(candidate, layoutResizeState.id);
+            current[layoutResizeState.id] = candidate;
+            if (hasLayoutCollision(current, layoutResizeState.id)) {
+                var reflowed = resolveSoftLayoutReflow(current, layoutResizeState.id);
+                if (!hasLayoutCollision(reflowed, layoutResizeState.id)) {
+                    current = reflowed;
+                    candidate = current[layoutResizeState.id];
+                    applyLayoutMap(current);
+                } else {
+                    var autoAvoidCandidate = findAutoAvoidRect(current, layoutResizeState.id, candidate, item, 'resize');
+                    if (!autoAvoidCandidate) {
+                        clearLayoutTargetHighlights();
+                        hideLayoutGuides();
+                        hideLayoutPreview();
+                        return;
+                    }
+                    candidate = autoAvoidCandidate;
+                    current[layoutResizeState.id] = candidate;
+                }
+            }
+            highlightLayoutTargets(candidate, layoutResizeState.id);
+            showLayoutGuides(candidate.guides || {}, candidate);
+            showLayoutPreview(candidate);
+            layoutResizeState.$el.css({
+                left: candidate.left + 'px',
+                top: candidate.top + 'px',
+                width: candidate.width + 'px',
+                height: candidate.height + 'px'
+            });
+        }
+
+        function onLayoutResizeEnd() {
+            if (!layoutResizeState) {
+                return;
+            }
+            $(document).off('.aiFloatingLayoutResize');
+            layoutResizeState.$el.removeClass('resize-n resize-s resize-e resize-w resize-ne resize-nw resize-se resize-sw');
+            clearLayoutTargetHighlights();
+            hideLayoutGuides();
+            hideLayoutPreview();
+            layoutResizeState = null;
+            savePanelLayout();
+        }
+
+        function initLayoutCustomizer() {
+            $.each(getLayoutItems(), function (_, item) {
+                item.$el.addClass('ai-floating-layout-item');
+                item.$el.data('layout-item', item);
+                if (item.$el.find('.ai-floating-layout-resizer').length === 0) {
+                    item.$el.append('<span class="ai-floating-layout-resizer" title="拖拽调整大小"></span>');
+                }
+                if (item.$el.find('.ai-floating-layout-edge-hint').length === 0) {
+                    item.$el.append('<span class="ai-floating-layout-edge-hint top"></span><span class="ai-floating-layout-edge-hint right"></span><span class="ai-floating-layout-edge-hint bottom"></span><span class="ai-floating-layout-edge-hint left"></span>');
+                }
+            });
+            restorePanelLayout();
+        }
+
         function getPanelSize() {
             return {
                 width: $panel.outerWidth(),
@@ -711,199 +1408,6 @@
                 return;
             }
             applyPanelSize(saved);
-        }
-
-        function getInnerLayoutItems() {
-            return $panel.find('.ai-floating-layout-item');
-        }
-
-        function collectInnerLayout() {
-            var layout = {};
-            getInnerLayoutItems().each(function () {
-                var $item = $(this);
-                var key = $item.data('layout-key');
-                if (!key) {
-                    return;
-                }
-                layout[key] = {
-                    left: parseFloat($item.attr('data-left')) || 0,
-                    top: parseFloat($item.attr('data-top')) || 0,
-                    width: parseFloat($item.attr('data-width')) || $item.outerWidth(),
-                    height: parseFloat($item.attr('data-height')) || $item.outerHeight()
-                };
-            });
-            return layout;
-        }
-
-        function saveInnerLayout() {
-            writeLocalJSON(innerLayoutKey, collectInnerLayout());
-        }
-
-        function getLayoutBounds() {
-            var panelWidth = $panel.innerWidth();
-            var panelHeight = $panel.innerHeight();
-            return {
-                width: Math.max(panelWidth, 260),
-                height: Math.max(panelHeight, 320)
-            };
-        }
-
-        function getLayoutItemMinSize($item) {
-            return {
-                width: parseFloat($item.attr('data-min-width')) || 140,
-                height: parseFloat($item.attr('data-min-height')) || 72
-            };
-        }
-
-        function applyLayoutItemBox($item, box) {
-            var bounds = getLayoutBounds();
-            var minSize = getLayoutItemMinSize($item);
-            var width = Math.min(Math.max(box.width, minSize.width), bounds.width);
-            var height = Math.min(Math.max(box.height, minSize.height), bounds.height);
-            var left = Math.min(Math.max(box.left, 0), Math.max(0, bounds.width - width));
-            var top = Math.min(Math.max(box.top, 52), Math.max(52, bounds.height - height));
-
-            $item.css({
-                left: left + 'px',
-                top: top + 'px',
-                width: width + 'px',
-                height: height + 'px'
-            });
-            $item.attr({
-                'data-left': left,
-                'data-top': top,
-                'data-width': width,
-                'data-height': height
-            });
-        }
-
-        function buildDefaultInnerLayout() {
-            var defaults = {};
-            getInnerLayoutItems().each(function () {
-                var $item = $(this);
-                var key = $item.data('layout-key');
-                if (!key) {
-                    return;
-                }
-                defaults[key] = {
-                    left: parseFloat($item.attr('data-default-left')) || 0,
-                    top: parseFloat($item.attr('data-default-top')) || 0,
-                    width: parseFloat($item.attr('data-default-width')) || $item.outerWidth(),
-                    height: parseFloat($item.attr('data-default-height')) || $item.outerHeight()
-                };
-            });
-            return defaults;
-        }
-
-        function restoreInnerLayout() {
-            var saved = readLocalJSON(innerLayoutKey, null) || buildDefaultInnerLayout();
-            getInnerLayoutItems().each(function () {
-                var $item = $(this);
-                var key = $item.data('layout-key');
-                if (!key || !saved[key]) {
-                    return;
-                }
-                applyLayoutItemBox($item, saved[key]);
-            });
-        }
-
-        function refreshInnerLayoutBounds() {
-            getInnerLayoutItems().each(function () {
-                var $item = $(this);
-                applyLayoutItemBox($item, {
-                    left: parseFloat($item.attr('data-left')) || 0,
-                    top: parseFloat($item.attr('data-top')) || 0,
-                    width: parseFloat($item.attr('data-width')) || $item.outerWidth(),
-                    height: parseFloat($item.attr('data-height')) || $item.outerHeight()
-                });
-            });
-        }
-
-        function beginInnerLayoutDrag(event) {
-            if (event.which && event.which !== 1) {
-                return;
-            }
-            if ($(event.target).closest('button, a, textarea, input, .ai-floating-section-toggle, .ai-floating-layout-resize').length) {
-                return;
-            }
-            var $item = $(event.currentTarget).closest('.ai-floating-layout-item');
-            innerLayoutDragState = {
-                $item: $item,
-                startX: event.clientX,
-                startY: event.clientY,
-                originLeft: parseFloat($item.attr('data-left')) || 0,
-                originTop: parseFloat($item.attr('data-top')) || 0
-            };
-            $item.addClass('is-layout-dragging');
-            $(document).on('mousemove.aiFloatingInnerLayoutDrag', onInnerLayoutDragMove);
-            $(document).on('mouseup.aiFloatingInnerLayoutDrag', onInnerLayoutDragEnd);
-            event.preventDefault();
-            event.stopPropagation();
-        }
-
-        function onInnerLayoutDragMove(event) {
-            if (!innerLayoutDragState) {
-                return;
-            }
-            applyLayoutItemBox(innerLayoutDragState.$item, {
-                left: innerLayoutDragState.originLeft + (event.clientX - innerLayoutDragState.startX),
-                top: innerLayoutDragState.originTop + (event.clientY - innerLayoutDragState.startY),
-                width: parseFloat(innerLayoutDragState.$item.attr('data-width')) || innerLayoutDragState.$item.outerWidth(),
-                height: parseFloat(innerLayoutDragState.$item.attr('data-height')) || innerLayoutDragState.$item.outerHeight()
-            });
-        }
-
-        function onInnerLayoutDragEnd() {
-            if (!innerLayoutDragState) {
-                return;
-            }
-            $(document).off('.aiFloatingInnerLayoutDrag');
-            innerLayoutDragState.$item.removeClass('is-layout-dragging');
-            innerLayoutDragState = null;
-            saveInnerLayout();
-        }
-
-        function beginInnerLayoutResize(event) {
-            if (event.which && event.which !== 1) {
-                return;
-            }
-            var $item = $(event.currentTarget).closest('.ai-floating-layout-item');
-            innerLayoutResizeState = {
-                $item: $item,
-                startX: event.clientX,
-                startY: event.clientY,
-                originLeft: parseFloat($item.attr('data-left')) || 0,
-                originTop: parseFloat($item.attr('data-top')) || 0,
-                originWidth: parseFloat($item.attr('data-width')) || $item.outerWidth(),
-                originHeight: parseFloat($item.attr('data-height')) || $item.outerHeight()
-            };
-            $item.addClass('is-layout-resizing');
-            $(document).on('mousemove.aiFloatingInnerLayoutResize', onInnerLayoutResizeMove);
-            $(document).on('mouseup.aiFloatingInnerLayoutResize', onInnerLayoutResizeEnd);
-            event.preventDefault();
-            event.stopPropagation();
-        }
-
-        function onInnerLayoutResizeMove(event) {
-            if (!innerLayoutResizeState) {
-                return;
-            }
-            applyLayoutItemBox(innerLayoutResizeState.$item, {
-                left: innerLayoutResizeState.originLeft,
-                top: innerLayoutResizeState.originTop,
-                width: innerLayoutResizeState.originWidth + (event.clientX - innerLayoutResizeState.startX),
-                height: innerLayoutResizeState.originHeight + (event.clientY - innerLayoutResizeState.startY)
-            });
-        }
-
-        function onInnerLayoutResizeEnd() {
-            if (!innerLayoutResizeState) {
-                return;
-            }
-            $(document).off('.aiFloatingInnerLayoutResize');
-            innerLayoutResizeState.$item.removeClass('is-layout-resizing');
-            innerLayoutResizeState = null;
-            saveInnerLayout();
         }
 
         function resetPanelSize() {
@@ -990,6 +1494,7 @@
                 return;
             }
 
+            var previousBounds = getPanelInnerBounds();
             var deltaX = event.clientX - resizeState.startX;
             var deltaY = event.clientY - resizeState.startY;
             var bounds = getViewportResizeBounds();
@@ -1023,6 +1528,11 @@
 
             applyPanelSize({ width: width, height: height });
             applyPosition({ left: left, top: top });
+            if (!resizeState.hasSnapshot) {
+                snapshotPanelLayoutForUndo();
+                resizeState.hasSnapshot = true;
+            }
+            scalePanelLayout(previousBounds, getPanelInnerBounds());
         }
 
         function onResizeEnd() {
@@ -1077,9 +1587,10 @@
         }
 
         function refreshResizeConstraints() {
+            var previousBounds = getPanelInnerBounds();
             applyPanelSize(getPanelSize());
             applyPosition(getCurrentPosition());
-            refreshInnerLayoutBounds();
+            scalePanelLayout(previousBounds, getPanelInnerBounds());
         }
 
         function defaultRestoreBtnPosition() {
@@ -1840,11 +2351,13 @@
 
         initMascot();
         applyMascotTheme();
+        updateUndoLayoutButton();
+        setLayoutLocked(localStorage.getItem(layoutLockedKey) === '1');
         setHidden(sessionStorage.getItem(hiddenKey) === '1');
         setPanelOpen(sessionStorage.getItem(panelKey) === '1' && sessionStorage.getItem(hiddenKey) !== '1');
         getPanelMinimumSize();
         restorePanelSize();
-        restoreInnerLayout();
+        initLayoutCustomizer();
         initPosition();
         initRestoreBtnPosition();
         bindLivePageSignals();
@@ -1852,8 +2365,32 @@
 
         $launcher.on('mousedown', beginDrag);
         $panel.on('mousedown', beginResize);
-        $panel.on('mousedown', '.ai-floating-layout-handle', beginInnerLayoutDrag);
-        $panel.on('mousedown', '.ai-floating-layout-resize', beginInnerLayoutResize);
+        $panel.on('mousedown', '.ai-floating-section-header, .ai-floating-context-status, .ai-floating-compose', beginLayoutDrag);
+        $panel.on('mousedown', '.ai-floating-layout-item', function (event) {
+            if ($(event.target).closest('.ai-floating-section-header, .ai-floating-context-status, .ai-floating-compose, button, a, textarea, input').length) {
+                return;
+            }
+            beginLayoutResize(event);
+        });
+        $panel.on('mousedown', '.ai-floating-layout-resizer', function (event) {
+            beginLayoutResize(event);
+        });
+        $panel.on('mousemove', '.ai-floating-layout-item', function (event) {
+            if (isLayoutLocked() || layoutResizeState) {
+                return;
+            }
+            var $item = $(this);
+            $item.removeClass('resize-n resize-s resize-e resize-w resize-ne resize-nw resize-se resize-sw');
+            var direction = detectInnerResizeDirection($item, event);
+            if (direction) {
+                $item.addClass('resize-' + direction);
+            }
+        });
+        $panel.on('mouseleave', '.ai-floating-layout-item', function () {
+            if (!layoutResizeState) {
+                $(this).removeClass('resize-n resize-s resize-e resize-w resize-ne resize-nw resize-se resize-sw');
+            }
+        });
         $panel.on('dblclick', function (event) {
             if ($(event.target).closest('.ai-floating-panel-tools, textarea, button, a, input, .ai-floating-section-body').length) {
                 return;
@@ -1873,6 +2410,18 @@
             }
         });
         $(window).on('resize.aiFloatingPanel', refreshResizeConstraints);
+
+        $('#aiFloatingResetLayout').on('click', function () {
+            resetPanelLayout();
+        });
+
+        $('#aiFloatingUndoLayout').on('click', function () {
+            restoreUndoPanelLayout();
+        });
+
+        $('#aiFloatingToggleLayoutLock').on('click', function () {
+            setLayoutLocked(!isLayoutLocked());
+        });
 
         $('#aiFloatingCollapse').on('click', function () {
             setPanelOpen(false);
