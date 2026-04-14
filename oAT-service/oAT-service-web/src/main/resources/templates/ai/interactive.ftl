@@ -272,8 +272,9 @@
                     <div id="aiFollowUpList" class="ai-follow-up-list">
                         <#list starterQuestions as question>
                             <button class="ui button basic fluid small starter-question"
-                                    data-question="${question?html}">
-                                ${question?html}
+                                    data-question="${question?html}"
+                                    title="${question?html}">
+                                <span class="ai-follow-up-text">${question?html}</span>
                             </button>
                         </#list>
                     </div>

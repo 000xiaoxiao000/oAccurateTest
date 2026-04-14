@@ -677,12 +677,29 @@ public class AIAgentService {
                     throw conversionError;
                 }
             } else {
+                Object fallbackValue = null;
+                String fallbackStrategy = null;
+                if (paramType.isPrimitive()) {
+                    if (!relaxedMode) {
+                        String message = "缺少必填基础类型参数: " + paramName + " (" + paramType.getSimpleName() + ")";
+                        if (report != null) {
+                            report.parameterReports.add(FallbackParameterReport.failure(
+                                    paramName, "<missing>", "missing-required-primitive",
+                                    null, paramType.getSimpleName(), message));
+                        }
+                        throw new IllegalArgumentException(message);
+                    }
+                    fallbackValue = getSemanticDefaultValue(param, schema, paramName, annotatedName, paramType);
+                    fallbackStrategy = fallbackValue != null ? "semantic-default" : "primitive-default";
+                }
                 if (report != null) {
                     report.parameterReports.add(FallbackParameterReport.defaulted(
-                            paramName, paramType.getSimpleName()));
+                            paramName, paramType.getSimpleName(), fallbackStrategy,
+                            fallbackValue != null ? String.valueOf(fallbackValue) : null));
                 }
-                invokeArgs[i] = getDefaultForType(paramType);
-                bindingDiagnostics.add(paramName + "=<default> => " + paramType.getSimpleName());
+                invokeArgs[i] = fallbackValue != null ? fallbackValue : getDefaultForType(paramType);
+                bindingDiagnostics.add(paramName + "=<default:" + (fallbackStrategy != null ? fallbackStrategy : "default")
+                        + "> => " + String.valueOf(invokeArgs[i]));
             }
         }
 
@@ -1517,8 +1534,80 @@ public class AIAgentService {
             if (type == int.class) return 0;
             if (type == long.class) return 0L;
             if (type == double.class) return 0.0;
+            if (type == float.class) return 0f;
+            if (type == short.class) return (short) 0;
+            if (type == byte.class) return (byte) 0;
             if (type == boolean.class) return false;
             if (type == char.class) return '\0';
+        }
+        return null;
+    }
+
+    private Object getSemanticDefaultValue(java.lang.reflect.Parameter param, ToolMethodSchema schema,
+                                           String paramName, String annotatedName, Class<?> paramType) {
+        String semanticName = resolveSemanticParameterName(param, schema, paramName, annotatedName);
+        String normalizedName = normalizeName(semanticName);
+        if (normalizedName.isEmpty()) {
+            normalizedName = normalizeName(paramName);
+        }
+        if (paramType == int.class || paramType == Integer.class) {
+            if (normalizedName.contains("limit") || normalizedName.contains("size")
+                    || normalizedName.contains("count") || normalizedName.contains("top")
+                    || normalizedName.contains("pageSize".toLowerCase(Locale.ROOT))) {
+                Integer parsed = extractIntegerDefault(semanticName);
+                return parsed != null ? parsed : 10;
+            }
+            if (normalizedName.contains("page") || normalizedName.contains("index")) {
+                Integer parsed = extractIntegerDefault(semanticName);
+                return parsed != null ? parsed : 1;
+            }
+        }
+        if (paramType == long.class || paramType == Long.class) {
+            if (normalizedName.contains("limit") || normalizedName.contains("size") || normalizedName.contains("count")) {
+                Integer parsed = extractIntegerDefault(semanticName);
+                return parsed != null ? parsed.longValue() : 10L;
+            }
+        }
+        if (paramType == boolean.class || paramType == Boolean.class) {
+            if (normalizedName.contains("enable") || normalizedName.contains("enabled")
+                    || normalizedName.contains("include") || normalizedName.contains("with")) {
+                return false;
+            }
+        }
+        return null;
+    }
+
+    private String resolveSemanticParameterName(java.lang.reflect.Parameter param, ToolMethodSchema schema,
+                                                String paramName, String annotatedName) {
+        if (annotatedName != null && !annotatedName.trim().isEmpty()) {
+            return annotatedName.trim();
+        }
+        if (schema != null) {
+            List<String> candidates = schema.getCandidatesFor(paramName, annotatedName);
+            if (candidates != null && !candidates.isEmpty()) {
+                return candidates.get(0);
+            }
+        }
+        if (param != null && param.isNamePresent() && param.getName() != null && !param.getName().trim().isEmpty()) {
+            return param.getName().trim();
+        }
+        return paramName;
+    }
+
+    private Integer extractIntegerDefault(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("默认\\s*(\\d+)|default\\s*(\\d+)", Pattern.CASE_INSENSITIVE).matcher(text);
+        if (matcher.find()) {
+            String matched = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            if (matched != null && !matched.isEmpty()) {
+                return Integer.parseInt(matched);
+            }
+        }
+        Matcher firstNumber = Pattern.compile("(\\d+)").matcher(text);
+        if (firstNumber.find()) {
+            return Integer.parseInt(firstNumber.group(1));
         }
         return null;
     }
@@ -1748,9 +1837,14 @@ public class AIAgentService {
                     false, false, message);
         }
 
-        private static FallbackParameterReport defaulted(String parameterName, String targetType) {
-            return new FallbackParameterReport(parameterName, "<default>", "default",
-                    null, targetType, true, false, "used default value");
+        private static FallbackParameterReport defaulted(String parameterName, String targetType,
+                                                         String strategy, String defaultValue) {
+            String resolvedStrategy = strategy != null ? strategy : "default";
+            String message = defaultValue != null
+                    ? "used default value: " + defaultValue
+                    : "used default value";
+            return new FallbackParameterReport(parameterName, "<default>", resolvedStrategy,
+                    null, targetType, true, false, message);
         }
 
         private static FallbackParameterReport explicitNull(String parameterName, String matchedKey,

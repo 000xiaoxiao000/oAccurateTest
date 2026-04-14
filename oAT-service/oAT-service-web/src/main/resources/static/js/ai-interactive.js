@@ -331,14 +331,14 @@
             var html = ''; $.each(links, function (_, link) {
                 html += '<a class="ai-quick-link-card" href="' + U.escapeHtml(link.url || '#') + '">'
                     + '<div class="ai-quick-link-title">' + U.escapeHtml(link.title || '推荐入口') + '</div>'
-                    + '<div class="ai-quick-link-desc">' + U.escapeHtml(link.description || '') + '</a>';
+                    + '<div class="ai-quick-link-desc">' + U.escapeHtml(link.description || '') + '</div></a>';
             }); $quickLinkList.html(html);
         }
 
         function renderFollowUps(actions) {
             if (!actions || !actions.length) { $followUpList.empty(); return; }
             var html = ''; $.each(actions, function (_, action) {
-                html += '<button class="ui button basic fluid small starter-question" data-question="' + U.escapeHtml(action) + '">' + U.escapeHtml(action) + '</button>';
+                html += '<button class="ui button basic fluid small starter-question" data-question="' + U.escapeHtml(action) + '" title="' + U.escapeHtml(action) + '"><span class="ai-follow-up-text">' + U.escapeHtml(action) + '</span></button>';
             }); $followUpList.html(html);
         }
 

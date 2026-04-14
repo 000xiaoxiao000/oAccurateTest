@@ -263,6 +263,11 @@
     border: 1px solid rgba(226, 232, 240, 0.9);
     color: #334155;
     font-size: 12px;
+    max-width: 100%;
+    line-height: 1.5;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .ai-console-pill.muted,
@@ -762,6 +767,22 @@
     .ai-session-toolbar {
         grid-template-columns: 1fr;
     }
+
+    .ai-capability-panel {
+        padding: 18px;
+    }
+}
+
+@media screen and (max-width: 991px) {
+    .ai-capability-panel,
+    .ai-session-panel,
+    .ai-chat-panel {
+        min-height: auto;
+    }
+
+    .ai-follow-up-list .ui.button {
+        font-size: 13px !important;
+    }
 }
 
 .ai-session-title {
@@ -919,6 +940,24 @@
     gap: 12px;
 }
 
+.ai-follow-up-list .ui.button {
+    display: flex !important;
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
+    line-height: 1.6;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    padding: 10px 12px !important;
+}
+
+.ai-follow-up-text {
+    display: block;
+    width: 100%;
+    min-width: 0;
+}
+
 .ai-ability-card,
 .ai-quick-link-card {
     border-radius: 18px;
@@ -932,12 +971,17 @@
     color: #0f172a;
     font-size: 18px;
     font-weight: 700;
+    line-height: 1.45;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .ai-ability-desc,
 .ai-quick-link-desc {
     color: #475569;
     line-height: 1.6;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .ai-sub-title {
