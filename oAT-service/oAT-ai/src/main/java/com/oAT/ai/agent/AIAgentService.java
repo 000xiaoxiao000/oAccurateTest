@@ -8,6 +8,8 @@ import com.oAT.ai.config.AIConfigProperties;
 import com.oAT.ai.config.AIEnhancedConfig;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.model.chat.ChatModel;
+import dev.langchain4j.service.AiServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +76,7 @@ public class AIAgentService {
     private final AIAgent aiAgent;
     private final AIConfigProperties configProperties;
     private final AgentDataProvider dataProvider;
+    private final String initializationStatus;
 
     /** 工具实例映射：方法名 → 工具对象 */
     private final Map<String, Object> toolInstances = new LinkedHashMap<>();
@@ -96,7 +99,7 @@ public class AIAgentService {
     private final boolean semanticCacheEnabled;
 
     /** 智能工具推荐器 */
-    private final com.oAT.ai.agent.ToolRecommender toolRecommender;
+    private final ToolRecommender toolRecommender;
 
     /** 动态LLM切换器 */
     private final DynamicLLMSwitcher llmSwitcher;
@@ -108,7 +111,7 @@ public class AIAgentService {
     private volatile AISelfLearningService selfLearningService;
 
     @Autowired
-    public AIAgentService(@Autowired(required = false) Object chatLanguageModel,
+    public AIAgentService(@Autowired(required = false) ChatModel chatLanguageModel,
                           AIConfigProperties configProperties,
                           AgentDataProvider dataProvider,
                           AIConfig aiConfig,
@@ -119,7 +122,7 @@ public class AIAgentService {
         // 初始化增强服务
         this.semanticCacheEnabled = enhancedConfig.getSemanticCache().isEnabled();
         this.semanticCacheService = new SemanticCacheService(enhancedConfig.getSemanticCache().getThreshold(), 500);
-        this.toolRecommender = new com.oAT.ai.agent.ToolRecommender();
+        this.toolRecommender = new ToolRecommender();
         this.llmSwitcher = new DynamicLLMSwitcher(aiConfig);
         this.conversationMemory = new ConversationMemoryService(enhancedConfig.getConversation().getMaxRounds(),
                 Math.max(1, enhancedConfig.getConversation().getMaxRounds() / 2));
@@ -128,13 +131,20 @@ public class AIAgentService {
         toolRecommender.registerAllBuiltInTools();
 
         if (chatLanguageModel == null) {
-            logger.warn("Chat model bean is null, AI Agent will not be available");
+            this.initializationStatus = buildUnavailableReason("chat model bean was not created", aiConfig);
+            logger.warn("{}", this.initializationStatus);
             this.aiAgent = null;
         } else {
             List<Object> tools = createTools();
-            logger.warn("AiServices builder API changed in LangChain4j 1.12.2, AI Agent auto-binding is temporarily disabled");
-            logger.info("Registered {} fallback tools for future compatibility adapter", tools.size());
-            this.aiAgent = null;
+            this.aiAgent = AiServices.builder(AIAgent.class)
+                    .chatModel(chatLanguageModel)
+                    .tools(tools)
+                    .maxSequentialToolsInvocations(20)
+                    .build();
+            this.initializationStatus = String.format(
+                    "AI Agent initialized successfully with LangChain4j %s and %d tools",
+                    AiServices.class.getPackage().getImplementationVersion(), tools.size());
+            logger.info("{}", this.initializationStatus);
         }
     }
 
@@ -238,6 +248,26 @@ public class AIAgentService {
         return aiAgent != null && configProperties.isEnabled();
     }
 
+    public String getInitializationStatus() {
+        return initializationStatus;
+    }
+
+    private String buildUnavailableReason(String detail, AIConfig aiConfig) {
+        if (!configProperties.isEnabled()) {
+            return "AI Agent initialization skipped: ai.llm.enabled=false";
+        }
+        return String.format(
+                "AI Agent initialization failed: %s (provider=%s, model=%s, baseUrl=%s)",
+                detail,
+                safeValue(aiConfig.getProvider()),
+                safeValue(aiConfig.getModel()),
+                safeValue(aiConfig.getBaseUrl()));
+    }
+
+    private String safeValue(String value) {
+        return value == null || value.trim().isEmpty() ? "<empty>" : value;
+    }
+
     /**
      * 与AI Agent对话（带工具调用兜底）
      * 集成语义缓存、智能工具推荐、多轮对话记忆
@@ -260,7 +290,7 @@ public class AIAgentService {
             }
 
             // 2. 智能工具推荐（日志记录，供后续分析）
-            com.oAT.ai.agent.ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
+            ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
             logger.debug("Tool recommendation: primary={}, intent={}, confidence={}",
                     recommendation.primaryTool, recommendation.detectedIntent, recommendation.confidence);
 

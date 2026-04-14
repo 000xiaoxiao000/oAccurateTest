@@ -121,10 +121,13 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
      */
     private String callAIAgent(ProjectVo project, List<AppVo> apps, UserVo user,
                                 String question, String pageContext, String imageData) {
-        // AI Agent 仅在 JDK 17+ 环境下可用
-        if (aiAgentService == null || !aiAgentService.isAvailable()) {
-            logger.warn("AI Agent service is not available (JDK 17+ required or LLM not configured)");
-            return "AI 服务暂不可用，请确保已配置大模型服务（如 Ollama）并启用 AI 功能。";
+        if (aiAgentService == null) {
+            logger.warn("AI Agent bean is not available in Spring context");
+            return "AI 服务暂不可用：AI Agent Bean 未加载，请检查模块装配与 Spring 配置。";
+        }
+        if (!aiAgentService.isAvailable()) {
+            logger.warn("AI Agent is unavailable: {}", aiAgentService.getInitializationStatus());
+            return "AI 服务暂不可用：" + aiAgentService.getInitializationStatus();
         }
 
         try {

@@ -38,6 +38,12 @@
         /* ===== DOM 引用 ===== */
         var $messageList = $('#aiMessageList');
         var $chatAnchorsList = $('#aiChatAnchorsList');
+        var $floatingAnchors = $('#aiFloatingAnchors');
+        var $floatingAnchorsList = $('#aiFloatingAnchorsList');
+        var $floatingAnchorTooltip = $('#aiFloatingAnchorTooltip');
+        var $anchorSearchInput = $('#aiAnchorSearchInput');
+        var $anchorSearchClear = $('#aiAnchorSearchClear');
+        var $anchorSearchMeta = $('#aiAnchorSearchMeta');
         var $questionInput = $('#aiQuestionInput');
         var $sendButton = $('#aiSendButton');
         var $requestState = $('#aiRequestState');
@@ -72,6 +78,9 @@
             hasUserPreference: false
         };
         var anchorFilterMode = 'all';
+        var anchorSearchKeyword = '';
+        var anchorKeyboardIndex = -1;
+        var expandedAnchorTextMap = {};
 
         /* ============================================================
          *  初始化
@@ -317,6 +326,54 @@
             return anchors;
         }
 
+        function renderFloatingAnchors(anchors) {
+            if (!$floatingAnchorsList.length) return;
+            if (!anchors || !anchors.length) {
+                $floatingAnchors.removeClass('visible');
+                $floatingAnchorsList.empty();
+                $floatingAnchorTooltip.removeClass('visible').attr('aria-hidden', 'true').empty();
+                return;
+            }
+            var container = $messageList[0];
+            var trackHeight = Math.max(160, Math.min((container && container.clientHeight) || 320, 420));
+            var maxTop = Math.max(0, trackHeight - 12);
+            var html = '';
+            $.each(anchors, function (_, anchor) {
+                var $target = $('#' + anchor.id);
+                var ratio = 0;
+                if ($target.length && container) {
+                    var targetTop = getAnchorScrollTop($target[0]);
+                    var scrollRange = Math.max(1, container.scrollHeight - container.clientHeight);
+                    ratio = Math.max(0, Math.min(1, targetTop / scrollRange));
+                }
+                var statusClass = anchor.answered ? 'answered' : 'pending';
+                var durationText = formatResponseTime(anchor.responseTime) || '等待回复中';
+                html += '<button type="button" class="ai-floating-anchor-dot ' + statusClass + '" style="top:' + Math.round(maxTop * ratio) + 'px" data-anchor-ratio="' + ratio + '" data-anchor-id="' + U.escapeHtml(anchor.id) + '" data-anchor-label="' + U.escapeHtml(anchor.label) + '" data-anchor-question="' + U.escapeHtml(anchor.question) + '" data-anchor-status="' + U.escapeHtml(anchor.answered ? '已回复' : '待回复') + '" data-anchor-duration="' + U.escapeHtml(durationText) + '" aria-label="' + U.escapeHtml(anchor.label + ' ' + anchor.question) + '"></button>';
+            });
+            $floatingAnchorsList.css('height', trackHeight + 'px').html(html);
+            $floatingAnchors.addClass('visible');
+        }
+
+        function positionFloatingAnchorTooltip($dot) {
+            if (!$dot || !$dot.length || !$floatingAnchorTooltip.length) return;
+            var dotRect = $dot[0].getBoundingClientRect();
+            var hostRect = $floatingAnchors[0].getBoundingClientRect();
+            var tooltipHeight = $floatingAnchorTooltip.outerHeight() || 0;
+            var tooltipTop = dotRect.top - hostRect.top - (tooltipHeight / 2) + (dotRect.height / 2);
+            var trackHeight = $floatingAnchorsList.outerHeight() || 0;
+            tooltipTop = Math.max(0, Math.min(trackHeight - tooltipHeight, tooltipTop));
+            $floatingAnchorTooltip.css({ top: tooltipTop + 'px' });
+        }
+
+        function highlightSearchKeyword(text, keyword) {
+            var safeText = U.escapeHtml(text || '');
+            if (!keyword) return safeText;
+            var escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return safeText.replace(new RegExp(escapedKeyword, 'ig'), function (match) {
+                return '<mark class="ai-anchor-keyword-mark">' + match + '</mark>';
+            });
+        }
+
         function renderChatAnchors(session) {
             if (!$chatAnchorsList.length) return;
             var previousStates = {};
@@ -327,10 +384,20 @@
             });
             var anchors = getQuestionAnchors(session);
             var visibleAnchors = anchors.filter(function (anchor) {
-                return anchorFilterMode === 'all' || !anchor.answered;
+                var matchesFilter = anchorFilterMode === 'all' || !anchor.answered;
+                var matchesSearch = !anchorSearchKeyword || (anchor.question || '').toLowerCase().indexOf(anchorSearchKeyword) !== -1;
+                return matchesFilter && matchesSearch;
             });
+            if ($anchorSearchMeta.length) {
+                $anchorSearchMeta.text(anchorSearchKeyword ? ('匹配 ' + visibleAnchors.length + ' 条') : ('共 ' + anchors.length + ' 条'));
+            }
+            if ($anchorSearchClear.length) {
+                $anchorSearchClear.toggleClass('visible', !!anchorSearchKeyword);
+            }
             if (!visibleAnchors.length) {
-                $chatAnchorsList.html('<div class="ai-chat-anchor-empty">' + (anchorFilterMode === 'pending' ? '当前没有待回复问题。' : '当前还没有提问，先发起一个问题吧。') + '</div>');
+                anchorKeyboardIndex = -1;
+                renderFloatingAnchors([]);
+                $chatAnchorsList.html('<div class="ai-chat-anchor-empty">' + (anchorFilterMode === 'pending' ? '当前没有待回复问题。' : anchorSearchKeyword ? '没有匹配的提问锚点。' : '当前还没有提问，先发起一个问题吧。') + '</div>');
                 return;
             }
             var html = '';
@@ -338,19 +405,28 @@
                 var statusClass = anchor.answered ? 'answered' : 'pending';
                 var statusText = anchor.answered ? '已回复' : '待回复';
                 var durationText = formatResponseTime(anchor.responseTime);
+                var expandedText = !!expandedAnchorTextMap[anchor.id];
                 html += '<div class="ai-chat-anchor-entry">'
-                    + '<button type="button" class="ai-chat-anchor-item ' + statusClass + '" data-anchor-id="' + U.escapeHtml(anchor.id) + '" title="' + U.escapeHtml(anchor.question) + '">'
+                    + '<button type="button" class="ai-chat-anchor-item ' + statusClass + (expandedText ? ' expanded-text' : '') + '" data-anchor-id="' + U.escapeHtml(anchor.id) + '" title="' + U.escapeHtml(anchor.question) + '">'
                     + '<div class="ai-chat-anchor-top">'
                     + '<span class="ai-chat-anchor-index">' + U.escapeHtml(anchor.label) + '</span>'
                     + '<span class="ai-chat-anchor-status ' + statusClass + '"><span class="ai-chat-anchor-status-dot ' + statusClass + '"></span>' + U.escapeHtml(statusText) + '</span>'
                     + '</div>'
-                    + '<span class="ai-chat-anchor-text">' + U.escapeHtml(anchor.question) + '</span>'
+                    + '<span class="ai-chat-anchor-text">' + highlightSearchKeyword(anchor.question, anchorSearchKeyword) + '</span>'
                     + '<span class="ai-chat-anchor-duration">' + U.escapeHtml(durationText || '等待回复中') + '</span>'
                     + '</button>'
+                    + '<div class="ai-chat-anchor-actions">'
+                    + '<button type="button" class="ai-chat-anchor-text-toggle" data-anchor-id="' + U.escapeHtml(anchor.id) + '">' + (expandedText ? '收起全文' : '展开全文') + '</button>'
                     + '<button type="button" class="ai-chat-anchor-link-btn" data-anchor-link="' + U.escapeHtml(anchor.shareUrl) + '" title="复制直达链接">复制链接</button>'
+                    + '</div>'
                     + '</div>';
             });
             $chatAnchorsList.html(html);
+            renderFloatingAnchors(visibleAnchors);
+            anchorKeyboardIndex = visibleAnchors.length ? Math.min(anchorKeyboardIndex, visibleAnchors.length - 1) : -1;
+            if (anchorKeyboardIndex >= 0) {
+                $chatAnchorsList.find('.ai-chat-anchor-item').eq(anchorKeyboardIndex).addClass('keyboard-active');
+            }
             $.each(visibleAnchors, function (_, anchor) {
                 var prev = previousStates[anchor.id];
                 if (anchor.answered && prev && !prev.answered) {
@@ -362,10 +438,12 @@
 
         function setActiveAnchor(anchorId) {
             $('.ai-chat-anchor-item.active').removeClass('active');
+            $('.ai-floating-anchor-dot.active').removeClass('active');
             $('.ai-message-section-anchor.is-active').removeClass('is-active');
             if (!anchorId) return;
             var $active = $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + anchorId + '"]');
             $active.addClass('active');
+            $floatingAnchorsList.find('.ai-floating-anchor-dot[data-anchor-id="' + anchorId + '"]').addClass('active');
             $('#'+ anchorId).addClass('is-active');
             if ($active.length && $chatAnchorsList.length) {
                 var container = $chatAnchorsList[0];
@@ -399,6 +477,38 @@
             setActiveAnchor(activeAnchorId);
         }
 
+        function clearAnchorSearch() {
+            if (!$anchorSearchInput.length) return;
+            $anchorSearchInput.val('');
+            anchorSearchKeyword = '';
+            anchorKeyboardIndex = -1;
+            $('.ai-message-section-anchor.is-preview').removeClass('is-preview');
+            renderChatAnchors(getActiveSession());
+            $anchorSearchInput.focus();
+        }
+
+        function previewAnchorSelection(anchorId) {
+            var $target = $('#' + anchorId);
+            $('.ai-message-section-anchor.is-preview').removeClass('is-preview');
+            if (!$target.length) return;
+            $target.addClass('is-preview');
+        }
+
+        function moveAnchorKeyboardSelection(step) {
+            var $items = $chatAnchorsList.find('.ai-chat-anchor-item');
+            if (!$items.length) return;
+            anchorKeyboardIndex = anchorKeyboardIndex < 0 ? 0 : Math.max(0, Math.min($items.length - 1, anchorKeyboardIndex + step));
+            $items.removeClass('keyboard-active');
+            var $active = $items.eq(anchorKeyboardIndex).addClass('keyboard-active');
+            if ($active.length) {
+                var container = $chatAnchorsList[0];
+                var item = $active[0];
+                var targetLeft = item.offsetLeft - (container.clientWidth - item.offsetWidth) / 2;
+                container.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+                previewAnchorSelection($active.data('anchor-id'));
+            }
+        }
+
         function copyAnchorLink(link) {
             if (!link) return;
             navigator.clipboard.writeText(window.location.origin + link).then(function () {
@@ -408,9 +518,33 @@
             });
         }
 
+        function getAnchorScrollTop(anchorElement) {
+            var container = $messageList[0];
+            if (!container || !anchorElement) return 0;
+            var containerRect = container.getBoundingClientRect();
+            var targetRect = anchorElement.getBoundingClientRect();
+            return container.scrollTop + (targetRect.top - containerRect.top) - 12;
+        }
+
+        function expandAnchorFromHash() {
+            var hash = window.location.hash || '';
+            if (!hash || hash.indexOf('#ai-question-anchor-') !== 0) return;
+            var anchorId = hash.substring(1);
+            if (anchorFilterMode === 'pending') {
+                anchorFilterMode = 'all';
+                $('.ai-anchor-filter-btn.active').removeClass('active');
+                $('.ai-anchor-filter-btn[data-filter="all"]').addClass('active');
+                renderChatAnchors(getActiveSession());
+            }
+            setTimeout(function () {
+                scrollToAnchor(anchorId);
+            }, 60);
+        }
+
         function highlightAnchorTarget(anchorId) {
             var $target = $('#' + anchorId);
             if (!$target.length) return;
+            $('.ai-message-section-anchor.is-preview').removeClass('is-preview');
             $('.ai-message-section-anchor.is-target').removeClass('is-target');
             $target.addClass('is-target');
             setTimeout(function () { $target.removeClass('is-target'); }, 1800);
@@ -421,7 +555,18 @@
             if (!$target.length) return;
             var container = $messageList[0];
             var target = $target[0];
-            container.scrollTop = target.offsetTop - 12;
+            var nextTop = getAnchorScrollTop(target);
+            container.scrollTop = Math.max(0, nextTop);
+            if (typeof container.scrollTo === 'function') {
+                container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
+            }
+            if (window.location.hash !== '#' + anchorId) {
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', '#' + anchorId);
+                } else {
+                    window.location.hash = anchorId;
+                }
+            }
             setActiveAnchor(anchorId);
             highlightAnchorTarget(anchorId);
         }
@@ -743,6 +888,7 @@
                 setTimelineExpanded(s.id === firstSessionId, { persist: false });
             }
             renderSessionList(); setSignalState('online'); $questionInput.focus();
+            expandAnchorFromHash();
         }
 
         function addTimeline(title, description) {
@@ -883,13 +1029,68 @@
         });
 
         $(document).on('click', '.starter-question, .ai-action-btn', function () { sendQuestion($(this).data('question')); });
-        $(document).on('click', '.ai-chat-anchor-item', function () { scrollToAnchor($(this).data('anchor-id')); });
+        $(document).on('click', '.ai-chat-anchor-item, .ai-floating-anchor-dot', function () { scrollToAnchor($(this).data('anchor-id')); });
+        $(document).on('mouseenter focus', '.ai-floating-anchor-dot', function () {
+            var $dot = $(this);
+            var question = $dot.data('anchor-question') || '';
+            var status = $dot.data('anchor-status') || '';
+            var duration = $dot.data('anchor-duration') || '';
+            $floatingAnchorTooltip.html('<div class="ai-floating-anchor-tooltip-label">' + U.escapeHtml($dot.data('anchor-label') || '') + '</div>'
+                + '<div class="ai-floating-anchor-tooltip-question">' + U.escapeHtml(question) + '</div>'
+                + '<div class="ai-floating-anchor-tooltip-meta">' + U.escapeHtml(status + ' · ' + duration) + '</div>')
+                .addClass('visible').attr('aria-hidden', 'false');
+            positionFloatingAnchorTooltip($dot);
+        });
+        $(document).on('mouseleave blur', '.ai-floating-anchor-dot', function () {
+            $floatingAnchorTooltip.removeClass('visible').attr('aria-hidden', 'true').empty();
+        });
         $(document).on('click', '.ai-chat-anchor-link-btn', function (event) { event.stopPropagation(); copyAnchorLink($(this).data('anchor-link')); });
+        $(document).on('click', '.ai-chat-anchor-text-toggle', function (event) {
+            event.stopPropagation();
+            var anchorId = $(this).data('anchor-id');
+            expandedAnchorTextMap[anchorId] = !expandedAnchorTextMap[anchorId];
+            renderChatAnchors(getActiveSession());
+        });
         $(document).on('click', '.ai-anchor-filter-btn', function () {
             anchorFilterMode = $(this).data('filter') || 'all';
             $('.ai-anchor-filter-btn.active').removeClass('active');
             $(this).addClass('active');
             renderChatAnchors(getActiveSession());
+        });
+        $anchorSearchInput.on('input', function () {
+            anchorSearchKeyword = $.trim($(this).val() || '').toLowerCase();
+            anchorKeyboardIndex = -1;
+            renderChatAnchors(getActiveSession());
+        }).on('keydown', function (event) {
+            if (event.keyCode === 13) {
+                event.preventDefault();
+                var $firstMatch = $chatAnchorsList.find('.ai-chat-anchor-item').eq(anchorKeyboardIndex >= 0 ? anchorKeyboardIndex : 0);
+                if ($firstMatch.length) {
+                    scrollToAnchor($firstMatch.data('anchor-id'));
+                }
+            } else if (event.keyCode === 27) {
+                event.preventDefault();
+                clearAnchorSearch();
+            } else if (event.keyCode === 40) {
+                event.preventDefault();
+                moveAnchorKeyboardSelection(1);
+            } else if (event.keyCode === 38) {
+                event.preventDefault();
+                moveAnchorKeyboardSelection(-1);
+            }
+        });
+        $anchorSearchClear.on('click', function () { clearAnchorSearch(); });
+        $(window).on('hashchange', function () { expandAnchorFromHash(); });
+        $(window).on('resize', function () {
+            renderFloatingAnchors(getQuestionAnchors(getActiveSession()).filter(function (anchor) {
+                var matchesFilter = anchorFilterMode === 'all' || !anchor.answered;
+                var matchesSearch = !anchorSearchKeyword || (anchor.question || '').toLowerCase().indexOf(anchorSearchKeyword) !== -1;
+                return matchesFilter && matchesSearch;
+            }));
+            var $hoveredDot = $floatingAnchorsList.find('.ai-floating-anchor-dot:hover').first();
+            if ($hoveredDot.length && $floatingAnchorTooltip.hasClass('visible')) {
+                positionFloatingAnchorTooltip($hoveredDot);
+            }
         });
         $messageList.on('scroll', syncActiveAnchorByScroll);
         $(document).on('click', '.ai-message-toggle', function () {
