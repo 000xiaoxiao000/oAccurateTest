@@ -33,6 +33,7 @@
         var activeSessionKey = 'ai-interactive-active-session:' + projectId;
         var sessionSortKey = 'ai-interactive-session-sort:' + projectId;
         var timelineExpandedKey = 'ai-interactive-timeline-expanded:' + projectId;
+        var sessionMigrationMarkerKey = 'ai-interactive-session-migrated:' + projectId;
         var sessionStateUrl = askUrl.replace(/\/ask$/, '/sessionState');
         var sessionStateSyncInFlight = false;
         var serverSessionState = $root.attr('data-session-state') || '';
@@ -266,6 +267,7 @@
         function appendMessage(role, title, message, actions, options) {
             options = options || {};
             var avatar = role === 'assistant' ? assistantName.substring(0, 1) : '我';
+            var shouldPulseLatest = !!options.pulseLatest;
             var cardContentClass = 'ai-message-content' + (options.collapsible ? ' collapsible expanded' : '');
             var contentHtml = options.animate
                 ? '<div class="ai-message-text"></div>'
@@ -303,8 +305,12 @@
                         : '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>';
                     $card.append(extra);
                     U.bindCopyButton($card.find('.ai-message-copy'), message);
+                    collapseHistoricalQaMessages({ scrollLatest: true });
+                    pulseLatestQaFocus();
                 });
+                return;
             }
+            collapseHistoricalQaMessages({ scrollLatest: false });
         }
 
         function renderActions(actions) {
@@ -784,6 +790,45 @@
             $button.attr('aria-expanded', expanded ? 'true' : 'false').text(expanded ? '收起' : '展开');
         }
 
+        function pulseLatestQaFocus() {
+            var $latestStart = $messageList.find('.ai-message-section.ai-qa-group-start').last();
+            if (!$latestStart.length) return;
+            var $qaGroup = $latestStart.nextUntil('.ai-message-section.ai-qa-group-start').addBack();
+            var $assistantMessage = $qaGroup.find('.ai-message.assistant').last();
+            $messageList.find('.ai-message-section.is-latest-focus').removeClass('is-latest-focus');
+            $messageList.find('.ai-message.assistant.is-current-assistant').removeClass('is-current-assistant');
+            $qaGroup.addClass('is-latest-focus');
+            if ($assistantMessage.length) {
+                $assistantMessage.addClass('is-current-assistant');
+                setTimeout(function () {
+                    $assistantMessage.removeClass('is-current-assistant');
+                }, 2200);
+            }
+            setTimeout(function () {
+                $qaGroup.removeClass('is-latest-focus');
+            }, 2600);
+        }
+
+        function collapseHistoricalQaMessages(options) {
+            options = options || {};
+            var $qaStarts = $messageList.find('.ai-message-section.ai-qa-group-start');
+            if (!$qaStarts.length) return;
+            var latestStartIndex = $qaStarts.length - 1;
+            $qaStarts.each(function (index) {
+                var $start = $(this);
+                var $end = $start.nextUntil('.ai-message-section.ai-qa-group-start').addBack();
+                var shouldExpand = index === latestStartIndex;
+                $end.find('.ai-message').each(function () {
+                    var $message = $(this);
+                    if (!$message.find('.ai-message-toggle').length) return;
+                    updateMessageCollapseState($message, shouldExpand);
+                });
+            });
+            if (options.scrollLatest !== false) {
+                scrollMessageListToBottom(false);
+            }
+        }
+
         function readTimelineExpanded() {
             var stored = sessionStorage.getItem(timelineExpandedKey);
             timelineState.hasUserPreference = stored !== null;
@@ -846,6 +891,12 @@
             resetSendButton(); setRequestState('就绪', false); setSignalState('online');
             var s = getActiveSession(); if (s) { s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
         }
+
+        $(document).on('click', '.ai-pending-banner-retry', function () {
+            var question = $(this).data('question') || '';
+            if (!question) return;
+            sendQuestion(question);
+        });
 
         $(document).on('click', '.ai-resume-btn', function () {
             var q = $(this).data('question') || pendingQuestion;
@@ -924,7 +975,7 @@
             var welcomeMessage = $('#aiWelcomeMessage').val();
             return {
                 id: U.createId(), title: '新会话', pinned: false, updatedAt: Date.now(),
-                quickLinks: [], suggestions: [],
+                quickLinks: [], suggestions: [], pendingRequest: null,
                 history: [{ role: 'assistant', title: assistantName, message: welcomeMessage, actions: [] }],
                 timeline: [
                     { time: U.nowText(), title: '工作台上线', desc: '动态工作台已连接当前项目上下文' },
@@ -946,12 +997,15 @@
         function loadSessions() {
             var localSessions = U.readJSON(sessionsKey, []);
             var serverState = parseServerSessionState();
-            maybeShowRecoveredToast(serverState, localSessions);
-            sessions = serverState && serverState.sessions && serverState.sessions.length ? serverState.sessions : localSessions;
-            activeSessionId = serverState && serverState.activeSessionId ? serverState.activeSessionId : sessionStorage.getItem(activeSessionKey);
-            $sessionSortSelect.val(getSessionSortMode(serverState));
-            $.each(sessions, function (_, s) { s.pinned = !!s.pinned; });
-            if (serverState && typeof serverState.timelineExpanded === 'boolean') {
+            var preferLocalMigration = shouldPreferLocalMigration(serverState, localSessions);
+            maybeShowRecoveredToast(serverState, localSessions, preferLocalMigration);
+            sessions = preferLocalMigration ? localSessions : (serverState && serverState.sessions && serverState.sessions.length ? serverState.sessions : localSessions);
+            activeSessionId = preferLocalMigration
+                ? (sessionStorage.getItem(activeSessionKey) || (localSessions[0] && localSessions[0].id))
+                : (serverState && serverState.activeSessionId ? serverState.activeSessionId : sessionStorage.getItem(activeSessionKey));
+            $sessionSortSelect.val(getSessionSortMode(preferLocalMigration ? null : serverState));
+            $.each(sessions, function (_, s) { s.pinned = !!s.pinned; if (!s.pendingRequest) s.pendingRequest = null; });
+            if (serverState && typeof serverState.timelineExpanded === 'boolean' && !preferLocalMigration) {
                 timelineState.hasUserPreference = true;
                 timelineState.expanded = serverState.timelineExpanded;
                 sessionStorage.setItem(timelineExpandedKey, serverState.timelineExpanded ? 'true' : 'false');
@@ -959,6 +1013,10 @@
             if (!sessions.length) { migrateLegacyHistory(); return; }
             if (!activeSessionId || !findSession(activeSessionId)) { activeSessionId = sessions[0].id; sessionStorage.setItem(activeSessionKey, activeSessionId); }
             persistSessions();
+            if (preferLocalMigration) {
+                syncSessionStateToServer({ silent: true });
+                localStorage.setItem(sessionMigrationMarkerKey, 'done');
+            }
         }
 
         function persistSessions() { U.writeJSON(sessionsKey, sessions); sessionStorage.setItem(activeSessionKey, activeSessionId); serverSessionState = JSON.stringify(buildServerSessionPayload()); }
@@ -1020,10 +1078,56 @@
             window.navigator.sendBeacon(sessionStateUrl, formData);
         }
 
-        function maybeShowRecoveredToast(serverState, localSessions) {
+        function maybeShowRecoveredToast(serverState, localSessions, preferLocalMigration) {
+            if (preferLocalMigration) {
+                U.showToast('已从浏览器本地恢复历史会话，并同步到服务端', 'success');
+                return;
+            }
             if (!serverState || !serverState.sessions || !serverState.sessions.length) return;
             if (localSessions && localSessions.length) return;
             U.showToast('已自动恢复上次会话', 'success');
+        }
+
+        function maybeShowPendingRecoveryHint(session) {
+            if (!session || !session.pendingRequest || session.pendingRequest.status !== 'pending') return;
+            var question = session.pendingRequest.question || '上一轮问题';
+            U.showToast('检测到上一轮请求可能未完成：' + question.substring(0, 18), 'warning');
+        }
+
+        function renderPendingRequestBanner(session) {
+            if (!session || !session.pendingRequest) return;
+            var pending = session.pendingRequest;
+            var status = pending.status || 'pending';
+            var statusLabelMap = {
+                pending: '上一轮请求仍未完成',
+                completed: '上一轮请求已完成',
+                failed: '上一轮请求处理失败',
+                timeout: '上一轮请求已超时',
+                aborted: '上一轮请求已手动停止',
+                error: '上一轮请求发生异常'
+            };
+            var question = pending.question || '未记录问题';
+            var detail = pending.detail || '';
+            var startedAt = pending.startedAt ? new Date(pending.startedAt).toLocaleString() : '';
+            var bannerClass = status === 'pending' ? 'is-pending' : 'is-resolved';
+            var retryButton = status === 'pending'
+                ? '<button type="button" class="ai-pending-banner-retry" data-question="' + U.escapeHtml(question) + '">重新发送</button>'
+                : '';
+            var html = '<div class="ai-pending-banner ' + bannerClass + '">'
+                + '<div class="ai-pending-banner-icon"><i class="history icon"></i></div>'
+                + '<div class="ai-pending-banner-body">'
+                + '<div class="ai-pending-banner-title-row"><div class="ai-pending-banner-title">' + U.escapeHtml(statusLabelMap[status] || '上一轮请求状态未知') + '</div>' + retryButton + '</div>'
+                + '<div class="ai-pending-banner-question">' + U.escapeHtml(question) + '</div>'
+                + '<div class="ai-pending-banner-meta">' + U.escapeHtml(startedAt + (detail ? ' · ' + detail : '')) + '</div>'
+                + '</div></div>';
+            $messageList.append(html);
+        }
+
+        function shouldPreferLocalMigration(serverState, localSessions) {
+            if (localStorage.getItem(sessionMigrationMarkerKey) === 'done') return false;
+            if (!localSessions || !localSessions.length) return false;
+            var serverSessions = serverState && serverState.sessions ? serverState.sessions : [];
+            return !serverSessions.length;
         }
 
         function normalizeServerSessionState() {
@@ -1044,6 +1148,14 @@
                 sessionStorage.setItem(sessionSortKey, serverState.sessionSortMode);
                 $sessionSortSelect.val(serverState.sessionSortMode);
             }
+        }
+
+        function clearPendingRequest(session, status, detail) {
+            if (!session || !session.pendingRequest) return;
+            session.pendingRequest.status = status || 'done';
+            session.pendingRequest.finishedAt = Date.now();
+            if (detail) session.pendingRequest.detail = detail;
+            persistSessions();
         }
 
         function findSession(id) { for (var i = 0; i < sessions.length; i++) { if (sessions[i].id === id) return sessions[i]; } return null; }
@@ -1115,6 +1227,7 @@
         function renderActiveSession() {
             var s = getActiveSession(); if (!s) return;
             $messageList.empty();
+            renderPendingRequestBanner(s);
             var anchors = getQuestionAnchors(s);
             var anchorCursor = 0;
             $.each(s.history || [], function (index, item) {
@@ -1135,6 +1248,7 @@
                 appendMessage(item.role, item.title, item.message, item.actions || [], messageOptions);
             });
             renderChatAnchors(s, { silent: true });
+            collapseHistoricalQaMessages({ scrollLatest: false });
             syncActiveAnchorByScroll();
             renderQuickLinks(s.quickLinks || []); renderFollowUps(s.suggestions || []); renderTimeline(s); updateTimelineSummary(s);
             if (!timelineState.hasUserPreference) {
@@ -1142,6 +1256,7 @@
                 setTimelineExpanded(s.id === firstSessionId, { persist: false });
             }
             renderSessionList(); setSignalState('online'); $questionInput.focus();
+            maybeShowPendingRecoveryHint(s);
             expandAnchorFromHash();
         }
 
@@ -1249,6 +1364,14 @@
             renderChatAnchors({ history: session.history.concat([{ role: 'user', message: saveMsgText || pendingQuestion }]) });
             updateSessionTitle(session, question || '[图片提问]');
             saveMessage({ role: 'user', title: '你', message: saveMsgText, actions: [] });
+            session.pendingRequest = {
+                status: 'pending',
+                question: saveMsgText || pendingQuestion,
+                startedAt: Date.now(),
+                hasImage: !!uploadedImageData
+            };
+            persistSessions();
+            syncSessionStateToServer({ silent: true });
             addTimeline('收到提问', pendingQuestion);
             $questionInput.val('');
             imgHandler.clear(); uploadedImageData = null;
@@ -1269,7 +1392,10 @@
                 if (!response || response.success === false || response.result === false) {
                     var fail = (response && response.message) || '当前无法完成分析，请稍后重试。';
                     appendMessage('assistant', assistantName, fail, [], { animate: true, collapsible: shouldCollapseMessage(fail) });
-                    saveMessage({ role: 'assistant', title: assistantName, message: fail, actions: [], responseTime: 0 }); addTimeline('分析失败', fail); setSignalState('online'); mascotCanvas.setState('idle'); return;
+                    saveMessage({ role: 'assistant', title: assistantName, message: fail, actions: [], responseTime: 0 });
+                    clearPendingRequest(session, 'failed', fail);
+                    syncSessionStateToServer({ silent: true });
+                    addTimeline('分析失败', fail); setSignalState('online'); mascotCanvas.setState('idle'); return;
                 }
                 var d = response.data || {};
                 var reply = d.answer || response.message || '已收到你的问题。';
@@ -1282,15 +1408,19 @@
                 }
                 renderQuickLinks(session.quickLinks); renderFollowUps(session.suggestions);
                 saveMessage({ role: 'assistant', title: assistantName, message: reply, actions: d.suggestions || [], quickLinks: d.quickLinks || [], responseTime: d.metadata && d.metadata.responseTime ? d.metadata.responseTime : 0 });
+                clearPendingRequest(session, 'completed', reply);
+                syncSessionStateToServer({ silent: true });
                 addTimeline('生成回复', d.topic || 'general'); setSignalState('reply');
                 mascotCanvas.setState('done');
             }).fail(function (jqXHR, textStatus) {
                 hideLoading();
-                if (textStatus === 'abort') { showStoppedMessage(pendingQuestion); mascotCanvas.setState('idle'); return; }
-                if (textStatus === 'timeout') { showTimeoutMessage(); mascotCanvas.setState('idle'); return; }
+                if (textStatus === 'abort') { showStoppedMessage(pendingQuestion); clearPendingRequest(session, 'aborted', '用户手动停止'); syncSessionStateToServer({ silent: true }); mascotCanvas.setState('idle'); return; }
+                if (textStatus === 'timeout') { showTimeoutMessage(); clearPendingRequest(session, 'timeout', '请求超时'); syncSessionStateToServer({ silent: true }); mascotCanvas.setState('idle'); return; }
                 var err = '请求失败了（' + textStatus + '），请稍后再试，或者换一个更具体的问题。';
                 appendMessage('assistant', assistantName, err, [], { animate: true });
                 saveMessage({ role: 'assistant', title: assistantName, message: err, actions: [], responseTime: 0 });
+                clearPendingRequest(session, 'error', err);
+                syncSessionStateToServer({ silent: true });
                 addTimeline('请求异常', textStatus + ' - 请稍后重试或更换问题描述'); setSignalState('online'); mascotCanvas.setState('idle');
             }).always(function () {
                 currentAjaxRequest = null; var s = getActiveSession(); if (s) { s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
@@ -1405,12 +1535,16 @@
                 positionFloatingAnchorTooltip($hoveredDot);
             }
         });
-        $messageList.on('scroll', syncActiveAnchorByScroll);
-        $('#aiChatPanel').on('scroll', syncActiveAnchorByScroll);
-        $(window).on('scroll', syncActiveAnchorByScroll);
+        $messageList.on('scroll', function () { dismissCurrentAssistantHighlight(); syncActiveAnchorByScroll(); });
+        $('#aiChatPanel').on('scroll', function () { dismissCurrentAssistantHighlight(); syncActiveAnchorByScroll(); });
+        $(window).on('scroll', function () { dismissCurrentAssistantHighlight(); syncActiveAnchorByScroll(); });
         $(document).on('click', '.ai-message-toggle', function () {
             var $message = $(this).closest('.ai-message');
-            updateMessageCollapseState($message, $(this).attr('aria-expanded') !== 'true');
+            var shouldExpand = $(this).attr('aria-expanded') !== 'true';
+            if (shouldExpand) {
+                collapseHistoricalQaMessages({ scrollLatest: false });
+            }
+            updateMessageCollapseState($message, shouldExpand);
         });
         $timelineToggleButton.on('click', function () { setTimelineExpanded(!timelineState.expanded); });
         $timelineSummary.on('click keydown', function (event) {

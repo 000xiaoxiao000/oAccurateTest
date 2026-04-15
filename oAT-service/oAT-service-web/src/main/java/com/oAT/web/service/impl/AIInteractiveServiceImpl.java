@@ -42,6 +42,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     private static final String[] HALO_COLORS = {"rgba(88,101,242,0.18)", "rgba(0,181,173,0.18)", "rgba(255,138,101,0.18)",
             "rgba(126,87,194,0.18)", "rgba(38,166,154,0.18)", "rgba(66,165,245,0.18)"};
     private static final String SESSION_STORE_KEY_PREFIX = "oAT:ai-interactive:v1:sessions:";
+    private static final String LEGACY_SESSION_STORE_KEY_PREFIX = "oAT:ai-interactive:sessions:";
     private static final long SESSION_STORE_TTL_DAYS = 30L;
     private static final String SESSION_LOG_PREFIX = "[AI-INTERACTIVE-SESSION]";
     private static final AtomicLong SESSION_RESTORE_COUNTER = new AtomicLong();
@@ -118,7 +119,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         reply.setMetadata(metadata);
         reply.setSuggestions(buildFollowUpSuggestions(apps, topic));
         reply.setQuickLinks(buildQuickLinks(projectId, apps, topic));
-        reply.setSessionState(saveSessionState(projectId, user, sessionState));
+        reply.setSessionState(loadSessionState(projectId, user));
         return reply;
     }
 
@@ -285,18 +286,34 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         Object stored = redisTemplate.opsForValue().get(cacheKey);
         if (stored instanceof String && StringUtils.hasText((String) stored)) {
             long restoreCount = SESSION_RESTORE_COUNTER.incrementAndGet();
-            logger.info("{} action=restore status=hit projectId={} userId={} payloadLength={} restoreCount={}",
+            logger.info("{} action=restore status=hit source=current projectId={} userId={} payloadLength={} restoreCount={}",
                     SESSION_LOG_PREFIX, projectId, user.getId(), ((String) stored).length(), restoreCount);
             return (String) stored;
         }
+
+        String legacyCacheKey = buildLegacySessionStoreKey(projectId, user.getId());
+        Object legacyStored = redisTemplate.opsForValue().get(legacyCacheKey);
+        if (legacyStored instanceof String && StringUtils.hasText((String) legacyStored)) {
+            String migratedPayload = (String) legacyStored;
+            redisTemplate.opsForValue().set(cacheKey, migratedPayload, SESSION_STORE_TTL_DAYS, TimeUnit.DAYS);
+            long restoreCount = SESSION_RESTORE_COUNTER.incrementAndGet();
+            logger.info("{} action=restore status=hit source=legacy_migrated projectId={} userId={} payloadLength={} restoreCount={} ttlDays={}",
+                    SESSION_LOG_PREFIX, projectId, user.getId(), migratedPayload.length(), restoreCount, SESSION_STORE_TTL_DAYS);
+            return migratedPayload;
+        }
+
         long missCount = SESSION_MISS_COUNTER.incrementAndGet();
-        logger.info("{} action=restore status=miss projectId={} userId={} missCount={}",
+        logger.info("{} action=restore status=miss source=all projectId={} userId={} missCount={}",
                 SESSION_LOG_PREFIX, projectId, user.getId(), missCount);
         return "";
     }
 
     private String buildSessionStoreKey(String projectId, String userId) {
         return SESSION_STORE_KEY_PREFIX + projectId + ":" + userId;
+    }
+
+    private String buildLegacySessionStoreKey(String projectId, String userId) {
+        return LEGACY_SESSION_STORE_KEY_PREFIX + projectId + ":" + userId;
     }
 
     private String detectTopic(String text) {
