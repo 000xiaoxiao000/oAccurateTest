@@ -694,7 +694,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 }
             }
         }
-        Objects.requireNonNull(list).stream().filter(a -> !cases.containsKey(a.getId())).forEach(a -> {
+        Optional.ofNullable(list).orElse(Collections.emptyList()).stream().filter(a -> !cases.containsKey(a.getId())).forEach(a -> {
             if (!cases.containsKey(a.getId())) {
                 cases.put(a.getId(), new CompareJobVo.SnapshotUnion(a));
             }
