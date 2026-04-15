@@ -291,6 +291,40 @@
     opacity: 0.82;
 }
 
+.ai-pending-banner-dismiss {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.72);
+    color: inherit;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.ai-pending-banner-dismiss:hover {
+    background: rgba(255, 255, 255, 0.92);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.ai-pending-banner-dismiss:focus {
+    outline: none;
+}
+
+.ai-pending-banner-dismiss:focus-visible {
+    box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.2);
+}
+
+.ai-pending-banner-dismiss .icon {
+    margin: 0;
+    font-size: 12px;
+}
+
 .ai-pending-banner-summary {
     display: none;
     font-size: 12px;

@@ -897,6 +897,33 @@
             updatePendingBannerExpandedState($banner, !$banner.hasClass('is-expanded'));
         });
 
+        $(document).on('click', '.ai-pending-banner-dismiss', function () {
+            var $banner = $(this).closest('.ai-pending-banner');
+            persistPendingBannerState({ dismissed: true });
+            $banner.slideUp(180, function () {
+                $(this).remove();
+            });
+        });
+
+        $(document).on('click', '.ai-pending-banner-retry', function () {
+            var question = $(this).data('question') || '';
+            if (!question) return;
+            sendQuestion(question);
+        });
+
+        $(document).on('click', '.ai-pending-banner-toggle', function () {
+            var $banner = $(this).closest('.ai-pending-banner');
+            updatePendingBannerExpandedState($banner, !$banner.hasClass('is-expanded'));
+        });
+
+        $(document).on('click', '.ai-pending-banner-dismiss', function () {
+            var $banner = $(this).closest('.ai-pending-banner');
+            persistPendingBannerState({ dismissed: true });
+            $banner.slideUp(180, function () {
+                $(this).remove();
+            });
+        });
+
         $(document).on('click', '.ai-pending-banner-retry', function () {
             var question = $(this).data('question') || '';
             if (!question) return;
@@ -1018,6 +1045,9 @@
                 if (typeof s.pendingRequest.bannerExpanded !== 'boolean') {
                     s.pendingRequest.bannerExpanded = s.pendingRequest.status === 'pending';
                 }
+                if (typeof s.pendingRequest.dismissed !== 'boolean') {
+                    s.pendingRequest.dismissed = false;
+                }
             });
             if (serverState && typeof serverState.timelineExpanded === 'boolean' && !preferLocalMigration) {
                 timelineState.hasUserPreference = true;
@@ -1109,7 +1139,7 @@
         }
 
         function renderPendingRequestBanner(session) {
-            if (!session || !session.pendingRequest) return;
+            if (!session || !session.pendingRequest || session.pendingRequest.dismissed) return;
             var pending = session.pendingRequest;
             var status = pending.status || 'pending';
             var statusLabelMap = {
@@ -1137,6 +1167,9 @@
             var retryButton = status === 'pending'
                 ? '<button type="button" class="ai-pending-banner-retry" data-question="' + U.escapeHtml(question) + '">重新发送</button>'
                 : '';
+            var dismissButton = status !== 'pending'
+                ? '<button type="button" class="ai-pending-banner-dismiss" aria-label="关闭提示" title="关闭提示"><i class="close icon"></i></button>'
+                : '';
             var metaText = startedAt + (detail ? ' · ' + detail : '');
             var collapsedSummary = question.length > 42 ? question.substring(0, 42) + '…' : question;
             var toggleText = isExpanded ? '收起' : '展开';
@@ -1155,6 +1188,7 @@
                 + '</span>'
                 + '</button>'
                 + retryButton
+                + dismissButton
                 + '</div>'
                 + '<div class="ai-pending-banner-details"' + (isExpanded ? '' : ' hidden') + '>'
                 + '<div class="ai-pending-banner-details-inner">'
@@ -1174,11 +1208,7 @@
             var $summary = $banner.find('.ai-pending-banner-summary');
             if (!$toggle.length || !$details.length) return;
 
-            var activeSession = getActiveSession();
-            if (activeSession && activeSession.pendingRequest) {
-                activeSession.pendingRequest.bannerExpanded = expanded;
-                persistSessions();
-            }
+            persistPendingBannerState({ bannerExpanded: expanded });
 
             $banner.toggleClass('is-expanded', expanded);
             $toggle.attr('aria-expanded', expanded ? 'true' : 'false');
@@ -1216,8 +1246,14 @@
             }, 240);
         }
 
+        function persistPendingBannerState(patch) {
+            var activeSession = getActiveSession();
+            if (!activeSession || !activeSession.pendingRequest) return;
+            $.extend(activeSession.pendingRequest, patch || {});
+            persistSessions();
+        }
+
         function shouldPreferLocalMigration(serverState, localSessions) {
-            if (localStorage.getItem(sessionMigrationMarkerKey) === 'done') return false;
             if (!localSessions || !localSessions.length) return false;
             var serverSessions = serverState && serverState.sessions ? serverState.sessions : [];
             return !serverSessions.length;
@@ -1462,7 +1498,8 @@
                 question: saveMsgText || pendingQuestion,
                 startedAt: Date.now(),
                 hasImage: !!uploadedImageData,
-                bannerExpanded: true
+                bannerExpanded: true,
+                dismissed: false
             };
             persistSessions();
             syncSessionStateToServer({ silent: true });
