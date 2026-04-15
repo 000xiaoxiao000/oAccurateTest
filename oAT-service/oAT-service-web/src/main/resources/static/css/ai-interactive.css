@@ -507,7 +507,6 @@
     display: flex;
     flex-direction: column;
     overflow: visible;
-    --ai-timeline-height: 140px;
 }
 
 .ai-session-panel {
@@ -547,12 +546,6 @@
     overflow-y: auto;
     padding-right: 6px;
     /* 不使用CSS smooth，由JS scrollToAnchor控制滚动动画，避免双重缓动冲突 */
-}
-
-.ai-scroll-debug-target {
-    outline: 2px dashed rgba(245, 158, 11, 0.95);
-    outline-offset: -2px;
-    box-shadow: inset 0 0 0 2px rgba(250, 204, 21, 0.22);
 }
 
 .ai-chat-anchors {
@@ -702,7 +695,8 @@
     display: none;
     align-items: center;
     gap: 10px;
-    z-index: 4;
+    z-index: 24;
+    pointer-events: none;
 }
 
 .ai-floating-anchors.visible {
@@ -711,38 +705,70 @@
 
 .ai-floating-anchors-list {
     position: relative;
-    width: 28px;
-    padding: 10px 8px;
+    width: 40px;
+    min-height: 180px;
+    padding: 12px 10px;
     border-radius: 999px;
     background: rgba(15, 23, 42, 0.72);
     box-shadow: 0 14px 34px rgba(15, 23, 42, 0.18);
     backdrop-filter: blur(14px);
+    pointer-events: auto;
+    overflow: visible;
+}
+
+.ai-floating-anchors-list:before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 12px;
+    bottom: 12px;
+    width: 4px;
+    margin-left: -2px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(148, 163, 184, 0.28), rgba(45, 212, 191, 0.22));
+    pointer-events: none;
 }
 
 .ai-floating-anchor-dot {
     position: absolute;
     left: 50%;
-    margin-left: -6px;
-    width: 12px;
-    height: 12px;
+    margin-left: -14px;
+    width: 28px;
+    height: 28px;
     border: none;
-    border-radius: 50%;
-    background: rgba(148, 163, 184, 0.78);
+    border-radius: 999px;
+    background: transparent;
     cursor: pointer;
-    position: relative;
+    z-index: 2;
+    pointer-events: auto;
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
-.ai-floating-anchor-dot.pending {
+.ai-floating-anchor-dot:before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin-left: -6px;
+    margin-top: -6px;
+    border-radius: 50%;
+    background: rgba(148, 163, 184, 0.78);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.ai-floating-anchor-dot.pending:before {
     background: #f59e0b;
 }
 
-.ai-floating-anchor-dot.answered {
+.ai-floating-anchor-dot.answered:before {
     background: #2dd4bf;
 }
 
-.ai-floating-anchor-dot:hover,
-.ai-floating-anchor-dot.active {
+.ai-floating-anchor-dot:hover:before,
+.ai-floating-anchor-dot.active:before,
+.ai-floating-anchor-dot.preview:before {
     transform: scale(1.22);
     box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.18);
 }
@@ -758,6 +784,7 @@
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
     color: #334155;
     display: none;
+    pointer-events: none;
 }
 
 .ai-floating-anchor-tooltip.visible {
@@ -810,6 +837,7 @@
 
 .ai-chat-anchor-item.active,
 .ai-chat-anchor-item.keyboard-active,
+.ai-chat-anchor-item.preview,
 .ai-chat-anchor-item:hover {
     transform: translateY(-1px);
     border-color: rgba(20, 184, 166, 0.4);
@@ -1164,6 +1192,18 @@
 
 .ai-message.user .ai-message-card {
     background: rgba(238, 242, 255, 0.9);
+}
+
+.ai-message-section.ai-qa-group-start {
+    margin-top: 14px;
+}
+
+.ai-message-section.ai-qa-group-start .ai-message-card {
+    box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.12);
+}
+
+.ai-message-section.ai-qa-group-end {
+    margin-bottom: 16px;
 }
 
 .ai-starter-row {

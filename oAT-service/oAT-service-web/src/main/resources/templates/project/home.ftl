@@ -65,7 +65,7 @@
         </div>
 
         <div class="ui block top attached header left aligned">
-            我最近的系统快照
+            我最近的快照
             <#if apps?? && (apps?size > 0)>
                 <a class="ui" style="float: right" href="/p/${project.id}/${apps[0].id}/snapshot/list">更多</a>
             <#else>

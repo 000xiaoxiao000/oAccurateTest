@@ -33,6 +33,9 @@
         var activeSessionKey = 'ai-interactive-active-session:' + projectId;
         var sessionSortKey = 'ai-interactive-session-sort:' + projectId;
         var timelineExpandedKey = 'ai-interactive-timeline-expanded:' + projectId;
+        var sessionStateUrl = askUrl.replace(/\/ask$/, '/sessionState');
+        var sessionStateSyncInFlight = false;
+        var serverSessionState = $root.attr('data-session-state') || '';
 
         /* ===== DOM 引用 ===== */
         var $messageList = $('#aiMessageList');
@@ -219,9 +222,7 @@
         }
 
         function markScrollContainerDebug(container) {
-            $('#aiMessageList, #aiChatPanel').removeClass('ai-scroll-debug-target');
-            if (!container) return;
-            $(container).addClass('ai-scroll-debug-target');
+            return container;
         }
 
         function scrollMessageListToBottom(force) {
@@ -274,7 +275,9 @@
                 : '';
             var anchorAttrs = options.anchorId ? ' id="' + U.escapeHtml(options.anchorId) + '" data-anchor-id="' + U.escapeHtml(options.anchorId) + '"' : '';
             var sectionClass = 'ai-message-section' + (options.isAnchorTarget ? ' ai-message-section-anchor' : '');
-            var $node = $('<div class="' + sectionClass + '"' + anchorAttrs + '>'
+            var qaGroupStartClass = options.startQaGroup ? ' ai-qa-group ai-qa-group-start' : '';
+            var qaGroupEndClass = options.endQaGroup ? ' ai-qa-group-end' : '';
+            var $node = $('<div class="' + sectionClass + qaGroupStartClass + qaGroupEndClass + '"' + anchorAttrs + '>'
                 + '<div class="ai-message ' + role + '">'
                 + '<div class="ai-message-avatar">' + U.escapeHtml(avatar) + '</div>'
                 + '<div class="ai-message-body">'
@@ -314,13 +317,16 @@
         }
 
         function createQuestionAnchor(question, index, meta) {
+            var normalizedIndex = typeof index === 'number' && index >= 0
+                ? index
+                : (meta && typeof meta.index === 'number' ? meta.index : 0);
             return {
-                id: 'ai-question-anchor-' + (index + 1),
-                label: 'Q' + (index + 1),
+                id: 'ai-question-anchor-' + (normalizedIndex + 1),
+                label: 'Q' + (normalizedIndex + 1),
                 question: question || '未命名提问',
                 answered: !!(meta && meta.answered),
                 responseTime: meta && meta.responseTime ? meta.responseTime : 0,
-                shareUrl: window.location.pathname + '#'+ ('ai-question-anchor-' + (index + 1))
+                shareUrl: window.location.pathname + '#'+ ('ai-question-anchor-' + (normalizedIndex + 1))
             };
         }
 
@@ -337,7 +343,7 @@
             $.each((session && session.history) || [], function (_, item) {
                 if (item.role === 'user') {
                     pendingUser = item;
-                    anchors.push(createQuestionAnchor(item.message, count, { answered: false, responseTime: 0 }));
+                    anchors.push(createQuestionAnchor(item.message, count, { index: count, answered: false, responseTime: 0 }));
                     count++;
                     return;
                 }
@@ -358,24 +364,71 @@
                 $floatingAnchorTooltip.removeClass('visible').attr('aria-hidden', 'true').empty();
                 return;
             }
-            var container = $messageList[0];
-            var trackHeight = Math.max(160, Math.min((container && container.clientHeight) || 320, 420));
-            var maxTop = Math.max(0, trackHeight - 12);
-            var html = '';
+            var trackHeight = Math.max(180, Math.min(window.innerHeight - 220, 420));
+            var maxTop = Math.max(0, trackHeight - 16);
+            var anchorPositions = [];
+            var lastTop = -18;
             $.each(anchors, function (_, anchor) {
                 var $target = $('#' + anchor.id);
-                var ratio = 0;
-                if ($target.length && container) {
-                    var targetTop = getAnchorScrollTop($target[0]);
-                    var scrollRange = Math.max(1, container.scrollHeight - container.clientHeight);
-                    ratio = Math.max(0, Math.min(1, targetTop / scrollRange));
+                var ratio = anchors.length <= 1 ? 0 : (_ / (anchors.length - 1));
+                if ($target.length) {
+                    var targetRect = $target[0].getBoundingClientRect();
+                    var absoluteTop = (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0) + targetRect.top;
+                    var pageHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
+                    ratio = Math.max(0, Math.min(1, absoluteTop / Math.max(1, pageHeight - window.innerHeight)));
                 }
+                var top = Math.round(maxTop * ratio);
+                if (top - lastTop < 18) {
+                    top = Math.min(maxTop, lastTop + 18);
+                }
+                lastTop = top;
+                anchorPositions.push({ anchor: anchor, top: top, ratio: ratio });
+            });
+            if (anchorPositions.length > 1) {
+                for (var i = anchorPositions.length - 2; i >= 0; i--) {
+                    if (anchorPositions[i + 1].top - anchorPositions[i].top < 18) {
+                        anchorPositions[i].top = Math.max(0, anchorPositions[i + 1].top - 18);
+                    }
+                }
+            }
+            var html = '';
+            $.each(anchorPositions, function (_, item) {
+                var anchor = item.anchor;
                 var statusClass = anchor.answered ? 'answered' : 'pending';
                 var durationText = formatResponseTime(anchor.responseTime) || '等待回复中';
-                html += '<button type="button" class="ai-floating-anchor-dot ' + statusClass + '" style="top:' + Math.round(maxTop * ratio) + 'px" data-anchor-ratio="' + ratio + '" data-anchor-id="' + U.escapeHtml(anchor.id) + '" data-anchor-label="' + U.escapeHtml(anchor.label) + '" data-anchor-question="' + U.escapeHtml(anchor.question) + '" data-anchor-status="' + U.escapeHtml(anchor.answered ? '已回复' : '待回复') + '" data-anchor-duration="' + U.escapeHtml(durationText) + '" aria-label="' + U.escapeHtml(anchor.label + ' ' + anchor.question) + '"></button>';
+                html += '<button type="button" class="ai-floating-anchor-dot ' + statusClass + '" style="top:' + item.top + 'px" data-anchor-ratio="' + item.ratio + '" data-anchor-id="' + U.escapeHtml(anchor.id) + '" data-anchor-label="' + U.escapeHtml(anchor.label) + '" data-anchor-question="' + U.escapeHtml(anchor.question) + '" data-anchor-status="' + U.escapeHtml(anchor.answered ? '已回复' : '待回复') + '" data-anchor-duration="' + U.escapeHtml(durationText) + '" aria-label="' + U.escapeHtml(anchor.label + ' ' + anchor.question) + '"></button>';
             });
             $floatingAnchorsList.css('height', trackHeight + 'px').html(html);
             $floatingAnchors.addClass('visible');
+        }
+
+        function findClosestFloatingAnchorId(pageY) {
+            if (!$floatingAnchorsList.length) return null;
+            var $dots = $floatingAnchorsList.find('.ai-floating-anchor-dot');
+            if (!$dots.length) return null;
+            var listRect = $floatingAnchorsList[0].getBoundingClientRect();
+            var relativeY = pageY - (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0) - listRect.top;
+            var closestId = null;
+            var minDistance = Infinity;
+            $dots.each(function () {
+                var $dot = $(this);
+                var dotTop = parseFloat($dot.css('top')) || 0;
+                var dotCenter = dotTop + ($dot.outerHeight() || 28) / 2;
+                var distance = Math.abs(dotCenter - relativeY);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestId = $dot.data('anchor-id');
+                }
+            });
+            return closestId;
+        }
+
+        function previewFloatingAnchor(anchorId) {
+            if (!anchorId) return;
+            applyAnchorPreview(anchorId);
+            setTimeout(function () {
+                clearAnchorPreview();
+            }, 220);
         }
 
         function positionFloatingAnchorTooltip($dot) {
@@ -479,6 +532,9 @@
             $('.ai-chat-anchor-item.active').removeClass('active');
             $('.ai-floating-anchor-dot.active').removeClass('active');
             $('.ai-message-section-anchor.is-active').removeClass('is-active');
+            if (anchorScrollState.currentAnchorId !== anchorId) {
+                clearAnchorPreview();
+            }
             anchorScrollState.currentAnchorId = anchorId || null;
             if (!anchorId) return;
             var $active = $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + anchorId + '"]');
@@ -506,7 +562,7 @@
                     }
                 });
             } else {
-                var viewportLine = Math.max(96, Math.round(window.innerHeight * 0.24));
+                var viewportLine = Math.max(72, Math.round(window.innerHeight * 0.16));
                 $messageList.find('.ai-message-section-anchor').each(function () {
                     var $section = $(this);
                     var $card = $section.find('.ai-message-card').first();
@@ -532,21 +588,35 @@
             setActiveAnchor(activeAnchorId);
         }
 
+        function clearAnchorPreview() {
+            $('.ai-message-section-anchor.is-preview').removeClass('is-preview');
+            $('.ai-chat-anchor-item.preview').removeClass('preview');
+            $floatingAnchorsList.find('.ai-floating-anchor-dot.preview').removeClass('preview');
+        }
+
+        function applyAnchorPreview(anchorId) {
+            if (!anchorId) return;
+            var $target = $('#' + anchorId);
+            clearAnchorPreview();
+            if ($target.length) {
+                $target.addClass('is-preview');
+            }
+            $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + anchorId + '"]').addClass('preview');
+            $floatingAnchorsList.find('.ai-floating-anchor-dot[data-anchor-id="' + anchorId + '"]').addClass('preview');
+        }
+
         function clearAnchorSearch() {
             if (!$anchorSearchInput.length) return;
             $anchorSearchInput.val('');
             anchorSearchKeyword = '';
             anchorKeyboardIndex = -1;
-            $('.ai-message-section-anchor.is-preview').removeClass('is-preview');
+            clearAnchorPreview();
             renderChatAnchors(getActiveSession());
             $anchorSearchInput.focus();
         }
 
         function previewAnchorSelection(anchorId) {
-            var $target = $('#' + anchorId);
-            $('.ai-message-section-anchor.is-preview').removeClass('is-preview');
-            if (!$target.length) return;
-            $target.addClass('is-preview');
+            applyAnchorPreview(anchorId);
         }
 
         function moveAnchorKeyboardSelection(step) {
@@ -578,13 +648,13 @@
 
             if (container) {
                 var containerRect = container.getBoundingClientRect();
-                var viewportOffset = Math.round(container.clientHeight * 0.16);
-                var nextTop = container.scrollTop + (targetRect.top - containerRect.top) - Math.max(8, viewportOffset);
+                var viewportOffset = Math.max(20, Math.round(container.clientHeight * 0.12));
+                var nextTop = container.scrollTop + (targetRect.top - containerRect.top) - viewportOffset;
                 return Math.max(0, Math.round(nextTop));
             }
 
             var pageTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
-            var pageOffset = Math.max(96, Math.round(window.innerHeight * 0.18));
+            var pageOffset = Math.max(72, Math.round(window.innerHeight * 0.1));
             return Math.max(0, Math.round(pageTop + targetRect.top - pageOffset));
         }
 
@@ -615,7 +685,6 @@
             var $target = $('#' + anchorId);
             if (!$target.length) return;
             var container = getScrollContainer();
-            markScrollContainerDebug(container);
 
             anchorScrollState.programmatic = true;
             anchorScrollState.currentAnchorId = anchorId;
@@ -628,20 +697,6 @@
             }
 
             var nextTop = Math.round(getAnchorScrollTop($target[0]));
-
-            if (window.console && console.debug) {
-                console.debug('[AI Anchor]', {
-                    anchorId: anchorId,
-                    containerId: container ? (container.id || '(no-id)') : '(window)',
-                    containerClass: container ? (container.className || '') : '(window)',
-                    currentTop: container ? container.scrollTop : (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0),
-                    nextTop: nextTop,
-                    maxScrollTop: container ? Math.max(0, container.scrollHeight - container.clientHeight) : Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
-                    clientHeight: container ? container.clientHeight : window.innerHeight,
-                    scrollHeight: container ? container.scrollHeight : document.documentElement.scrollHeight,
-                    immediate: !!options.immediate
-                });
-            }
 
             if (container && container._aiAnchorScrollFrame) {
                 cancelAnimationFrame(container._aiAnchorScrollFrame);
@@ -889,15 +944,107 @@
         }
 
         function loadSessions() {
-            sessions = U.readJSON(sessionsKey, []);
-            activeSessionId = sessionStorage.getItem(activeSessionKey);
-            $sessionSortSelect.val(getSessionSortMode());
+            var localSessions = U.readJSON(sessionsKey, []);
+            var serverState = parseServerSessionState();
+            maybeShowRecoveredToast(serverState, localSessions);
+            sessions = serverState && serverState.sessions && serverState.sessions.length ? serverState.sessions : localSessions;
+            activeSessionId = serverState && serverState.activeSessionId ? serverState.activeSessionId : sessionStorage.getItem(activeSessionKey);
+            $sessionSortSelect.val(getSessionSortMode(serverState));
             $.each(sessions, function (_, s) { s.pinned = !!s.pinned; });
+            if (serverState && typeof serverState.timelineExpanded === 'boolean') {
+                timelineState.hasUserPreference = true;
+                timelineState.expanded = serverState.timelineExpanded;
+                sessionStorage.setItem(timelineExpandedKey, serverState.timelineExpanded ? 'true' : 'false');
+            }
             if (!sessions.length) { migrateLegacyHistory(); return; }
             if (!activeSessionId || !findSession(activeSessionId)) { activeSessionId = sessions[0].id; sessionStorage.setItem(activeSessionKey, activeSessionId); }
+            persistSessions();
         }
 
-        function persistSessions() { U.writeJSON(sessionsKey, sessions); sessionStorage.setItem(activeSessionKey, activeSessionId); }
+        function persistSessions() { U.writeJSON(sessionsKey, sessions); sessionStorage.setItem(activeSessionKey, activeSessionId); serverSessionState = JSON.stringify(buildServerSessionPayload()); }
+
+        function parseServerSessionState() {
+            if (!serverSessionState) return null;
+            try {
+                return JSON.parse(serverSessionState);
+            } catch (e) {
+                console.warn('[AI] 解析服务端会话状态失败', e);
+                return null;
+            }
+        }
+
+        function buildServerSessionPayload() {
+            return {
+                sessions: sessions,
+                activeSessionId: activeSessionId,
+                sessionSortMode: getSessionSortMode(),
+                timelineExpanded: timelineState.expanded
+            };
+        }
+
+        function syncSessionStateToServer(options) {
+            options = options || {};
+            var payload = JSON.stringify(buildServerSessionPayload());
+            serverSessionState = payload;
+            sessionStateSyncInFlight = true;
+            return $.ajax({
+                url: sessionStateUrl,
+                type: 'POST',
+                dataType: 'json',
+                timeout: Math.min(aiTimeout, 15000),
+                data: { sessionState: payload }
+            }).done(function (response) {
+                if (response && response.success !== false && response.data) {
+                    serverSessionState = response.data;
+                    normalizeServerSessionState();
+                    persistSessions();
+                    if (options.toastMessage) {
+                        U.showToast(options.toastMessage, 'success');
+                    }
+                }
+            }).fail(function () {
+                if (options.silent !== true) {
+                    U.showToast('会话同步失败，但本地记录仍已保留', 'warning');
+                }
+            }).always(function () {
+                sessionStateSyncInFlight = false;
+            });
+        }
+
+        function syncSessionStateOnPageLeave() {
+            if (sessionStateSyncInFlight || !window.navigator || typeof window.navigator.sendBeacon !== 'function') return;
+            var payload = JSON.stringify(buildServerSessionPayload());
+            serverSessionState = payload;
+            var formData = new FormData();
+            formData.append('sessionState', payload);
+            window.navigator.sendBeacon(sessionStateUrl, formData);
+        }
+
+        function maybeShowRecoveredToast(serverState, localSessions) {
+            if (!serverState || !serverState.sessions || !serverState.sessions.length) return;
+            if (localSessions && localSessions.length) return;
+            U.showToast('已自动恢复上次会话', 'success');
+        }
+
+        function normalizeServerSessionState() {
+            var serverState = parseServerSessionState();
+            if (!serverState) return;
+            if (serverState.sessions && serverState.sessions.length) {
+                sessions = serverState.sessions;
+            }
+            if (serverState.activeSessionId) {
+                activeSessionId = serverState.activeSessionId;
+            }
+            if (typeof serverState.timelineExpanded === 'boolean') {
+                timelineState.expanded = serverState.timelineExpanded;
+                timelineState.hasUserPreference = true;
+                sessionStorage.setItem(timelineExpandedKey, serverState.timelineExpanded ? 'true' : 'false');
+            }
+            if (serverState.sessionSortMode) {
+                sessionStorage.setItem(sessionSortKey, serverState.sessionSortMode);
+                $sessionSortSelect.val(serverState.sessionSortMode);
+            }
+        }
 
         function findSession(id) { for (var i = 0; i < sessions.length; i++) { if (sessions[i].id === id) return sessions[i]; } return null; }
         function getActiveSession() { return findSession(activeSessionId); }
@@ -907,8 +1054,9 @@
             session.title = (q || '新会话').substring(0, 18);
         }
 
-        function getSessionSortMode() {
-            var m = sessionStorage.getItem(sessionSortKey) || 'recent';
+        function getSessionSortMode(serverState) {
+            var fromServer = serverState && serverState.sessionSortMode;
+            var m = fromServer || sessionStorage.getItem(sessionSortKey) || 'recent';
             return ['recent', 'oldest', 'name'].indexOf(m) !== -1 ? m : 'recent';
         }
 
@@ -967,18 +1115,22 @@
         function renderActiveSession() {
             var s = getActiveSession(); if (!s) return;
             $messageList.empty();
-            var anchorIndex = 0;
-            $.each(s.history || [], function (_, item) {
+            var anchors = getQuestionAnchors(s);
+            var anchorCursor = 0;
+            $.each(s.history || [], function (index, item) {
+                var nextItem = (s.history || [])[index + 1] || null;
                 var messageOptions = {
                     animate: false,
                     collapsible: item.role === 'assistant' && shouldCollapseMessage(item.message),
-                    isHtml: false
+                    isHtml: false,
+                    startQaGroup: item.role === 'user',
+                    endQaGroup: item.role === 'assistant' && (!nextItem || nextItem.role === 'user')
                 };
                 if (item.role === 'user') {
-                    var anchor = createQuestionAnchor(item.message, anchorIndex);
+                    var anchor = anchors[anchorCursor] || createQuestionAnchor(item.message, anchorCursor, { index: anchorCursor });
                     messageOptions.anchorId = anchor.id;
                     messageOptions.isAnchorTarget = true;
-                    anchorIndex++;
+                    anchorCursor++;
                 }
                 appendMessage(item.role, item.title, item.message, item.actions || [], messageOptions);
             });
@@ -1004,10 +1156,18 @@
         function saveMessage(entry) {
             var s = getActiveSession(); if (!s) return;
             s.history.push(entry); s.updatedAt = Date.now(); persistSessions(); renderSessionList();
+            renderChatAnchors(s, { silent: true });
+            renderFloatingAnchors(getQuestionAnchors(s).filter(function (anchor) {
+                var matchesFilter = anchorFilterMode === 'all' || !anchor.answered;
+                var matchesSearch = !anchorSearchKeyword || (anchor.question || '').toLowerCase().indexOf(anchorSearchKeyword) !== -1;
+                return matchesFilter && matchesSearch;
+            }));
+            syncActiveAnchorByScroll();
         }
 
         function createNewSession() {
             var s = createBaseSession(); sessions.unshift(s); activeSessionId = s.id; persistSessions(); renderActiveSession();
+            syncSessionStateToServer({ silent: true });
         }
 
         function renameSession(sid) {
@@ -1019,21 +1179,34 @@
 
             function finish() {
                 var n = $.trim($input.val());
-                if (n && n !== old) { s.title = n.substring(0, 24); s.updatedAt = Date.now(); persistSessions(); U.showToast('会话已重命名为"' + U.escapeHtml(s.title) + '"', 'success'); }
+                if (n && n !== old) {
+                    s.title = n.substring(0, 24); s.updatedAt = Date.now(); persistSessions(); renderSessionList();
+                    syncSessionStateToServer({ toastMessage: '会话已重命名为"' + U.escapeHtml(s.title) + '"' });
+                    return;
+                }
                 renderSessionList();
             }
             $input.on('keydown', function (e) { if (e.keyCode === 13) { e.preventDefault(); finish(); } else if (e.keyCode === 27) { renderSessionList(); } }).on('blur', finish);
         }
 
-        function togglePinSession(sid) { var s = findSession(sid); if (!s) return; s.pinned = !s.pinned; s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
+        function togglePinSession(sid) {
+            var s = findSession(sid); if (!s) return;
+            s.pinned = !s.pinned; s.updatedAt = Date.now(); persistSessions(); renderSessionList();
+            syncSessionStateToServer({ silent: true });
+        }
 
         function deleteSession(sid) {
             var s = findSession(sid); if (!s) return;
             U.showConfirm('确认删除会话 "' + (s.title || '新会话') + '" 吗？', function () {
                 sessions = sessions.filter(function (x) { return x.id !== sid; });
-                if (!sessions.length) { var ns = createBaseSession(); sessions = [ns]; activeSessionId = ns.id; persistSessions(); renderActiveSession(); return; }
+                if (!sessions.length) {
+                    var ns = createBaseSession(); sessions = [ns]; activeSessionId = ns.id; persistSessions(); renderActiveSession();
+                    syncSessionStateToServer({ toastMessage: '会话已删除' });
+                    return;
+                }
                 if (activeSessionId === sid) activeSessionId = sortSessions(sessions)[0].id;
-                persistSessions(); renderActiveSession(); U.showToast('会话已删除', 'success');
+                persistSessions(); renderActiveSession();
+                syncSessionStateToServer({ toastMessage: '会话已删除' });
             });
         }
 
@@ -1084,7 +1257,13 @@
 
             currentAjaxRequest = $.ajax({
                 url: askUrl, type: 'POST', dataType: 'json', timeout: aiTimeout,
-                data: { question: question }
+                data: {
+                    question: question,
+                    sessionState: JSON.stringify(buildServerSessionPayload()),
+                    activeSessionId: activeSessionId,
+                    sessionSortMode: getSessionSortMode(),
+                    timelineExpanded: timelineState.expanded
+                }
             }).done(function (response) {
                 hideLoading();
                 if (!response || response.success === false || response.result === false) {
@@ -1096,6 +1275,11 @@
                 var reply = d.answer || response.message || '已收到你的问题。';
                 appendMessage('assistant', assistantName, reply, d.suggestions || [], { animate: true, collapsible: shouldCollapseMessage(reply) });
                 session.quickLinks = d.quickLinks || []; session.suggestions = d.suggestions || [];
+                if (d.sessionState) {
+                    serverSessionState = d.sessionState;
+                    normalizeServerSessionState();
+                    session = getActiveSession() || session;
+                }
                 renderQuickLinks(session.quickLinks); renderFollowUps(session.suggestions);
                 saveMessage({ role: 'assistant', title: assistantName, message: reply, actions: d.suggestions || [], quickLinks: d.quickLinks || [], responseTime: d.metadata && d.metadata.responseTime ? d.metadata.responseTime : 0 });
                 addTimeline('生成回复', d.topic || 'general'); setSignalState('reply');
@@ -1119,15 +1303,41 @@
          *  事件绑定
          * ============================================================ */
 
+        $(window).on('pagehide beforeunload', function () {
+            syncSessionStateOnPageLeave();
+        });
+        $(document).on('visibilitychange', function () {
+            if (document.visibilityState === 'hidden') {
+                syncSessionStateOnPageLeave();
+            }
+        });
+
         $newSessionButton.on('click', createNewSession);
         $sessionSearchInput.on('input', renderSessionList);
-        $sessionSortSelect.on('change', function () { sessionStorage.setItem(sessionSortKey, $(this).val()); renderSessionList(); });
+        $sessionSortSelect.on('change', function () { sessionStorage.setItem(sessionSortKey, $(this).val()); persistSessions(); renderSessionList(); syncSessionStateToServer({ silent: true }); });
 
         $questionInput.on('keydown', function (e) {
             if (e.keyCode === 13 && !e.shiftKey) { e.preventDefault(); sendQuestion(); }
         });
 
         $(document).on('click', '.starter-question, .ai-action-btn', function () { sendQuestion($(this).data('question')); });
+        $(document).on('mousedown', '.ai-floating-anchor-dot', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            scrollToAnchor($(this).data('anchor-id'));
+        });
+        $floatingAnchorsList.on('mousedown', function (event) {
+            if ($(event.target).closest('.ai-floating-anchor-dot').length) return;
+            event.preventDefault();
+            event.stopPropagation();
+            var anchorId = findClosestFloatingAnchorId(event.pageY);
+            if (anchorId) {
+                previewFloatingAnchor(anchorId);
+                setTimeout(function () {
+                    scrollToAnchor(anchorId);
+                }, 70);
+            }
+        });
         $(document).on('click', '.ai-chat-anchor-item, .ai-floating-anchor-dot', function (event) {
             event.preventDefault();
             event.stopPropagation();
@@ -1209,7 +1419,14 @@
                 setTimelineExpanded(true);
             }
         });
-        $(document).on('click', '.ai-session-item', function () { activeSessionId = $(this).data('session-id'); persistSessions(); renderActiveSession(); });
+        $(document).on('click', '.ai-session-item', function () {
+            var nextSessionId = $(this).data('session-id');
+            if (!nextSessionId || nextSessionId === activeSessionId) return;
+            activeSessionId = nextSessionId;
+            persistSessions();
+            renderActiveSession();
+            syncSessionStateToServer({ silent: true });
+        });
         $(document).on('click', '.ai-session-action.rename', function (e) { e.stopPropagation(); renameSession($(this).data('session-id')); });
         $(document).on('click', '.ai-session-action.pin', function (e) { e.stopPropagation(); togglePinSession($(this).data('session-id')); });
         $(document).on('click', '.ai-session-action.delete', function (e) { e.stopPropagation(); deleteSession($(this).data('session-id')); });

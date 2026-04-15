@@ -18,6 +18,7 @@ public class AIInteractivePageVo implements Serializable {
     private List<AIQuickLinkVo> quickLinks;
     private Map<String, String> mascot;
     private int aiTimeout;
+    private String sessionState;
 
     public String getProjectId() {
         return projectId;
@@ -121,5 +122,13 @@ public class AIInteractivePageVo implements Serializable {
 
     public void setAiTimeout(int aiTimeout) {
         this.aiTimeout = aiTimeout;
+    }
+
+    public String getSessionState() {
+        return sessionState;
+    }
+
+    public void setSessionState(String sessionState) {
+        this.sessionState = sessionState;
     }
 }
