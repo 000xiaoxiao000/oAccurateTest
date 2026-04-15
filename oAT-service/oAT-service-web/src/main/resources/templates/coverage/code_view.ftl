@@ -217,6 +217,8 @@
             <#list classCov.methods as m>
                 <#-- 计算百分比并保留小数以防整数截断 -->
                 <#assign linePct = (m.totalLines > 0)?then(m.coveredLines * 1.0 / m.totalLines * 100, 0)>
+                <#assign branchTargetTotal = m.totalBranchTargets!0>
+                <#assign branchTargetCovered = m.coveredBranchTargets!0>
                 <#assign branchPct = m.branchRate!0>
                 <tr>
                     <td class="method-name" title="${m.methodDesc!""}">${m.methodName}</td>
@@ -227,8 +229,8 @@
                         </div>
                     </td>
                     <td>
-                        <span class="stat-txt">${m.coveredBranches}/${m.totalBranches} (${branchPct?string("0.0")}%)</span>
-                        <div class="ui tiny progress <#if branchPct == 100>success<#elseif branchPct gt 0>warning<#elseif m.totalBranches gt 0>error</#if>" data-percent="${branchPct}">
+                        <span class="stat-txt">${branchTargetCovered}/${branchTargetTotal} (${branchPct?string("0.0")}%)</span>
+                        <div class="ui tiny progress <#if branchPct == 100>success<#elseif branchPct gt 0>warning<#elseif branchTargetTotal gt 0>error</#if>" data-percent="${branchPct}">
                             <div class="bar" style="width: ${branchPct}%"></div>
                         </div>
                     </td>
@@ -236,7 +238,7 @@
                         <a href="#method_${m?index}" class="ui mini blue basic button">查看代码</a>
                     </td>
                     <td>
-                        <#if linePct == 100 && (m.totalBranches == 0 || branchPct == 100)>
+                        <#if linePct == 100 && (branchTargetTotal == 0 || branchPct == 100)>
                             <span class="ui green label small">全覆盖</span>
                         <#elseif linePct gt 0 || branchPct gt 0>
                             <span class="ui orange label small">部分覆盖</span>
