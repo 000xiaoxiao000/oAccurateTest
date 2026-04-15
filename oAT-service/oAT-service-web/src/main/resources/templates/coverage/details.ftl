@@ -157,7 +157,7 @@
                     <th style="width: 25%">类名</th>
                     <th style="width: 12%">方法 (覆盖/总)</th>
                     <th style="width: 8%">方法覆盖率</th>
-                    <th style="width: 12%">分支 (覆盖/总)</th>
+                    <th style="width: 12%">分支目标 (覆盖/总)</th>
                     <th style="width: 8%">分支覆盖率</th>
                     <th style="width: 12%">代码行 (覆盖/总)</th>
                     <th style="width: 10%">代码行覆盖率</th>
@@ -171,8 +171,8 @@
                     <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.className}">${item.className}</td>
                     <td class="center aligned">${item.coveredMethods} / ${item.totalMethods}</td>
                     <td class="center aligned <#if item.coveredMethods gt 0>positive<#else>negative</#if>"><#if (item.totalMethods > 0)>${(item.coveredMethods / item.totalMethods * 100)?string("0.00")}%<#else>0.00%</#if></td>
-                    <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
-                    <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
+                    <td class="center aligned">${item.coveredBranchTargets} / ${item.totalBranchTargets}</td>
+                    <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranchTargets gt 0>negative</#if>"><#if (item.totalBranchTargets > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
                     <td class="center aligned">${item.coveredLines} / ${item.totalLines}</td>
                     <td class="center aligned <#if item.coveredLines gt 0>positive<#else>negative</#if>"><#if (item.totalLines > 0)>${(item.coveredLines / item.totalLines * 100)?string("0.00")}%<#else>0.00%</#if></td>
                     <td class="center aligned">${item.totalComplexity}</td>
@@ -206,7 +206,7 @@
                 <th style="width: 25%">包/类</th>
                 <th style="width: 12%">方法 (覆盖/总)</th>
                 <th style="width: 8%">方法覆盖率</th>
-                <th style="width: 12%">分支 (覆盖/总)</th>
+                <th style="width: 12%">分支目标 (覆盖/总)</th>
                 <th style="width: 8%">分支覆盖率</th>
                 <th style="width: 12%">代码行 (覆盖/总)</th>
                 <th style="width: 10%">代码行覆盖率</th>
@@ -254,8 +254,8 @@
         </td>
         <td class="center aligned">${item.coveredMethods} / ${item.totalMethods}</td>
         <td class="center aligned <#if item.coveredMethods gt 0>positive<#else>negative</#if>">${item.methodRate?string("0.00")}%</td>
-        <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
-        <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>"><#if (item.totalBranches > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
+        <td class="center aligned">${item.coveredBranchTargets} / ${item.totalBranchTargets}</td>
+        <td class="center aligned <#if (item.branchRate!0) gt 0>positive<#elseif item.totalBranchTargets gt 0>negative</#if>"><#if (item.totalBranchTargets > 0)>${(item.branchRate!0)?string("0.00")}%<#else>N/A</#if></td>
         <td class="center aligned">${item.coveredLines} / ${item.totalLines}</td>
         <td class="center aligned <#if item.coveredLines gt 0>positive<#else>negative</#if>">${item.lineRate?string("0.00")}%</td>
         <td class="center aligned">${item.totalComplexity}</td>
@@ -372,8 +372,8 @@
                     html += '</td>';
                     html += '<td class="center aligned">' + item.coveredMethods + ' / ' + item.totalMethods + '</td>';
                     html += '<td class="center aligned ' + (item.coveredMethods > 0 ? 'positive' : 'negative') + '">' + item.methodRate.toFixed(2) + '%</td>';
-                    html += '<td class="center aligned">' + item.coveredBranches + ' / ' + item.totalBranches + '</td>';
-                    html += '<td class="center aligned ' + ((item.branchRate || 0) > 0 ? 'positive' : (item.totalBranches > 0 ? 'negative' : '')) + '">' + (item.totalBranches > 0 ? (item.branchRate || 0).toFixed(2) + '%' : 'N/A') + '</td>';
+                    html += '<td class="center aligned">' + item.coveredBranchTargets + ' / ' + item.totalBranchTargets + '</td>';
+                    html += '<td class="center aligned ' + ((item.branchRate || 0) > 0 ? 'positive' : (item.totalBranchTargets > 0 ? 'negative' : '')) + '">' + (item.totalBranchTargets > 0 ? (item.branchRate || 0).toFixed(2) + '%' : 'N/A') + '</td>';
                     html += '<td class="center aligned">' + item.coveredLines + ' / ' + item.totalLines + '</td>';
                     html += '<td class="center aligned ' + (item.coveredLines > 0 ? 'positive' : 'negative') + '">' + item.lineRate.toFixed(2) + '%</td>';
                     html += '<td class="center aligned">' + item.totalComplexity + '</td>';

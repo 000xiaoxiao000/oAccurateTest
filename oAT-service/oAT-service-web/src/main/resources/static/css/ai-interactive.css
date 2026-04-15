@@ -546,7 +546,7 @@
     min-height: 200px;
     overflow-y: auto;
     padding-right: 6px;
-    scroll-behavior: smooth;
+    /* 不使用CSS smooth，由JS scrollToAnchor控制滚动动画，避免双重缓动冲突 */
 }
 
 .ai-chat-anchors {
@@ -810,8 +810,49 @@
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
 }
 
+.ai-chat-anchor-item.active {
+    animation: aiAnchorActiveBreath 1.15s ease-out 1;
+}
+
+.ai-floating-anchor-dot.active {
+    animation: aiFloatingAnchorActivePulse 1.05s ease-out 1;
+}
+
 .ai-chat-anchor-item.just-answered {
     animation: aiAnchorAnsweredPulse 0.7s ease;
+}
+
+@keyframes aiAnchorActiveBreath {
+    0% {
+        transform: translateY(-1px) scale(0.985);
+        border-color: rgba(20, 184, 166, 0.28);
+        box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.00), 0 10px 24px rgba(15, 23, 42, 0.04);
+    }
+    42% {
+        transform: translateY(-2px) scale(1.015);
+        border-color: rgba(20, 184, 166, 0.52);
+        box-shadow: 0 0 0 8px rgba(20, 184, 166, 0.10), 0 16px 30px rgba(15, 23, 42, 0.08);
+    }
+    100% {
+        transform: translateY(-1px) scale(1);
+        border-color: rgba(20, 184, 166, 0.4);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+}
+
+@keyframes aiFloatingAnchorActivePulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(45, 212, 191, 0.00);
+    }
+    45% {
+        transform: scale(1.34);
+        box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.18);
+    }
+    100% {
+        transform: scale(1.22);
+        box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.18);
+    }
 }
 
 @keyframes aiAnchorAnsweredPulse {
