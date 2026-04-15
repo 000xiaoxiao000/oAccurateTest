@@ -892,6 +892,11 @@
             var s = getActiveSession(); if (s) { s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
         }
 
+        $(document).on('click', '.ai-pending-banner-toggle', function () {
+            var $banner = $(this).closest('.ai-pending-banner');
+            updatePendingBannerExpandedState($banner, !$banner.hasClass('is-expanded'));
+        });
+
         $(document).on('click', '.ai-pending-banner-retry', function () {
             var question = $(this).data('question') || '';
             if (!question) return;
@@ -1004,7 +1009,16 @@
                 ? (sessionStorage.getItem(activeSessionKey) || (localSessions[0] && localSessions[0].id))
                 : (serverState && serverState.activeSessionId ? serverState.activeSessionId : sessionStorage.getItem(activeSessionKey));
             $sessionSortSelect.val(getSessionSortMode(preferLocalMigration ? null : serverState));
-            $.each(sessions, function (_, s) { s.pinned = !!s.pinned; if (!s.pendingRequest) s.pendingRequest = null; });
+            $.each(sessions, function (_, s) {
+                s.pinned = !!s.pinned;
+                if (!s.pendingRequest) {
+                    s.pendingRequest = null;
+                    return;
+                }
+                if (typeof s.pendingRequest.bannerExpanded !== 'boolean') {
+                    s.pendingRequest.bannerExpanded = s.pendingRequest.status === 'pending';
+                }
+            });
             if (serverState && typeof serverState.timelineExpanded === 'boolean' && !preferLocalMigration) {
                 timelineState.hasUserPreference = true;
                 timelineState.expanded = serverState.timelineExpanded;
@@ -1110,17 +1124,87 @@
             var detail = pending.detail || '';
             var startedAt = pending.startedAt ? new Date(pending.startedAt).toLocaleString() : '';
             var bannerClass = status === 'pending' ? 'is-pending' : 'is-resolved';
+            var isExpanded = typeof pending.bannerExpanded === 'boolean' ? pending.bannerExpanded : status === 'pending';
             var retryButton = status === 'pending'
                 ? '<button type="button" class="ai-pending-banner-retry" data-question="' + U.escapeHtml(question) + '">重新发送</button>'
                 : '';
-            var html = '<div class="ai-pending-banner ' + bannerClass + '">'
+            var metaText = startedAt + (detail ? ' · ' + detail : '');
+            var collapsedSummary = question.length > 42 ? question.substring(0, 42) + '…' : question;
+            var toggleText = isExpanded ? '收起' : '展开';
+            var html = '<div class="ai-pending-banner ' + bannerClass + (isExpanded ? ' is-expanded' : '') + '">'
                 + '<div class="ai-pending-banner-icon"><i class="history icon"></i></div>'
                 + '<div class="ai-pending-banner-body">'
-                + '<div class="ai-pending-banner-title-row"><div class="ai-pending-banner-title">' + U.escapeHtml(statusLabelMap[status] || '上一轮请求状态未知') + '</div>' + retryButton + '</div>'
+                + '<div class="ai-pending-banner-title-row">'
+                + '<button type="button" class="ai-pending-banner-toggle" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">'
+                + '<span class="ai-pending-banner-toggle-main">'
+                + '<span class="ai-pending-banner-title">' + U.escapeHtml(statusLabelMap[status] || '上一轮请求状态未知') + '</span>'
+                + '<span class="ai-pending-banner-summary' + (isExpanded ? '' : ' visible') + '">' + U.escapeHtml(collapsedSummary) + '</span>'
+                + '</span>'
+                + '<span class="ai-pending-banner-toggle-side">'
+                + '<span class="ai-pending-banner-toggle-text">' + toggleText + '</span>'
+                + '<span class="ai-pending-banner-chevron" aria-hidden="true"></span>'
+                + '</span>'
+                + '</button>'
+                + retryButton
+                + '</div>'
+                + '<div class="ai-pending-banner-details"' + (isExpanded ? '' : ' hidden') + '>'
+                + '<div class="ai-pending-banner-details-inner">'
                 + '<div class="ai-pending-banner-question">' + U.escapeHtml(question) + '</div>'
-                + '<div class="ai-pending-banner-meta">' + U.escapeHtml(startedAt + (detail ? ' · ' + detail : '')) + '</div>'
+                + '<div class="ai-pending-banner-meta">' + U.escapeHtml(metaText) + '</div>'
+                + '</div>'
+                + '</div>'
                 + '</div></div>';
             $messageList.append(html);
+        }
+
+        function updatePendingBannerExpandedState($banner, expanded) {
+            if (!$banner || !$banner.length) return;
+            var $toggle = $banner.find('.ai-pending-banner-toggle');
+            var $details = $banner.find('.ai-pending-banner-details');
+            var $toggleText = $banner.find('.ai-pending-banner-toggle-text');
+            var $summary = $banner.find('.ai-pending-banner-summary');
+            if (!$toggle.length || !$details.length) return;
+
+            var activeSession = getActiveSession();
+            if (activeSession && activeSession.pendingRequest) {
+                activeSession.pendingRequest.bannerExpanded = expanded;
+                persistSessions();
+            }
+
+            $banner.toggleClass('is-expanded', expanded);
+            $toggle.attr('aria-expanded', expanded ? 'true' : 'false');
+            if ($toggleText.length) {
+                $toggleText.text(expanded ? '收起' : '展开');
+            }
+            if ($summary.length) {
+                $summary.toggleClass('visible', !expanded);
+            }
+
+            if (expanded) {
+                $details.prop('hidden', false);
+                var targetHeight = $details[0].scrollHeight;
+                $details.css('max-height', '0px');
+                requestAnimationFrame(function () {
+                    $details.addClass('is-animating').css('max-height', targetHeight + 'px');
+                });
+                setTimeout(function () {
+                    if ($banner.hasClass('is-expanded')) {
+                        $details.removeClass('is-animating').css('max-height', 'none');
+                    }
+                }, 240);
+                return;
+            }
+
+            var currentHeight = $details[0].scrollHeight;
+            $details.addClass('is-animating').css('max-height', currentHeight + 'px');
+            requestAnimationFrame(function () {
+                $details.css('max-height', '0px');
+            });
+            setTimeout(function () {
+                if (!$banner.hasClass('is-expanded')) {
+                    $details.removeClass('is-animating').prop('hidden', true).css('max-height', '');
+                }
+            }, 240);
         }
 
         function shouldPreferLocalMigration(serverState, localSessions) {
@@ -1368,7 +1452,8 @@
                 status: 'pending',
                 question: saveMsgText || pendingQuestion,
                 startedAt: Date.now(),
-                hasImage: !!uploadedImageData
+                hasImage: !!uploadedImageData,
+                bannerExpanded: true
             };
             persistSessions();
             syncSessionStateToServer({ silent: true });

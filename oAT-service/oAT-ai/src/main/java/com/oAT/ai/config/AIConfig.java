@@ -75,6 +75,16 @@ public class AIConfig implements AIConfigProperties {
     private int timeout = 300;
 
     /**
+     * 是否记录 AI HTTP 请求日志
+     */
+    private boolean logRequests = false;
+
+    /**
+     * 是否记录 AI HTTP 响应日志
+     */
+    private boolean logResponses = false;
+
+    /**
      * 系统提示词前缀
      */
     private String systemPromptPrefix = "你是一个专业的代码覆盖率分析助手，专注于帮助用户进行链路分析、问题排查和数据洞察。";
@@ -145,6 +155,22 @@ public class AIConfig implements AIConfigProperties {
 
     public void setTimeout(int timeout) {
         this.timeout = timeout;
+    }
+
+    public boolean isLogRequests() {
+        return logRequests;
+    }
+
+    public void setLogRequests(boolean logRequests) {
+        this.logRequests = logRequests;
+    }
+
+    public boolean isLogResponses() {
+        return logResponses;
+    }
+
+    public void setLogResponses(boolean logResponses) {
+        this.logResponses = logResponses;
     }
 
     @Override
@@ -246,8 +272,8 @@ public class AIConfig implements AIConfigProperties {
                 .maxTokens(maxTokens)
                 .temperature(temperature)
                 .parallelToolCalls(false)
-                .logRequests(true)
-                .logResponses(true)
+                .logRequests(logRequests)
+                .logResponses(logResponses)
                 .timeout(Duration.ofSeconds(timeout))
                 .build();
     }

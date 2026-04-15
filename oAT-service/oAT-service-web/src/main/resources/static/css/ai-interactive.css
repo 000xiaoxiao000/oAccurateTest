@@ -200,6 +200,7 @@
     min-width: 0;
     display: grid;
     gap: 4px;
+}
 
 .ai-pending-banner-title-row {
     display: flex;
@@ -207,6 +208,108 @@
     justify-content: space-between;
     gap: 12px;
     flex-wrap: wrap;
+}
+
+.ai-pending-banner-title-row > * {
+    min-width: 0;
+}
+
+.ai-pending-banner-toggle {
+    flex: 1;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+}
+
+.ai-pending-banner-toggle-main {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    flex: 1;
+}
+
+.ai-pending-banner-toggle-side {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.ai-pending-banner-toggle-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: inherit;
+    opacity: 0.82;
+}
+
+.ai-pending-banner-summary {
+    display: none;
+    font-size: 12px;
+    line-height: 1.45;
+    font-weight: 500;
+    color: rgba(31, 41, 55, 0.74);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ai-pending-banner-summary.visible {
+    display: block;
+}
+
+.ai-pending-banner-toggle:focus {
+    outline: none;
+}
+
+.ai-pending-banner-toggle:focus-visible {
+    border-radius: 10px;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.16);
+}
+
+.ai-pending-banner-details {
+    overflow: hidden;
+    max-height: none;
+    opacity: 1;
+    transition: max-height 0.24s ease, opacity 0.18s ease;
+}
+
+.ai-pending-banner-details[hidden] {
+    display: none;
+}
+
+.ai-pending-banner-details.is-animating {
+    display: block;
+}
+
+.ai-pending-banner:not(.is-expanded) .ai-pending-banner-details {
+    opacity: 0;
+}
+
+.ai-pending-banner-details-inner {
+    display: grid;
+    gap: 4px;
+}
+
+.ai-pending-banner-chevron {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 0.18s ease;
+    margin-right: 2px;
+}
+
+.ai-pending-banner.is-expanded .ai-pending-banner-chevron {
+    transform: rotate(225deg);
 }
 
 .ai-pending-banner-retry {
@@ -220,6 +323,35 @@
     box-shadow: 0 8px 18px rgba(217, 119, 6, 0.24);
     cursor: pointer;
     transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+    .ai-pending-banner {
+        align-items: stretch;
+    }
+
+    .ai-pending-banner-body {
+        width: 100%;
+    }
+
+    .ai-pending-banner-title-row {
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .ai-pending-banner-toggle {
+        width: 100%;
+    }
+
+    .ai-pending-banner-toggle-side {
+        gap: 6px;
+    }
+
+    .ai-pending-banner-retry {
+        align-self: flex-start;
+    }
 }
 
 .ai-pending-banner-retry:hover {
@@ -235,13 +367,25 @@
     outline: none;
     box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18), 0 8px 18px rgba(217, 119, 6, 0.24);
 }
+
+.ai-pending-banner-title-row {
     font-size: 13px;
     font-weight: 700;
     color: #92400e;
 }
 
-.ai-pending-banner.is-resolved .ai-pending-banner-title {
+.ai-pending-banner.is-resolved .ai-pending-banner-toggle {
     color: #0f766e;
+}
+
+.ai-pending-banner-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: inherit;
+}
+
+.ai-pending-banner.is-resolved .ai-pending-banner-title {
+    color: inherit;
 }
 
 .ai-pending-banner-question {
