@@ -162,6 +162,101 @@
     gap: 6px;
 }
 
+.ai-pending-banner {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    background: linear-gradient(135deg, rgba(255, 251, 235, 0.96), rgba(255, 244, 214, 0.92));
+    box-shadow: 0 10px 24px rgba(245, 158, 11, 0.10);
+}
+
+.ai-pending-banner.is-resolved {
+    border-color: rgba(20, 184, 166, 0.22);
+    background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(220, 252, 231, 0.92));
+    box-shadow: 0 10px 24px rgba(20, 184, 166, 0.10);
+}
+
+.ai-pending-banner-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #b45309;
+    background: rgba(255, 255, 255, 0.72);
+    flex-shrink: 0;
+}
+
+.ai-pending-banner.is-resolved .ai-pending-banner-icon {
+    color: #0f766e;
+}
+
+.ai-pending-banner-body {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+
+.ai-pending-banner-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.ai-pending-banner-retry {
+    border: 0;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    box-shadow: 0 8px 18px rgba(217, 119, 6, 0.24);
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.ai-pending-banner-retry:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 22px rgba(217, 119, 6, 0.28);
+}
+
+.ai-pending-banner-retry:active {
+    transform: translateY(0);
+}
+
+.ai-pending-banner-retry:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18), 0 8px 18px rgba(217, 119, 6, 0.24);
+}
+    font-size: 13px;
+    font-weight: 700;
+    color: #92400e;
+}
+
+.ai-pending-banner.is-resolved .ai-pending-banner-title {
+    color: #0f766e;
+}
+
+.ai-pending-banner-question {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #1f2937;
+    word-break: break-word;
+}
+
+.ai-pending-banner-meta {
+    font-size: 12px;
+    color: #6b7280;
+    word-break: break-word;
+}
+
 .ai-request-stream .stream-line {
     display: block;
     height: 8px;
@@ -431,6 +526,12 @@
 .ai-mini-stat .label,
 .ai-sub-title {
     color: #64748b;
+}
+
+.ai-sub-title {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
 }
 
 .ai-console-label {
@@ -1202,6 +1303,22 @@
     box-shadow: 0 0 0 1px rgba(20, 184, 166, 0.12);
 }
 
+.ai-message-section.is-latest-focus .ai-message-card {
+    border-color: rgba(45, 212, 191, 0.42);
+    box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.10), 0 14px 30px rgba(15, 23, 42, 0.08);
+    transition: border-color 0.28s ease, box-shadow 0.28s ease, transform 0.28s ease;
+}
+
+.ai-message.assistant.is-current-assistant .ai-message-card {
+    border-color: rgba(20, 184, 166, 0.5);
+    box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12), 0 18px 34px rgba(15, 23, 42, 0.10);
+    transform: translateY(-1px);
+}
+
+.ai-message.assistant.is-current-assistant .ai-message-avatar {
+    box-shadow: 0 0 0 6px rgba(20, 184, 166, 0.10);
+}
+
 .ai-message-section.ai-qa-group-end {
     margin-bottom: 16px;
 }
@@ -1894,6 +2011,18 @@ body.ai-resizing-timeline {
         min-height: 280px;
     }
 
+    .ai-chat-anchors-header,
+    .ai-timeline-header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .ai-chat-anchors-tools,
+    .ai-timeline-tools {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
     /* Reduce animation intensity on mobile */
     .ai-workbench-particles {
         display: none;
@@ -1901,6 +2030,129 @@ body.ai-resizing-timeline {
 
     .ai-stage-panel {
         min-height: 180px;
+    }
+}
+
+@media screen and (max-width: 640px) {
+    .ai-chat-anchors {
+        padding: 12px;
+    }
+
+    .ai-chat-anchors-tools {
+        gap: 8px;
+    }
+
+    .ai-chat-anchors-filter {
+        width: 100%;
+        justify-content: flex-start;
+        overflow-x: auto;
+    }
+
+    .ai-anchor-filter-btn {
+        flex-shrink: 0;
+        padding: 8px 10px;
+    }
+
+    .ai-chat-anchors-search {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .ai-chat-anchors-search-input-wrap {
+        width: 100%;
+    }
+
+    .ai-chat-anchors-search input {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .ai-chat-anchors-search-meta,
+    .ai-chat-anchors-tip {
+        white-space: normal;
+    }
+
+    .ai-panel-header,
+    .ai-panel-header.compact {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .ai-panel-header.compact > :first-child {
+        min-width: 0;
+    }
+
+    .ai-panel-header h3,
+    .ai-sub-title {
+        max-width: 100%;
+    }
+
+    .ai-panel-desc {
+        width: 100%;
+    }
+
+    #aiNewSessionButton {
+        margin-top: 2px;
+    }
+
+    .ai-hero-actions,
+    .ai-dock-actions,
+    .ai-starter-row,
+    .ai-compose-actions {
+        gap: 8px;
+    }
+
+    .ai-hero-actions > .button,
+    .ai-hero-actions > .ui.button,
+    .ai-hero-actions > a.ui.button,
+    .ai-dock-chip,
+    .ai-starter-row .ui.button,
+    .ai-follow-up-list .ui.button,
+    #aiSendButton {
+        width: 100%;
+        min-height: 40px;
+    }
+
+    .ai-dock-chip,
+    .ai-starter-row .ui.button,
+    .ai-follow-up-list .ui.button,
+    #aiSendButton {
+        padding-top: 10px !important;
+        padding-bottom: 10px !important;
+    }
+
+    .ai-compose-actions {
+        flex-wrap: wrap;
+    }
+
+    .ai-compose-actions > .ai-request-state,
+    .ai-compose-toolbar,
+    #aiSendButton {
+        width: 100%;
+    }
+
+    .ai-compose-toolbar {
+        display: flex;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    .ai-mini-stats {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .ai-mini-stat,
+    .ai-quick-link-card,
+    .ai-ability-card {
+        padding: 12px 14px;
+    }
+
+    .ai-console-pill,
+    .ai-hero-tag,
+    .ai-dock-chip {
+        max-width: 100%;
     }
 }
 
