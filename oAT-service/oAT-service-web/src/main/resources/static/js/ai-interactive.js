@@ -1120,10 +1120,19 @@
                 aborted: '上一轮请求已手动停止',
                 error: '上一轮请求发生异常'
             };
+            var statusMetaMap = {
+                pending: { icon: 'history', bannerClass: 'is-pending' },
+                completed: { icon: 'check circle', bannerClass: 'is-completed' },
+                failed: { icon: 'times circle', bannerClass: 'is-failed' },
+                timeout: { icon: 'clock outline', bannerClass: 'is-timeout' },
+                aborted: { icon: 'pause circle', bannerClass: 'is-aborted' },
+                error: { icon: 'warning circle', bannerClass: 'is-error' }
+            };
             var question = pending.question || '未记录问题';
             var detail = pending.detail || '';
             var startedAt = pending.startedAt ? new Date(pending.startedAt).toLocaleString() : '';
-            var bannerClass = status === 'pending' ? 'is-pending' : 'is-resolved';
+            var statusMeta = statusMetaMap[status] || statusMetaMap.pending;
+            var bannerClass = statusMeta.bannerClass;
             var isExpanded = typeof pending.bannerExpanded === 'boolean' ? pending.bannerExpanded : status === 'pending';
             var retryButton = status === 'pending'
                 ? '<button type="button" class="ai-pending-banner-retry" data-question="' + U.escapeHtml(question) + '">重新发送</button>'
@@ -1132,7 +1141,7 @@
             var collapsedSummary = question.length > 42 ? question.substring(0, 42) + '…' : question;
             var toggleText = isExpanded ? '收起' : '展开';
             var html = '<div class="ai-pending-banner ' + bannerClass + (isExpanded ? ' is-expanded' : '') + '">'
-                + '<div class="ai-pending-banner-icon"><i class="history icon"></i></div>'
+                + '<div class="ai-pending-banner-icon"><i class="' + U.escapeHtml(statusMeta.icon) + ' icon"></i></div>'
                 + '<div class="ai-pending-banner-body">'
                 + '<div class="ai-pending-banner-title-row">'
                 + '<button type="button" class="ai-pending-banner-toggle" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">'
