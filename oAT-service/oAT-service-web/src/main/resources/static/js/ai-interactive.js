@@ -215,16 +215,7 @@
          * ============================================================ */
 
         function getScrollContainer() {
-            if (!$messageList.length) return null;
-            var messageList = $messageList[0];
-            var panel = document.getElementById('aiChatPanel');
-            if (messageList.scrollHeight > messageList.clientHeight + 4) {
-                return messageList;
-            }
-            if (panel && panel.scrollHeight > panel.clientHeight + 4) {
-                return panel;
-            }
-            return messageList;
+            return null;
         }
 
         function markScrollContainerDebug(container) {
@@ -235,10 +226,19 @@
 
         function scrollMessageListToBottom(force) {
             var container = getScrollContainer();
-            markScrollContainerDebug(container);
-            if (!container) return;
+            if (container) {
+                markScrollContainerDebug(container);
+                if (!force && anchorScrollState.programmatic) return;
+                container.scrollTop = container.scrollHeight;
+                return;
+            }
+            $('#aiMessageList, #aiChatPanel').removeClass('ai-scroll-debug-target');
             if (!force && anchorScrollState.programmatic) return;
-            container.scrollTop = container.scrollHeight;
+            var messageListNode = $messageList[0];
+            if (messageListNode) {
+                messageListNode.scrollIntoView({ block: 'end', behavior: 'auto' });
+            }
+            window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' });
         }
 
         function typewriterText($target, message, done) {
@@ -490,20 +490,34 @@
 
         function syncActiveAnchorByScroll() {
             var container = getScrollContainer();
-            if (!container) return;
             if (anchorScrollState.programmatic && Date.now() < anchorScrollState.suppressUntil) return;
-            var containerRect = container.getBoundingClientRect();
-            var anchorActivationLine = containerRect.top + Math.max(24, Math.round(container.clientHeight * 0.18));
             var activeAnchorId = null;
-            $messageList.find('.ai-message-section-anchor').each(function () {
-                var $section = $(this);
-                var $card = $section.find('.ai-message-card').first();
-                var targetElement = $card.length ? $card[0] : this;
-                var targetRect = targetElement.getBoundingClientRect();
-                if (targetRect.top <= anchorActivationLine) {
-                    activeAnchorId = $section.data('anchor-id');
-                }
-            });
+
+            if (container) {
+                var containerRect = container.getBoundingClientRect();
+                var anchorActivationLine = containerRect.top + Math.max(24, Math.round(container.clientHeight * 0.18));
+                $messageList.find('.ai-message-section-anchor').each(function () {
+                    var $section = $(this);
+                    var $card = $section.find('.ai-message-card').first();
+                    var targetElement = $card.length ? $card[0] : this;
+                    var targetRect = targetElement.getBoundingClientRect();
+                    if (targetRect.top <= anchorActivationLine) {
+                        activeAnchorId = $section.data('anchor-id');
+                    }
+                });
+            } else {
+                var viewportLine = Math.max(96, Math.round(window.innerHeight * 0.24));
+                $messageList.find('.ai-message-section-anchor').each(function () {
+                    var $section = $(this);
+                    var $card = $section.find('.ai-message-card').first();
+                    var targetElement = $card.length ? $card[0] : this;
+                    var targetRect = targetElement.getBoundingClientRect();
+                    if (targetRect.top <= viewportLine) {
+                        activeAnchorId = $section.data('anchor-id');
+                    }
+                });
+            }
+
             if (!activeAnchorId) {
                 var $first = $messageList.find('.ai-message-section-anchor').first();
                 activeAnchorId = $first.data('anchor-id');
@@ -558,14 +572,20 @@
 
         function getAnchorScrollTop(anchorElement) {
             var container = getScrollContainer();
-            if (!container || !anchorElement) return 0;
             var $card = $(anchorElement).find('.ai-message-card').first();
             var targetElement = $card.length ? $card[0] : anchorElement;
-            var containerRect = container.getBoundingClientRect();
             var targetRect = targetElement.getBoundingClientRect();
-            var viewportOffset = Math.round(container.clientHeight * 0.16);
-            var nextTop = container.scrollTop + (targetRect.top - containerRect.top) - Math.max(8, viewportOffset);
-            return Math.max(0, Math.round(nextTop));
+
+            if (container) {
+                var containerRect = container.getBoundingClientRect();
+                var viewportOffset = Math.round(container.clientHeight * 0.16);
+                var nextTop = container.scrollTop + (targetRect.top - containerRect.top) - Math.max(8, viewportOffset);
+                return Math.max(0, Math.round(nextTop));
+            }
+
+            var pageTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+            var pageOffset = Math.max(96, Math.round(window.innerHeight * 0.18));
+            return Math.max(0, Math.round(pageTop + targetRect.top - pageOffset));
         }
 
         function expandAnchorFromHash() {
@@ -595,7 +615,7 @@
             var $target = $('#' + anchorId);
             if (!$target.length) return;
             var container = getScrollContainer();
-            if (!container) return;
+            markScrollContainerDebug(container);
 
             anchorScrollState.programmatic = true;
             anchorScrollState.currentAnchorId = anchorId;
@@ -608,10 +628,22 @@
             }
 
             var nextTop = Math.round(getAnchorScrollTop($target[0]));
-            var maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
-            nextTop = Math.max(0, Math.min(maxScrollTop, nextTop));
 
-            if (container._aiAnchorScrollFrame) {
+            if (window.console && console.debug) {
+                console.debug('[AI Anchor]', {
+                    anchorId: anchorId,
+                    containerId: container ? (container.id || '(no-id)') : '(window)',
+                    containerClass: container ? (container.className || '') : '(window)',
+                    currentTop: container ? container.scrollTop : (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0),
+                    nextTop: nextTop,
+                    maxScrollTop: container ? Math.max(0, container.scrollHeight - container.clientHeight) : Math.max(0, document.documentElement.scrollHeight - window.innerHeight),
+                    clientHeight: container ? container.clientHeight : window.innerHeight,
+                    scrollHeight: container ? container.scrollHeight : document.documentElement.scrollHeight,
+                    immediate: !!options.immediate
+                });
+            }
+
+            if (container && container._aiAnchorScrollFrame) {
                 cancelAnimationFrame(container._aiAnchorScrollFrame);
                 container._aiAnchorScrollFrame = null;
             }
@@ -622,6 +654,16 @@
                 setActiveAnchor(anchorId);
                 highlightAnchorTarget(anchorId);
             };
+
+            if (!container) {
+                window.scrollTo({ top: nextTop, behavior: options.immediate ? 'auto' : 'smooth' });
+                updateLocationHash(anchorId);
+                setTimeout(finishScroll, options.immediate ? 80 : 360);
+                return;
+            }
+
+            var maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+            nextTop = Math.max(0, Math.min(maxScrollTop, nextTop));
 
             if (options.immediate) {
                 container.scrollTop = nextTop;
@@ -1155,6 +1197,7 @@
         });
         $messageList.on('scroll', syncActiveAnchorByScroll);
         $('#aiChatPanel').on('scroll', syncActiveAnchorByScroll);
+        $(window).on('scroll', syncActiveAnchorByScroll);
         $(document).on('click', '.ai-message-toggle', function () {
             var $message = $(this).closest('.ai-message');
             updateMessageCollapseState($message, $(this).attr('aria-expanded') !== 'true');
