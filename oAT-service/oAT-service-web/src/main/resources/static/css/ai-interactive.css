@@ -172,12 +172,75 @@
     border: 1px solid rgba(245, 158, 11, 0.28);
     background: linear-gradient(135deg, rgba(255, 251, 235, 0.96), rgba(255, 244, 214, 0.92));
     box-shadow: 0 10px 24px rgba(245, 158, 11, 0.10);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.ai-pending-banner.is-auto-dismissing {
+    opacity: 0;
+    transform: translateY(-4px);
+}
+
+.ai-pending-banner-restore-hint {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    background: rgba(248, 250, 252, 0.92);
+    color: #475569;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.ai-pending-banner-restore-hint.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.ai-pending-banner-restore-text {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.ai-pending-banner-restore-btn {
+    border: none;
+    border-radius: 999px;
+    padding: 6px 12px;
+    background: rgba(15, 118, 110, 0.12);
+    color: #0f766e;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.ai-pending-banner-restore-btn:hover {
+    background: rgba(15, 118, 110, 0.18);
+    transform: translateY(-1px);
+}
+
+.ai-pending-banner-restore-btn:focus {
+    outline: none;
+}
+
+.ai-pending-banner-restore-btn:focus-visible {
+    box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.16);
 }
 
 .ai-pending-banner.is-completed {
     border-color: rgba(20, 184, 166, 0.22);
     background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(220, 252, 231, 0.92));
     box-shadow: 0 10px 24px rgba(20, 184, 166, 0.10);
+}
+
+.ai-pending-banner.is-completed .ai-pending-banner-icon,
+.ai-pending-banner.is-completed .ai-pending-banner-toggle {
+    color: #0f766e;
 }
 
 .ai-pending-banner.is-failed,
@@ -187,10 +250,22 @@
     box-shadow: 0 10px 24px rgba(239, 68, 68, 0.10);
 }
 
+.ai-pending-banner.is-failed .ai-pending-banner-icon,
+.ai-pending-banner.is-failed .ai-pending-banner-toggle,
+.ai-pending-banner.is-error .ai-pending-banner-icon,
+.ai-pending-banner.is-error .ai-pending-banner-toggle {
+    color: #b91c1c;
+}
+
 .ai-pending-banner.is-timeout {
     border-color: rgba(249, 115, 22, 0.24);
     background: linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.92));
     box-shadow: 0 10px 24px rgba(249, 115, 22, 0.10);
+}
+
+.ai-pending-banner.is-timeout .ai-pending-banner-icon,
+.ai-pending-banner.is-timeout .ai-pending-banner-toggle {
+    color: #c2410c;
 }
 
 .ai-pending-banner.is-aborted {
@@ -199,10 +274,9 @@
     box-shadow: 0 10px 24px rgba(148, 163, 184, 0.12);
 }
 
-.ai-pending-banner.is-resolved {
-    border-color: rgba(20, 184, 166, 0.22);
-    background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(220, 252, 231, 0.92));
-    box-shadow: 0 10px 24px rgba(20, 184, 166, 0.10);
+.ai-pending-banner.is-aborted .ai-pending-banner-icon,
+.ai-pending-banner.is-aborted .ai-pending-banner-toggle {
+    color: #475569;
 }
 
 .ai-pending-banner-icon {
@@ -215,27 +289,6 @@
     color: #b45309;
     background: rgba(255, 255, 255, 0.72);
     flex-shrink: 0;
-}
-
-.ai-pending-banner.is-completed .ai-pending-banner-icon {
-    color: #0f766e;
-}
-
-.ai-pending-banner.is-failed .ai-pending-banner-icon,
-.ai-pending-banner.is-error .ai-pending-banner-icon {
-    color: #b91c1c;
-}
-
-.ai-pending-banner.is-timeout .ai-pending-banner-icon {
-    color: #c2410c;
-}
-
-.ai-pending-banner.is-aborted .ai-pending-banner-icon {
-    color: #475569;
-}
-
-.ai-pending-banner.is-resolved .ai-pending-banner-icon {
-    color: #0f766e;
 }
 
 .ai-pending-banner-body {
@@ -467,17 +520,9 @@
     color: #475569;
 }
 
-.ai-pending-banner.is-resolved .ai-pending-banner-toggle {
-    color: #0f766e;
-}
-
 .ai-pending-banner-title {
     font-size: 13px;
     font-weight: 700;
-    color: inherit;
-}
-
-.ai-pending-banner.is-resolved .ai-pending-banner-title {
     color: inherit;
 }
 
