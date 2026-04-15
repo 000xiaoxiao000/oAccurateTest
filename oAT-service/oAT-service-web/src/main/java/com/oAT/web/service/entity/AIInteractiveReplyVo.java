@@ -10,32 +10,37 @@ public class AIInteractiveReplyVo implements Serializable {
     private String topic;
     private List<String> suggestions;
     private List<AIQuickLinkVo> quickLinks;
-    
+
     /**
      * 数据可视化建议（前端可根据此字段渲染图表）
      * 例如: {"type": "bar", "title": "覆盖率趋势", "data": {...}}
      */
     private List<Map<String, Object>> visualizationSuggestions;
-    
+
     /**
      * AI回答的置信度 (0-1之间)
      */
     private Double confidence;
-    
+
     /**
      * 使用的工具列表（用于调试和统计）
      */
     private List<String> usedTools;
-    
+
     /**
      * 是否需要加载更多数据
      */
     private Boolean needMoreData;
-    
+
     /**
      * 额外的元数据
      */
     private Map<String, Object> metadata;
+
+    /**
+     * 服务端持久化后的会话状态，供前端重启后恢复显示
+     */
+    private String sessionState;
 
     public String getQuestion() {
         return question;
@@ -116,5 +121,12 @@ public class AIInteractiveReplyVo implements Serializable {
     public void setMetadata(Map<String, Object> metadata) {
         this.metadata = metadata;
     }
-}
 
+    public String getSessionState() {
+        return sessionState;
+    }
+
+    public void setSessionState(String sessionState) {
+        this.sessionState = sessionState;
+    }
+}

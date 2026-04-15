@@ -1,7 +1,6 @@
 package com.oAT.web.service.impl;
 
 import com.oAT.ai.agent.AgentContext;
-import com.oAT.ai.agent.AgentDataProvider;
 import com.oAT.ai.agent.AIAgentService;
 import com.oAT.web.service.AIInteractiveService;
 import com.oAT.web.service.AppService;
@@ -18,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 @Service
@@ -39,6 +41,12 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     private static final String[] ACCENT_COLORS = {"#8ea1ff", "#65e5dd", "#ffb58a", "#b39ddb", "#80cbc4", "#90caf9"};
     private static final String[] HALO_COLORS = {"rgba(88,101,242,0.18)", "rgba(0,181,173,0.18)", "rgba(255,138,101,0.18)",
             "rgba(126,87,194,0.18)", "rgba(38,166,154,0.18)", "rgba(66,165,245,0.18)"};
+    private static final String SESSION_STORE_KEY_PREFIX = "oAT:ai-interactive:v1:sessions:";
+    private static final long SESSION_STORE_TTL_DAYS = 30L;
+    private static final String SESSION_LOG_PREFIX = "[AI-INTERACTIVE-SESSION]";
+    private static final AtomicLong SESSION_RESTORE_COUNTER = new AtomicLong();
+    private static final AtomicLong SESSION_SAVE_COUNTER = new AtomicLong();
+    private static final AtomicLong SESSION_MISS_COUNTER = new AtomicLong();
 
     @Autowired
     private ProjectService projectService;
@@ -49,12 +57,11 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     @Autowired
     private ClientSessionService clientSessionService;
 
-    // AI Agent 服务 (JDK 17+), 支持自主工具调用
-    @Autowired(required = false)
-    private AIAgentService aiAgentService;
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
 
     @Autowired(required = false)
-    private AgentDataProvider agentDataProvider;
+    private AIAgentService aiAgentService;
 
     @Value("${ai.llm.timeout:300}")
     private int aiTimeout;
@@ -77,18 +84,20 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         page.setAppNames(apps.stream().map(AppVo::getName).collect(Collectors.toList()));
         page.setMascotHint(buildMascotHint(project, apps));
         page.setQuickLinks(buildQuickLinks(projectId, apps, "overview"));
+        page.setSessionState(loadSessionState(projectId, user));
         page.setMascot(mascot);
         page.setAiTimeout(aiTimeout);
         return page;
     }
 
     @Override
-    public AIInteractiveReplyVo ask(String projectId, UserVo user, String question, String pageContext, String imageData) {
+    public AIInteractiveReplyVo ask(String projectId, UserVo user, String question, String pageContext, String imageData,
+                                    String sessionState, String activeSessionId, String sessionSortMode,
+                                    Boolean timelineExpanded) {
         long startTime = System.currentTimeMillis();
         ProjectVo project = projectService.getProject(projectId);
         List<AppVo> apps = loadApps(projectId);
         String cleanQuestion = question == null ? "" : question.trim();
-        // 如果有图片但没有文字，生成默认提示
         if (!StringUtils.hasText(cleanQuestion) && StringUtils.hasText(imageData)) {
             cleanQuestion = "[图片提问] 请分析这张图片";
         }
@@ -99,28 +108,37 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         reply.setQuestion(cleanQuestion);
         reply.setTopic(topic);
 
-        // 只使用 AI Agent (支持自主工具调用)
         String answer = callAIAgent(project, apps, user, cleanQuestion, contextSummary, imageData);
         reply.setAnswer(answer);
 
-        // 记录响应时间
         long responseTime = System.currentTimeMillis() - startTime;
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("responseTime", responseTime);
         metadata.put("topic", topic);
         reply.setMetadata(metadata);
-
         reply.setSuggestions(buildFollowUpSuggestions(apps, topic));
         reply.setQuickLinks(buildQuickLinks(projectId, apps, topic));
+        reply.setSessionState(saveSessionState(projectId, user, sessionState));
         return reply;
     }
 
-    /**
-     * 调用 AI Agent 获取回复
-     * AI Agent 可以自主调用工具获取实时数据
-     */
+    @Override
+    public String saveSessionState(String projectId, UserVo user, String sessionState) {
+        if (!StringUtils.hasText(sessionState)) {
+            logger.info("{} action=save status=skipped projectId={} userId={} reason=empty_payload", SESSION_LOG_PREFIX,
+                    projectId, user.getId());
+            return loadSessionState(projectId, user);
+        }
+        String cacheKey = buildSessionStoreKey(projectId, user.getId());
+        redisTemplate.opsForValue().set(cacheKey, sessionState, SESSION_STORE_TTL_DAYS, TimeUnit.DAYS);
+        long saveCount = SESSION_SAVE_COUNTER.incrementAndGet();
+        logger.info("{} action=save status=success projectId={} userId={} payloadLength={} ttlDays={} saveCount={}",
+                SESSION_LOG_PREFIX, projectId, user.getId(), sessionState.length(), SESSION_STORE_TTL_DAYS, saveCount);
+        return sessionState;
+    }
+
     private String callAIAgent(ProjectVo project, List<AppVo> apps, UserVo user,
-                                String question, String pageContext, String imageData) {
+                               String question, String pageContext, String imageData) {
         if (aiAgentService == null) {
             logger.warn("AI Agent bean is not available in Spring context");
             return "AI 服务暂不可用：AI Agent Bean 未加载，请检查模块装配与 Spring 配置。";
@@ -131,27 +149,16 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         }
 
         try {
-            // 创建会话上下文
             AgentContext context = new AgentContext(project.getId(), user.getId(), user.getName());
-
             logger.info("Calling AI Agent for question: {} (hasImage: {})", question, StringUtils.hasText(imageData));
 
-            String response;
             if (StringUtils.hasText(imageData)) {
-                // 图片模式：将 base64 图片数据传递给 AI Agent（多模态）
-                response = aiAgentService.chatWithImage(context, question, pageContext, imageData);
-            } else if (StringUtils.hasText(pageContext)) {
-                response = aiAgentService.chatWithContext(context, question, pageContext);
-            } else {
-                response = aiAgentService.chat(context, question);
+                return aiAgentService.chatWithImage(context, question, pageContext, imageData);
             }
-
-            if (response != null) {
-                logger.info("AI Agent response received successfully");
-                return response;
-            } else {
-                return "AI 服务暂时无法响应，请稍后重试。";
+            if (StringUtils.hasText(pageContext)) {
+                return aiAgentService.chatWithContext(context, question, pageContext);
             }
+            return aiAgentService.chat(context, question);
         } catch (Exception e) {
             logger.error("Failed to call AI Agent", e);
             return "AI 服务调用失败：" + e.getMessage();
@@ -174,13 +181,6 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
             }
         }
         return count;
-    }
-
-    private String appNames(List<AppVo> apps, int limit) {
-        return apps.stream()
-                .map(AppVo::getName)
-                .limit(limit)
-                .collect(Collectors.joining("、"));
     }
 
     private boolean containsAny(String text, String... keywords) {
@@ -228,7 +228,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     private String buildWelcomeMessage(UserVo user, ProjectVo project, List<AppVo> apps, String mascotName) {
         int online = countOnlineApps(apps);
         return String.format("你好，%s！我是 %s，你的精准测试助手。当前项目「%s」有 %d 个应用，%d 个在线运行。有什么我可以帮助你的吗？",
-                user.getName(), mascotName, project.getName(), apps.size(), online);
+                user.getName(), StringUtils.hasText(mascotName) ? mascotName : "AI", project.getName(), apps.size(), online);
     }
 
     private List<String> buildStarterQuestions(List<AppVo> apps) {
@@ -277,10 +277,26 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     }
 
     private String normalizePageContext(String pageContext) {
-        if (pageContext == null) {
-            return "";
+        return pageContext == null ? "" : pageContext.trim();
+    }
+
+    private String loadSessionState(String projectId, UserVo user) {
+        String cacheKey = buildSessionStoreKey(projectId, user.getId());
+        Object stored = redisTemplate.opsForValue().get(cacheKey);
+        if (stored instanceof String && StringUtils.hasText((String) stored)) {
+            long restoreCount = SESSION_RESTORE_COUNTER.incrementAndGet();
+            logger.info("{} action=restore status=hit projectId={} userId={} payloadLength={} restoreCount={}",
+                    SESSION_LOG_PREFIX, projectId, user.getId(), ((String) stored).length(), restoreCount);
+            return (String) stored;
         }
-        return pageContext.trim();
+        long missCount = SESSION_MISS_COUNTER.incrementAndGet();
+        logger.info("{} action=restore status=miss projectId={} userId={} missCount={}",
+                SESSION_LOG_PREFIX, projectId, user.getId(), missCount);
+        return "";
+    }
+
+    private String buildSessionStoreKey(String projectId, String userId) {
+        return SESSION_STORE_KEY_PREFIX + projectId + ":" + userId;
     }
 
     private String detectTopic(String text) {

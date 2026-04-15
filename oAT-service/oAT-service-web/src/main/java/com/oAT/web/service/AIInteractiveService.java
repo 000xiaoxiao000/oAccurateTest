@@ -7,5 +7,8 @@ import com.oAT.web.service.entity.UserVo;
 public interface AIInteractiveService {
     AIInteractivePageVo buildPage(String projectId, UserVo user);
 
-    AIInteractiveReplyVo ask(String projectId, UserVo user, String question, String pageContext, String imageData);
+    AIInteractiveReplyVo ask(String projectId, UserVo user, String question, String pageContext, String imageData,
+                             String sessionState, String activeSessionId, String sessionSortMode, Boolean timelineExpanded);
+
+    String saveSessionState(String projectId, UserVo user, String sessionState);
 }

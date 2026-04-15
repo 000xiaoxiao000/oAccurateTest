@@ -19,7 +19,9 @@
 </head>
 <body>
 <#assign monitorItemActive="active">
-<#include "../projectHeader.ftl">
+<#include "../partials/projectHeaderNav.ftl">
+
+<#include "../partials/aiFloatingWidgetFull.ftl">
 
 <div class="ui container fluid" style="padding: 20px">
     <!-- 面包屑导航 -->
