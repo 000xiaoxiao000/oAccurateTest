@@ -131,7 +131,7 @@
 
         function anchorLauncherPosition() {
             var rect = $launcher[0].getBoundingClientRect();
-            // 目标:让 launcher 关闭后面板消失后,launcher 仍停留在当前屏幕坐标
+            // 让 launcher 关闭后面板消失后,launcher 仍停留在当前屏幕坐标
             // widget position:fixed, left/top 控制其左上角
             // 关闭后 widget 宽度 ≈ launcher 宽度(96px),所以 left = launcherRight - widgetWidth
             var targetLeft = rect.right - $root.outerWidth();

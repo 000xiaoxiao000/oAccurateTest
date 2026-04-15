@@ -169,18 +169,18 @@
                                     <#list lists as list>
                                         <#if !(list.doLines?seq_contains(-1)) && list.lineTotal?? && list.lineTotal?size gt 0>
                                             <#assign mPct = (list.lineTotal?size > 0)?then(list.doLines?size * 100.0 / list.lineTotal?size, 0)>
-                                            <#assign methodBranchTotal = (list.branchTotal??)?then(list.branchTotal?size, 0)>
-                                            <#assign methodBranchCovered = (list.executeBranch??)?then(list.executeBranch?size, 0)>
-                                            <#assign methodBranchPct = (methodBranchTotal > 0)?then(methodBranchCovered * 100.0 / methodBranchTotal, 0)>
+                                            <#assign methodBranchTargetTotal = (list.executeBranchTargetProbeMap??)?then(list.executeBranchTargetProbeMap?size, 0)>
+                                            <#assign methodBranchTargetCovered = (list.executeBranchTargetProbeMap??)?then(list.executeBranchTargetProbeMap?size, 0)>
+                                            <#assign methodBranchPct = (methodBranchTargetTotal > 0)?then(methodBranchTargetCovered * 100.0 / methodBranchTargetTotal, 0)>
                                             <tr>
                                                 <td title="${list.className!}">${list.className?keep_after_last(".")}</td>
                                                 <td>${list.methodName!}</td>
                                                 <td class="center aligned">${list.doLines?size} / ${list.lineTotal?size} (${mPct?string("0.00")}%)</td>
                                                 <td class="center aligned">
-                                                    <#if methodBranchTotal gt 0>${methodBranchCovered} / ${methodBranchTotal} (${methodBranchPct?string("0.00")}%)<#else>N/A</#if>
+                                                    <#if methodBranchTargetTotal gt 0>${methodBranchTargetCovered} / ${methodBranchTargetTotal} (${methodBranchPct?string("0.00")}%)<#else>N/A</#if>
                                                 </td>
                                                 <td class="center aligned">
-                                                    <#if mPct == 100 && (methodBranchTotal == 0 || methodBranchPct == 100)><div class="ui mini green empty circular label" title="全覆盖"></div>
+                                                    <#if mPct == 100 && (methodBranchTargetTotal == 0 || methodBranchPct == 100)><div class="ui mini green empty circular label" title="全覆盖"></div>
                                                     <#elseif mPct gt 0 || methodBranchPct gt 0><div class="ui mini orange empty circular label" title="部分覆盖"></div>
                                                     <#else><div class="ui mini empty circular label" title="未覆盖"></div></#if>
                                                 </td>
@@ -230,10 +230,10 @@
                 <td class="center aligned <#if mPct gt 0>positive<#else>negative</#if>">
                     <b>${mPct?string("0.00")}%</b>
                 </td>
-                <td class="center aligned">${item.coveredBranches} / ${item.totalBranches}</td>
+                <td class="center aligned">${item.coveredBranchTargets!0} / ${item.totalBranchTargets!0}</td>
                 <#assign bPct = item.branchRate!0>
-                <td class="center aligned <#if bPct gt 0>positive<#elseif item.totalBranches gt 0>negative</#if>">
-                    <#if (item.totalBranches > 0)><b>${bPct?string("0.00")}%</b><#else>N/A</#if>
+                <td class="center aligned <#if bPct gt 0>positive<#elseif (item.totalBranchTargets!0) gt 0>negative</#if>">
+                    <#if ((item.totalBranchTargets!0) > 0)><b>${bPct?string("0.00")}%</b><#else>N/A</#if>
                 </td>
                 <td class="center aligned">${item.coveredLines} / ${item.totalLines}</td>
                 <#assign clPct = (item.totalLines > 0)?then(item.coveredLines * 100.0 / item.totalLines, 0)>

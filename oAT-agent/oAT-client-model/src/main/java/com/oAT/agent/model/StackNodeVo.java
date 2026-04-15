@@ -25,7 +25,7 @@ public class StackNodeVo implements java.io.Serializable {
      */
     private ArrayList<Integer> executeBranch = new ArrayList<>(4);
     /**
-     * JaCoCo 风格分支目标命中：分支行 -> 已命中的目标探针编号集合
+     * JaCoCo 风格分支命中：分支行 -> 已命中的目标探针编号集合
      */
     private Map<String, List<Integer>> executeBranchTargetProbeMap;
 

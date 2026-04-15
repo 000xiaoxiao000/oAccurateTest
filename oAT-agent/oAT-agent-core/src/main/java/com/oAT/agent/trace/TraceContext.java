@@ -460,22 +460,24 @@ public class TraceContext {
         //装载应用程序配配置文件，不能覆盖本地配置
         Properties appConfig = clientSession.getConfigs();
         if (logger.isDebugEnabled()) {
-            logger.debug("[Agent-debug] 当前配置项如下：");
+            logger.debug("[Agent-debug]当前配置项如下：");
         }
         if (appConfig != null) {
             for (String s : appConfig.stringPropertyNames()) {
                 if (logger.isDebugEnabled()) {
-                    logger.debug("[Agent-debug] " + s + " = " + appConfig.getProperty(s));
+                    logger.debug("[Agent-debug]" + s + " = " + appConfig.getProperty(s));
                 }
                 if (!this.config.containsKey(s)) {
                     this.config.put(s, appConfig.getProperty(s));
                 }
             }
         } else {
-            logger.warn("[Agent-warn] appConfig is null, 未获取到应用配置");
+            logger.warn("[Agent-warn]appConfig is null, 未获取到应用配置");
         }
         if (clientSession.getApplication() == null) {
-            logger.warn("[Agent-warn]登录server失败，未获取到应用信息");
+            logger.warn("===================================================\n" +
+                    "[Agent-warn]登录server失败，未获取到应用信息"+ "\n" +
+                    "===================================================");
             return false;
         }
         logger.info(String.format("===================================================\n" +
