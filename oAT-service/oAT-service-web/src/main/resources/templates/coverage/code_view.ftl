@@ -15,7 +15,7 @@
         .branch-line { position: relative; }
         .branch-line .branch-flag {
             position: absolute;
-            left: calc(var(--line-number-width, 3em) + 6px);
+            left: calc(3em + 6px);
             top: 50%;
             transform: translateY(-50%);
             width: 9px;
@@ -62,7 +62,7 @@
         }
         .branch-tooltip {
             position: absolute;
-            left: calc(var(--line-number-width, 3em) + 24px);
+            left: calc(3em + 24px);
             top: 50%;
             transform: translateY(-50%);
             background: rgba(20, 24, 33, 0.96);
