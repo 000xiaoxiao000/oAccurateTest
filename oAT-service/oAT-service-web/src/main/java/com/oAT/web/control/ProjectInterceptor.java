@@ -13,7 +13,6 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.net.URLEncoder;
 import java.util.List;
 
 
@@ -26,6 +25,9 @@ public class ProjectInterceptor implements HandlerInterceptor {
     ProjectService projectService;
     @Autowired
     AppService appService;
+
+    @Value("${ai.llm.enabled:true}")
+    private boolean aiLlmEnabled;
 
     @Value("${ai.llm.timeout:120}")
     private int aiTimeout;
@@ -45,6 +47,7 @@ public class ProjectInterceptor implements HandlerInterceptor {
         if (share != null && share) {
             project = projectService.getProject(projectId);
             request.setAttribute("project", project);
+            request.setAttribute("aiLlmEnabled", aiLlmEnabled);
             setMascotPrimary(request, project);
             return true;
         }
@@ -60,6 +63,7 @@ public class ProjectInterceptor implements HandlerInterceptor {
         List<AppVo> apps = appService.getAppList(projectId);
         request.setAttribute("apps", apps);
         request.setAttribute("project", project);
+        request.setAttribute("aiLlmEnabled", aiLlmEnabled);
         setMascotPrimary(request, project);
         request.setAttribute("aiTimeout", aiTimeout);
         return true;

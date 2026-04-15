@@ -1,5 +1,6 @@
 package com.oAT.web.config;
 
+import com.oAT.web.control.AIInteractiveAccessInterceptor;
 import com.oAT.web.control.LoginInterceptor;
 import com.oAT.web.control.ProjectInterceptor;
 import com.oAT.web.service.ResourceService;
@@ -19,6 +20,8 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     ProjectInterceptor projectInterceptor;
     @Autowired
+    AIInteractiveAccessInterceptor aiInteractiveAccessInterceptor;
+    @Autowired
     LoginInterceptor loginInterceptor;
     @Autowired
     ResourceService resourceService;
@@ -34,6 +37,7 @@ public class WebConfig implements WebMvcConfigurer {
                 .excludePathPatterns("/", "/login", "/doLogin", "/register",
                         "/doRegister", "/client/**", "/r/**", "/error",
                         "/css/**", "/images/**", "/js/**", "/share/**");
+        registry.addInterceptor(aiInteractiveAccessInterceptor).addPathPatterns("/p/*/AIInteractive/**");
         //项目节点拦截
         registry.addInterceptor(projectInterceptor).addPathPatterns("/p/**");
     }

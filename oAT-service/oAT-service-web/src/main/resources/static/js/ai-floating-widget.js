@@ -314,8 +314,7 @@
                 ],
                 quickLinks: [
                     {title: '项目主页', description: '回到项目整体概况', url: projectBase + '/home', icon: 'home', priority: 82},
-                    {title: '监控台', description: '查看实时请求与调用链', url: projectBase + '/monitor', icon: 'chart line', priority: 88},
-                    {title: 'AI 工作台', description: '进入完整 AI Interactive 页面', url: projectBase + '/AIInteractive', icon: 'magic', priority: 90}
+                    {title: '监控台', description: '查看实时请求与调用链', url: projectBase + '/monitor', icon: 'chart line', priority: 88}
                 ]
             };
         }

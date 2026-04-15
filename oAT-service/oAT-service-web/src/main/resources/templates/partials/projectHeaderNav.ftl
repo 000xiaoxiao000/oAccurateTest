@@ -94,10 +94,12 @@
             <#--项目设置-->
             <#--</a>-->
 
+            <#if (aiLlmEnabled!true)>
             <a id="AIInteractive" class="ui ${AIInteractive!}-m teal primary dropdown icon item"
                href="/p/${project.id}/AIInteractive">
                 AI Interactive
             </a>
+            </#if>
 
             <div class="right menu">
                 <div class="ui dropdown icon item">
