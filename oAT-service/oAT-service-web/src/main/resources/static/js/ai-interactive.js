@@ -32,7 +32,6 @@
         var sessionsKey = 'ai-interactive-sessions:' + projectId;
         var activeSessionKey = 'ai-interactive-active-session:' + projectId;
         var sessionSortKey = 'ai-interactive-session-sort:' + projectId;
-        var timelineHeightKey = 'ai-interactive-timeline-height:' + projectId;
         var timelineExpandedKey = 'ai-interactive-timeline-expanded:' + projectId;
 
         /* ===== DOM 引用 ===== */
@@ -56,7 +55,6 @@
         var $timelinePanel = $('#aiTimelinePanel');
         var $timelineSummary = $('#aiTimelineSummary');
         var $timelineToggleButton = $('#aiTimelineToggleButton');
-        var $timelineResizeHandle = $('#aiTimelineResizeHandle');
         var $sessionList = $('#aiSessionList');
         var $newSessionButton = $('#aiNewSessionButton');
         var $sessionSearchInput = $('#aiSessionSearchInput');
@@ -70,16 +68,12 @@
         var uploadedImageData = null;
         var timelineState = {
             expanded: false,
-            resizing: false,
-            startY: 0,
-            startHeight: 0,
-            minHeight: 96,
-            maxHeight: 320,
             hasUserPreference: false
         };
         var anchorFilterMode = 'all';
         var anchorSearchKeyword = '';
         var anchorKeyboardIndex = -1;
+        var expandedAnchorTextMap = {};
         var anchorScrollState = {
             programmatic: false,
             currentAnchorId: null,
@@ -121,7 +115,6 @@
         // 加载会话数据
         loadSessions();
         renderActiveSession();
-        setTimelineHeight(readTimelineHeight());
         setTimelineExpanded(readTimelineExpanded());
         initWorkbenchAnimation();
 
@@ -221,15 +214,40 @@
          *  工作台独有：打字机效果
          * ============================================================ */
 
+        function getScrollContainer() {
+            if (!$messageList.length) return null;
+            var messageList = $messageList[0];
+            var panel = document.getElementById('aiChatPanel');
+            if (messageList.scrollHeight > messageList.clientHeight + 4) {
+                return messageList;
+            }
+            if (panel && panel.scrollHeight > panel.clientHeight + 4) {
+                return panel;
+            }
+            return messageList;
+        }
+
+        function markScrollContainerDebug(container) {
+            $('#aiMessageList, #aiChatPanel').removeClass('ai-scroll-debug-target');
+            if (!container) return;
+            $(container).addClass('ai-scroll-debug-target');
+        }
+
+        function scrollMessageListToBottom(force) {
+            var container = getScrollContainer();
+            markScrollContainerDebug(container);
+            if (!container) return;
+            if (!force && anchorScrollState.programmatic) return;
+            container.scrollTop = container.scrollHeight;
+        }
+
         function typewriterText($target, message, done) {
             var safeMessage = U.escapeHtml(message || '');
             var index = 0;
             function tick() {
                 index = Math.min(index + 2, safeMessage.length);
                 $target.html(safeMessage.substring(0, index).replace(/\n/g, '<br>') + '<span class="ai-typing-cursor"></span>');
-                if (!anchorScrollState.programmatic) {
-                    $messageList.scrollTop($messageList[0].scrollHeight);
-                }
+                scrollMessageListToBottom(false);
                 if (index >= safeMessage.length) {
                     $target.html(safeMessage.replace(/\n/g, '<br>'));
                     if (done) done();
@@ -272,7 +290,7 @@
             if (!options.animate) {
                 U.bindCopyButton($node.find('.ai-message-copy'), message);
             }
-            $messageList.scrollTop($messageList[0].scrollHeight);
+            scrollMessageListToBottom(false);
             if (options.animate) {
                 var $card = $node.find('.ai-message-card');
                 var $content = $card.find('.ai-message-content');
@@ -471,9 +489,9 @@
         }
 
         function syncActiveAnchorByScroll() {
-            if (!$messageList.length) return;
+            var container = getScrollContainer();
+            if (!container) return;
             if (anchorScrollState.programmatic && Date.now() < anchorScrollState.suppressUntil) return;
-            var container = $messageList[0];
             var containerRect = container.getBoundingClientRect();
             var anchorActivationLine = containerRect.top + Math.max(24, Math.round(container.clientHeight * 0.18));
             var activeAnchorId = null;
@@ -539,7 +557,7 @@
         }
 
         function getAnchorScrollTop(anchorElement) {
-            var container = $messageList[0];
+            var container = getScrollContainer();
             if (!container || !anchorElement) return 0;
             var $card = $(anchorElement).find('.ai-message-card').first();
             var targetElement = $card.length ? $card[0] : anchorElement;
@@ -576,7 +594,7 @@
             options = options || {};
             var $target = $('#' + anchorId);
             if (!$target.length) return;
-            var container = $messageList[0];
+            var container = getScrollContainer();
             if (!container) return;
 
             anchorScrollState.programmatic = true;
@@ -592,16 +610,6 @@
             var nextTop = Math.round(getAnchorScrollTop($target[0]));
             var maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
             nextTop = Math.max(0, Math.min(maxScrollTop, nextTop));
-
-            if (window.console && console.debug) {
-                console.debug('[AI Anchor] scrollToAnchor', {
-                    anchorId: anchorId,
-                    currentTop: container.scrollTop,
-                    nextTop: nextTop,
-                    maxScrollTop: maxScrollTop,
-                    immediate: !!options.immediate
-                });
-            }
 
             if (container._aiAnchorScrollFrame) {
                 cancelAnimationFrame(container._aiAnchorScrollFrame);
@@ -679,15 +687,6 @@
             $button.attr('aria-expanded', expanded ? 'true' : 'false').text(expanded ? '收起' : '展开');
         }
 
-        function clampTimelineHeight(height) {
-            return Math.max(timelineState.minHeight, Math.min(timelineState.maxHeight, height));
-        }
-
-        function readTimelineHeight() {
-            var stored = parseInt(sessionStorage.getItem(timelineHeightKey), 10);
-            return isNaN(stored) ? 140 : clampTimelineHeight(stored);
-        }
-
         function readTimelineExpanded() {
             var stored = sessionStorage.getItem(timelineExpandedKey);
             timelineState.hasUserPreference = stored !== null;
@@ -695,7 +694,6 @@
         }
 
         function persistTimelineState() {
-            sessionStorage.setItem(timelineHeightKey, String(clampTimelineHeight($timelineList.outerHeight() || timelineState.startHeight || 140)));
             sessionStorage.setItem(timelineExpandedKey, timelineState.expanded ? 'true' : 'false');
         }
 
@@ -727,40 +725,6 @@
             }
         }
 
-        function setTimelineHeight(height) {
-            var nextHeight = clampTimelineHeight(height);
-            $timelinePanel.css('--ai-timeline-height', nextHeight + 'px');
-            sessionStorage.setItem(timelineHeightKey, String(nextHeight));
-            return nextHeight;
-        }
-
-        function resetTimelineHeight() {
-            setTimelineHeight(140);
-        }
-
-        function beginTimelineResize(event) {
-            if (!timelineState.expanded) return;
-            event.preventDefault();
-            timelineState.resizing = true;
-            timelineState.startY = event.clientY;
-            timelineState.startHeight = $timelineList.outerHeight();
-            $('body').addClass('ai-resizing-timeline');
-            $(document).on('mousemove.aiTimelineResize', handleTimelineResize);
-            $(document).on('mouseup.aiTimelineResize', endTimelineResize);
-        }
-
-        function handleTimelineResize(event) {
-            if (!timelineState.resizing) return;
-            event.preventDefault();
-            setTimelineHeight(timelineState.startHeight - (event.clientY - timelineState.startY));
-        }
-
-        function endTimelineResize() {
-            timelineState.resizing = false;
-            $('body').removeClass('ai-resizing-timeline');
-            $(document).off('.aiTimelineResize');
-        }
-
         /* ============================================================
          *  停止 / 恢复生成
          * ============================================================ */
@@ -779,7 +743,7 @@
                 + '<span><i class="pause circle icon"></i> 已停止生成，等待 ' + Math.round((Date.now() - loadingStartTime) / 1000) + 's 后手动中断</span>'
                 + '<button class="ai-resume-btn" data-question="' + U.escapeHtml(questionText) + '">重新发送</button>'
                 + '</div></div></div>');
-            $messageList.append($node); $messageList.scrollTop($messageList[0].scrollHeight);
+            $messageList.append($node); scrollMessageListToBottom(false);
             saveMessage({ role: 'assistant', title: assistantName, message: '[已停止生成] 原问题: ' + questionText, actions: [], responseTime: 0 });
             addTimeline('用户中断', '手动停止了 AI 回复生成');
             resetSendButton(); setRequestState('就绪', false); setSignalState('online');
@@ -807,7 +771,7 @@
                 + '<div class="loading-avatar" style="width:38px;height:38px;border-radius:14px;background:#dff7f5;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;color:#0f172a;">' + assistantName.substring(0, 1) + '</div>'
                 + '<div class="ai-loading-dots"><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span></div>'
                 + '<span class="ai-loading-text">正在思考中...</span><span class="ai-loading-timer">0s</span></div>');
-            $messageList.append($loading); $messageList.scrollTop($messageList[0].scrollHeight);
+            $messageList.append($loading); scrollMessageListToBottom(false);
             loadingTimerInterval = setInterval(function () {
                 var elapsed = Math.round((Date.now() - loadingStartTime) / 1000);
                 $loading.find('.ai-loading-timer').text(elapsed + 's');
@@ -1043,9 +1007,6 @@
                     + '<div class="ai-timeline-desc">' + U.escapeHtml(item.desc) + '</div></div>');
             });
             updateTimelineSummary(session);
-            if (timelineState.expanded) {
-                setTimelineHeight(readTimelineHeight());
-            }
         }
 
         /* ============================================================
@@ -1193,13 +1154,12 @@
             }
         });
         $messageList.on('scroll', syncActiveAnchorByScroll);
+        $('#aiChatPanel').on('scroll', syncActiveAnchorByScroll);
         $(document).on('click', '.ai-message-toggle', function () {
             var $message = $(this).closest('.ai-message');
             updateMessageCollapseState($message, $(this).attr('aria-expanded') !== 'true');
         });
         $timelineToggleButton.on('click', function () { setTimelineExpanded(!timelineState.expanded); });
-        $timelineResizeHandle.on('mousedown', beginTimelineResize);
-        $timelineResizeHandle.on('dblclick', function (event) { event.preventDefault(); resetTimelineHeight(); });
         $timelineSummary.on('click keydown', function (event) {
             if (event.type === 'click' || event.keyCode === 13 || event.keyCode === 32) {
                 if (event.type === 'keydown') event.preventDefault();

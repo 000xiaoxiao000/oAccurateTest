@@ -186,7 +186,7 @@ public class SnapshotControl {
 
     @RequestMapping("/mySnapshotsCodeReport")
     public String mySnapshotsCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String sort, Model model) {
-        Map<String, Map<String, List<StackNodeVo>>> codeRelationships = new HashMap<>();
+        Map<String, Map<String, List<Map<String, Object>>>> codeRelationships = new HashMap<>();
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
 
         // 用于计算聚合指标
@@ -222,8 +222,7 @@ public class SnapshotControl {
 
                 StackNodeVo[] codeNodes = httpTraceNode.getCodeNodes();
                 if (codeNodes != null) {
-                    Map<String, List<StackNodeVo>> childNodes =
-                            Arrays.stream(codeNodes).collect(Collectors.groupingBy(StackNodeVo::parentId));
+                    Map<String, List<Map<String, Object>>> childNodes = new HashMap<>();
                     codeRelationships.put(requestUrl, childNodes);
 
                     // 获取 appId
@@ -243,6 +242,16 @@ public class SnapshotControl {
                         if (StringUtils.hasText(currentAppId)) {
                             classToAppId.putIfAbsent(node.getClassName(), currentAppId);
                         }
+
+                        childNodes.computeIfAbsent(node.parentId(), k -> new ArrayList<>()).add(new HashMap<String, Object>() {{
+                            put("className", node.getClassName());
+                            put("methodName", node.getMethodName());
+                            put("methodDescriptor", node.getMethodDescriptor());
+                            put("doLines", node.getDoLines() != null ? new ArrayList<>(node.getDoLines()) : Collections.emptyList());
+                            put("lineTotal", Collections.emptyList());
+                            put("branchCovered", 0);
+                            put("branchTotal", 0);
+                        }});
 
                         // 行覆盖
                         if (node.getDoLines() != null) {
@@ -285,6 +294,21 @@ public class SnapshotControl {
                             methodCoveredBranchTargets.put(mKey, normalizedKeys);
                         }
                     }
+                }
+            }
+        }
+
+        // 计算汇总
+        for (Map<String, List<Map<String, Object>>> childNodes : codeRelationships.values()) {
+            for (List<Map<String, Object>> nodes : childNodes.values()) {
+                for (Map<String, Object> node : nodes) {
+                    String methodKey = node.get("methodName") + "#" + node.get("methodDescriptor");
+                    Set<Integer> totalLineSet = methodTotalLines.getOrDefault(methodKey, Collections.emptySet());
+                    Set<String> totalBranchSet = methodTotalBranchTargets.getOrDefault(methodKey, Collections.emptySet());
+                    Set<String> coveredBranchSet = methodCoveredBranchTargets.getOrDefault(methodKey, Collections.emptySet());
+                    node.put("lineTotalCount", totalLineSet.size());
+                    node.put("branchTotalCount", totalBranchSet.size());
+                    node.put("branchCoveredCount", coveredBranchSet.size());
                 }
             }
         }
@@ -347,6 +371,8 @@ public class SnapshotControl {
             cStat.put("coveredLines", cCoveredLines);
             cStat.put("totalBranches", cTotalBranches);
             cStat.put("coveredBranches", cCoveredBranches);
+            cStat.put("totalBranchTargets", cTotalBranchTargets);
+            cStat.put("coveredBranchTargets", cCoveredBranchTargets);
             cStat.put("branchRate", cTotalBranchTargets > 0 ? cCoveredBranchTargets * 100.0 / cTotalBranchTargets : 0);
             cStat.put("totalComplexity", cTotalComplexity);
             classStats.add(cStat);

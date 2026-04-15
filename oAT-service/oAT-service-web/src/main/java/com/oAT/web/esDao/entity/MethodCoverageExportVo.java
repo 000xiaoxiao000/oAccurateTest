@@ -7,17 +7,17 @@ public class MethodCoverageExportVo {
     @ExcelProperty("类名")
     private String className;
 
-    @ExcelProperty("类-方法总数")
-    private int classTotalMethods;
+    @ExcelProperty("类-方法 (覆盖/总)")
+    private String classMethodCoverage;
 
-    @ExcelProperty("类-已覆盖方法数")
-    private int classCoveredMethods;
+    @ExcelProperty("类-方法覆盖率")
+    private String classMethodCoverageRate;
 
-    @ExcelProperty("类-总行数")
-    private int classTotalLines;
+    @ExcelProperty("类-代码行 (覆盖/总)")
+    private String classLineCoverage;
 
-    @ExcelProperty("类-已覆盖行数")
-    private int classCoveredLines;
+    @ExcelProperty("类-代码行覆盖率")
+    private String classLineCoverageRate;
 
     @ExcelProperty("方法名")
     private String methodName;
@@ -25,20 +25,17 @@ public class MethodCoverageExportVo {
     @ExcelProperty("方法描述")
     private String methodDesc;
 
-    @ExcelProperty("方法-总行数")
-    private int totalLines;
+    @ExcelProperty("方法-代码行 (覆盖/总)")
+    private String lineCoverage;
 
-    @ExcelProperty("方法-已覆盖行数")
-    private int coveredLines;
-
-    @ExcelProperty("方法-行覆盖率")
+    @ExcelProperty("方法-代码行覆盖率")
     private String lineCoverageRate;
 
-    @ExcelProperty("方法-分支总数")
-    private int totalBranches;
+    @ExcelProperty("方法-分支 (覆盖/总)")
+    private String branchCoverage;
 
-    @ExcelProperty("方法-已覆盖分支数")
-    private int coveredBranches;
+    @ExcelProperty("方法-分支覆盖率")
+    private String branchCoverageRate;
 
     @ExcelProperty("方法-圈复杂度")
     private int complexity;
@@ -54,36 +51,36 @@ public class MethodCoverageExportVo {
         this.className = className;
     }
 
-    public int getClassTotalMethods() {
-        return classTotalMethods;
+    public String getClassMethodCoverage() {
+        return classMethodCoverage;
     }
 
-    public void setClassTotalMethods(int classTotalMethods) {
-        this.classTotalMethods = classTotalMethods;
+    public void setClassMethodCoverage(String classMethodCoverage) {
+        this.classMethodCoverage = classMethodCoverage;
     }
 
-    public int getClassCoveredMethods() {
-        return classCoveredMethods;
+    public String getClassMethodCoverageRate() {
+        return classMethodCoverageRate;
     }
 
-    public void setClassCoveredMethods(int classCoveredMethods) {
-        this.classCoveredMethods = classCoveredMethods;
+    public void setClassMethodCoverageRate(String classMethodCoverageRate) {
+        this.classMethodCoverageRate = classMethodCoverageRate;
     }
 
-    public int getClassTotalLines() {
-        return classTotalLines;
+    public String getClassLineCoverage() {
+        return classLineCoverage;
     }
 
-    public void setClassTotalLines(int classTotalLines) {
-        this.classTotalLines = classTotalLines;
+    public void setClassLineCoverage(String classLineCoverage) {
+        this.classLineCoverage = classLineCoverage;
     }
 
-    public int getClassCoveredLines() {
-        return classCoveredLines;
+    public String getClassLineCoverageRate() {
+        return classLineCoverageRate;
     }
 
-    public void setClassCoveredLines(int classCoveredLines) {
-        this.classCoveredLines = classCoveredLines;
+    public void setClassLineCoverageRate(String classLineCoverageRate) {
+        this.classLineCoverageRate = classLineCoverageRate;
     }
 
     public String getMethodName() {
@@ -102,20 +99,12 @@ public class MethodCoverageExportVo {
         this.methodDesc = methodDesc;
     }
 
-    public int getTotalLines() {
-        return totalLines;
+    public String getLineCoverage() {
+        return lineCoverage;
     }
 
-    public void setTotalLines(int totalLines) {
-        this.totalLines = totalLines;
-    }
-
-    public int getCoveredLines() {
-        return coveredLines;
-    }
-
-    public void setCoveredLines(int coveredLines) {
-        this.coveredLines = coveredLines;
+    public void setLineCoverage(String lineCoverage) {
+        this.lineCoverage = lineCoverage;
     }
 
     public String getLineCoverageRate() {
@@ -126,20 +115,20 @@ public class MethodCoverageExportVo {
         this.lineCoverageRate = lineCoverageRate;
     }
 
-    public int getTotalBranches() {
-        return totalBranches;
+    public String getBranchCoverage() {
+        return branchCoverage;
     }
 
-    public void setTotalBranches(int totalBranches) {
-        this.totalBranches = totalBranches;
+    public void setBranchCoverage(String branchCoverage) {
+        this.branchCoverage = branchCoverage;
     }
 
-    public int getCoveredBranches() {
-        return coveredBranches;
+    public String getBranchCoverageRate() {
+        return branchCoverageRate;
     }
 
-    public void setCoveredBranches(int coveredBranches) {
-        this.coveredBranches = coveredBranches;
+    public void setBranchCoverageRate(String branchCoverageRate) {
+        this.branchCoverageRate = branchCoverageRate;
     }
 
     public int getComplexity() {

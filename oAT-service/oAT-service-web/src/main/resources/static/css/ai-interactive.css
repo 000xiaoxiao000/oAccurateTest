@@ -1242,34 +1242,13 @@
     overflow-wrap: anywhere;
 }
 
-.ai-timeline-resize-handle {
-    height: 10px;
-    margin: 2px 0 8px;
-    border-radius: 999px;
-    cursor: ns-resize;
-    background: linear-gradient(90deg, rgba(203, 213, 225, 0.3), rgba(20, 184, 166, 0.5), rgba(203, 213, 225, 0.3));
-    position: relative;
-    user-select: none;
-}
-
-.ai-timeline-resize-handle:before {
-    content: '';
-    position: absolute;
-    left: -8px;
-    right: -8px;
-    top: -6px;
-    bottom: -6px;
-}
-
 .ai-timeline-list {
     display: grid;
     gap: 12px;
-    height: var(--ai-timeline-height);
-    min-height: var(--ai-timeline-height);
+    max-height: 140px;
     overflow-y: auto;
 }
 
-.ai-timeline-panel.collapsed .ai-timeline-resize-handle,
 .ai-timeline-panel.collapsed .ai-timeline-list {
     display: none;
 }

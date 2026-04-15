@@ -829,18 +829,17 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                         for (ClassCoverageIndex.MethodCoverageDetail m : classIdx.getMethods()) {
                             MethodCoverageExportVo vo = new MethodCoverageExportVo();
                             vo.setClassName(classIdx.getClassName());
-                            vo.setClassTotalMethods(classIdx.getTotalMethods());
-                            vo.setClassCoveredMethods(classIdx.getCoveredMethods());
-                            vo.setClassTotalLines(classIdx.getTotalLines());
-                            vo.setClassCoveredLines(classIdx.getCoveredLines());
+                            vo.setClassMethodCoverage(classIdx.getCoveredMethods() + " / " + classIdx.getTotalMethods());
+                            vo.setClassMethodCoverageRate(classIdx.getTotalMethods() > 0 ? String.format("%.2f%%", (double) classIdx.getCoveredMethods() / classIdx.getTotalMethods() * 100) : "0.00%");
+                            vo.setClassLineCoverage(classIdx.getCoveredLines() + " / " + classIdx.getTotalLines());
+                            vo.setClassLineCoverageRate(classIdx.getTotalLines() > 0 ? String.format("%.2f%%", (double) classIdx.getCoveredLines() / classIdx.getTotalLines() * 100) : "0.00%");
 
                             vo.setMethodName(m.getMethodName());
                             vo.setMethodDesc(m.getMethodDesc());
-                            vo.setTotalLines(m.getTotalLines());
-                            vo.setCoveredLines(m.getCoveredLines());
+                            vo.setLineCoverage(m.getCoveredLines() + " / " + m.getTotalLines());
                             vo.setLineCoverageRate(m.getTotalLines() > 0 ? String.format("%.2f%%", (double) m.getCoveredLines() / m.getTotalLines() * 100) : "0.00%");
-                            vo.setTotalBranches(m.getTotalBranches());
-                            vo.setCoveredBranches(m.getCoveredBranches());
+                            vo.setBranchCoverage(m.getCoveredBranchTargets() + " / " + m.getTotalBranchTargets());
+                            vo.setBranchCoverageRate(m.getTotalBranchTargets() > 0 ? String.format("%.2f%%", (double) m.getCoveredBranchTargets() / m.getTotalBranchTargets() * 100) : "0.00%");
                             vo.setComplexity(m.getComplexity());
                             vo.setIsCovered(m.isCovered() ? "是" : "否");
                             writeData.add(vo);
