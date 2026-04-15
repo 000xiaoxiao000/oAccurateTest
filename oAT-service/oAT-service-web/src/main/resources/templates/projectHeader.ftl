@@ -157,7 +157,7 @@
      data-ai-url="/p/${project.id}/AIInteractive"
      data-mascot-primary="${mascotPrimary!('#00b5ad')}"
      data-ai-timeout="${(aiTimeout)!120}">
-    <button id="aiFloatingLauncher" class="ai-floating-launcher" type="button" title="打开 AI 助手">
+    <button id="aiFloatingLauncher" class="ai-floating-launcher" type="button" title="打开 AI 助手" data-show-ai-label="false">
         <canvas id="aiFloatingMascotCanvas" width="88" height="88"></canvas>
     </button>
 

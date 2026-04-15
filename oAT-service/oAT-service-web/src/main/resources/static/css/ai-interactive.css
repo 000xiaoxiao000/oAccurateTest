@@ -549,6 +549,12 @@
     /* 不使用CSS smooth，由JS scrollToAnchor控制滚动动画，避免双重缓动冲突 */
 }
 
+.ai-scroll-debug-target {
+    outline: 2px dashed rgba(245, 158, 11, 0.95);
+    outline-offset: -2px;
+    box-shadow: inset 0 0 0 2px rgba(250, 204, 21, 0.22);
+}
+
 .ai-chat-anchors {
     margin-bottom: 14px;
     padding: 12px 14px;
