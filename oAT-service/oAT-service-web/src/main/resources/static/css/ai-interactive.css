@@ -174,6 +174,31 @@
     box-shadow: 0 10px 24px rgba(245, 158, 11, 0.10);
 }
 
+.ai-pending-banner.is-completed {
+    border-color: rgba(20, 184, 166, 0.22);
+    background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(220, 252, 231, 0.92));
+    box-shadow: 0 10px 24px rgba(20, 184, 166, 0.10);
+}
+
+.ai-pending-banner.is-failed,
+.ai-pending-banner.is-error {
+    border-color: rgba(239, 68, 68, 0.24);
+    background: linear-gradient(135deg, rgba(254, 242, 242, 0.96), rgba(254, 226, 226, 0.92));
+    box-shadow: 0 10px 24px rgba(239, 68, 68, 0.10);
+}
+
+.ai-pending-banner.is-timeout {
+    border-color: rgba(249, 115, 22, 0.24);
+    background: linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(255, 237, 213, 0.92));
+    box-shadow: 0 10px 24px rgba(249, 115, 22, 0.10);
+}
+
+.ai-pending-banner.is-aborted {
+    border-color: rgba(148, 163, 184, 0.26);
+    background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.92));
+    box-shadow: 0 10px 24px rgba(148, 163, 184, 0.12);
+}
+
 .ai-pending-banner.is-resolved {
     border-color: rgba(20, 184, 166, 0.22);
     background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(220, 252, 231, 0.92));
@@ -190,6 +215,23 @@
     color: #b45309;
     background: rgba(255, 255, 255, 0.72);
     flex-shrink: 0;
+}
+
+.ai-pending-banner.is-completed .ai-pending-banner-icon {
+    color: #0f766e;
+}
+
+.ai-pending-banner.is-failed .ai-pending-banner-icon,
+.ai-pending-banner.is-error .ai-pending-banner-icon {
+    color: #b91c1c;
+}
+
+.ai-pending-banner.is-timeout .ai-pending-banner-icon {
+    color: #c2410c;
+}
+
+.ai-pending-banner.is-aborted .ai-pending-banner-icon {
+    color: #475569;
 }
 
 .ai-pending-banner.is-resolved .ai-pending-banner-icon {
@@ -372,6 +414,23 @@
     font-size: 13px;
     font-weight: 700;
     color: #92400e;
+}
+
+.ai-pending-banner.is-completed .ai-pending-banner-toggle {
+    color: #0f766e;
+}
+
+.ai-pending-banner.is-failed .ai-pending-banner-toggle,
+.ai-pending-banner.is-error .ai-pending-banner-toggle {
+    color: #b91c1c;
+}
+
+.ai-pending-banner.is-timeout .ai-pending-banner-toggle {
+    color: #c2410c;
+}
+
+.ai-pending-banner.is-aborted .ai-pending-banner-toggle {
+    color: #475569;
 }
 
 .ai-pending-banner.is-resolved .ai-pending-banner-toggle {
