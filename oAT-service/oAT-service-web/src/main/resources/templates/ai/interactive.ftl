@@ -211,7 +211,6 @@
                                 <button type="button" id="aiTimelineToggleButton" class="ai-panel-toggle" aria-expanded="true">收起</button>
                             </div>
                         </div>
-                        <div id="aiTimelineResizeHandle" class="ai-timeline-resize-handle" title="拖动调整时间线高度，双击恢复默认高度"></div>
                         <div id="aiTimelineSummary" class="ai-timeline-summary" role="button" tabindex="0" aria-hidden="true"></div>
                         <div id="aiTimelineList" class="ai-timeline-list"></div>
                     </div>
