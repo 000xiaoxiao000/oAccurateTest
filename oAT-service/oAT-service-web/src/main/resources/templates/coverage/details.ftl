@@ -157,7 +157,7 @@
                     <th style="width: 25%">类名</th>
                     <th style="width: 12%">方法 (覆盖/总)</th>
                     <th style="width: 8%">方法覆盖率</th>
-                    <th style="width: 12%">分支目标 (覆盖/总)</th>
+                    <th style="width: 12%">分支 (覆盖/总)</th>
                     <th style="width: 8%">分支覆盖率</th>
                     <th style="width: 12%">代码行 (覆盖/总)</th>
                     <th style="width: 10%">代码行覆盖率</th>
@@ -206,7 +206,7 @@
                 <th style="width: 25%">包/类</th>
                 <th style="width: 12%">方法 (覆盖/总)</th>
                 <th style="width: 8%">方法覆盖率</th>
-                <th style="width: 12%">分支目标 (覆盖/总)</th>
+                <th style="width: 12%">分支 (覆盖/总)</th>
                 <th style="width: 8%">分支覆盖率</th>
                 <th style="width: 12%">代码行 (覆盖/总)</th>
                 <th style="width: 10%">代码行覆盖率</th>

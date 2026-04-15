@@ -456,6 +456,8 @@ public class SystemSnapshotControl {
             cStat.put("coveredLines", cCoveredLines);
             cStat.put("totalBranches", cTotalBranches);
             cStat.put("coveredBranches", cCoveredBranches);
+            cStat.put("totalBranchTargets", cTotalBranchTargets);
+            cStat.put("coveredBranchTargets", cCoveredBranchTargets);
             cStat.put("branchRate", cTotalBranchTargets > 0 ? cCoveredBranchTargets * 100.0 / cTotalBranchTargets : 0);
             cStat.put("totalComplexity", cTotalComplexity);
             classStats.add(cStat);

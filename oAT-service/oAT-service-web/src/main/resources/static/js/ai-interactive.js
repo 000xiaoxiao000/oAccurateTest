@@ -80,7 +80,11 @@
         var anchorFilterMode = 'all';
         var anchorSearchKeyword = '';
         var anchorKeyboardIndex = -1;
-        var expandedAnchorTextMap = {};
+        var anchorScrollState = {
+            programmatic: false,
+            currentAnchorId: null,
+            suppressUntil: 0
+        };
 
         /* ============================================================
          *  初始化
@@ -223,7 +227,9 @@
             function tick() {
                 index = Math.min(index + 2, safeMessage.length);
                 $target.html(safeMessage.substring(0, index).replace(/\n/g, '<br>') + '<span class="ai-typing-cursor"></span>');
-                $messageList.scrollTop($messageList[0].scrollHeight);
+                if (!anchorScrollState.programmatic) {
+                    $messageList.scrollTop($messageList[0].scrollHeight);
+                }
                 if (index >= safeMessage.length) {
                     $target.html(safeMessage.replace(/\n/g, '<br>'));
                     if (done) done();
@@ -455,6 +461,7 @@
             $('.ai-chat-anchor-item.active').removeClass('active');
             $('.ai-floating-anchor-dot.active').removeClass('active');
             $('.ai-message-section-anchor.is-active').removeClass('is-active');
+            anchorScrollState.currentAnchorId = anchorId || null;
             if (!anchorId) return;
             var $active = $chatAnchorsList.find('.ai-chat-anchor-item[data-anchor-id="' + anchorId + '"]');
             $active.addClass('active');
@@ -465,13 +472,18 @@
 
         function syncActiveAnchorByScroll() {
             if (!$messageList.length) return;
+            if (anchorScrollState.programmatic && Date.now() < anchorScrollState.suppressUntil) return;
             var container = $messageList[0];
             var containerRect = container.getBoundingClientRect();
+            var anchorActivationLine = containerRect.top + Math.max(24, Math.round(container.clientHeight * 0.18));
             var activeAnchorId = null;
             $messageList.find('.ai-message-section-anchor').each(function () {
-                var targetRect = this.getBoundingClientRect();
-                if (targetRect.top - containerRect.top - 20 <= 0) {
-                    activeAnchorId = $(this).data('anchor-id');
+                var $section = $(this);
+                var $card = $section.find('.ai-message-card').first();
+                var targetElement = $card.length ? $card[0] : this;
+                var targetRect = targetElement.getBoundingClientRect();
+                if (targetRect.top <= anchorActivationLine) {
+                    activeAnchorId = $section.data('anchor-id');
                 }
             });
             if (!activeAnchorId) {
@@ -529,14 +541,13 @@
         function getAnchorScrollTop(anchorElement) {
             var container = $messageList[0];
             if (!container || !anchorElement) return 0;
-            // 真实可见定位目标应优先落到 ai-message-card
             var $card = $(anchorElement).find('.ai-message-card').first();
             var targetElement = $card.length ? $card[0] : anchorElement;
-            // 使用 jQuery.position 相对滚动容器内容区取值，避免 offsetParent / absolute 元素导致的偏移错误
-            var $targetElement = $(targetElement);
-            var positionedTop = $targetElement.position() ? $targetElement.position().top : 0;
+            var containerRect = container.getBoundingClientRect();
+            var targetRect = targetElement.getBoundingClientRect();
             var viewportOffset = Math.round(container.clientHeight * 0.16);
-            return Math.max(0, Math.round(positionedTop - Math.max(8, viewportOffset)));
+            var nextTop = container.scrollTop + (targetRect.top - containerRect.top) - Math.max(8, viewportOffset);
+            return Math.max(0, Math.round(nextTop));
         }
 
         function expandAnchorFromHash() {
@@ -568,10 +579,11 @@
             var container = $messageList[0];
             if (!container) return;
 
-            // 先立即设置活动状态，提升感知响应速度
+            anchorScrollState.programmatic = true;
+            anchorScrollState.currentAnchorId = anchorId;
+            anchorScrollState.suppressUntil = Date.now() + (options.immediate ? 120 : 480);
             setActiveAnchor(anchorId);
 
-            // 如果目标消息处于折叠状态，先展开再定位
             var $content = $target.find('.ai-message-content');
             if ($content.length && $content.hasClass('collapsed')) {
                 updateMessageCollapseState($target.find('.ai-message'), true);
@@ -581,31 +593,45 @@
             var maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
             nextTop = Math.max(0, Math.min(maxScrollTop, nextTop));
 
-            // 取消正在进行的动画
+            if (window.console && console.debug) {
+                console.debug('[AI Anchor] scrollToAnchor', {
+                    anchorId: anchorId,
+                    currentTop: container.scrollTop,
+                    nextTop: nextTop,
+                    maxScrollTop: maxScrollTop,
+                    immediate: !!options.immediate
+                });
+            }
+
             if (container._aiAnchorScrollFrame) {
                 cancelAnimationFrame(container._aiAnchorScrollFrame);
                 container._aiAnchorScrollFrame = null;
             }
 
+            var finishScroll = function () {
+                anchorScrollState.programmatic = false;
+                anchorScrollState.suppressUntil = 0;
+                setActiveAnchor(anchorId);
+                highlightAnchorTarget(anchorId);
+            };
+
             if (options.immediate) {
                 container.scrollTop = nextTop;
-                highlightAnchorTarget(anchorId);
                 updateLocationHash(anchorId);
+                finishScroll();
                 return;
             }
 
             var startTop = container.scrollTop;
             var distance = nextTop - startTop;
 
-            // 距离很小时直接跳转，无动画
             if (Math.abs(distance) <= 3) {
                 container.scrollTop = nextTop;
-                highlightAnchorTarget(anchorId);
                 updateLocationHash(anchorId);
+                finishScroll();
                 return;
             }
 
-            // 优化动画：更快的持续时间（120-220ms）和更利落的缓动
             var duration = Math.min(220, Math.max(120, Math.abs(distance) * 0.2));
             var startAt = performance.now();
             var easeOutCubic = function (t) { return 1 - Math.pow(1 - t, 3); };
@@ -622,7 +648,7 @@
                 } else {
                     container._aiAnchorScrollFrame = null;
                     container.scrollTop = nextTop;
-                    highlightAnchorTarget(anchorId);
+                    finishScroll();
                 }
             };
 

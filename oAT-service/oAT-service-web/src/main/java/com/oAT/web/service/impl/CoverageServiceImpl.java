@@ -1795,7 +1795,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             status = "部分覆盖";
             statusIcon = "🟠";
         }
-        return statusIcon + " 分支状态：" + status + "\n已处理分支： " + coveredText + "\n总分支目标： " + totalText;
+        return statusIcon + " 分支状态：" + status + "\n已处理分支： " + coveredText + "\n总分支： " + totalText;
     }
 
     private String pickCoverageColor(String currentColor, String newColor) {
