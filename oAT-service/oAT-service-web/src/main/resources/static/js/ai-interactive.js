@@ -50,8 +50,39 @@
         var $questionInput = $('#aiQuestionInput');
         var $sendButton = $('#aiSendButton');
         var $requestState = $('#aiRequestState');
-        var currentAjaxRequest = null;
-        var pendingQuestion = '';
+        var pendingBannerStatusMetaMap = {
+            pending: {
+                label: '上一轮请求仍未完成',
+                icon: 'history',
+                bannerClass: 'is-pending'
+            },
+            completed: {
+                label: '上一轮请求已完成',
+                icon: 'check circle',
+                bannerClass: 'is-completed'
+            },
+            failed: {
+                label: '上一轮请求处理失败',
+                icon: 'times circle',
+                bannerClass: 'is-failed'
+            },
+            timeout: {
+                label: '上一轮请求已超时',
+                icon: 'clock outline',
+                bannerClass: 'is-timeout'
+            },
+            aborted: {
+                label: '上一轮请求已手动停止',
+                icon: 'pause circle',
+                bannerClass: 'is-aborted'
+            },
+            error: {
+                label: '上一轮请求发生异常',
+                icon: 'warning circle',
+                bannerClass: 'is-error'
+            }
+        };
+
         var $followUpList = $('#aiFollowUpList');
         var $quickLinkList = $('#aiQuickLinkList');
         var $signalLights = $('#aiSignalLights');
@@ -918,10 +949,15 @@
 
         $(document).on('click', '.ai-pending-banner-dismiss', function () {
             var $banner = $(this).closest('.ai-pending-banner');
-            persistPendingBannerState({ dismissed: true });
-            $banner.slideUp(180, function () {
+            persistPendingBannerState({ dismissed: true, autoDismissed: false });
+            $banner.stop(true, true).slideUp(180, function () {
                 $(this).remove();
+                showPendingBannerRestoreHint('manual');
             });
+        });
+
+        $(document).on('click', '.ai-pending-banner-restore-btn', function () {
+            restorePendingBanner();
         });
 
         $(document).on('click', '.ai-pending-banner-retry', function () {
@@ -1048,6 +1084,9 @@
                 if (typeof s.pendingRequest.dismissed !== 'boolean') {
                     s.pendingRequest.dismissed = false;
                 }
+                if (typeof s.pendingRequest.autoDismissed !== 'boolean') {
+                    s.pendingRequest.autoDismissed = false;
+                }
             });
             if (serverState && typeof serverState.timelineExpanded === 'boolean' && !preferLocalMigration) {
                 timelineState.hasUserPreference = true;
@@ -1142,27 +1181,10 @@
             if (!session || !session.pendingRequest || session.pendingRequest.dismissed) return;
             var pending = session.pendingRequest;
             var status = pending.status || 'pending';
-            var statusLabelMap = {
-                pending: '上一轮请求仍未完成',
-                completed: '上一轮请求已完成',
-                failed: '上一轮请求处理失败',
-                timeout: '上一轮请求已超时',
-                aborted: '上一轮请求已手动停止',
-                error: '上一轮请求发生异常'
-            };
-            var statusMetaMap = {
-                pending: { icon: 'history', bannerClass: 'is-pending' },
-                completed: { icon: 'check circle', bannerClass: 'is-completed' },
-                failed: { icon: 'times circle', bannerClass: 'is-failed' },
-                timeout: { icon: 'clock outline', bannerClass: 'is-timeout' },
-                aborted: { icon: 'pause circle', bannerClass: 'is-aborted' },
-                error: { icon: 'warning circle', bannerClass: 'is-error' }
-            };
+            var statusMeta = pendingBannerStatusMetaMap[status] || pendingBannerStatusMetaMap.pending;
             var question = pending.question || '未记录问题';
             var detail = pending.detail || '';
             var startedAt = pending.startedAt ? new Date(pending.startedAt).toLocaleString() : '';
-            var statusMeta = statusMetaMap[status] || statusMetaMap.pending;
-            var bannerClass = statusMeta.bannerClass;
             var isExpanded = typeof pending.bannerExpanded === 'boolean' ? pending.bannerExpanded : status === 'pending';
             var retryButton = status === 'pending'
                 ? '<button type="button" class="ai-pending-banner-retry" data-question="' + U.escapeHtml(question) + '">重新发送</button>'
@@ -1173,13 +1195,14 @@
             var metaText = startedAt + (detail ? ' · ' + detail : '');
             var collapsedSummary = question.length > 42 ? question.substring(0, 42) + '…' : question;
             var toggleText = isExpanded ? '收起' : '展开';
-            var html = '<div class="ai-pending-banner ' + bannerClass + (isExpanded ? ' is-expanded' : '') + '">'
+            var autoDismissAttr = status === 'completed' && !pending.autoDismissed ? ' data-auto-dismiss="completed"' : '';
+            var html = '<div class="ai-pending-banner ' + statusMeta.bannerClass + (isExpanded ? ' is-expanded' : '') + '"' + autoDismissAttr + '>'
                 + '<div class="ai-pending-banner-icon"><i class="' + U.escapeHtml(statusMeta.icon) + ' icon"></i></div>'
                 + '<div class="ai-pending-banner-body">'
                 + '<div class="ai-pending-banner-title-row">'
                 + '<button type="button" class="ai-pending-banner-toggle" aria-expanded="' + (isExpanded ? 'true' : 'false') + '">'
                 + '<span class="ai-pending-banner-toggle-main">'
-                + '<span class="ai-pending-banner-title">' + U.escapeHtml(statusLabelMap[status] || '上一轮请求状态未知') + '</span>'
+                + '<span class="ai-pending-banner-title">' + U.escapeHtml(statusMeta.label) + '</span>'
                 + '<span class="ai-pending-banner-summary' + (isExpanded ? '' : ' visible') + '">' + U.escapeHtml(collapsedSummary) + '</span>'
                 + '</span>'
                 + '<span class="ai-pending-banner-toggle-side">'
@@ -1198,6 +1221,7 @@
                 + '</div>'
                 + '</div></div>';
             $messageList.append(html);
+            schedulePendingBannerAutoDismiss($messageList.find('.ai-pending-banner').last());
         }
 
         function updatePendingBannerExpandedState($banner, expanded) {
@@ -1251,6 +1275,58 @@
             if (!activeSession || !activeSession.pendingRequest) return;
             $.extend(activeSession.pendingRequest, patch || {});
             persistSessions();
+        }
+
+        function showPendingBannerRestoreHint(reason) {
+            var activeSession = getActiveSession();
+            if (!activeSession || !activeSession.pendingRequest) return;
+            $('.ai-pending-banner-restore-hint').remove();
+            var hintText = reason === 'auto'
+                ? '已自动隐藏完成提示'
+                : '已隐藏当前提示';
+            var $hint = $('<div class="ai-pending-banner-restore-hint">'
+                + '<span class="ai-pending-banner-restore-text">' + U.escapeHtml(hintText) + '</span>'
+                + '<button type="button" class="ai-pending-banner-restore-btn">恢复显示</button>'
+                + '</div>');
+            $messageList.prepend($hint);
+            setTimeout(function () {
+                $hint.addClass('visible');
+            }, 20);
+            setTimeout(function () {
+                if (!$hint.closest('body').length) return;
+                $hint.removeClass('visible');
+                setTimeout(function () {
+                    $hint.remove();
+                }, 180);
+            }, 6000);
+        }
+
+        function restorePendingBanner() {
+            var activeSession = getActiveSession();
+            if (!activeSession || !activeSession.pendingRequest) return;
+            activeSession.pendingRequest.dismissed = false;
+            activeSession.pendingRequest.autoDismissed = false;
+            if (typeof activeSession.pendingRequest.bannerExpanded !== 'boolean') {
+                activeSession.pendingRequest.bannerExpanded = activeSession.pendingRequest.status === 'pending';
+            }
+            persistSessions();
+            $('.ai-pending-banner-restore-hint').remove();
+            renderActiveSession();
+        }
+
+        function schedulePendingBannerAutoDismiss($banner) {
+            if (!$banner || !$banner.length || $banner.attr('data-auto-dismiss') !== 'completed') return;
+            setTimeout(function () {
+                if (!$banner.closest('body').length) return;
+                persistPendingBannerState({ dismissed: true, autoDismissed: true });
+                $banner.addClass('is-auto-dismissing');
+                setTimeout(function () {
+                    $banner.slideUp(180, function () {
+                        $(this).remove();
+                        showPendingBannerRestoreHint('auto');
+                    });
+                }, 220);
+            }, 5000);
         }
 
         function shouldPreferLocalMigration(serverState, localSessions) {
@@ -1499,7 +1575,8 @@
                 startedAt: Date.now(),
                 hasImage: !!uploadedImageData,
                 bannerExpanded: true,
-                dismissed: false
+                dismissed: false,
+                autoDismissed: false
             };
             persistSessions();
             syncSessionStateToServer({ silent: true });
@@ -1676,6 +1753,26 @@
                 collapseHistoricalQaMessages({ scrollLatest: false });
             }
             updateMessageCollapseState($message, shouldExpand);
+        });
+        $(document).on('click', '.ai-pending-banner-toggle', function () {
+            var $banner = $(this).closest('.ai-pending-banner');
+            updatePendingBannerExpandedState($banner, !$banner.hasClass('is-expanded'));
+        });
+        $(document).on('click', '.ai-pending-banner-dismiss', function () {
+            var $banner = $(this).closest('.ai-pending-banner');
+            persistPendingBannerState({ dismissed: true, autoDismissed: false });
+            $banner.stop(true, true).slideUp(180, function () {
+                $(this).remove();
+                showPendingBannerRestoreHint('manual');
+            });
+        });
+        $(document).on('click', '.ai-pending-banner-restore-btn', function () {
+            restorePendingBanner();
+        });
+        $(document).on('click', '.ai-pending-banner-retry', function () {
+            var question = $(this).data('question') || '';
+            if (!question) return;
+            sendQuestion(question);
         });
         $timelineToggleButton.on('click', function () { setTimelineExpanded(!timelineState.expanded); });
         $timelineSummary.on('click keydown', function (event) {
