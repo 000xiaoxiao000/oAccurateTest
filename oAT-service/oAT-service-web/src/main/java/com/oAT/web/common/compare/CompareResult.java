@@ -28,6 +28,10 @@ public class CompareResult {
         return methods.toArray(new Method[0]);
     }
 
+    public void removeMethodsIf(java.util.function.Predicate<Method> predicate) {
+        methods.removeIf(predicate);
+    }
+
     public void add(String name, String desc, Model model) {
         methods.add(new Method(name, desc, model));
     }

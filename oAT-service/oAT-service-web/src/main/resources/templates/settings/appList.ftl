@@ -80,7 +80,7 @@
                                         <br><span style="color: grey; font-size: 0.9em;">分支: ${app.currentBranch}</span>
                                     </#if>
                                     <#if app.currentCommitId?? && app.currentCommitId != "">
-                                        <br><span style="color: grey; font-size: 0.8em;">Commit: ${app.currentCommitId?substring(0, 7)}</span>
+                                        <br><span style="color: grey; font-size: 0.8em;">Commit: <code class="commit-id" data-content="${app.currentCommitId}" data-position="top center">${(app.currentCommitId?length > 8)?then(app.currentCommitId?substring(0,8), app.currentCommitId)}</code></span>
                                     </#if>
                                 </span>
                             <#else>
@@ -147,6 +147,7 @@
     $('#center-content .ui.dropdown').dropdown({
         on: 'hover'
     });
+    $('.commit-id').popup();
 
     function openEditDialog(appId) {
         $("#editDialog").load('/p/${project.id}/app/edit?appId=' + appId);

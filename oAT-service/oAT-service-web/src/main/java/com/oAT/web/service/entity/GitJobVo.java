@@ -15,6 +15,8 @@ public class GitJobVo implements Serializable {
     private String cachePath; // The path where the zipped file is stored
     private String md5;
     private String repoCommitId;
+    private Long pullDurationMs;
+    private Long packageSizeBytes;
 
     public String getId() {
         return id;
@@ -95,4 +97,21 @@ public class GitJobVo implements Serializable {
     public void setRepoCommitId(String repoCommitId) {
         this.repoCommitId = repoCommitId;
     }
+
+    public Long getPullDurationMs() {
+        return pullDurationMs;
+    }
+
+    public void setPullDurationMs(Long pullDurationMs) {
+        this.pullDurationMs = pullDurationMs;
+    }
+
+    public Long getPackageSizeBytes() {
+        return packageSizeBytes;
+    }
+
+    public void setPackageSizeBytes(Long packageSizeBytes) {
+        this.packageSizeBytes = packageSizeBytes;
+    }
 }
+

@@ -61,4 +61,6 @@ public interface UsecaseService {
      */
     void doDeleteUsecase(String projectId, String id);
 
+    int rebuildUsecaseSearchData(String projectId, String operator);
+
 }

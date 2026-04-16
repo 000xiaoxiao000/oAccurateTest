@@ -32,6 +32,19 @@
         <h4 class="ui header top attached block">
         ${compareJob.name}
         </h4>
+        <#if compareJob.gitBranch?? || compareJob.gitOldCommit?? || compareJob.gitNewCommit??>
+            <div class="ui attached segment" style="padding-top: 10px; padding-bottom: 10px; color: rgba(0,0,0,.6);">
+                <#if compareJob.gitBranch??>
+                    分支: <code>${compareJob.gitBranch}</code>
+                </#if>
+                <#if compareJob.gitOldCommit??>
+                    <#if compareJob.gitBranch??> ｜ </#if>旧: <code class="commit-id" data-content="${compareJob.gitOldCommit}" data-position="top center">${(compareJob.gitOldCommit?length > 8)?then(compareJob.gitOldCommit?substring(0,8), compareJob.gitOldCommit)}</code>
+                </#if>
+                <#if compareJob.gitNewCommit??>
+                    <#if compareJob.gitBranch?? || compareJob.gitOldCommit??> ｜ </#if>新: <code class="commit-id" data-content="${compareJob.gitNewCommit}" data-position="top center">${(compareJob.gitNewCommit?length > 8)?then(compareJob.gitNewCommit?substring(0,8), compareJob.gitNewCommit)}</code>
+                </#if>
+            </div>
+        </#if>
         <div class="ui attached segment">
             <div id="compareProgress" data-percent="${compareJob.progress}" class="ui active progress">
                 <div class="bar">
@@ -79,15 +92,23 @@
     $('.ui.filter.dropdown').dropdown({
         on: 'click'
     });
+    $('.commit-id').popup();
     $(function () {
-        // 开启定时任务，时间间隔为3000 ms。
-        clearInterval
         var future = setInterval(function () {
             var results = refreshJob();
+            if (!results || !results.data) {
+                window.location.href = "/p/${project.id}/version/report/${compareJob.id}";
+                return;
+            }
             if (results.data.finish) {
                 clearInterval(future);
-                $("#openReport").attr("href", "/p/${project.id}/version/report/" + results.data.id);
-                $("#openReport").show();
+                $("#compareProgress").removeClass("active warning").addClass("success");
+                $("#compareProgressName").html("正在生成报告，即将自动跳转...");
+                var reportUrl = "/p/${project.id}/version/report/" + results.data.id;
+                $("#openReport").attr("href", reportUrl).show();
+                setTimeout(function () {
+                    window.location.href = reportUrl;
+                }, 400);
             }
         }, 500);
     });
@@ -98,24 +119,28 @@
             async: false
         }).responseJSON;
 
-        var $progress = $("#compareProgress");
-        $progress.progress('set percent', results.data.progress);
-        $("#compareProgressName").html(results.data.progressName);
-
-        if (results.data.finish) {
-            $progress.removeClass("active").addClass("success");
-        } else {
-            $progress.addClass("active").removeClass("success");
+        if (!results || !results.data) {
+            return results;
         }
 
-        $("#classAdd").html(results.data.addClassCount);
-        $("#classUpdate").html(results.data.updateClassCount);
-        $("#classDelete").html(results.data.deleteClassCount);
-        $("#methodAdd").html(results.data.addMethodCount);
-        $("#methodUpdate").html(results.data.updateMethodCount);
-        $("#methodDelete").html(results.data.deleteMethodCount);
-        // 换行替换成<br>
-        $("#compareLogger").html(results.data.log.replace(/(\r\n)|(\n)/g,'<br>'));
+        var data = results.data;
+        var $progress = $("#compareProgress");
+        $progress.progress('set percent', data.progress || 0);
+        $("#compareProgressName").html(data.progressName || "等待结果");
+
+        if (data.finish) {
+            $progress.removeClass("active warning").addClass("success");
+        } else {
+            $progress.addClass("active").removeClass("success warning");
+        }
+
+        $("#classAdd").html(data.addClassCount || 0);
+        $("#classUpdate").html(data.updateClassCount || 0);
+        $("#classDelete").html(data.deleteClassCount || 0);
+        $("#methodAdd").html(data.addMethodCount || 0);
+        $("#methodUpdate").html(data.updateMethodCount || 0);
+        $("#methodDelete").html(data.deleteMethodCount || 0);
+        $("#compareLogger").html((data.log || '').replace(/(\r\n)|(\n)/g,'<br>'));
         return results;
     }
 </script>

@@ -200,6 +200,32 @@
         });
     }
 
+    function buildGitPullEstimateMessage(estimate) {
+        var parts = ['检测通过'];
+        if (estimate) {
+            if (estimate.estimatedDurationMs || estimate.estimatedDurationMs === 0) {
+                parts.push('预计耗时：' + formatGitPullDuration(estimate.estimatedDurationMs));
+            }
+            if (estimate.estimatedPackageSizeBytes || estimate.estimatedPackageSizeBytes === 0) {
+                parts.push('预计大小：' + formatGitPullSize(estimate.estimatedPackageSizeBytes));
+            }
+        }
+        return parts.join('，');
+    }
+
+    function buildGitPullEstimateMessage(estimate) {
+        var parts = ['检测通过'];
+        if (estimate) {
+            if (estimate.estimatedDurationMs || estimate.estimatedDurationMs === 0) {
+                parts.push('预计耗时：' + formatGitPullDuration(estimate.estimatedDurationMs));
+            }
+            if (estimate.estimatedPackageSizeBytes || estimate.estimatedPackageSizeBytes === 0) {
+                parts.push('预计大小：' + formatGitPullSize(estimate.estimatedPackageSizeBytes));
+            }
+        }
+        return parts.join('，');
+    }
+
     function checkGitConnection(btn) {
         var branch = $('#repoBranch').val();
         if(!branch) {
@@ -208,16 +234,61 @@
         }
         var commitId = $('#repoCommitId').val();
         var versionNumber = $('input[name="versionNumber"]').val();
+        var excludePaths = $('#excludePaths').val();
 
         $(btn).addClass('loading');
-        $.get("/p/${project.id}/${appId}/version/checkGitPull?branch="+branch+"&commitId="+commitId+"&versionNumber="+encodeURIComponent(versionNumber), function(data){
+        $.get("/p/${project.id}/${appId}/version/checkGitPull?branch="+encodeURIComponent(branch)+"&commitId="+encodeURIComponent(commitId)+"&versionNumber="+encodeURIComponent(versionNumber)+"&excludePaths="+encodeURIComponent(excludePaths), function(data){
             $(btn).removeClass('loading');
             if(data.result) {
-                showToast(data.message || '检测通过', 'success');
+                showToast(buildGitPullEstimateMessage(data.data), 'success');
             } else {
                 showToast(data.message, 'error');
             }
         });
+    }
+
+    function formatGitPullDuration(durationMs) {
+        if (!durationMs && durationMs !== 0) {
+            return '-';
+        }
+        if (durationMs < 1000) {
+            return durationMs + 'ms';
+        }
+        var seconds = durationMs / 1000;
+        if (seconds < 60) {
+            return seconds.toFixed(seconds >= 10 ? 1 : 2).replace(/\.0$/, '') + 's';
+        }
+        var minutes = Math.floor(seconds / 60);
+        var remainSeconds = (seconds % 60).toFixed(1).replace(/\.0$/, '');
+        return minutes + '分' + remainSeconds + '秒';
+    }
+
+    function formatGitPullSize(sizeBytes) {
+        if (!sizeBytes && sizeBytes !== 0) {
+            return '-';
+        }
+        var units = ['B', 'KB', 'MB', 'GB'];
+        var size = sizeBytes;
+        var unitIndex = 0;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size = size / 1024;
+            unitIndex++;
+        }
+        var formatted = unitIndex === 0 ? size.toString() : size.toFixed(size >= 10 ? 1 : 2).replace(/\.0$/, '');
+        return formatted + ' ' + units[unitIndex];
+    }
+
+    function buildGitPullSuccessMessage(job) {
+        var parts = ['拉取成功'];
+        if (job) {
+            if (job.pullDurationMs || job.pullDurationMs === 0) {
+                parts.push('耗时：' + formatGitPullDuration(job.pullDurationMs));
+            }
+            if (job.packageSizeBytes || job.packageSizeBytes === 0) {
+                parts.push('大小：' + formatGitPullSize(job.packageSizeBytes));
+            }
+        }
+        return parts.join('，');
     }
 
     function checkGitPullStatus(jobId, btn) {
@@ -235,7 +306,7 @@
                         $('#gitProgress .bar').addClass('success');
                         $('#gitProgress .label').text("拉取完成");
                         $('#programFile').val(job.cachePath); // Set the hidden file path
-                        showToast('拉取成功', 'success');
+                        showToast(buildGitPullSuccessMessage(job), 'success');
 
                         // 拉取成功后：置灰拉取按钮，显示删除按钮
                         $(btn).addClass('disabled').prop('disabled', true).removeClass('loading');
@@ -278,7 +349,7 @@
         $('#gitProgress .label').text("正在请求...");
         $('#gitProgress .bar').removeClass('success error');
 
-        $.get("/p/${project.id}/${appId}/version/git/pull?branch="+branch+"&commitId="+commitId+"&excludePaths="+excludePaths+"&versionNumber="+encodeURIComponent(versionNumber), function(data){
+        $.get("/p/${project.id}/${appId}/version/git/pull?branch="+encodeURIComponent(branch)+"&commitId="+encodeURIComponent(commitId)+"&excludePaths="+encodeURIComponent(excludePaths)+"&versionNumber="+encodeURIComponent(versionNumber), function(data){
             if(data.result) {
                 // Return jobId
                 var jobId = data.data;

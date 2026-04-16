@@ -8,6 +8,20 @@
         /* 允许在容器内断行长字符串（如长 commit id）避免溢出 */
         .oat-wrap-word { overflow-wrap: break-word; word-break: break-all; }
         .oat-wrap-word code { white-space: normal; overflow-wrap: anywhere; }
+        .impact-hint-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            cursor: pointer;
+        }
+        .impact-hint-body {
+            display: none;
+            margin-top: 12px;
+        }
+        .impact-hint-body.open {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -41,10 +55,10 @@
                 分支: <b>${report.gitBranch}</b>
             </#if>
             <#if report.gitOldCommit?has_content>
-                &nbsp; 旧: <code>${report.gitOldCommit}</code>
+                &nbsp; 旧: <code class="commit-id" data-content="${report.gitOldCommit}" data-position="top center">${(report.gitOldCommit?length > 8)?then(report.gitOldCommit?substring(0,8), report.gitOldCommit)}</code>
             </#if>
             <#if report.gitNewCommit?has_content>
-                &nbsp; 新: <code>${report.gitNewCommit}</code>
+                &nbsp; 新: <code class="commit-id" data-content="${report.gitNewCommit}" data-position="top center">${(report.gitNewCommit?length > 8)?then(report.gitNewCommit?substring(0,8), report.gitNewCommit)}</code>
             </#if>
         </div>
         <div style="height:8px"></div>
@@ -134,6 +148,41 @@
      <h3 class="ui dividing header ">
          影响用例
      </h3>
+     <#if report.impactCaseCount?has_content && report.impactCaseCount == 0>
+         <div class="ui warning message">
+             <div class="impact-hint-toggle" onclick="toggleImpactHint()">
+                 <div>
+                     <div class="header">当前未命中影响用例，点击查看排查建议</div>
+                     <p style="margin: 6px 0 0;">常见原因是当前应用快照样本较少，或现有快照未覆盖本次变更类/方法。</p>
+                 </div>
+                 <i class="dropdown icon" id="impactHintIcon"></i>
+             </div>
+             <div class="impact-hint-body" id="impactHintBody">
+                 <#if impactHintSummary?? && (impactHintSummary.snapshotCount?? || (impactHintSummary.hitSnapshots?has_content) || (impactHintSummary.zeroHitClasses?has_content))>
+                     <div class="ui small info message">
+                         <div class="header">日志摘要</div>
+                         <div class="ui bulleted list" style="margin-top: 8px;">
+                             <#if impactHintSummary.snapshotCount??>
+                                 <div class="item">当前应用快照数：${impactHintSummary.snapshotCount}</div>
+                             </#if>
+                             <#if impactHintSummary.hitSnapshots?has_content>
+                                 <div class="item">命中快照：${impactHintSummary.hitSnapshots?join("、")}</div>
+                             </#if>
+                             <#if impactHintSummary.zeroHitClasses?has_content>
+                                 <div class="item">未命中的类：${impactHintSummary.zeroHitClasses?join("、")}</div>
+                             </#if>
+                         </div>
+                     </div>
+                 </#if>
+                 <div class="ui bulleted list" style="margin-top: 0;">
+                     <div class="item">先展开下方“比对日志”，查看每个变更类对应的“当前应用快照数”和“命中快照”信息。</div>
+                     <div class="item">如果日志中显示快照数很少，建议补录更多关键入口快照。</div>
+                     <div class="item">如果变更类/方法未出现在现有快照的 <code>codes</code> 中，也会导致影响用例为 0。</div>
+                     <div class="item">优先补录本次改动相关入口，例如对应 Controller / Service 的真实调用链，再重新发起比对。</div>
+                 </div>
+             </div>
+         </div>
+     </#if>
      <div class="ui list">
     <#-- 基于目录对用例进行分组-->
       <#if usecaseGroups?has_content && (usecaseGroups?size > 0)>
@@ -145,7 +194,7 @@
                      <#list dir.list as case>
                          <div class="item">
                          <#--跳转至用例详情-->
-                             <a href="/p/${project.id}/${app.id}/snapshot/detail/${case.id}">
+                             <a href="/p/${project.id}/usecase/detail?id=${case.id}">
                                  ${case.name}
 
                              <#-- 遍历用例中的标签-->
@@ -191,11 +240,17 @@
     $('.ui.filter.dropdown').dropdown({
         on: 'click'
     });
+    $('.commit-id').popup();
 
     function showDetail(id) {
         <!--显示节点详情-->
         "#" + id && $("#" + id).toggle();
 
+    }
+
+    function toggleImpactHint() {
+        $('#impactHintBody').toggleClass('open');
+        $('#impactHintIcon').toggleClass('rotated');
     }
 </script>
 </body>
