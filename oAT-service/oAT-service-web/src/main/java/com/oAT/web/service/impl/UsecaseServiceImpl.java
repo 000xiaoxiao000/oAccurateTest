@@ -4,6 +4,7 @@ import com.oAT.agent.model.*;
 import com.oAT.web.common.SqlParseInfo;
 import com.oAT.web.common.SqlStatParse;
 import com.oAT.web.esDao.CaseCenterRepository;
+import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.DirtyDataException;
@@ -29,16 +30,13 @@ public class UsecaseServiceImpl implements UsecaseService {
     CaseCenterRepository centerRepository;
     @Autowired
     TraceNodeRepository traceNodeRepository;
+    @Autowired
+    SystemSnapshotRepository systemSnapshotRepository;
 
     @Override
     public UsecaseVo doAdd(String author, UsecaseVo usecaseParam) {
 
-        Usecase usecase;
-        if (ObjectUtils.isEmpty(usecaseParam.getSnapshots())) {
-            usecase = new Usecase();
-        } else {
-            usecase = buildUsecaseBySnapshot(usecaseParam.getSnapshots());
-        }
+        Usecase usecase = buildUsecaseRelations(usecaseParam.getSnapshots(), usecaseParam.getSystemSnapshots());
         // 设置基本信息
         BeanUtils.copyProperties(usecaseParam, usecase);
         usecase.setLastUpdateAuthor(author);
@@ -48,63 +46,92 @@ public class UsecaseServiceImpl implements UsecaseService {
         return convertUsecase(index);
     }
 
-    /**
-     * 基于快照构建用例中的部分信息。内容包括:
-     * <ul>
-     * <li>sql</li>
-     * <li>remote 远程调用</li>
-     * <ul/>
-     *
-     * @param snapshotIds
-     * @return
-     */
-    private Usecase buildUsecaseBySnapshot(String[] snapshotIds) {
-        Iterable<CaseCenterIndex> snapshots = centerRepository.findAllById(Arrays.asList(snapshotIds));
+    private Usecase buildUsecaseRelations(String[] snapshotIds, String[] systemSnapshotIds) {
+        boolean noSnapshots = ObjectUtils.isEmpty(snapshotIds);
+        boolean noSystemSnapshots = ObjectUtils.isEmpty(systemSnapshotIds);
+        if (noSnapshots && noSystemSnapshots) {
+            return new Usecase();
+        }
 
-        // 找出快照中所有的Sql节点
         Map<SqlTraceNode, String> sqlTraceNodes = new HashMap<>();
         Map<CKSqlTraceNode, String> cksqlTraceNodes = new HashMap<>();
         Map<DubboTraceNode, String> dubboTraceNodes = new HashMap<>();
         Map<RedisTraceNode, String> redisTraceNodes = new HashMap<>();
-        // 所堆栈节点
         List<StackNodeVo> codeNodes = new ArrayList<>();
 
+        collectMySnapshotTraceNodes(snapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+        collectSystemSnapshotTraceNodes(systemSnapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+
+        Usecase usecase = new Usecase();
+        usecase.setSql(parseSql(sqlTraceNodes));
+        usecase.setSql(parseCKSql(cksqlTraceNodes));
+        usecase.setRemote(parseRemote(dubboTraceNodes));
+        usecase.setSrcStack(parseCoeStack(codeNodes));
+        return usecase;
+    }
+
+    private void collectMySnapshotTraceNodes(String[] snapshotIds,
+                                             Map<SqlTraceNode, String> sqlTraceNodes,
+                                             Map<CKSqlTraceNode, String> cksqlTraceNodes,
+                                             Map<DubboTraceNode, String> dubboTraceNodes,
+                                             Map<RedisTraceNode, String> redisTraceNodes,
+                                             List<StackNodeVo> codeNodes) {
+        if (ObjectUtils.isEmpty(snapshotIds)) {
+            return;
+        }
+        Iterable<CaseCenterIndex> snapshots = centerRepository.findAllById(Arrays.asList(snapshotIds));
         int count = 0;
         for (CaseCenterIndex snapshot : snapshots) {
-            String traceId = snapshot.getSnapshot().getTraceId();
-            List<TraceNodeIndex> nodeIndexs = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
-            if (CollectionUtils.isEmpty(nodeIndexs)) {
-                throw new DirtyDataException("找不到Trace Node traceId=" + traceId);
-            }
-            for (TraceNodeIndex nodeIndex : nodeIndexs) {
-                TraceNode node = nodeIndex.toTraceNode();
-                if (node instanceof SqlTraceNode) {
-                    sqlTraceNodes.put((SqlTraceNode) node, snapshot.getId());
-                } else if (node instanceof CKSqlTraceNode) {
-                    cksqlTraceNodes.put((CKSqlTraceNode) node, snapshot.getId());
-                }else if (node instanceof DubboTraceNode) {
-                    dubboTraceNodes.put((DubboTraceNode) node, snapshot.getId());
-                }else if (node instanceof RedisTraceNode) {
-                    redisTraceNodes.put((RedisTraceNode) node, snapshot.getId());
-                } else if (node instanceof CodeNodeBean) {
-                    if (((CodeNodeBean) node).getCodeNodes() != null) {
-                        codeNodes.addAll(Arrays.asList(((CodeNodeBean) node).getCodeNodes()));
-                    }
-                }
-            }
+            Assert.notNull(snapshot.getSnapshot(), "列表中存在无效的 Snapshot ID:" + Arrays.toString(snapshotIds));
+            collectTraceNodes(snapshot.getSnapshot().getTraceId(), snapshot.getId(), sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
             count++;
         }
         Assert.isTrue(count == snapshotIds.length, "列表中存在无效的 Snapshot ID:" + Arrays.toString(snapshotIds));
+    }
 
-        Usecase usecase = new Usecase();
-        // 解析封装SQL节点
-        usecase.setSql(parseSql(sqlTraceNodes));
-        usecase.setSql(parseCKSql(cksqlTraceNodes));
-        // 解析封装远程调用节点
-        usecase.setRemote(parseRemote(dubboTraceNodes));
-        // 构建执行代码堆栈
-        usecase.setSrcStack(parseCoeStack(codeNodes));
-        return usecase;
+    private void collectSystemSnapshotTraceNodes(String[] systemSnapshotIds,
+                                                 Map<SqlTraceNode, String> sqlTraceNodes,
+                                                 Map<CKSqlTraceNode, String> cksqlTraceNodes,
+                                                 Map<DubboTraceNode, String> dubboTraceNodes,
+                                                 Map<RedisTraceNode, String> redisTraceNodes,
+                                                 List<StackNodeVo> codeNodes) {
+        if (ObjectUtils.isEmpty(systemSnapshotIds)) {
+            return;
+        }
+        Iterable<SystemSnapshot> snapshots = systemSnapshotRepository.findAllById(Arrays.asList(systemSnapshotIds));
+        int count = 0;
+        for (SystemSnapshot snapshot : snapshots) {
+            collectTraceNodes(snapshot.getTraceId(), snapshot.getId(), sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+            count++;
+        }
+        Assert.isTrue(count == systemSnapshotIds.length, "列表中存在无效的 SystemSnapshot ID:" + Arrays.toString(systemSnapshotIds));
+    }
+
+    private void collectTraceNodes(String traceId,
+                                   String relationId,
+                                   Map<SqlTraceNode, String> sqlTraceNodes,
+                                   Map<CKSqlTraceNode, String> cksqlTraceNodes,
+                                   Map<DubboTraceNode, String> dubboTraceNodes,
+                                   Map<RedisTraceNode, String> redisTraceNodes,
+                                   List<StackNodeVo> codeNodes) {
+        List<TraceNodeIndex> nodeIndexs = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
+        if (CollectionUtils.isEmpty(nodeIndexs)) {
+            throw new DirtyDataException("找不到Trace Node traceId=" + traceId);
+        }
+        for (TraceNodeIndex nodeIndex : nodeIndexs) {
+            TraceNode node = nodeIndex.toTraceNode();
+            if (node instanceof SqlTraceNode) {
+                sqlTraceNodes.put((SqlTraceNode) node, relationId);
+            } else if (node instanceof CKSqlTraceNode) {
+                cksqlTraceNodes.put((CKSqlTraceNode) node, relationId);
+            } else if (node instanceof DubboTraceNode) {
+                dubboTraceNodes.put((DubboTraceNode) node, relationId);
+            } else if (node instanceof RedisTraceNode) {
+                redisTraceNodes.put((RedisTraceNode) node, relationId);
+            } else if (node instanceof CodeNodeBean && ((CodeNodeBean) node).getCodeNodes() != null) {
+                codeNodes.addAll(Arrays.asList(((CodeNodeBean) node).getCodeNodes()));
+            }
+        }
     }
 
     private String[] parseCoeStack(List<StackNodeVo> nodeVos) {
@@ -441,11 +468,12 @@ public class UsecaseServiceImpl implements UsecaseService {
         Assert.isTrue(optional.isPresent(), "not found usecase Id id=" + usecaseParam.getId());
         CaseCenterIndex index = optional.get();
         // 更新快照中包含的信息
-        if (ObjectUtils.isEmpty(usecaseParam.getSnapshots())) {
+        if (ObjectUtils.isEmpty(usecaseParam.getSnapshots()) && ObjectUtils.isEmpty(usecaseParam.getSystemSnapshots())) {
             index.getUsecase().setRemote(null);
             index.getUsecase().setSql(null);
+            index.getUsecase().setSrcStack(null);
         } else {
-            Usecase usecase = buildUsecaseBySnapshot(usecaseParam.getSnapshots());
+            Usecase usecase = buildUsecaseRelations(usecaseParam.getSnapshots(), usecaseParam.getSystemSnapshots());
             index.getUsecase().setRemote(usecase.getRemote());
             index.getUsecase().setSql(usecase.getSql());
             index.getUsecase().setSrcStack(usecase.getSrcStack());
@@ -454,7 +482,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         // 复制属性
         BeanUtils.copyProperties(usecaseParam, index.getUsecase(), "authors", "projectId", "id");
         // 添加作者
-        List<String> authorList = Arrays.asList(index.getUsecase().getAuthors());
+        List<String> authorList = new ArrayList<>(Arrays.asList(Optional.ofNullable(index.getUsecase().getAuthors()).orElse(new String[0])));
         if (!authorList.contains(author)) {
             authorList.add(author);
         }
@@ -478,6 +506,38 @@ public class UsecaseServiceImpl implements UsecaseService {
         Assert.isTrue(op.get().getUsecase().getProjectId().equals(projectId), "the usecase not belong to project Id=" + projectId);
         // 不直接删除，只是标识其disable 等于true
         centerRepository.save(op.get());
+    }
+
+    @Override
+    public int rebuildUsecaseSearchData(String projectId, String operator) {
+        Assert.hasText(projectId, "projectId不能为空");
+        List<CaseCenterIndex> list = centerRepository.findByUsecase_ProjectId(projectId);
+        int updated = 0;
+        for (CaseCenterIndex index : list) {
+            if (index == null || index.getUsecase() == null) {
+                continue;
+            }
+            Usecase current = index.getUsecase();
+            if (ObjectUtils.isEmpty(current.getSnapshots()) && ObjectUtils.isEmpty(current.getSystemSnapshots())) {
+                continue;
+            }
+            Usecase rebuilt = buildUsecaseRelations(current.getSnapshots(), current.getSystemSnapshots());
+            current.setRemote(rebuilt.getRemote());
+            current.setSql(rebuilt.getSql());
+            current.setSrcStack(rebuilt.getSrcStack());
+            if (StringUtils.hasText(operator)) {
+                current.setLastUpdateAuthor(operator);
+                List<String> authors = new ArrayList<>(Arrays.asList(Optional.ofNullable(current.getAuthors()).orElse(new String[0])));
+                if (!authors.contains(operator)) {
+                    authors.add(operator);
+                }
+                current.setAuthors(authors.toArray(new String[0]));
+            }
+            index.setUpdateTime(new Date());
+            centerRepository.save(index);
+            updated++;
+        }
+        return updated;
     }
 
     private UsecaseDirectoryVo convertDirectory(CaseCenterIndex index) {

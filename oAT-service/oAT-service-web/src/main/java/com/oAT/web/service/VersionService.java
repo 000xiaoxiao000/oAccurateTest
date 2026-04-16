@@ -30,6 +30,8 @@ public interface VersionService {
 
     List<VersionCompareReportVo> getCompareReportList(String projectId, String appId);
 
+    Page<VersionCompareReportVo> getCompareReportList(String projectId, String appId, Pageable pageable);
+
     void deleteCompareReport(String projectId, String reportId);
 
     void deleteCacheFile(String path);

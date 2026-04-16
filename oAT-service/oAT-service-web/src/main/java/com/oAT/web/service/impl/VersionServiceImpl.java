@@ -1,5 +1,24 @@
 package com.oAT.web.service.impl;
 
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.Position;
+import com.github.javaparser.Range;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.CallableDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.CompactConstructorDeclaration;
+import com.github.javaparser.ast.body.ConstructorDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.body.InitializerDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.oAT.web.common.Job;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.common.compare.CompareUtils;
@@ -10,6 +29,7 @@ import com.oAT.web.esDao.entity.VersionCompareReport;
 import com.oAT.web.esDao.entity.VersionItem;
 import com.oAT.web.service.ResourceService;
 import com.oAT.web.service.SnapshotSearchService;
+import com.oAT.web.service.UsecaseSearchService;
 import com.oAT.web.service.VersionService;
 import com.oAT.web.service.entity.*;
 import org.slf4j.Logger;
@@ -21,6 +41,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.elasticsearch.core.IndexOperations;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.FileSystemUtils;
@@ -54,7 +80,13 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
     SnapshotSearchService snapshotSearchService;
 
     @Autowired
-    com.oAT.web.service.GitService gitService;
+    UsecaseSearchService usecaseSearchService;
+
+    @Autowired
+    private com.oAT.web.service.GitService gitService;
+
+    @Autowired
+    private ElasticsearchOperations elasticsearchOperations;
 
     private ExecutorService compareJobExecutors;
     private List<Job<CompareJobVo>> jobs;
@@ -280,6 +312,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                         Thread.sleep(5000);
                         jobs.remove(job);
                     } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
                         logger.error("比对任务移除失败", e);
                     }
                 }).start();
@@ -300,7 +333,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         jobInfo.setProjectId(projectId);
         jobInfo.setAppId(appinfo.getId());
         jobInfo.setProgressName("准备中");
-        jobInfo.setName(String.format("Git Diff %s..%s", oldCommit, newCommit));
+        jobInfo.setName("Git 版本比对");
         // 保存 git 元信息到 job，用于后续保存到报告
         jobInfo.setGitBranch(branch);
         jobInfo.setGitOldCommit(oldCommit);
@@ -314,7 +347,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             job.state = Job.JobState.active;
             jobInfo.setFinish(false);
             try {
-                job.getLogger().info(String.format("开始基于Git的差异比对: %s -> %s", oldCommit, newCommit));
+                job.getLogger().info(String.format("分支: %s ｜ 旧: %s ｜ 新: %s", branch, shortCommit(oldCommit), shortCommit(newCommit)));
                 job.setProgress(new Job.JobProgress());
                 job.getProgress().next("获取Git差异", 50);
 
@@ -334,12 +367,16 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 int addedMethods = 0, deletedMethods = 0, modifiedMethods = 0;
 
                 if (diffs != null) {
+                    String packageFilter = normalizePackageFilter(packageName);
                     for (GitDiffVo diffVo : diffs) {
                         String changeType = diffVo.getChangeType();
                         String dottedName = diffVo.getClassName();
 
                         // remove any leading dots or slashes
                         dottedName = dottedName.replaceFirst("^[./]+", "");
+                        if (!matchesPackageFilter(dottedName, packageFilter)) {
+                            continue;
+                        }
 
                         // prepare possible file path for fetching source
                         String filePath = dottedName.replace('.', '/') + ".java";
@@ -410,6 +447,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                             } else {
                                 // Compare methods for updated classes
                                 boolean nameLogged = false;
+                                Set<String> retainedMethodNames = new LinkedHashSet<>();
                                 for (Map.Entry<String, MethodInfo> eMethod : oldMethods.entrySet()) {
                                     String mName = eMethod.getKey();
                                     MethodInfo om = eMethod.getValue();
@@ -420,6 +458,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                                         if (bodyChanged || linesIntersect) {
                                             if (!nameLogged) { job.getLogger().info(String.format("发现【修改】类: %s", dottedName)); nameLogged = true; }
                                             r.add(mName, String.format("行: %d-%d", nm.startLine, nm.endLine), CompareResult.Model.update);
+                                            retainedMethodNames.add(mName);
                                             modifiedMethods++;
                                             job.getLogger().info(String.format("    - 变更方法: %s (行: %d-%d)", mName, nm.startLine, nm.endLine));
                                         }
@@ -427,6 +466,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                                     } else {
                                         if (!nameLogged) { job.getLogger().info(String.format("发现【修改】类: %s", dottedName)); nameLogged = true; }
                                         r.add(mName, String.format("行: %d-%d", om.startLine, om.endLine), CompareResult.Model.delete);
+                                        retainedMethodNames.add(mName);
                                         deletedMethods++;
                                         job.getLogger().info(String.format("    - 删除方法: %s", mName));
                                     }
@@ -441,6 +481,8 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                                 if (!nameLogged) {
                                     // Modified but methods didn't show changes, maybe comments or imports
                                     job.getLogger().info(String.format("发现【修改】类(细节无显著变化): %s", dottedName));
+                                } else {
+                                    keepOnlyDeclaredClassMethods(r, dottedName, retainedMethodNames);
                                 }
                             }
                         } catch (Exception e) {
@@ -452,10 +494,13 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 job.getLogger().info(String.format("比对完成: 共分析 %d 个类 (新增:%d, 修改:%d, 删除:%d)", totalClasses, addedClasses, modifiedClasses, deletedClasses));
                 job.getLogger().info(String.format("方法变更统计: 新增:%d, 修改:%d, 删除:%d", addedMethods, modifiedMethods, deletedMethods));
 
-                // 初始化并设置差异和影响快照集合，防止后续保存时报空指针
+                // 初始化并设置差异和影响集合，防止后续保存时报空指针
                 job.getData().setDifferences(differences);
                 if (job.getData().getImpactSnapshot() == null) {
                     job.getData().setImpactSnapshot(new HashMap<>());
+                }
+                if (job.getData().getImpactUsecases() == null) {
+                    job.getData().setImpactUsecases(new LinkedHashMap<>());
                 }
                 countJobInfo(differences, job.getData());
 
@@ -467,6 +512,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 // 确保 impactSnapshot 已初始化
                 if (job.getData().getImpactSnapshot() == null) {
                     job.getData().setImpactSnapshot(new HashMap<>());
+                }
+                if (job.getData().getImpactUsecases() == null) {
+                    job.getData().setImpactUsecases(new LinkedHashMap<>());
                 }
                 for (CompareResult compareResult : differences) {
                     if (compareResult.getModel() != CompareResult.Model.same) {
@@ -487,6 +535,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 if (job.getData().getImpactSnapshot() == null) {
                     job.getData().setImpactSnapshot(new HashMap<>());
                 }
+                if (job.getData().getImpactUsecases() == null) {
+                    job.getData().setImpactUsecases(new LinkedHashMap<>());
+                }
                 saveCompareReport(job);
                 job.getProgress().finish("比对完成");
                 job.state = Job.JobState.finish;
@@ -497,9 +548,10 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 jobInfo.setFinish(true);
                 new Thread(() -> {
                     try {
-                        Thread.sleep(5000);
+                        Thread.sleep(15000);
                         jobs.remove(job);
                     } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
                         logger.error("移除比对任务失败", e);
                     }
                 }).start();
@@ -529,8 +581,10 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
     private CompareJobVo flushJobState(Job<CompareJobVo> job) {
         CompareJobVo result = job.getData();
         result.setLog(job.getLog());
-        result.setProgress(job.getProgress().getPercent());
-        result.setProgressName(job.getProgress().getName());
+        if (job.getProgress() != null) {
+            result.setProgress(job.getProgress().getPercent());
+            result.setProgressName(job.getProgress().getName());
+        }
         result.setFinish(job.state == Job.JobState.finish);
         return result;
     }
@@ -603,33 +657,28 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         if (!StringUtils.hasText(tv)) tv = vo.getTargetFile();
         report.setTargetVersion(tv);
 
-        // Git metadata
         report.setGitBranch(vo.getGitBranch());
         report.setGitOldCommit(vo.getGitOldCommit());
         report.setGitNewCommit(vo.getGitNewCommit());
 
         List<VersionCompareReport.Difference> listDifference = new ArrayList<>();
-
-        List<CompareResult> diffsToIterate = vo.getDifferences() == null ? Collections.emptyList() :
-                vo.getDifferences();
+        List<CompareResult> diffsToIterate = vo.getDifferences() == null ? Collections.emptyList() : vo.getDifferences();
         for (CompareResult difference : diffsToIterate) {
             listDifference.add(new VersionCompareReport.Difference("class", difference.getModel().toString(),
                     difference.getClassName()));
             for (CompareResult.Method method : difference.getMethods()) {
-                String methodValue = difference.getClassName() + "\t" + method.getName() + "\t" + (method.getDesc()==null?"":method.getDesc());
+                String methodValue = difference.getClassName() + "\t" + method.getName() + "\t" + (method.getDesc() == null ? "" : method.getDesc());
                 listDifference.add(new VersionCompareReport.Difference("method", method.getModel().toString(), methodValue));
             }
         }
         report.setDifferences(listDifference.toArray(new VersionCompareReport.Difference[0]));
 
         List<VersionCompareReport.ImpactCase> listCase = new ArrayList<>();
-        Map<String, CompareJobVo.SnapshotUnion> impact = vo.getImpactSnapshot() == null ? Collections.emptyMap() :
-                vo.getImpactSnapshot();
-        impact.values().forEach(a -> listCase.add(new VersionCompareReport.ImpactCase(a.getSnapshot().getId(),
+        Map<String, CompareJobVo.UsecaseUnion> impact = vo.getImpactUsecases() == null ? Collections.emptyMap() : vo.getImpactUsecases();
+        impact.values().forEach(a -> listCase.add(new VersionCompareReport.ImpactCase(a.getUsecase().getId(),
                 a.getClasses().toArray(new String[0]))));
         report.setCases(listCase.toArray(new VersionCompareReport.ImpactCase[0]));
 
-        // set statistics counts from job
         report.setAddClassCount(vo.getAddClassCount());
         report.setUpdateClassCount(vo.getUpdateClassCount());
         report.setDeleteClassCount(vo.getDeleteClassCount());
@@ -638,65 +687,122 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         report.setDeleteMethodCount(vo.getDeleteMethodCount());
         report.setImpactCaseCount(impact.size());
 
+        job.getLogger().info(String.format("开始保存比对报告 id=%s 差异数=%s 影响用例数=%s",
+                job.getId(), listDifference.size(), listCase.size()));
+        logger.info("保存比对报告 id={} diffs={} cases={}", job.getId(), listDifference.size(), listCase.size());
+
         VersionCenterIndex index = new VersionCenterIndex(report);
         index.setId(job.getId());
-        versionCenterRepository.save(index);
+        try {
+            index = versionCenterRepository.save(index);
+            IndexOperations indexOperations = elasticsearchOperations.indexOps(VersionCenterIndex.class);
+            indexOperations.refresh();
+            boolean saved = versionCenterRepository.findById(index.getId()).isPresent();
+            Assert.isTrue(saved, "比对报告保存失败，id=" + index.getId());
+            job.getLogger().info("比对报告保存成功 id=" + index.getId());
+        } catch (Exception e) {
+            job.getLogger().error("比对报告保存失败 id=" + job.getId() + " 错误=" + e.getMessage());
+            logger.error("比对报告保存失败 id={} diffs={} cases={}", job.getId(), listDifference.size(), listCase.size(), e);
+            throw e;
+        }
     }
 
     private void findUsecaseImpact(Job<CompareJobVo> job, CompareResult compareResult) {
-        //        job.getLogger().info(String.format("查找用例影响:%s", compareResult.getClassName()));
         Map<String, CompareJobVo.SnapshotUnion> cases = job.getData().getImpactSnapshot();
-        List<SystemSnapshot> list = null;
-        // normalize class name to dotted form for snapshot search
+        List<SystemSnapshot> list = Collections.emptyList();
+        String projectId = job.getData().getProjectId();
+        String appId = job.getData().getAppId();
         String originalName = compareResult.getClassName();
         if (originalName != null && originalName.startsWith("/")) {
             originalName = originalName.substring(1);
         }
         String classDot = Optional.ofNullable(originalName).orElse("");
         classDot = classDot.replace('/', '.');
-        if (compareResult.getModel() == CompareResult.Model.delete) {
-            list = snapshotSearchService.searchByCode(job.getData().getProjectId(), classDot);
-            job.getLogger().info(String.format("查找快照影响类名：%s 影响数：%s", classDot, list.size()));
+
+        List<SystemSnapshot> appSnapshots = snapshotSearchService.searchByCode(projectId, appId, classDot, "__oat_probe__");
+        int appSnapshotCount = (int) appSnapshots.stream().map(SystemSnapshot::getId).distinct().count();
+
+        if (compareResult.getModel() == CompareResult.Model.delete || compareResult.getModel() == CompareResult.Model.add) {
+            list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
+            job.getLogger().info(String.format("查找快照影响 类名：%s 类级检索影响数：%s（当前应用快照数：%s）",
+                    classDot, list.size(), appSnapshotCount));
         } else if (compareResult.getModel() == CompareResult.Model.update) {
-            List<String> names = Arrays.stream(compareResult.getMethods())
-                    .filter(m -> m.getModel() != CompareResult.Model.add)
-                    .map(CompareResult.Method::getName)
-                    .collect(Collectors.toList());
-            // 过滤掉占位符或空的方法名（例如我们可能在无法解析方法时加入的占位项 "(类变更)"）
-            final String finalClassDot = classDot;
-            final String simpleClassName = finalClassDot.contains(".") ? finalClassDot.substring(finalClassDot.lastIndexOf(".") + 1) : finalClassDot;
-            List<String> filteredNames = names.stream()
-                    .filter(n -> n != null && !n.trim().isEmpty() && !n.trim().startsWith("("))
-                    .map(n -> {
-                        // 如果方法名包含了类名（如 Web3Controller.StringBuilder），尝试剥离类名部分
-                        // 因为 snapshotSearchService.searchByCode 内部会再次拼接 classDot + " " + methodName
-                        if (n.startsWith(simpleClassName + ".")) {
-                            return n.substring(simpleClassName.length() + 1);
-                        }
-                        return n;
-                    })
-                    .collect(Collectors.toList());
+            List<String> filteredNames = normalizeMethodNamesForSearch(classDot, compareResult);
+            List<String> fallbackMethodNames = buildMethodFallbackCandidates(filteredNames);
 
             if (filteredNames.isEmpty()) {
-                // 回退到类级别检索，确保能找到受影响的用例
-                list = snapshotSearchService.searchByCode(job.getData().getProjectId(), classDot);
-                job.getLogger().info(String.format("查找快照影响 类名：%s (方法未解析或仅占位) 影响数：%s", classDot, list.size()));
+                list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
+                job.getLogger().info(String.format("查找快照影响 类名：%s (方法未解析或仅占位) 影响数：%s（当前应用快照数：%s）",
+                        classDot, list.size(), appSnapshotCount));
             } else {
-                list = snapshotSearchService.searchByCode(job.getData().getProjectId(), classDot, StringUtils.toStringArray(filteredNames));
-                // 如果按方法名没搜到，尝试按类名回退搜索，防止漏掉影响用例
+                job.getLogger().info(String.format("查找快照影响 类名：%s 方法候选：%s（当前应用快照数：%s）",
+                        classDot, String.join(", ", fallbackMethodNames), appSnapshotCount));
+                list = snapshotSearchService.searchByCode(projectId, appId, classDot, StringUtils.toStringArray(fallbackMethodNames));
                 if (list.isEmpty()) {
-                    list = snapshotSearchService.searchByCode(job.getData().getProjectId(), classDot);
-                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s() 未找到，回退到类级别检索，影响数：%s",
-                            classDot, Arrays.toString(StringUtils.toStringArray(filteredNames)), list.size()));
+                    list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
+                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s 未找到，回退到类级别检索，影响数：%s",
+                            classDot, String.join(", ", fallbackMethodNames), list.size()));
                 } else {
-                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s() 影响数：%s",
-                            classDot, Arrays.toString(StringUtils.toStringArray(filteredNames)), list.size()));
+                    String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s 影响数：%s，命中快照：%s",
+                            classDot, String.join(", ", fallbackMethodNames), list.size(), StringUtils.hasText(titles) ? titles : "-"));
                 }
             }
         }
         Optional.ofNullable(list).orElse(Collections.emptyList()).stream().filter(a -> !cases.containsKey(a.getId())).forEach(a -> {
             if (!cases.containsKey(a.getId())) {
                 cases.put(a.getId(), new CompareJobVo.SnapshotUnion(a));
+            }
+            cases.get(a.getId()).getClasses().add(compareResult.getClassName());
+        });
+
+        collectUsecaseImpact(job, compareResult, classDot);
+    }
+
+    private void collectUsecaseImpact(Job<CompareJobVo> job, CompareResult compareResult, String classDot) {
+        Map<String, CompareJobVo.UsecaseUnion> cases = job.getData().getImpactUsecases();
+        if (cases == null) {
+            return;
+        }
+        String projectId = job.getData().getProjectId();
+        List<UsecaseVo> usecases = Collections.emptyList();
+
+        if (compareResult.getModel() == CompareResult.Model.delete || compareResult.getModel() == CompareResult.Model.add) {
+            usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
+            job.getLogger().info(String.format("查找影响用例 类名：%s 类级检索影响数：%s",
+                    classDot, usecases.size()));
+        } else if (compareResult.getModel() == CompareResult.Model.update) {
+            List<String> filteredNames = normalizeMethodNamesForSearch(classDot, compareResult);
+            List<String> fallbackMethodNames = buildMethodFallbackCandidates(filteredNames);
+            if (fallbackMethodNames.isEmpty()) {
+                usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
+                job.getLogger().info(String.format("查找影响用例 类名：%s (方法未解析或仅占位) 影响数：%s",
+                        classDot, usecases.size()));
+            } else {
+                LinkedHashSet<String> srcMethods = new LinkedHashSet<>();
+                for (String methodName : fallbackMethodNames) {
+                    if (StringUtils.hasText(methodName)) {
+                        srcMethods.add(classDot.replace('.', '/') + " " + methodName);
+                    }
+                }
+                if (!srcMethods.isEmpty()) {
+                    usecases = usecaseSearchService.getBySrcMethod(projectId, srcMethods.toArray(new String[0]));
+                }
+                if (usecases.isEmpty()) {
+                    usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
+                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 未找到，回退到类级别检索，影响数：%s",
+                            classDot, String.join(", ", fallbackMethodNames), usecases.size()));
+                } else {
+                    String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 影响数：%s，命中用例：%s",
+                            classDot, String.join(", ", fallbackMethodNames), usecases.size(), StringUtils.hasText(titles) ? titles : "-"));
+                }
+            }
+        }
+
+        Optional.ofNullable(usecases).orElse(Collections.emptyList()).stream().filter(a -> !cases.containsKey(a.getId())).forEach(a -> {
+            if (!cases.containsKey(a.getId())) {
+                cases.put(a.getId(), new CompareJobVo.UsecaseUnion(a));
             }
             cases.get(a.getId()).getClasses().add(compareResult.getClassName());
         });
@@ -747,6 +853,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         Optional<VersionCenterIndex> optional = versionCenterRepository.findById(compareId);
         Assert.isTrue(optional.isPresent(), String.format("找不到id=%s的比对报告", compareId));
         VersionCenterIndex index = optional.get();
+        Assert.notNull(index.getCompareReport(), String.format("id=%s对应的记录不是比对报告", compareId));
         VersionCompareReport report = index.getCompareReport();
         report.setCreateTime(index.getCreateTime());
         return report;
@@ -754,33 +861,47 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Override
     public List<VersionCompareReportVo> getCompareReportList(String projectId, String appId) {
-        List<VersionCompareReportVo> result = new ArrayList<>();
-        Pageable page = PageRequest.of(0, 50);
-        List<VersionCenterIndex> list =
-                versionCenterRepository.findByCompareReport_ProjectIdAndCompareReport_AppId(projectId, appId, page);
-        for (VersionCenterIndex index : list) {
-            VersionCompareReportVo report = new VersionCompareReportVo(index.getId(),
-                    index.getCompareReport().getJobName());
-            report.setSourceVersion(index.getCompareReport().getSourceVersion());
-            report.setTargetVersion(index.getCompareReport().getTargetVersion());
-            report.setGitBranch(index.getCompareReport().getGitBranch());
-            report.setGitOldCommit(index.getCompareReport().getGitOldCommit());
-            report.setGitNewCommit(index.getCompareReport().getGitNewCommit());
-            report.setCreateTime(index.getCreateTime());
-            // populate counts if available
-            VersionCompareReport r = index.getCompareReport();
-            if (r != null) {
-                report.setAddClassCount(r.getAddClassCount());
-                report.setUpdateClassCount(r.getUpdateClassCount());
-                report.setDeleteClassCount(r.getDeleteClassCount());
-                report.setAddMethodCount(r.getAddMethodCount());
-                report.setUpdateMethodCount(r.getUpdateMethodCount());
-                report.setDeleteMethodCount(r.getDeleteMethodCount());
-                report.setImpactCaseCount(r.getImpactCaseCount());
-            }
-            result.add(report);
+        Pageable pageable = PageRequest.of(0, 50, Sort.by(Sort.Direction.DESC, "createTime"));
+        return getCompareReportList(projectId, appId, pageable).getContent();
+    }
+
+    @Override
+    public Page<VersionCompareReportVo> getCompareReportList(String projectId, String appId, Pageable pageable) {
+        NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
+                .withFilter(org.elasticsearch.index.query.QueryBuilders.boolQuery()
+                        .must(org.elasticsearch.index.query.QueryBuilders.termQuery("type", "compareReport"))
+                        .must(org.elasticsearch.index.query.QueryBuilders.termQuery("compareReport.projectId", projectId))
+                        .must(org.elasticsearch.index.query.QueryBuilders.termQuery("compareReport.appId", appId)))
+                .withSort(Sort.by(Sort.Direction.DESC, "createTime"))
+                .withPageable(pageable);
+        SearchHits<VersionCenterIndex> searchHits = elasticsearchOperations.search(queryBuilder.build(), VersionCenterIndex.class);
+        List<VersionCompareReportVo> result = searchHits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .map(this::convertCompareReport)
+                .collect(Collectors.toList());
+        return new PageImpl<>(result, pageable, searchHits.getTotalHits());
+    }
+
+    private VersionCompareReportVo convertCompareReport(VersionCenterIndex index) {
+        VersionCompareReport reportIndex = index.getCompareReport();
+        VersionCompareReportVo report = new VersionCompareReportVo(index.getId(),
+                reportIndex == null ? null : reportIndex.getJobName());
+        if (reportIndex != null) {
+            report.setSourceVersion(reportIndex.getSourceVersion());
+            report.setTargetVersion(reportIndex.getTargetVersion());
+            report.setGitBranch(reportIndex.getGitBranch());
+            report.setGitOldCommit(reportIndex.getGitOldCommit());
+            report.setGitNewCommit(reportIndex.getGitNewCommit());
+            report.setAddClassCount(reportIndex.getAddClassCount());
+            report.setUpdateClassCount(reportIndex.getUpdateClassCount());
+            report.setDeleteClassCount(reportIndex.getDeleteClassCount());
+            report.setAddMethodCount(reportIndex.getAddMethodCount());
+            report.setUpdateMethodCount(reportIndex.getUpdateMethodCount());
+            report.setDeleteMethodCount(reportIndex.getDeleteMethodCount());
+            report.setImpactCaseCount(reportIndex.getImpactCaseCount());
         }
-        return result;
+        report.setCreateTime(index.getCreateTime());
+        return report;
     }
 
     @Override
@@ -790,6 +911,112 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         Assert.isTrue("compareReport".equalsIgnoreCase(index.get().getType()), "找不到比对报告，id=" + reportId);
         Assert.isTrue(index.get().getCompareReport().getProjectId().equalsIgnoreCase(projectId), "项目ID不符，非法的操作");
         versionCenterRepository.deleteById(reportId);
+    }
+
+    private List<String> normalizeMethodNamesForSearch(String classDot, CompareResult compareResult) {
+        final String simpleClassName = classDot.contains(".") ? classDot.substring(classDot.lastIndexOf('.') + 1) : classDot;
+        final String nestedPrefix = simpleClassName + "$";
+        LinkedHashSet<String> filteredNames = Arrays.stream(compareResult.getMethods())
+                .filter(m -> m.getModel() != CompareResult.Model.add)
+                .map(CompareResult.Method::getName)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(n -> !n.isEmpty() && !n.startsWith("("))
+                .map(n -> {
+                    if (n.startsWith(simpleClassName + ".")) {
+                        return n.substring(simpleClassName.length() + 1);
+                    }
+                    if (n.startsWith(nestedPrefix)) {
+                        int methodSeparator = n.lastIndexOf('.');
+                        if (methodSeparator >= 0 && methodSeparator < n.length() - 1) {
+                            return n.substring(methodSeparator + 1);
+                        }
+                    }
+                    return n;
+                })
+                .filter(n -> !n.contains("$"))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return new ArrayList<>(filteredNames);
+    }
+
+    private List<String> buildMethodFallbackCandidates(List<String> methodNames) {
+        if (methodNames == null || methodNames.isEmpty()) {
+            return Collections.emptyList();
+        }
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        for (String methodName : methodNames) {
+            if (!StringUtils.hasText(methodName)) {
+                continue;
+            }
+            String trimmed = methodName.trim();
+            candidates.add(trimmed);
+            int dotIndex = trimmed.lastIndexOf('.');
+            if (dotIndex >= 0 && dotIndex < trimmed.length() - 1) {
+                candidates.add(trimmed.substring(dotIndex + 1));
+            }
+        }
+        return new ArrayList<>(candidates);
+    }
+
+    private void keepOnlyDeclaredClassMethods(CompareResult compareResult, String dottedName, Set<String> retainedMethodNames) {
+        if (compareResult == null || retainedMethodNames == null || retainedMethodNames.isEmpty()) {
+            return;
+        }
+        String simpleClassName = dottedName.contains(".") ? dottedName.substring(dottedName.lastIndexOf('.') + 1) : dottedName;
+        String nestedPrefix = simpleClassName + "$";
+        CompareResult.Method[] methods = compareResult.getMethods();
+        if (methods == null || methods.length == 0) {
+            return;
+        }
+        LinkedHashSet<String> normalizedRetained = retainedMethodNames.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        compareResult.removeMethodsIf(method -> {
+            if (method == null || !StringUtils.hasText(method.getName())) {
+                return false;
+            }
+            String trimmed = method.getName().trim();
+            if (normalizedRetained.contains(trimmed)) {
+                return false;
+            }
+            if (trimmed.startsWith(simpleClassName + ".")) {
+                return false;
+            }
+            return trimmed.startsWith(nestedPrefix);
+        });
+    }
+
+    private String normalizePackageFilter(String packageName) {
+        if (!StringUtils.hasText(packageName)) {
+            return null;
+        }
+        String normalized = packageName.trim();
+        if ("*".equals(normalized)) {
+            return null;
+        }
+        if (normalized.endsWith(".*")) {
+            normalized = normalized.substring(0, normalized.length() - 2);
+        }
+        return normalized;
+    }
+
+    private String shortCommit(String commitId) {
+        if (!StringUtils.hasText(commitId)) {
+            return "-";
+        }
+        String trimmed = commitId.trim();
+        return trimmed.length() > 7 ? trimmed.substring(0, 7) : trimmed;
+    }
+
+    private boolean matchesPackageFilter(String className, String packageFilter) {
+        if (!StringUtils.hasText(className)) {
+            return true;
+        }
+        if (!StringUtils.hasText(packageFilter)) {
+            return true;
+        }
+        return className.equals(packageFilter) || className.startsWith(packageFilter + ".");
     }
 
     // Helper to hold method body and line range
@@ -805,125 +1032,200 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         }
     }
 
-    // Strip comments but preserve newlines
-    private String stripCommentsPreserveLines(String src) {
-        if (src == null) return null;
-        String s = src;
-        // replace block comments with same number of newlines
-        java.util.regex.Pattern block = java.util.regex.Pattern.compile("(?s)/\\*.*?\\*/");
-        java.util.regex.Matcher bm = block.matcher(s);
-        StringBuffer sb = new StringBuffer();
-        while (bm.find()) {
-            String match = bm.group();
-            long newlines = match.chars().filter(ch -> ch == '\n').count();
-            StringBuilder rep = new StringBuilder();
-            for (int i = 0; i < newlines; i++) rep.append('\n');
-            bm.appendReplacement(sb, rep.toString());
-        }
-        bm.appendTail(sb);
-        s = sb.toString();
-
-        // remove line comments but keep newline
-        s = s.replaceAll("//[^\n]*", "");
-        return s;
-    }
-
-    // Extract methods and their start/end line numbers from source text
+    // Extract methods and their start/end line numbers from source text using Java AST
     private Map<String, MethodInfo> extractMethodsWithLines(String source) {
-        if (source == null) return new LinkedHashMap<>();
-        String clean = stripCommentsPreserveLines(source);
-        return scanForMethods(clean, "", 0, clean.length());
-    }
-
-    private Map<String, MethodInfo> scanForMethods(String clean, String prefix, int start, int end) {
         Map<String, MethodInfo> result = new LinkedHashMap<>();
-        if (start >= end || start >= clean.length()) return result;
-        String scope = clean.substring(start, end);
-
-        // Improved Regex:
-        // Group 1: class/interface/enum/record name
-        // Group 2: anonymous class base type
-        // Group 3: method name
-        // Group 4: static or instance initializer '{'
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile("(?ms)(?:class|interface|enum|record|@interface)\\s+([\\w$]+)[^{]*\\{|new\\s+([\\w$<>.\\[\\]]+)\\s*\\([^)]*\\)\\s*[^{]*\\{|(?:public|protected|private|static|final|synchronized|native|abstract|default|\\s|<[^>]+>)+[\\w\\[\\]<>.,\\s@$]+\\s+([\\w$]+)\\s*\\([^)]*\\)[^{]*\\{|(\\b(?:static\\s*)?\\{)");
-        java.util.regex.Matcher m = p.matcher(scope);
-
-        int anonymousCount = 0;
-        int lastPos = 0;
-        while (m.find(lastPos)) {
-            int entryPoint = start + m.start();
-            int bodyStart = start + m.end() - 1; // '{' position
-            int bodyEnd = findMatchingBrace(clean, bodyStart);
-            if (bodyEnd <= bodyStart) {
-                lastPos = m.end();
-                continue;
-            }
-
-            if (m.group(3) != null) {
-                // It's a method
-                String methodName = m.group(3);
-                // Basic filter for keywords that look like methods
-                if (!isKeyword(methodName)) {
-                    String fullName = prefix.isEmpty() ? methodName : prefix + "." + methodName;
-                    String body = clean.substring(bodyStart, bodyEnd);
-                    int startLine = 1 + countNewlinesBefore(clean, entryPoint);
-                    int endLine = 1 + countNewlinesBefore(clean, bodyEnd - 1);
-                    result.put(fullName, new MethodInfo(body.trim(), startLine, endLine));
-                }
-                // Even if it's a method, we might have inner classes inside it
-                result.putAll(scanForMethods(clean, prefix, bodyStart + 1, bodyEnd - 1));
-            } else if (m.group(4) != null) {
-                // Static or instance initializer
-                String initName = m.group(4).contains("static") ? "<clinit>" : "<init>_block";
-                String fullName = prefix.isEmpty() ? initName : prefix + "." + initName;
-                int startLine = 1 + countNewlinesBefore(clean, entryPoint);
-                int endLine = 1 + countNewlinesBefore(clean, bodyEnd - 1);
-                result.put(fullName, new MethodInfo(clean.substring(bodyStart, bodyEnd).trim(), startLine, endLine));
-                result.putAll(scanForMethods(clean, prefix, bodyStart + 1, bodyEnd - 1));
-            } else {
-                // It's a class or anonymous class
-                String className;
-                if (m.group(1) != null) {
-                    className = m.group(1);
-                } else if (m.group(2) != null) {
-                    className = "Anon" + (++anonymousCount) + "_" + m.group(2).replaceAll("[<>\\[\\]]", "");
-                } else {
-                    className = "Unknown" + (++anonymousCount);
-                }
-                String newPrefix = prefix.isEmpty() ? className : prefix + "$" + className;
-                result.putAll(scanForMethods(clean, newPrefix, bodyStart + 1, bodyEnd - 1));
-            }
-            lastPos = bodyEnd - start;
+        if (!StringUtils.hasText(source)) {
+            return result;
         }
+
+        ParserConfiguration configuration = new ParserConfiguration();
+        configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
+        JavaParser parser = new JavaParser(configuration);
+        ParseResult<CompilationUnit> parseResult = parser.parse(source);
+        if (!parseResult.isSuccessful() || !parseResult.getResult().isPresent()) {
+            return result;
+        }
+
+        CompilationUnit cu = parseResult.getResult().get();
+        AstMethodCollector collector = new AstMethodCollector(source, result);
+        collector.visit(cu, new ArrayDeque<>());
         return result;
     }
 
-    private boolean isKeyword(String name) {
-        return "if".equals(name) || "for".equals(name) || "while".equals(name) || "switch".equals(name) || "catch".equals(name) || "synchronized".equals(name) || "try".equals(name);
-    }
+    private static class AstMethodCollector extends VoidVisitorAdapter<Deque<String>> {
+        private final String source;
+        private final Map<String, MethodInfo> methods;
+        private final IdentityHashMap<Node, Integer> anonymousCounters = new IdentityHashMap<>();
 
-    private int findMatchingBrace(String clean, int openBraceIdx) {
-        int idx = openBraceIdx;
-        int len = clean.length();
-        int depth = 0;
-        while (idx < len) {
-            char c = clean.charAt(idx);
-            if (c == '{') depth++;
-            else if (c == '}') {
-                depth--;
-                if (depth == 0) return idx + 1;
+        private AstMethodCollector(String source, Map<String, MethodInfo> methods) {
+            this.source = source;
+            this.methods = methods;
+        }
+
+        @Override
+        public void visit(ClassOrInterfaceDeclaration n, Deque<String> path) {
+            visitNamedType(n, n.getNameAsString(), path);
+        }
+
+        @Override
+        public void visit(EnumDeclaration n, Deque<String> path) {
+            visitNamedType(n, n.getNameAsString(), path);
+        }
+
+        @Override
+        public void visit(RecordDeclaration n, Deque<String> path) {
+            visitNamedType(n, n.getNameAsString(), path);
+        }
+
+        @Override
+        public void visit(MethodDeclaration n, Deque<String> path) {
+            addCallableMethod(n, n.getNameAsString(), n.getBody().orElse(null), path);
+            super.visit(n, path);
+        }
+
+        @Override
+        public void visit(ConstructorDeclaration n, Deque<String> path) {
+            addCallableMethod(n, n.getNameAsString(), n.getBody(), path);
+            super.visit(n, path);
+        }
+
+        @Override
+        public void visit(CompactConstructorDeclaration n, Deque<String> path) {
+            addCompactConstructorMethod(n, path);
+            super.visit(n, path);
+        }
+
+        @Override
+        public void visit(ObjectCreationExpr n, Deque<String> path) {
+            if (n.getAnonymousClassBody().isPresent()) {
+                int nextIndex = anonymousCounters.merge(n.getParentNode().orElse(null), 1, Integer::sum);
+                String anonName = "Anon" + nextIndex;
+                path.addLast(anonName);
+                try {
+                    super.visit(n, path);
+                } finally {
+                    path.removeLast();
+                }
+                return;
             }
-            idx++;
+            super.visit(n, path);
         }
-        return len;
+
+        @Override
+        public void visit(BlockStmt n, Deque<String> path) {
+            if (isInitializerBody(n)) {
+                String initName = isStaticInitializer(n) ? "<clinit>" : "<init>_block";
+                addBlockMethod(initName, n, path);
+            }
+            super.visit(n, path);
+        }
+
+        private void visitNamedType(TypeDeclaration<?> n, String name, Deque<String> path) {
+            path.addLast(name);
+            try {
+                for (Node child : n.getChildNodes()) {
+                    child.accept(this, path);
+                }
+            } finally {
+                path.removeLast();
+            }
+        }
+
+        private void addCallableMethod(CallableDeclaration<?> declaration, String name, Node bodyNode, Deque<String> path) {
+            Range bodyRange = getBodyRange(bodyNode, declaration.getRange().orElse(null));
+            if (bodyRange == null) {
+                return;
+            }
+            String fullName = buildMethodName(path, name);
+            methods.put(fullName, new MethodInfo(extractRangeText(bodyRange), bodyRange.begin.line, bodyRange.end.line));
+        }
+
+        private void addCompactConstructorMethod(CompactConstructorDeclaration declaration, Deque<String> path) {
+            Range bodyRange = declaration.getBody().getRange().orElse(declaration.getRange().orElse(null));
+            if (bodyRange == null) {
+                return;
+            }
+            String fullName = buildMethodName(path, declaration.getNameAsString());
+            methods.put(fullName, new MethodInfo(extractRangeText(bodyRange), bodyRange.begin.line, bodyRange.end.line));
+        }
+
+        private void addBlockMethod(String name, BlockStmt body, Deque<String> path) {
+            Range range = body.getRange().orElse(null);
+            if (range == null) {
+                return;
+            }
+            String fullName = buildMethodName(path, name);
+            methods.put(fullName, new MethodInfo(extractRangeText(range), range.begin.line, range.end.line));
+        }
+
+        private String buildMethodName(Deque<String> path, String methodName) {
+            if (path.isEmpty()) {
+                return methodName;
+            }
+            return String.join("$", path) + "." + methodName;
+        }
+
+        private Range getBodyRange(Node bodyNode, Range fallback) {
+            if (bodyNode != null) {
+                return bodyNode.getRange().orElse(fallback);
+            }
+            return fallback;
+        }
+
+        private String extractRangeText(Range range) {
+            if (range == null) {
+                return "";
+            }
+            int begin = positionToIndex(source, range.begin);
+            int end = positionToIndexExclusive(source, range.end);
+            if (begin < 0 || end < begin || begin > source.length()) {
+                return "";
+            }
+            end = Math.min(end, source.length());
+            return source.substring(begin, end).trim();
+        }
+
+        private boolean isInitializerBody(BlockStmt block) {
+            Node parent = block.getParentNode().orElse(null);
+            return parent instanceof InitializerDeclaration;
+        }
+
+        private boolean isStaticInitializer(BlockStmt block) {
+            Node parent = block.getParentNode().orElse(null);
+            if (parent instanceof InitializerDeclaration) {
+                return ((InitializerDeclaration) parent).isStatic();
+            }
+            return false;
+        }
     }
 
-    private int countNewlinesBefore(String s, int index) {
-        if (index <= 0) return 0;
-        int count = 0;
-        for (int i = 0; i < Math.min(index, s.length()); i++) {
-            if (s.charAt(i) == '\n') count++;
+    private static int positionToIndex(String source, Position position) {
+        if (position == null) {
+            return -1;
         }
-        return count;
+        int line = 1;
+        int column = 1;
+        for (int i = 0; i < source.length(); i++) {
+            if (line == position.line && column == position.column) {
+                return i;
+            }
+            char c = source.charAt(i);
+            if (c == '\n') {
+                line++;
+                column = 1;
+            } else {
+                column++;
+            }
+        }
+        if (line == position.line && column == position.column) {
+            return source.length();
+        }
+        return -1;
+    }
+
+    private static int positionToIndexExclusive(String source, Position position) {
+        int index = positionToIndex(source, position);
+        return index < 0 ? -1 : index + 1;
     }
 }

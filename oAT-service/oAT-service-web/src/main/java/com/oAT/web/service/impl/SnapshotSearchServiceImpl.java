@@ -17,8 +17,12 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -108,19 +112,45 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
 
     @Override
     public List<SystemSnapshot> searchByCode(String projectId, String className, String... methodName) {
+        return searchByCode(projectId, null, className, methodName);
+    }
+
+    @Override
+    public List<SystemSnapshot> searchByCode(String projectId, String appId, String className, String... methodName) {
         Assert.hasText(projectId, "参数'projectId'不能为空");
         Assert.hasText(className, "参数'className'不能为空");
+
+        List<String> normalizedMethods = normalizeMethodNames(methodName);
+        boolean probeOnly = normalizedMethods.size() == 1 && "__oat_probe__".equals(normalizedMethods.get(0));
+        List<String> queryCandidates = probeOnly ? Collections.emptyList() : buildCodeQueryCandidates(className, normalizedMethods);
 
         BoolQueryBuilder masterQuery = QueryBuilders.boolQuery();
         masterQuery.must(QueryBuilders.termQuery("projectId", projectId));
         masterQuery.must(QueryBuilders.termQuery("disable", false));
-        if (ArrayUtils.isNotEmpty(methodName)) {
-            List<String> methods = Arrays.stream(methodName)
-                    .map(m -> className + " " + m)
-                    .collect(Collectors.toList());
-            masterQuery.must(QueryBuilders.termsQuery("codes.keyword", methods));
+        if (StringUtils.hasText(appId)) {
+            masterQuery.must(QueryBuilders.termQuery("appId", appId));
+        }
+        if (probeOnly) {
+            // 仅用于统计当前应用下快照数量，不附加 codes 条件
+        } else if (!queryCandidates.isEmpty()) {
+            BoolQueryBuilder codeQuery = QueryBuilders.boolQuery();
+            for (String candidate : queryCandidates) {
+                codeQuery.should(QueryBuilders.termQuery("codes.keyword", candidate));
+                codeQuery.should(QueryBuilders.prefixQuery("codes.keyword", candidate + " "));
+                codeQuery.should(QueryBuilders.prefixQuery("codes.keyword", candidate + "("));
+                String simpleMethod = extractSimpleMethodName(candidate.substring(candidate.lastIndexOf(' ') + 1));
+                if (StringUtils.hasText(simpleMethod)) {
+                    codeQuery.should(QueryBuilders.wildcardQuery("codes.keyword", className + " *" + simpleMethod + "*"));
+                }
+            }
+            codeQuery.minimumShouldMatch(1);
+            masterQuery.must(codeQuery);
         } else {
-            masterQuery.must(QueryBuilders.prefixQuery("codes.keyword", className));
+            BoolQueryBuilder classQuery = QueryBuilders.boolQuery();
+            classQuery.should(QueryBuilders.prefixQuery("codes.keyword", className));
+            classQuery.should(QueryBuilders.wildcardQuery("codes.keyword", className + " *"));
+            classQuery.minimumShouldMatch(1);
+            masterQuery.must(classQuery);
         }
 
         NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
@@ -130,6 +160,44 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
         return searchHits.getSearchHits().stream()
                 .map(SearchHit::getContent)
                 .collect(Collectors.toList());
+    }
+
+    private List<String> normalizeMethodNames(String... methodName) {
+        if (ArrayUtils.isEmpty(methodName)) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(methodName)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private List<String> buildCodeQueryCandidates(String className, List<String> methodNames) {
+        if (methodNames == null || methodNames.isEmpty()) {
+            return Collections.emptyList();
+        }
+        LinkedHashSet<String> candidates = new LinkedHashSet<>();
+        for (String method : methodNames) {
+            candidates.add(className + " " + method);
+            String simpleMethod = extractSimpleMethodName(method);
+            if (StringUtils.hasText(simpleMethod) && !simpleMethod.equals(method)) {
+                candidates.add(className + " " + simpleMethod);
+            }
+        }
+        return new ArrayList<>(candidates);
+    }
+
+    private String extractSimpleMethodName(String methodName) {
+        if (!StringUtils.hasText(methodName)) {
+            return methodName;
+        }
+        int dotIndex = methodName.lastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < methodName.length() - 1) {
+            return methodName.substring(dotIndex + 1);
+        }
+        return methodName;
     }
 
     @Override

@@ -4,8 +4,10 @@ import com.oAT.web.common.CoverageSourceClassUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.service.GitService;
 import com.oAT.web.service.ResourceService;
+import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitDiffVo;
 import com.oAT.web.service.entity.GitJobVo;
+import com.oAT.web.service.entity.GitPullEstimateVo;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.LsRemoteCommand;
 import org.eclipse.jgit.diff.DiffEntry;
@@ -14,7 +16,10 @@ import org.eclipse.jgit.diff.Edit;
 import org.eclipse.jgit.diff.RawTextComparator;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ProgressMonitor;
+import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
+import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.patch.HunkHeader;
 import org.eclipse.jgit.revwalk.RevCommit;
@@ -35,7 +40,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -217,6 +224,90 @@ public class GitServiceImpl implements GitService {
         }
     }
 
+    @Override
+    public List<GitCommitOptionVo> getRecentCommits(String repoUrl, String username, String password, String branch, int limit) {
+        List<GitCommitOptionVo> commits = new ArrayList<>();
+        if (!StringUtils.hasText(branch)) {
+            return commits;
+        }
+
+        int finalLimit = limit > 0 ? limit : 20;
+        try {
+            Collection<Ref> refs = Git.lsRemoteRepository()
+                    .setRemote(repoUrl)
+                    .setHeads(true)
+                    .setTags(false)
+                    .setCredentialsProvider(getCredentials(username, password))
+                    .call();
+
+            Ref targetRef = null;
+            for (Ref ref : refs) {
+                if (("refs/heads/" + branch).equals(ref.getName())) {
+                    targetRef = ref;
+                    break;
+                }
+            }
+            if (targetRef == null || targetRef.getObjectId() == null) {
+                throw new RuntimeException("分支 " + branch + " 不存在");
+            }
+
+            try (InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription(repoUrl + "#" + branch));
+                 RevWalk revWalk = new RevWalk(repository)) {
+                RevCommit startCommit = revWalk.parseCommit(targetRef.getObjectId());
+                revWalk.markStart(startCommit);
+                int count = 0;
+                for (RevCommit commit : revWalk) {
+                    if (count++ >= finalLimit) {
+                        break;
+                    }
+                    String commitId = commit.getName();
+                    String shortCommitId = commitId.length() > 8 ? commitId.substring(0, 8) : commitId;
+                    String message = commit.getShortMessage();
+                    if (!StringUtils.hasText(message)) {
+                        message = "-";
+                    }
+                    String author = commit.getAuthorIdent() != null ? commit.getAuthorIdent().getName() : "";
+                    commits.add(new GitCommitOptionVo(commitId, shortCommitId, message, author));
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to get recent commits for repo: {} branch: {}", repoUrl, branch, e);
+            throw new RuntimeException("获取 Commit 列表失败: " + getFriendlyErrorMessage(e));
+        }
+        return commits;
+    }
+
+    @Override
+    public GitPullEstimateVo estimateGitPull(String repoUrl, String username, String password, String branch, String commitId, String excludePaths) {
+        GitPullEstimateVo estimate = new GitPullEstimateVo();
+        estimate.setBranch(branch);
+        estimate.setCommitId(commitId);
+
+        String finalBranch = branch != null ? branch.trim() : "";
+        String finalCommitId = commitId != null ? commitId.trim() : "";
+        String taskKey = repoUrl + "#" + finalBranch + "#" + finalCommitId + (StringUtils.hasText(excludePaths) ? "#" + excludePaths : "");
+        String existingJobId = runningTaskMap.get(taskKey);
+        if (existingJobId != null) {
+            Job<GitJobVo> existingJob = jobs.get(existingJobId);
+            if (existingJob != null && existingJob.getData() != null) {
+                GitJobVo data = existingJob.getData();
+                if (data.getPullDurationMs() != null) {
+                    estimate.setEstimatedDurationMs(data.getPullDurationMs());
+                }
+                if (data.getPackageSizeBytes() != null) {
+                    estimate.setEstimatedPackageSizeBytes(data.getPackageSizeBytes());
+                }
+            }
+        }
+
+        if (estimate.getEstimatedDurationMs() == null) {
+            estimate.setEstimatedDurationMs(30000L);
+        }
+        if (estimate.getEstimatedPackageSizeBytes() == null) {
+            estimate.setEstimatedPackageSizeBytes(50L * 1024 * 1024);
+        }
+        return estimate;
+    }
 
     @Override
     public void downloadAndPackage(String repoUrl, String username, String password, String branch, String commitId, File targetZipFile) {
@@ -314,6 +405,7 @@ public class GitServiceImpl implements GitService {
 
         executorService.submit(() -> {
             job.state = Job.JobState.active;
+            long pullStartTime = System.currentTimeMillis();
             File tempZip = null;
             Path tempDir = null;
             try {
@@ -374,7 +466,16 @@ public class GitServiceImpl implements GitService {
                     for (String path : paths) {
                         String trimmedPath = path.trim();
                         if (trimmedPath.isEmpty()) continue;
-                        File toDelete = new File(cloneDir, trimmedPath);
+                        Path sanitizedPath;
+                        try {
+                            sanitizedPath = Paths.get(trimmedPath).normalize();
+                        } catch (InvalidPathException ex) {
+                            throw new RuntimeException("排除路径格式不合法: " + trimmedPath);
+                        }
+                        if (sanitizedPath.isAbsolute() || sanitizedPath.startsWith("..")) {
+                            throw new RuntimeException("排除路径格式不合法: " + trimmedPath);
+                        }
+                        File toDelete = new File(cloneDir, sanitizedPath.toString());
                         if (toDelete.exists()) {
                             deleteFile(toDelete);
                         }
@@ -417,6 +518,8 @@ public class GitServiceImpl implements GitService {
                 gitJobVo.setMd5(md5);
                 gitJobVo.setFileName(fileName);
                 gitJobVo.setCachePath(resourceService.getCachePath(md5, fileName));
+                gitJobVo.setPackageSizeBytes(targetFile.length());
+                gitJobVo.setPullDurationMs(System.currentTimeMillis() - pullStartTime);
                 gitJobVo.setSuccess(true);
                 gitJobVo.setFinish(true);
                 job.getProgress().finish("完成");

@@ -4,8 +4,10 @@ import java.io.File;
 import java.util.List;
 import java.util.Map;
 
+import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitDiffVo;
 import com.oAT.web.service.entity.GitJobVo;
+import com.oAT.web.service.entity.GitPullEstimateVo;
 
 public interface GitService {
     List<String> getRemoteBranches(String repoUrl, String username, String password);
@@ -13,6 +15,10 @@ public interface GitService {
     void checkGitPull(String repoUrl, String username, String password, String branch, String commitId);
 
     String getLatestCommitId(String repoUrl, String username, String password, String branch);
+
+    List<GitCommitOptionVo> getRecentCommits(String repoUrl, String username, String password, String branch, int limit);
+
+    GitPullEstimateVo estimateGitPull(String repoUrl, String username, String password, String branch, String commitId, String excludePaths);
 
     void downloadAndPackage(String repoUrl, String username, String password, String branch, String commitId, File targetZipFile);
 

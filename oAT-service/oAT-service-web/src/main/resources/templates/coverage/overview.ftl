@@ -69,10 +69,10 @@
                         </div>
                         <div class="item">
                             <div class="content">
-                                <#if version.repoCommitId?? && version.repoCommitId?length gt 7>
-                                    <div class="ui label"><i class="code icon"></i> Commit: ${version.repoCommitId?substring(0, 7)}</div>
+                                <#if version.repoCommitId?has_content>
+                                    <div class="ui label"><i class="code icon"></i> Commit: <code class="commit-id" data-content="${version.repoCommitId}" data-position="top center">${(version.repoCommitId?length > 8)?then(version.repoCommitId?substring(0,8), version.repoCommitId)}</code></div>
                                 <#else>
-                                    <div class="ui label"><i class="code icon"></i> Commit: ${version.repoCommitId!"-"}</div>
+                                    <div class="ui label"><i class="code icon"></i> Commit: -</div>
                                 </#if>
                             </div>
                         </div>
@@ -426,6 +426,8 @@
 </div>
 
 <script>
+    $('.commit-id').popup();
+
     // Comparison Data
     var compData = {
         added: [

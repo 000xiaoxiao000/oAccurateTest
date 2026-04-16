@@ -10,20 +10,24 @@ import com.oAT.web.esDao.entity.*;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.util.StringUtils;
-
-import java.io.File;
-import java.io.Serializable;
-import java.io.UnsupportedEncodingException;
-import java.util.*;
-import java.util.stream.Collectors;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.*;
+
+import java.io.File;
+import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -175,11 +179,16 @@ public class VersionItemControl {
 
     @RequestMapping("{appId}/version/checkGitPull")
     @ResponseBody
-    public ResultNotified<String> checkGitPull(@PathVariable String appId, String branch, String commitId, String versionNumber) {
+    public ResultNotified<GitPullEstimateVo> checkGitPull(@PathVariable String appId, String branch, String commitId, String versionNumber, String excludePaths) {
         try {
             AppVo app = appService.getApp(appId);
             String finalBranch = branch != null ? branch.trim() : "";
             String finalCommitId = commitId != null ? commitId.trim() : "";
+
+            ResultNotified<String> excludePathCheckResult = validateExcludePaths(excludePaths);
+            if (excludePathCheckResult != null) {
+                return new ResultNotified<>(false, excludePathCheckResult.getMessage(), null);
+            }
 
             gitService.checkGitPull(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, finalCommitId);
 
@@ -193,13 +202,14 @@ public class VersionItemControl {
             if (StringUtils.hasText(versionNumber)) {
                 VersionItemVo existing = versionService.getVersionByGitInfo(appId, versionNumber.trim(), finalBranch, checkCommitId);
                 if (existing != null) {
-                    return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID (版本号: " + existing.getVersionNumber() + ")");
+                    return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID (版本号: " + existing.getVersionNumber() + ")", null);
                 }
             }
 
-            return new ResultNotified<>(true, "检测通过");
+            GitPullEstimateVo estimate = gitService.estimateGitPull(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, checkCommitId, excludePaths);
+            return new ResultNotified<>(true, "检测通过", estimate);
         } catch (Exception e) {
-            return new ResultNotified<>(false, "检测失败: " + e.getMessage());
+            return new ResultNotified<>(false, "检测失败: " + e.getMessage(), null);
         }
     }
 
@@ -215,6 +225,20 @@ public class VersionItemControl {
         }
     }
 
+    @RequestMapping("{appId}/version/git/commits")
+    @ResponseBody
+    public ResultNotified<List<GitCommitOptionVo>> getGitRecentCommits(@PathVariable String appId,
+                                                                       String branch,
+                                                                       @RequestParam(defaultValue = "20") int limit) {
+        try {
+            AppVo app = appService.getApp(appId);
+            List<GitCommitOptionVo> commits = gitService.getRecentCommits(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), branch, limit);
+            return new ResultNotified<>(true, "获取成功", commits);
+        } catch (Exception e) {
+            return new ResultNotified<List<GitCommitOptionVo>>(false, "获取失败: " + e.getMessage(), Collections.emptyList());
+        }
+    }
+
     @RequestMapping("{appId}/version/git/pull")
     @ResponseBody
     public ResultNotified<String> startGitPull(@PathVariable String appId, String branch, String commitId, String excludePaths, String versionNumber) {
@@ -222,6 +246,11 @@ public class VersionItemControl {
             AppVo app = appService.getApp(appId);
             String finalBranch = branch != null ? branch.trim() : "";
             String finalCommitId = (commitId != null && !commitId.trim().isEmpty()) ? commitId.trim() : null;
+
+            ResultNotified<String> excludePathCheckResult = validateExcludePaths(excludePaths);
+            if (excludePathCheckResult != null) {
+                return excludePathCheckResult;
+            }
 
             // 如果 commitId 为空，先获取远程最新 commitId，以便查重
             String checkCommitId = finalCommitId;
@@ -253,6 +282,33 @@ public class VersionItemControl {
         } catch (Exception e) {
             return new ResultNotified<>(false, "删除失败: " + e.getMessage());
         }
+    }
+
+    private ResultNotified<String> validateExcludePaths(String excludePaths) {
+        if (!StringUtils.hasText(excludePaths)) {
+            return null;
+        }
+
+        String[] paths = excludePaths.split(",");
+        for (String path : paths) {
+            String trimmedPath = path.trim();
+            if (!StringUtils.hasText(trimmedPath)) {
+                continue;
+            }
+            if (trimmedPath.contains("..")) {
+                return new ResultNotified<>(false, "检测失败: 排除路径不能包含 ..");
+            }
+            if (trimmedPath.startsWith("/") || trimmedPath.startsWith("\\") || trimmedPath.matches("^[A-Za-z]:.*")) {
+                return new ResultNotified<>(false, "检测失败: 排除路径不能是绝对路径");
+            }
+
+            Path normalizedPath = Paths.get(trimmedPath).normalize();
+            String normalized = normalizedPath.toString().replace('\\', '/');
+            if (normalized.isEmpty() || ".".equals(normalized) || normalized.startsWith("../")) {
+                return new ResultNotified<>(false, "检测失败: 排除路径格式不合法");
+            }
+        }
+        return null;
     }
 
     @RequestMapping("{appId}/version/git/status")
@@ -349,10 +405,11 @@ public class VersionItemControl {
     // 打开版本比对页面
     @RequestMapping("{appId}/version/compare")
     public String openCompareView(@PathVariable String projectId, @PathVariable String appId, Model model) {
-        List<VersionItemVo> items = versionService.getVersionItemList(projectId, appId);
+        List<VersionItemVo> versionItems = versionService.getVersionItemList(projectId, appId);
+        List<VersionItemVo> packageItems = versionItems;
         // 过滤掉非制品包文件（如.zip），只保留 .jar 和 .war
-        if (items != null) {
-            items = items.stream()
+        if (packageItems != null) {
+            packageItems = packageItems.stream()
                     .filter(item -> {
                         String file = item.getProgramFile();
                         if (file == null) return false;
@@ -361,7 +418,8 @@ public class VersionItemControl {
                     })
                     .collect(Collectors.toList());
         }
-        model.addAttribute("items", items);
+        model.addAttribute("items", packageItems);
+        model.addAttribute("versionItems", versionItems);
         model.addAttribute("app", appService.getApp(appId));
         List<VersionCompareReportVo> list = versionService.getCompareReportList(projectId, appId);
         // Sort by createTime descending (newest first), nulls last
@@ -412,7 +470,13 @@ public class VersionItemControl {
 
     // 打开比对报告列表页
     @RequestMapping("{appId}/version/report/list")
-    public String openCompareReportList(@PathVariable String projectId, @PathVariable String appId, String tab, Model model) {
+    public String openCompareReportList(@PathVariable String projectId,
+                                        @PathVariable String appId,
+                                        String tab,
+                                        String highlightReportId,
+                                        @RequestParam(defaultValue = "0") int page,
+                                        @RequestParam(defaultValue = "10") int size,
+                                        Model model) {
         if (!StringUtils.hasText(tab)) {
             tab = "coverage";
         }
@@ -422,15 +486,11 @@ public class VersionItemControl {
         model.addAttribute("project", projectService.getProject(projectId));
 
         if ("compare".equals(tab)) {
-            List<VersionCompareReportVo> list = versionService.getCompareReportList(projectId, appId);
-            // Ensure compare reports are shown newest-first (by createTime desc), nulls last
-            if (list != null && !list.isEmpty()) {
-                list = list.stream()
-                        .sorted(Comparator.comparing(VersionCompareReportVo::getCreateTime,
-                                Comparator.nullsLast(Comparator.reverseOrder())))
-                        .collect(Collectors.toList());
-            }
-            model.addAttribute("reports", list);
+            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createTime"));
+            Page<VersionCompareReportVo> comparePage = versionService.getCompareReportList(projectId, appId, pageable);
+            model.addAttribute("reports", comparePage.getContent());
+            model.addAttribute("page", comparePage);
+            model.addAttribute("highlightReportId", highlightReportId);
         } else {
             // 1. 获取基于版本的生成的报告（全量/增量）
             // 这里我们获取该应用下所有的覆盖率报告
@@ -783,96 +843,193 @@ public class VersionItemControl {
     }
 
     @RequestMapping("/version/report/{reportId}")
-    public String openCompareReport(@PathVariable String reportId, Model model) {
-        VersionCompareReport report = versionService.getCompareReport(reportId);
-        model.addAttribute("report", report);
-        model.addAttribute("app", appService.getApp(report.getAppId()));
+    public String openCompareReport(@PathVariable String projectId, @PathVariable String reportId, Model model) {
+        try {
+            VersionCompareReport report = versionService.getCompareReport(reportId);
+            model.addAttribute("report", report);
+            model.addAttribute("app", appService.getApp(report.getAppId()));
 
-        // 差异项转换
-        Map<String, CompareResult> differenceClass = new HashMap<>();
-        VersionCompareReport.Difference[] diffs = report.getDifferences();
-        if (diffs != null) {
-            for (VersionCompareReport.Difference difference : diffs) {
-                if (difference == null) continue;
-                if ("class".equals(difference.getType())) {
-                    if (differenceClass.containsKey(difference.getValue())) {
-                        continue;
-                    }
-                    CompareResult r = new CompareResult(difference.getValue(),
-                            CompareResult.Model.valueOf(difference.getModel()));
-                    differenceClass.put(r.getClassName(), r);
-                } else if ("method".equals(difference.getType())) {
-                    String raw = difference.getValue();
-                    String className = null, methodName = null, desc = "";
-                    if (raw != null) {
-                        // prefer tab-separated (new format), fallback to space-separated
-                        String[] parts = raw.split("\t");
-                        if (parts.length >= 3) {
-                            className = parts[0];
-                            methodName = parts[1];
-                            desc = parts[2];
-                        } else {
-                            parts = raw.split(" ");
+            // 差异项转换
+            Map<String, CompareResult> differenceClass = new HashMap<>();
+            VersionCompareReport.Difference[] diffs = report.getDifferences();
+            if (diffs != null) {
+                for (VersionCompareReport.Difference difference : diffs) {
+                    if (difference == null) continue;
+                    if ("class".equals(difference.getType())) {
+                        if (differenceClass.containsKey(difference.getValue())) {
+                            continue;
+                        }
+                        CompareResult r = new CompareResult(difference.getValue(),
+                                CompareResult.Model.valueOf(difference.getModel()));
+                        differenceClass.put(r.getClassName(), r);
+                    } else if ("method".equals(difference.getType())) {
+                        String raw = difference.getValue();
+                        String className = null, methodName = null, desc = "";
+                        if (raw != null) {
+                            String[] parts = raw.split("\t");
                             if (parts.length >= 3) {
                                 className = parts[0];
                                 methodName = parts[1];
                                 desc = parts[2];
-                            } else if (parts.length == 2) {
-                                className = parts[0];
-                                methodName = parts[1];
+                            } else {
+                                parts = raw.split(" ");
+                                if (parts.length >= 3) {
+                                    className = parts[0];
+                                    methodName = parts[1];
+                                    desc = parts[2];
+                                } else if (parts.length == 2) {
+                                    className = parts[0];
+                                    methodName = parts[1];
+                                }
                             }
                         }
+                        if (className == null || methodName == null) continue;
+                        if (!differenceClass.containsKey(className)) {
+                            CompareResult r = new CompareResult(className,
+                                    CompareResult.Model.update);
+                            differenceClass.put(r.getClassName(), r);
+                        }
+                        differenceClass.get(className).add(methodName, desc,
+                                CompareResult.Model.valueOf(difference.getModel()));
                     }
-                    if (className == null || methodName == null) continue;
-                    if (!differenceClass.containsKey(className)) {
-                        CompareResult r = new CompareResult(className,
-                                CompareResult.Model.update);
-                        differenceClass.put(r.getClassName(), r);
-                    }
-                    differenceClass.get(className).add(methodName, desc,
-                            CompareResult.Model.valueOf(difference.getModel()));
                 }
             }
-        }
-        model.addAttribute("different", differenceClass.values());
+            model.addAttribute("different", differenceClass.values());
 
-        //影响用例转换
-        List<SnapshotBo> snapshotBos = new ArrayList<>();
-        VersionCompareReport.ImpactCase[] casesArr = report.getCases();
-        if (casesArr != null) {
-            Arrays.stream(casesArr).forEach(a -> {
-                try {
-                    if (a == null || a.getCaseId() == null) return;
-                    SystemSnapshot snapshot = systemSnapshotService.getById(a.getCaseId());
-                    if (snapshot == null) {
-                        // 日志并跳过不存在的快照
-                        logger.info("无法找到影响用例快照，id={}", a.getCaseId());
-                        return;
+            List<UsecaseBo> usecaseBos = new ArrayList<>();
+            VersionCompareReport.ImpactCase[] casesArr = report.getCases();
+            if (casesArr != null) {
+                Arrays.stream(casesArr).forEach(a -> {
+                    try {
+                        if (a == null || a.getCaseId() == null) return;
+                        UsecaseVo usecase = usecaseService.getUsecase(report.getProjectId(), a.getCaseId());
+                        if (usecase == null) {
+                            logger.info("无法找到影响用例，id={}", a.getCaseId());
+                            return;
+                        }
+                        List<LabelGroup.Label> labels = projectService.getLables(report.getProjectId(), LableType.usecase, usecase.getLabels());
+                        UsecaseBo bo = new UsecaseBo(usecase.getId(), usecase.getTitle(), labels, a.getDifferences());
+                        bo.setDirectoryPath(resolveUsecaseDirectoryPath(report.getProjectId(), Optional.ofNullable(usecase.getDirectory()).orElse("root")));
+                        usecaseBos.add(bo);
+                    } catch (Exception ex) {
+                        logger.warn("处理影响用例时发生异常, id={}", a.getCaseId(), ex);
                     }
-                    List<LabelGroup.Label> labels = projectService.getLables(snapshot.getProjectId(), LableType.snapshot, snapshot.getLabels());
-                    SnapshotBo sb = new SnapshotBo(snapshot.getId(), snapshot.getTitle(), labels, a.getDifferences());
-                    sb.setDirectoryPath(appService.getDirectory(snapshot.getAppId(), Optional.ofNullable(snapshot.getDirectory()).orElse("root")).getPath());
-                    snapshotBos.add(sb);
-                } catch (Exception ex) {
-                    logger.warn("处理影响用例时发生异常, id={}", a.getCaseId(), ex);
-                }
-            });
-            // 按 directoryPath 分组为 SnapshotGroup 列表
-            Map<String, List<SnapshotBo>> grouped = snapshotBos.stream().collect(Collectors.groupingBy(SnapshotBo::getDirectoryPath));
-            ArrayList<SnapshotGroup> usecaseGroups = new ArrayList<>();
-            grouped.forEach((k, v) -> usecaseGroups.add(new SnapshotGroup(k, v)));
-            model.addAttribute("usecaseGroups", usecaseGroups);
-        } else {
-            model.addAttribute("usecaseGroups", Collections.emptyList());
+                });
+                Map<String, List<UsecaseBo>> grouped = usecaseBos.stream().collect(Collectors.groupingBy(UsecaseBo::getDirectoryPath));
+                ArrayList<UsecaseGroup> usecaseGroups = new ArrayList<>();
+                grouped.forEach((k, v) -> usecaseGroups.add(new UsecaseGroup(k, v)));
+                model.addAttribute("usecaseGroups", usecaseGroups);
+            } else {
+                model.addAttribute("usecaseGroups", Collections.emptyList());
+            }
+
+            model.addAttribute("impactHintSummary", buildImpactHintSummary(report.getJobLog()));
+            return "/version/compareReport";
+        } catch (IllegalArgumentException ex) {
+            logger.warn("比对报告暂不可用，等待重试 reportId={}", reportId, ex);
+            model.addAttribute("reportId", reportId);
+            CompareJobVo compareJob = versionService.getCompareJob(reportId);
+            model.addAttribute("appId", compareJob == null ? "" : compareJob.getAppId());
+            model.addAttribute("retryMessage", "比对报告正在生成或索引刷新中，页面会自动重试...");
+            return "/version/compareReportPending";
         }
-        return "/version/compareReport";
     }
 
-    public class SnapshotGroup implements Serializable {
-        String directoryName;
-        List<SnapshotBo> list;
+    private String resolveUsecaseDirectoryPath(String projectId, String directoryId) {
+        try {
+            List<UsecaseDirectoryVo> tiers = usecaseService.getDirectoryTier(projectId, directoryId);
+            if (tiers == null || tiers.isEmpty()) {
+                return directoryId;
+            }
+            List<String> names = new ArrayList<>();
+            Collections.reverse(tiers);
+            for (UsecaseDirectoryVo vo : tiers) {
+                if (vo != null && StringUtils.hasText(vo.getName())) {
+                    names.add(vo.getName());
+                }
+            }
+            return names.isEmpty() ? directoryId : String.join(" / ", names);
+        } catch (Exception ex) {
+            logger.warn("解析用例目录失败, directoryId={}", directoryId, ex);
+            return directoryId;
+        }
+    }
 
-        public SnapshotGroup(String directoryName, List<SnapshotBo> list) {
+    private ImpactHintSummary buildImpactHintSummary(String jobLog) {
+        ImpactHintSummary summary = new ImpactHintSummary();
+        if (!StringUtils.hasText(jobLog)) {
+            return summary;
+        }
+
+        Pattern snapshotCountPattern = Pattern.compile("当前应用快照数：(\\d+)");
+        Matcher countMatcher = snapshotCountPattern.matcher(jobLog);
+        int maxSnapshotCount = -1;
+        while (countMatcher.find()) {
+            int count = Integer.parseInt(countMatcher.group(1));
+            if (count > maxSnapshotCount) {
+                maxSnapshotCount = count;
+            }
+        }
+        if (maxSnapshotCount >= 0) {
+            summary.setSnapshotCount(maxSnapshotCount);
+        }
+
+        Pattern hitPattern = Pattern.compile("命中快照：([^\\n\\r]+)");
+        Matcher hitMatcher = hitPattern.matcher(jobLog);
+        LinkedHashSet<String> snapshotTitles = new LinkedHashSet<>();
+        while (hitMatcher.find()) {
+            String title = hitMatcher.group(1).trim();
+            if (StringUtils.hasText(title) && !"-".equals(title)) {
+                Arrays.stream(title.split(",")).map(String::trim).filter(StringUtils::hasText).forEach(snapshotTitles::add);
+            }
+        }
+        summary.setHitSnapshots(new ArrayList<>(snapshotTitles));
+
+        Pattern zeroPattern = Pattern.compile("查找快照影响 类名：([^\\s]+).*?影响数：0");
+        Matcher zeroMatcher = zeroPattern.matcher(jobLog);
+        LinkedHashSet<String> zeroHitClasses = new LinkedHashSet<>();
+        while (zeroMatcher.find()) {
+            zeroHitClasses.add(zeroMatcher.group(1).trim());
+        }
+        summary.setZeroHitClasses(new ArrayList<>(zeroHitClasses));
+        return summary;
+    }
+
+    public class ImpactHintSummary implements Serializable {
+        private Integer snapshotCount;
+        private List<String> hitSnapshots = Collections.emptyList();
+        private List<String> zeroHitClasses = Collections.emptyList();
+
+        public Integer getSnapshotCount() {
+            return snapshotCount;
+        }
+
+        public void setSnapshotCount(Integer snapshotCount) {
+            this.snapshotCount = snapshotCount;
+        }
+
+        public List<String> getHitSnapshots() {
+            return hitSnapshots;
+        }
+
+        public void setHitSnapshots(List<String> hitSnapshots) {
+            this.hitSnapshots = hitSnapshots;
+        }
+
+        public List<String> getZeroHitClasses() {
+            return zeroHitClasses;
+        }
+
+        public void setZeroHitClasses(List<String> zeroHitClasses) {
+            this.zeroHitClasses = zeroHitClasses;
+        }
+    }
+
+    public class UsecaseGroup implements Serializable {
+        String directoryName;
+        List<UsecaseBo> list;
+
+        public UsecaseGroup(String directoryName, List<UsecaseBo> list) {
             this.directoryName = directoryName;
             this.list = list;
         }
@@ -881,19 +1038,19 @@ public class VersionItemControl {
             return directoryName;
         }
 
-        public List<SnapshotBo> getList() {
+        public List<UsecaseBo> getList() {
             return list;
         }
     }
 
-    public class SnapshotBo implements Serializable {
+    public class UsecaseBo implements Serializable {
         private String id;
         private String name;
         private String directoryPath;
         private List<LabelGroup.Label> labels;
         private String[] differences;
 
-        public SnapshotBo(String id, String name, List<LabelGroup.Label> labels, String[] differences) {
+        public UsecaseBo(String id, String name, List<LabelGroup.Label> labels, String[] differences) {
             this.id = id;
             this.name = name;
             this.labels = labels;

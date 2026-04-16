@@ -199,12 +199,12 @@ public class UsecaseControl {
         if (usecase.getId() == null) {
             usecase.setProjectId(projectId);
             UsecaseVo vo = usecaseService.doAdd(user.getId(), usecase);
-            result = new ResultNotified(true, "用例新增成功");
+            result = new ResultNotified<>(true, "用例新增成功");
             result.setData(vo.getId());
             return result;
         } else {
             usecaseService.doUpdate(user.getId(), usecase);
-            result = new ResultNotified(true, "用例保存成功");
+            result = new ResultNotified<>(true, "用例保存成功");
             return result;
         }
     }
@@ -244,9 +244,18 @@ public class UsecaseControl {
 
     @RequestMapping("/doDelete")
     @ResponseBody
-    public ResultNotified doDeleteUsecase(@PathVariable String projectId, String id) {
+    public ResultNotified<String> doDeleteUsecase(@PathVariable String projectId, String id) {
         usecaseService.doDeleteUsecase(projectId, id);
-        return new ResultNotified(true, "用例删除成功");
+        return new ResultNotified<>(true, "用例删除成功");
+    }
+
+    @RequestMapping("/rebuildSearchData")
+    @ResponseBody
+    public ResultNotified<Integer> rebuildSearchData(@PathVariable String projectId, @SessionAttribute UserVo user) {
+        int updated = usecaseService.rebuildUsecaseSearchData(projectId, user.getId());
+        ResultNotified<Integer> result = new ResultNotified<>(true, "已回填用例检索数据，更新数量：" + updated);
+        result.setData(updated);
+        return result;
     }
 
     /**

@@ -156,6 +156,12 @@
             <version>5.13.1.202206130422-r</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.github.javaparser</groupId>
+            <artifactId>javaparser-core</artifactId>
+            <version>3.26.2</version>
+        </dependency>
+
         <!-- Netty MacOS DNS resolver for proper DNS resolution on MacOS -->
         <dependency>
             <groupId>io.netty</groupId>

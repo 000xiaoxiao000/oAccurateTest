@@ -149,6 +149,7 @@
     $('.ui.filter.dropdown').dropdown({
         on: 'click'
     });
+    $('.commit-id').popup();
 
     function showDetail(id) {
         <!--显示节点详情-->

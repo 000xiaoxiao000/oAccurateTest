@@ -1,10 +1,8 @@
 package com.oAT.web.control.entity;
 
-import java.io.Serializable;
-
 
 //TODO 异常统一拦截
-public class ResultNotified<T extends Serializable> implements Serializable {
+public class ResultNotified<T> implements java.io.Serializable {
     private Boolean result;
     private String message;
     private String errorMessage;

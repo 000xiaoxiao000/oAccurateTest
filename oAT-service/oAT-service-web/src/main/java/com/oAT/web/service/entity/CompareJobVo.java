@@ -39,8 +39,10 @@ public class CompareJobVo implements Serializable {
 
     // 差异项.勿略序列化
     private transient List<CompareResult> differences;
-    // 影响的用例.勿略序列化
+    // 影响的系统快照.勿略序列化
     private transient Map<String, SnapshotUnion> impactSnapshot;
+    // 影响的用例.勿略序列化
+    private transient Map<String, UsecaseUnion> impactUsecases;
 
     public CompareJobVo() {
     }
@@ -229,6 +231,14 @@ public class CompareJobVo implements Serializable {
         this.impactSnapshot = impactSnapshot;
     }
 
+    public Map<String, UsecaseUnion> getImpactUsecases() {
+        return impactUsecases;
+    }
+
+    public void setImpactUsecases(Map<String, UsecaseUnion> impactUsecases) {
+        this.impactUsecases = impactUsecases;
+    }
+
     public List<CompareResult> getDifferences() {
         return differences;
     }
@@ -273,6 +283,31 @@ public class CompareJobVo implements Serializable {
 
         public void setSnapshot(SystemSnapshot snapshot) {
             this.snapshot = snapshot;
+        }
+    }
+
+    public static class UsecaseUnion {
+        private List<String> classes = new ArrayList<>();
+        private UsecaseVo usecase;
+
+        public UsecaseUnion(UsecaseVo usecase) {
+            this.usecase = usecase;
+        }
+
+        public List<String> getClasses() {
+            return classes;
+        }
+
+        public void setClasses(List<String> classes) {
+            this.classes = classes;
+        }
+
+        public UsecaseVo getUsecase() {
+            return usecase;
+        }
+
+        public void setUsecase(UsecaseVo usecase) {
+            this.usecase = usecase;
         }
     }
 }
