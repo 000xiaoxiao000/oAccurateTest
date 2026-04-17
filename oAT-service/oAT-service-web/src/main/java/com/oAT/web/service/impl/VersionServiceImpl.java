@@ -29,6 +29,8 @@ import com.oAT.web.esDao.entity.VersionCompareReport;
 import com.oAT.web.esDao.entity.VersionItem;
 import com.oAT.web.service.ResourceService;
 import com.oAT.web.service.SnapshotSearchService;
+import com.oAT.web.service.SystemSnapshotService;
+import com.oAT.web.service.SystemSnapshotService;
 import com.oAT.web.service.UsecaseSearchService;
 import com.oAT.web.service.VersionService;
 import com.oAT.web.service.entity.*;
@@ -78,6 +80,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Autowired
     SnapshotSearchService snapshotSearchService;
+
+    @Autowired
+    SystemSnapshotService systemSnapshotService;
 
     @Autowired
     UsecaseSearchService usecaseSearchService;
@@ -504,6 +509,17 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 }
                 countJobInfo(differences, job.getData());
 
+                List<SystemSnapshot> appSnapshots = Collections.emptyList();
+                try {
+                    appSnapshots = systemSnapshotService.findAll(job.getData().getProjectId(), job.getData().getAppId());
+                } catch (Exception ex) {
+                    job.getLogger().info(String.format("统计当前应用快照数失败 projectId=%s appId=%s: %s",
+                            job.getData().getProjectId(), job.getData().getAppId(), ex.getMessage()));
+                }
+                int appSnapshotCount = (int) appSnapshots.stream().map(SystemSnapshot::getId).distinct().count();
+                job.getData().setAppSnapshotCount(appSnapshotCount);
+                job.getLogger().info(String.format("当前应用快照总数：%s", appSnapshotCount));
+
                 // 分析受影响的用例（影响范围）
                 job.getLogger().info("开始分析用例影响");
                 job.setProgress(new Job.JobProgress());
@@ -527,7 +543,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                     job.getProgress().loaded++;
                 }
 
-                job.getProgress().next("保存比对报告", 10);
+                job.getProgress().next("保存版本比对报告", 10);
                 // 在保存之前再次确保差异集合与影响集合非空，避免NPE
                 if (job.getData().getDifferences() == null) {
                     job.getData().setDifferences(new ArrayList<>());
@@ -611,6 +627,17 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         }
         job.getData().setDifferences(difference);
 
+        List<SystemSnapshot> appSnapshots = Collections.emptyList();
+        try {
+            appSnapshots = systemSnapshotService.findAll(job.getData().getProjectId(), job.getData().getAppId());
+        } catch (Exception ex) {
+            job.getLogger().info(String.format("统计当前应用快照数失败 projectId=%s appId=%s: %s",
+                    job.getData().getProjectId(), job.getData().getAppId(), ex.getMessage()));
+        }
+        int appSnapshotCount = (int) appSnapshots.stream().map(SystemSnapshot::getId).distinct().count();
+        job.getData().setAppSnapshotCount(appSnapshotCount);
+        job.getLogger().info(String.format("当前应用快照总数：%s", appSnapshotCount));
+
         // 检测受影响的功能
         job.getLogger().info(String.format("版本文件比较完成,发现差异项: %s", difference.size()));
         job.getLogger().info("开始分析用例影响");
@@ -626,7 +653,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             }
             job.getProgress().loaded++;
         }
-        // 保存比对报告
+        // 保存版本比对报告
         job.getProgress().next("生成比对报告", 20);
         job.getLogger().info("开始生成比对报告");
         job.getProgress().total = 1;
@@ -635,7 +662,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         job.getLogger().info("比对报告已生成");
         job.getLogger().info("版本比对完成");
         job.getProgress().finish("对比完成");
-        // 保存比对报告
+        // 保存版本比对报告
         job.state = Job.JobState.finish;
     }
 
@@ -687,9 +714,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         report.setDeleteMethodCount(vo.getDeleteMethodCount());
         report.setImpactCaseCount(impact.size());
 
-        job.getLogger().info(String.format("开始保存比对报告 id=%s 差异数=%s 影响用例数=%s",
+        job.getLogger().info(String.format("开始保存版本比对报告 id=%s 差异数=%s 影响用例数=%s",
                 job.getId(), listDifference.size(), listCase.size()));
-        logger.info("保存比对报告 id={} diffs={} cases={}", job.getId(), listDifference.size(), listCase.size());
+        logger.info("保存版本比对报告 id={} diffs={} cases={}", job.getId(), listDifference.size(), listCase.size());
 
         VersionCenterIndex index = new VersionCenterIndex(report);
         index.setId(job.getId());
@@ -719,29 +746,43 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         String classDot = Optional.ofNullable(originalName).orElse("");
         classDot = classDot.replace('/', '.');
 
-        List<SystemSnapshot> appSnapshots = snapshotSearchService.searchByCode(projectId, appId, classDot, "__oat_probe__");
-        int appSnapshotCount = (int) appSnapshots.stream().map(SystemSnapshot::getId).distinct().count();
+        int appSnapshotCount = Optional.ofNullable(job.getData().getAppSnapshotCount()).orElse(0);
 
         if (compareResult.getModel() == CompareResult.Model.delete || compareResult.getModel() == CompareResult.Model.add) {
+            List<String> classCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot);
+            List<String> classPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot);
+            job.getLogger().info(String.format("查找快照影响 类名：%s 类级候选：%s 模式：%s（当前应用快照数：%s）",
+                    classDot, String.join(" | ", classCandidates), String.join(" | ", classPatterns), appSnapshotCount));
             list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
-            job.getLogger().info(String.format("查找快照影响 类名：%s 类级检索影响数：%s（当前应用快照数：%s）",
-                    classDot, list.size(), appSnapshotCount));
+            String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+            job.getLogger().info(String.format("查找快照影响 类名：%s 类级检索影响数：%s，命中快照：%s",
+                    classDot, list.size(), StringUtils.hasText(titles) ? titles : "-"));
         } else if (compareResult.getModel() == CompareResult.Model.update) {
             List<String> filteredNames = normalizeMethodNamesForSearch(classDot, compareResult);
             List<String> fallbackMethodNames = buildMethodFallbackCandidates(filteredNames);
 
             if (filteredNames.isEmpty()) {
+                List<String> classCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot);
+                List<String> classPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot);
+                job.getLogger().info(String.format("查找快照影响 类名：%s (方法未解析或仅占位) 类级候选：%s 模式：%s（当前应用快照数：%s）",
+                        classDot, String.join(" | ", classCandidates), String.join(" | ", classPatterns), appSnapshotCount));
                 list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
-                job.getLogger().info(String.format("查找快照影响 类名：%s (方法未解析或仅占位) 影响数：%s（当前应用快照数：%s）",
-                        classDot, list.size(), appSnapshotCount));
+                String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                job.getLogger().info(String.format("查找快照影响 类名：%s (方法未解析或仅占位) 影响数：%s，命中快照：%s",
+                        classDot, list.size(), StringUtils.hasText(titles) ? titles : "-"));
             } else {
-                job.getLogger().info(String.format("查找快照影响 类名：%s 方法候选：%s（当前应用快照数：%s）",
-                        classDot, String.join(", ", fallbackMethodNames), appSnapshotCount));
+                List<String> methodCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot, StringUtils.toStringArray(fallbackMethodNames));
+                List<String> methodPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot, StringUtils.toStringArray(fallbackMethodNames));
+                job.getLogger().info(String.format("查找快照影响 类名：%s 方法候选：%s 检索候选：%s 模式：%s（当前应用快照数：%s）",
+                        classDot, String.join(", ", fallbackMethodNames), String.join(" | ", methodCandidates), String.join(" | ", methodPatterns), appSnapshotCount));
                 list = snapshotSearchService.searchByCode(projectId, appId, classDot, StringUtils.toStringArray(fallbackMethodNames));
                 if (list.isEmpty()) {
+                    List<String> classCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot);
+                    List<String> classPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot);
                     list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
-                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s 未找到，回退到类级别检索，影响数：%s",
-                            classDot, String.join(", ", fallbackMethodNames), list.size()));
+                    String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s 未找到，回退到类级别检索；类级候选：%s 模式：%s 影响数：%s，命中快照：%s",
+                            classDot, String.join(", ", fallbackMethodNames), String.join(" | ", classCandidates), String.join(" | ", classPatterns), list.size(), StringUtils.hasText(titles) ? titles : "-"));
                 } else {
                     String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
                     job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s 影响数：%s，命中快照：%s",
@@ -851,6 +892,14 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
     @Override
     public VersionCompareReport getCompareReport(String compareId) {
         Optional<VersionCenterIndex> optional = versionCenterRepository.findById(compareId);
+        if (!optional.isPresent() && StringUtils.hasText(compareId)) {
+            Pageable pageable = PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createTime"));
+            Page<VersionCompareReportVo> reportPage = getCompareReportList(null, compareId, pageable);
+            if (!reportPage.isEmpty()) {
+                String fallbackReportId = reportPage.getContent().get(0).getId();
+                optional = versionCenterRepository.findById(fallbackReportId);
+            }
+        }
         Assert.isTrue(optional.isPresent(), String.format("找不到id=%s的比对报告", compareId));
         VersionCenterIndex index = optional.get();
         Assert.notNull(index.getCompareReport(), String.format("id=%s对应的记录不是比对报告", compareId));
@@ -870,7 +919,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
                 .withFilter(org.elasticsearch.index.query.QueryBuilders.boolQuery()
                         .must(org.elasticsearch.index.query.QueryBuilders.termQuery("type", "compareReport"))
-                        .must(org.elasticsearch.index.query.QueryBuilders.termQuery("compareReport.projectId", projectId))
+                        .must(StringUtils.hasText(projectId)
+                                ? org.elasticsearch.index.query.QueryBuilders.termQuery("compareReport.projectId", projectId)
+                                : org.elasticsearch.index.query.QueryBuilders.matchAllQuery())
                         .must(org.elasticsearch.index.query.QueryBuilders.termQuery("compareReport.appId", appId)))
                 .withSort(Sort.by(Sort.Direction.DESC, "createTime"))
                 .withPageable(pageable);

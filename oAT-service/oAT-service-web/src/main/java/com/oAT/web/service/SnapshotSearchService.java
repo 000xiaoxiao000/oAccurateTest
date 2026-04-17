@@ -16,6 +16,10 @@ public interface SnapshotSearchService {
 
     List<SystemSnapshot> searchByCode(String projectId, String appId, String className, String... methodName);
 
+    List<String> buildCodeSearchCandidates(String className, String... methodName);
+
+    List<String> buildCodeSearchPatterns(String className, String... methodName);
+
     List<SystemSnapshot> searchByDubbo(String projectId, String interfaceName, String... methodName);
 
 }

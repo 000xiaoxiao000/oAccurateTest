@@ -37,6 +37,9 @@ public class CompareJobVo implements Serializable {
     public int updateMethodCount;
     public int deleteMethodCount;
 
+    // 当前应用快照总数（任务级缓存，避免每个差异类重复查询 ES）
+    private Integer appSnapshotCount;
+
     // 差异项.勿略序列化
     private transient List<CompareResult> differences;
     // 影响的系统快照.勿略序列化
@@ -221,6 +224,14 @@ public class CompareJobVo implements Serializable {
 
     public void setFinish(boolean finish) {
         this.finish = finish;
+    }
+
+    public Integer getAppSnapshotCount() {
+        return appSnapshotCount;
+    }
+
+    public void setAppSnapshotCount(Integer appSnapshotCount) {
+        this.appSnapshotCount = appSnapshotCount;
     }
 
     public Map<String, SnapshotUnion> getImpactSnapshot() {

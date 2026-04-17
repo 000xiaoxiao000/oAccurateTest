@@ -93,22 +93,61 @@
         on: 'click'
     });
     $('.commit-id').popup();
+
+    function buildReportUrl(reportId) {
+        return "/p/${project.id}/version/report/detail/" + reportId;
+    }
+
+    function waitForReportReady(reportId, maxAttempts, delayMs) {
+        var reportUrl = buildReportUrl(reportId);
+        var deferred = $.Deferred();
+        var attempts = 0;
+
+        function probe() {
+            attempts++;
+            $.ajax({
+                url: reportUrl,
+                method: 'GET',
+                cache: false
+            }).done(function (html) {
+                if (typeof html === 'string' && html.indexOf('比对报告生成中') >= 0) {
+                    if (attempts >= maxAttempts) {
+                        deferred.resolve(reportUrl);
+                    } else {
+                        setTimeout(probe, delayMs);
+                    }
+                    return;
+                }
+                deferred.resolve(reportUrl);
+            }).fail(function () {
+                if (attempts >= maxAttempts) {
+                    deferred.resolve(reportUrl);
+                } else {
+                    setTimeout(probe, delayMs);
+                }
+            });
+        }
+
+        probe();
+        return deferred.promise();
+    }
+
     $(function () {
         var future = setInterval(function () {
             var results = refreshJob();
             if (!results || !results.data) {
-                window.location.href = "/p/${project.id}/version/report/${compareJob.id}";
                 return;
             }
             if (results.data.finish) {
                 clearInterval(future);
                 $("#compareProgress").removeClass("active warning").addClass("success");
-                $("#compareProgressName").html("正在生成报告，即将自动跳转...");
-                var reportUrl = "/p/${project.id}/version/report/" + results.data.id;
+                $("#compareProgressName").html("比对已完成，正在等待报告可打开...");
+                var reportUrl = buildReportUrl(results.data.id);
                 $("#openReport").attr("href", reportUrl).show();
-                setTimeout(function () {
-                    window.location.href = reportUrl;
-                }, 400);
+                waitForReportReady(results.data.id, 8, 700).then(function (readyUrl) {
+                    $("#compareProgressName").html("报告已生成，正在跳转...");
+                    window.location.href = readyUrl;
+                });
             }
         }, 500);
     });
@@ -120,6 +159,7 @@
         }).responseJSON;
 
         if (!results || !results.data) {
+            $("#compareProgressName").html("正在生成报告，请稍候...");
             return results;
         }
 
