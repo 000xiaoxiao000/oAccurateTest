@@ -85,12 +85,14 @@ public class UsecaseControl {
         UsecaseVo usecase = usecaseService.getUsecase(projectId, id);
         Assert.notNull(usecase, "not fount usecase by id. id=" + id);
         // 获取当前用户下所有的快照
-        List<SnapshotVo> selectedSnapshots = Collections.emptyList();
+        List<SnapshotVo> selectedSnapshots = ArrayUtils.isNotEmpty(usecase.getSnapshots())
+                ? snapshotService.getByIds(usecase.getSnapshots())
+                : new ArrayList<>();
         if (ArrayUtils.isNotEmpty(usecase.getSnapshots())) {
-            selectedSnapshots = snapshotService.getByIds(usecase.getSnapshots());
             // 找出被删除的快照ID
-            String[] deleteByIds =
-                    Stream.of(usecase.getSnapshots()).filter(s -> selectedSnapshots.stream().noneMatch((t -> t.getId().equals(s)))).collect(Collectors.toList()).toArray(new String[0]);
+            String[] deleteByIds = Stream.of(usecase.getSnapshots())
+                    .filter(snapshotId -> selectedSnapshots.stream().noneMatch(snapshot -> snapshot.getId().equals(snapshotId)))
+                    .toArray(String[]::new);
             // 已被删除的快照同样需要加入到 选择项当中
             if (ArrayUtils.isNotEmpty(deleteByIds)) {
                 selectedSnapshots.addAll(snapshotService.getByIds(deleteByIds));
