@@ -575,19 +575,30 @@
             position: fixed;
             right: 24px;
             bottom: 24px;
-            width: 44px;
-            height: 44px;
-            border: none;
-            border-radius: 50%;
-            background: #00b5ad;
-            color: #ffffff;
-            box-shadow: 0 12px 30px rgba(0, 181, 173, 0.28);
+            width: 52px;
+            height: 52px;
+            border: 1px solid rgba(20, 184, 166, 0.26);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 253, 250, 0.98) 100%);
+            color: #0f766e;
+            box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+            backdrop-filter: blur(10px);
             cursor: pointer;
             opacity: 0;
             visibility: hidden;
-            transform: translateY(8px);
-            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+            transform: translateY(10px);
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
             z-index: 20;
+        }
+
+        .back-to-top:hover {
+            border-color: rgba(20, 184, 166, 0.42);
+            box-shadow: 0 20px 42px rgba(15, 23, 42, 0.18);
+        }
+
+        .back-to-top i {
+            margin: 0;
+            font-size: 18px;
         }
 
         .back-to-top.visible {
@@ -732,13 +743,6 @@
                     <a class="item" data-anchor-target="contentHeader" href="#contentHeader">
                         <span>详情描述</span>
                     </a>
-                    <a class="item" data-anchor-target="sqlHeader" href="#sqlHeader">
-                        <span>SQL列表</span>
-                        <div class="ui label">${(usecase.sqls?size)!'0'}</div>
-                    </a>
-                    <a class="item" data-anchor-target="remoteHeader" href="#remoteHeader">
-                        <span>远程调用</span>
-                    </a>
                 </div>
             </div>
         </aside>
@@ -788,7 +792,7 @@
                 </div>
 
                 <div class="usecase-header-divider">
-                    <span>当前页面聚合了用例说明、关联资源、SQL 与远程调用信息</span>
+                    <span>当前页面聚合了用例说明与关联资源信息</span>
                     <span>点击右上角设置可继续编辑内容</span>
                 </div>
 
@@ -939,90 +943,10 @@
                 </div>
             </section>
 
-            <section class="usecase-section" id="sqlHeader">
-                <div class="usecase-section-header">
-                    <h3 class="usecase-section-title">SQL列表</h3>
-                    <span class="usecase-section-subtitle">展开卡片可查看完整 SQL 与高亮代码</span>
-                </div>
-                <#if usecase.sqls??>
-                    <div class="sql-card-list">
-                        <#list usecase.sqls as sql>
-                            <details class="sql-card" <#if sql_index == 0>open</#if>>
-                                <summary class="sql-card-summary">
-                                    <span class="sql-card-index">${sql_index+1}</span>
-                                    <div class="sql-card-main">
-                                        <div class="sql-card-title">
-                                            <strong>${sql.dbName}</strong>
-                                            <div class="ui mini basic label">SQL</div>
-                                        </div>
-                                        <div class="sql-card-preview">${sql.sql}</div>
-                                    </div>
-                                </summary>
-                                <div class="sql-card-body">
-                                    <pre><code class="sql">${sql.sql}</code></pre>
-                                </div>
-                            </details>
-                        </#list>
-                    </div>
-                <#else >
-                    <p class="usecase-empty">没有任何SQL</p>
-                </#if>
-            </section>
-
-            <section class="usecase-section" id="remoteHeader">
-                <div class="usecase-section-header">
-                    <h3 class="usecase-section-title">远程调用</h3>
-                    <span class="usecase-section-subtitle">按调用协议分组展示，便于快速扫描</span>
-                </div>
-                <#if usecase.remote??>
-                    <div class="remote-card-list">
-                        <#if usecase.remote.dubbo??>
-                            <#list usecase.remote.dubbo as dubbo>
-                                <details class="remote-card" <#if dubbo_index == 0>open</#if>>
-                                    <summary class="remote-card-summary">
-                                        <span class="remote-card-index">D</span>
-                                        <div class="remote-card-main">
-                                            <div class="remote-card-title">
-                                                <strong>dubbo 调用</strong>
-                                                <div class="ui mini basic label">Dubbo</div>
-                                            </div>
-                                            <div class="remote-card-preview">${dubbo}</div>
-                                        </div>
-                                    </summary>
-                                    <div class="remote-card-body">
-                                        <pre><code>${dubbo}</code></pre>
-                                    </div>
-                                </details>
-                            </#list>
-                        </#if>
-                        <#if usecase.remote.http??>
-                            <#list usecase.remote.http as http>
-                                <details class="remote-card">
-                                    <summary class="remote-card-summary">
-                                        <span class="remote-card-index">H</span>
-                                        <div class="remote-card-main">
-                                            <div class="remote-card-title">
-                                                <strong>http 调用</strong>
-                                                <div class="ui mini basic label">HTTP</div>
-                                            </div>
-                                            <div class="remote-card-preview">${http}</div>
-                                        </div>
-                                    </summary>
-                                    <div class="remote-card-body">
-                                        <pre><code>${http}</code></pre>
-                                    </div>
-                                </details>
-                            </#list>
-                        </#if>
-                    </div>
-                <#else >
-                    <p class="usecase-empty">没有任何的远程调用信息</p>
-                </#if>
-            </section>
         </main>
     </div>
 </div>
-<button id="backToTop" class="back-to-top" type="button" aria-label="返回顶部">
+<button id="backToTop" class="back-to-top" type="button" aria-label="返回顶部" title="返回顶部">
     <i class="angle up icon"></i>
 </button>
 <script>

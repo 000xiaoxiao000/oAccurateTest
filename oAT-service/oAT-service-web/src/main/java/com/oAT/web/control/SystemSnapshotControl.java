@@ -155,6 +155,7 @@ public class SystemSnapshotControl {
                        @RequestParam(value = "tab", required = false) String tab,
                        Model model) {
         SystemSnapshot snapshot = systemSnapshotService.getById(id);
+        Assert.notNull(snapshot, "找不到系统快照id=" + id);
         model.addAttribute("snapshot", snapshot);
         model.addAttribute("activeTab", StringUtils.hasText(tab) ? tab : "definition");
         // 加载所有标签
@@ -218,6 +219,7 @@ public class SystemSnapshotControl {
     @ResponseBody
     public GraphView getGraphView(@PathVariable String projectId, @PathVariable String id) {
         SystemSnapshot snapshot = systemSnapshotService.getById(id);
+        Assert.notNull(snapshot, "找不到系统快照id=" + id);
         Collection<TraceNode> nodes = snapshotService.getTraceNodes(snapshot.getTraceId());
         GraphViewHelp graphViewHelp = new GraphViewHelp(nodes);
         return graphViewHelp.buildGraphView();

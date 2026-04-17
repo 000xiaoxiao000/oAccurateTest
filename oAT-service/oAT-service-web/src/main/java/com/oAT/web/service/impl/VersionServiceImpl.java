@@ -23,6 +23,7 @@ import com.oAT.web.common.Job;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.common.compare.CompareUtils;
 import com.oAT.web.esDao.VersionCenterRepository;
+import com.oAT.web.esDao.CaseCenterRepository;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.esDao.entity.VersionCenterIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
@@ -62,6 +63,7 @@ import java.util.stream.Collectors;
 
 import static java.util.concurrent.Executors.*;
 
+import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.service.entity.GitDiffVo;
 
@@ -71,6 +73,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Autowired
     VersionCenterRepository versionCenterRepository;
+
+    @Autowired
+    CaseCenterRepository caseCenterRepository;
 
     @Autowired
     ResourceService resourceService;
@@ -841,12 +846,56 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             }
         }
 
+        if (usecases.isEmpty()) {
+            List<UsecaseVo> fallbackUsecases = collectUsecasesByMatchedSnapshots(projectId, cases, job.getData().getImpactSnapshot());
+            if (!fallbackUsecases.isEmpty()) {
+                String titles = fallbackUsecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                job.getLogger().info(String.format("查找影响用例 类名：%s 直接源码检索未命中，改为基于系统快照反推，影响数：%s，命中用例：%s",
+                        classDot, fallbackUsecases.size(), StringUtils.hasText(titles) ? titles : "-"));
+                usecases = fallbackUsecases;
+            }
+        }
+
         Optional.ofNullable(usecases).orElse(Collections.emptyList()).stream().filter(a -> !cases.containsKey(a.getId())).forEach(a -> {
             if (!cases.containsKey(a.getId())) {
                 cases.put(a.getId(), new CompareJobVo.UsecaseUnion(a));
             }
             cases.get(a.getId()).getClasses().add(compareResult.getClassName());
         });
+    }
+
+    private List<UsecaseVo> collectUsecasesByMatchedSnapshots(String projectId,
+                                                              Map<String, CompareJobVo.UsecaseUnion> existingCases,
+                                                              Map<String, CompareJobVo.SnapshotUnion> impactSnapshots) {
+        if (impactSnapshots == null || impactSnapshots.isEmpty()) {
+            return Collections.emptyList();
+        }
+        LinkedHashMap<String, UsecaseVo> collected = new LinkedHashMap<>();
+        for (String snapshotId : impactSnapshots.keySet()) {
+            if (!StringUtils.hasText(snapshotId)) {
+                continue;
+            }
+            List<CaseCenterIndex> indexes = caseCenterRepository.findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshotId);
+            for (CaseCenterIndex index : indexes) {
+                if (index == null || index.getUsecase() == null || !StringUtils.hasText(index.getId())) {
+                    continue;
+                }
+                if (existingCases != null && existingCases.containsKey(index.getId())) {
+                    continue;
+                }
+                collected.putIfAbsent(index.getId(), convertUsecaseIndex(index));
+            }
+        }
+        return new ArrayList<>(collected.values());
+    }
+
+    private UsecaseVo convertUsecaseIndex(CaseCenterIndex index) {
+        UsecaseVo vo = new UsecaseVo();
+        BeanUtils.copyProperties(index.getUsecase(), vo);
+        vo.setId(index.getId());
+        vo.setCreateTime(index.getCreateTime());
+        vo.setUpdateTime(index.getUpdateTime());
+        return vo;
     }
 
     private void countJobInfo(List<CompareResult> result, CompareJobVo jobInfo) {

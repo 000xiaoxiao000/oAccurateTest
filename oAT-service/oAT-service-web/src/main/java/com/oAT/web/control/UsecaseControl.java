@@ -9,7 +9,14 @@ import com.oAT.web.service.SnapshotService;
 import com.oAT.web.service.SystemSnapshotService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.UserService;
-import com.oAT.web.service.entity.*;
+import com.oAT.web.service.entity.AppVo;
+import com.oAT.web.service.entity.LableType;
+import com.oAT.web.service.entity.SimpleRelationOption;
+import com.oAT.web.service.entity.SnapshotVo;
+import com.oAT.web.service.entity.UsecaseDetailVo;
+import com.oAT.web.service.entity.UsecaseDirectoryVo;
+import com.oAT.web.service.entity.UsecaseVo;
+import com.oAT.web.service.entity.UserVo;
 import org.apache.commons.lang3.ArrayUtils;
 import org.pegdown.PegDownProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,16 +85,22 @@ public class UsecaseControl {
         UsecaseVo usecase = usecaseService.getUsecase(projectId, id);
         Assert.notNull(usecase, "not fount usecase by id. id=" + id);
         // 获取当前用户下所有的快照
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId());
+        List<SnapshotVo> selectedSnapshots = Collections.emptyList();
         if (ArrayUtils.isNotEmpty(usecase.getSnapshots())) {
+            selectedSnapshots = snapshotService.getByIds(usecase.getSnapshots());
             // 找出被删除的快照ID
             String[] deleteByIds =
-                    Stream.of(usecase.getSnapshots()).filter(s -> snapshots.stream().noneMatch((t -> t.getId().equals(s)))).collect(Collectors.toList()).toArray(new String[0]);
+                    Stream.of(usecase.getSnapshots()).filter(s -> selectedSnapshots.stream().noneMatch((t -> t.getId().equals(s)))).collect(Collectors.toList()).toArray(new String[0]);
             // 已被删除的快照同样需要加入到 选择项当中
             if (ArrayUtils.isNotEmpty(deleteByIds)) {
-                snapshots.addAll(snapshotService.getByIds(deleteByIds));
+                selectedSnapshots.addAll(snapshotService.getByIds(deleteByIds));
             }
         }
+
+        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId());
+        snapshots.addAll(selectedSnapshots.stream()
+                .filter(selected -> snapshots.stream().noneMatch(item -> item.getId().equals(selected.getId())))
+                .collect(Collectors.toList()));
 
         List<SimpleRelationOption> systemSnapshots = getSystemSnapshotOptions(projectId);
         if (ArrayUtils.isNotEmpty(usecase.getSystemSnapshots())) {
@@ -105,6 +118,12 @@ public class UsecaseControl {
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase);
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("systemSnapshots", systemSnapshots);
+        model.addAttribute("selectedSnapshotCount", snapshots.stream()
+                .filter(snapshot -> ArrayUtils.contains(usecase.getSnapshots(), snapshot.getId()))
+                .count());
+        model.addAttribute("selectedSystemSnapshotCount", systemSnapshots.stream()
+                .filter(item -> ArrayUtils.contains(usecase.getSystemSnapshots(), item.getId()))
+                .count());
         model.addAttribute("usecase", usecase);
         model.addAttribute("currentDir", usecase.getDirectory());
         model.addAttribute("labels", labels);
@@ -332,7 +351,13 @@ public class UsecaseControl {
             return null;
         }
         SystemSnapshot snapshot = systemSnapshotService.getById(snapshotId);
+        if (snapshot == null) {
+            return null;
+        }
         AppVo app = appService.getApp(snapshot.getAppId());
+        if (app == null) {
+            return null;
+        }
         return new SimpleRelationOption(
                 snapshot.getId(),
                 app.getName() + " / " + snapshot.getTitle(),

@@ -335,6 +335,42 @@
             border-radius: 10px !important;
         }
 
+        .back-to-top {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            width: 52px;
+            height: 52px;
+            border: 1px solid rgba(20, 184, 166, 0.26);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(240, 253, 250, 0.98) 100%);
+            color: #0f766e;
+            box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            z-index: 20;
+        }
+
+        .back-to-top:hover {
+            border-color: rgba(20, 184, 166, 0.42);
+            box-shadow: 0 20px 42px rgba(15, 23, 42, 0.18);
+        }
+
+        .back-to-top i {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .back-to-top.visible {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
         @media only screen and (max-width: 1180px) {
             .usecase-edit-layout {
                 grid-template-columns: 1fr;
@@ -442,11 +478,11 @@
             <div class="usecase-edit-summary">
                 <div class="summary-box">
                     <div class="summary-box-label">已选快照</div>
-                    <div class="summary-box-value">${(usecase.snapshots?size)!'0'}</div>
+                    <div class="summary-box-value">${(selectedSnapshotCount)!0}</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-box-label">系统快照</div>
-                    <div class="summary-box-value">${(usecase.systemSnapshots?size)!'0'}</div>
+                    <div class="summary-box-value">${(selectedSystemSnapshotCount)!0}</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-box-label">测试缺陷</div>
@@ -584,6 +620,9 @@
         </div>
     </form>
 </div>
+<button id="backToTop" class="back-to-top" type="button" aria-label="返回顶部" title="返回顶部">
+    <i class="angle up icon"></i>
+</button>
 
 <!-- 取消用例弹出框-->
 <div id="cancelUsecaseDialog" class="ui small modal">
@@ -603,6 +642,7 @@
     var simplemde = new SimpleMDE({
         element: $("#doc-edit")[0]
     });
+    var backToTop = $('#backToTop');
     // 初始化 默认值
     <#--simplemde.val('${usecase.content}')-->
 
@@ -631,6 +671,14 @@
         });
         $("#cancelUsecaseDialog").modal('show');
     }
+
+    function updateBackToTop() {
+        if ($(window).scrollTop() > 360) {
+            backToTop.addClass('visible');
+        } else {
+            backToTop.removeClass('visible');
+        }
+    }
 </script>
 <script>
     $('.ui.accordion').accordion({
@@ -658,6 +706,16 @@
     $('.ui.filter.dropdown').dropdown({
         on: 'click'
     });
+
+    backToTop.on('click', function () {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    $(window).on('scroll', function () {
+        updateBackToTop();
+    });
+
+    updateBackToTop();
 
     $('.tab.item').tab();
 
