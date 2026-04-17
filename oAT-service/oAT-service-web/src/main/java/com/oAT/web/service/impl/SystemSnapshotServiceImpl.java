@@ -41,9 +41,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         if (!StringUtils.hasText(id)) {
             return null;
         }
-        Optional<SystemSnapshot> optional = repository.findById(id);
-        Assert.isTrue(optional.isPresent(), String.format("找不到系统快照id=%s", id));
-        return optional.get();
+        return repository.findById(id).orElse(null);
     }
 
     @Override
