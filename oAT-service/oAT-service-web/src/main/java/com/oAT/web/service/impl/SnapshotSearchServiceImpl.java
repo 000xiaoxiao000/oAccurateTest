@@ -123,6 +123,7 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
         List<String> normalizedMethods = normalizeMethodNames(methodName);
         boolean probeOnly = normalizedMethods.size() == 1 && "__oat_probe__".equals(normalizedMethods.get(0));
         List<String> queryCandidates = probeOnly ? Collections.emptyList() : buildCodeQueryCandidates(className, normalizedMethods);
+        List<String> queryPatterns = probeOnly ? Collections.emptyList() : buildCodeQueryPatterns(className, normalizedMethods);
 
         BoolQueryBuilder masterQuery = QueryBuilders.boolQuery();
         masterQuery.must(QueryBuilders.termQuery("projectId", projectId));
@@ -138,17 +139,24 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
                 codeQuery.should(QueryBuilders.termQuery("codes.keyword", candidate));
                 codeQuery.should(QueryBuilders.prefixQuery("codes.keyword", candidate + " "));
                 codeQuery.should(QueryBuilders.prefixQuery("codes.keyword", candidate + "("));
-                String simpleMethod = extractSimpleMethodName(candidate.substring(candidate.lastIndexOf(' ') + 1));
-                if (StringUtils.hasText(simpleMethod)) {
-                    codeQuery.should(QueryBuilders.wildcardQuery("codes.keyword", className + " *" + simpleMethod + "*"));
+            }
+            for (String pattern : queryPatterns) {
+                if (StringUtils.hasText(pattern)) {
+                    codeQuery.should(QueryBuilders.wildcardQuery("codes.keyword", pattern));
                 }
             }
             codeQuery.minimumShouldMatch(1);
             masterQuery.must(codeQuery);
         } else {
             BoolQueryBuilder classQuery = QueryBuilders.boolQuery();
-            classQuery.should(QueryBuilders.prefixQuery("codes.keyword", className));
-            classQuery.should(QueryBuilders.wildcardQuery("codes.keyword", className + " *"));
+            String classPrefix = buildClassPrefix(className);
+            String classWildcard = buildClassWildcardPattern(className);
+            if (StringUtils.hasText(classPrefix)) {
+                classQuery.should(QueryBuilders.prefixQuery("codes.keyword", classPrefix));
+            }
+            if (StringUtils.hasText(classWildcard)) {
+                classQuery.should(QueryBuilders.wildcardQuery("codes.keyword", classWildcard));
+            }
             classQuery.minimumShouldMatch(1);
             masterQuery.must(classQuery);
         }
@@ -174,19 +182,114 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<String> buildCodeSearchCandidates(String className, String... methodName) {
+        if (!StringUtils.hasText(className)) {
+            return Collections.emptyList();
+        }
+        List<String> normalizedMethods = normalizeMethodNames(methodName);
+        if (normalizedMethods.isEmpty()) {
+            return Collections.singletonList(buildClassPrefix(className));
+        }
+        return buildCodeQueryCandidates(className, normalizedMethods);
+    }
+
+    @Override
+    public List<String> buildCodeSearchPatterns(String className, String... methodName) {
+        if (!StringUtils.hasText(className)) {
+            return Collections.emptyList();
+        }
+        List<String> normalizedMethods = normalizeMethodNames(methodName);
+        return buildCodeQueryPatterns(className, normalizedMethods);
+    }
+
+    private List<String> buildCodeQueryPatterns(String className, List<String> methodNames) {
+        LinkedHashSet<String> patterns = new LinkedHashSet<>();
+        if (methodNames == null || methodNames.isEmpty()) {
+            String classWildcard = buildClassWildcardPattern(className);
+            if (StringUtils.hasText(classWildcard)) {
+                patterns.add(classWildcard);
+            }
+            return new ArrayList<>(patterns);
+        }
+        for (String method : methodNames) {
+            String wildcardPattern = buildMethodWildcardPattern(className, method);
+            if (StringUtils.hasText(wildcardPattern)) {
+                patterns.add(wildcardPattern);
+            }
+        }
+        return new ArrayList<>(patterns);
+    }
+
     private List<String> buildCodeQueryCandidates(String className, List<String> methodNames) {
         if (methodNames == null || methodNames.isEmpty()) {
             return Collections.emptyList();
         }
         LinkedHashSet<String> candidates = new LinkedHashSet<>();
         for (String method : methodNames) {
-            candidates.add(className + " " + method);
-            String simpleMethod = extractSimpleMethodName(method);
-            if (StringUtils.hasText(simpleMethod) && !simpleMethod.equals(method)) {
+            if (!StringUtils.hasText(method)) {
+                continue;
+            }
+            String trimmedMethod = method.trim();
+            candidates.add(className + " " + trimmedMethod);
+
+            String simpleMethod = extractSimpleMethodName(trimmedMethod);
+            if (StringUtils.hasText(simpleMethod)) {
                 candidates.add(className + " " + simpleMethod);
+            }
+
+            String bareMethod = stripMethodDescriptor(simpleMethod);
+            if (StringUtils.hasText(bareMethod)) {
+                candidates.add(className + " " + bareMethod);
             }
         }
         return new ArrayList<>(candidates);
+    }
+
+    private String stripMethodDescriptor(String methodName) {
+        if (!StringUtils.hasText(methodName)) {
+            return methodName;
+        }
+        String normalized = methodName.trim();
+        int spaceIndex = normalized.indexOf(' ');
+        if (spaceIndex > 0) {
+            normalized = normalized.substring(0, spaceIndex);
+        }
+        int bracketIndex = normalized.indexOf('(');
+        if (bracketIndex > 0) {
+            normalized = normalized.substring(0, bracketIndex);
+        }
+        return normalized;
+    }
+
+    private String buildMethodWildcardPattern(String className, String methodName) {
+        if (!StringUtils.hasText(className) || !StringUtils.hasText(methodName)) {
+            return null;
+        }
+        String bareMethod = stripMethodDescriptor(extractSimpleMethodName(methodName));
+        if (!StringUtils.hasText(bareMethod)) {
+            return null;
+        }
+        return className + " *" + bareMethod + "*";
+    }
+
+    private String buildClassPrefix(String className) {
+        if (!StringUtils.hasText(className)) {
+            return className;
+        }
+        String normalized = className.trim();
+        if (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized;
+    }
+
+    private String buildClassWildcardPattern(String className) {
+        String prefix = buildClassPrefix(className);
+        if (!StringUtils.hasText(prefix)) {
+            return prefix;
+        }
+        return prefix + " *";
     }
 
     private String extractSimpleMethodName(String methodName) {

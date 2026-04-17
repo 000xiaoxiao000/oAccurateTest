@@ -91,7 +91,7 @@
         <div id="comparePendingCounter" class="compare-report-pending-counter">正在第 <span id="comparePendingAttempt">1</span> / <span id="comparePendingMax">5</span> 次重试</div>
         <div id="comparePendingActions" class="compare-report-pending-actions">
             <a class="ui primary button" href="/p/${project.id}/${appId}/version/report/list?tab=compare&highlightReportId=${reportId}">返回报告列表</a>
-            <a class="ui button" href="/p/${project.id}/version/report/${reportId}">手动重试打开</a>
+            <a class="ui button" href="/p/${project.id}/version/report/detail/${reportId}">手动重试打开</a>
         </div>
     </div>
 </div>
@@ -114,7 +114,7 @@
         }
 
         setTimeout(function () {
-            window.location.href = '/p/${project.id}/version/report/' + reportId;
+            window.location.href = '/p/${project.id}/version/report/detail/' + reportId;
         }, 1200);
     })();
 </script>

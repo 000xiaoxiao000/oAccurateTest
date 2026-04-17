@@ -1,6 +1,5 @@
 package com.oAT.web.service;
 
-import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.service.entity.UsecaseDetailVo;
 import com.oAT.web.service.entity.UsecaseDirectoryVo;
 import com.oAT.web.service.entity.UsecaseVo;

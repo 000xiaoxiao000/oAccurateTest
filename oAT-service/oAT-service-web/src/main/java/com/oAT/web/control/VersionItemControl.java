@@ -842,7 +842,7 @@ public class VersionItemControl {
         }
     }
 
-    @RequestMapping("/version/report/{reportId}")
+    @RequestMapping("/version/report/detail/{reportId}")
     public String openCompareReport(@PathVariable String projectId, @PathVariable String reportId, Model model) {
         try {
             VersionCompareReport report = versionService.getCompareReport(reportId);
