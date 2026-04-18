@@ -8,7 +8,6 @@ import org.apache.commons.lang3.BooleanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 
@@ -25,7 +24,10 @@ public class ShareControl {
     @RequestMapping("/snapshot/{id}")
     public String openSnapshot(@PathVariable String id, Model model) {
         SnapshotVo snapshot = snapshotService.get(id);
-        Assert.notNull(snapshot, "找不到指定快照");
+        if (snapshot == null) {
+            model.addAttribute("errorMessage", "找不到指定快照");
+            return "forward:/error/404";
+        }
         if (BooleanUtils.isTrue(snapshot.getDisable())) {
             model.addAttribute("errorMessage", "快照已被删除");
             return "forward:/error/404";

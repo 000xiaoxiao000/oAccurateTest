@@ -91,7 +91,7 @@
             <#list snapshots as snap>
                 <tr>
                     <td>
-                        <a class="text" href="<#if snap.appId??>/p/${project.id}/${snap.appId}/snapshot/detail/${snap.id}<#else>/p/${project.id}/snapshot/detail/${snap.id}</#if>">
+                        <a class="text" href="${mySnapshotDetailHref(project.id, snap.id)}">
                             ${snap.name}
                         </a>
                         <#if snap.labels??>

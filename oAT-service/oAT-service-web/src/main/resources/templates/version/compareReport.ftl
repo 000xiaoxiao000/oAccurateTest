@@ -94,7 +94,11 @@
                 <span class="ui mini red label">删除方法 ${report.deleteMethodCount}</span>
             </#if>
             <#if report.impactCaseCount?has_content>
-                <span class="ui mini label">影响用例 ${report.impactCaseCount}</span>
+                <#if skippedDeletedUsecaseCount?? && skippedDeletedUsecaseCount gt 0>
+                    <span class="ui mini label">影响用例 ${displayedImpactUsecaseCount!0} / ${report.impactCaseCount}</span>
+                <#else>
+                    <span class="ui mini label">影响用例 ${report.impactCaseCount}</span>
+                </#if>
             </#if>
         </div>
     </#if>
@@ -155,6 +159,15 @@
      <h3 class="ui dividing header ">
          影响用例
      </h3>
+     <#if skippedDeletedUsecaseCount?? && skippedDeletedUsecaseCount gt 0>
+         <div class="ui info message">
+             <div class="header">部分影响用例已被删除</div>
+             <p>
+                 原始命中 ${report.impactCaseCount!0} 条，当前展示 ${displayedImpactUsecaseCount!0} 条，
+                 已自动跳过 ${skippedDeletedUsecaseCount} 条已删除用例，不影响当前报告查看。
+             </p>
+         </div>
+     </#if>
      <#if report.impactCaseCount?has_content && report.impactCaseCount == 0>
          <div class="ui warning message">
              <div class="impact-hint-toggle" onclick="toggleImpactHint()">

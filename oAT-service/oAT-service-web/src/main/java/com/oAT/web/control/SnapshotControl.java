@@ -151,7 +151,8 @@ public class SnapshotControl {
     }
 
     @RequestMapping("/my")
-    public String mySnapshotList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, String keyword, Model model) {
+    public String mySnapshotList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, String keyword,
+                                 String missingSnapshotId, Model model) {
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null, keyword);
         // 基于标签过滤
         if (ArrayUtils.isNotEmpty(labels)) {
@@ -167,6 +168,7 @@ public class SnapshotControl {
         model.addAttribute("filterLabels", StringUtils.arrayToDelimitedString(labels, ","));
         model.addAttribute("sort", sort);
         model.addAttribute("keyword", keyword);
+        model.addAttribute("missingSnapshotId", missingSnapshotId);
 
         return "/snapshot/mySnapshot";
     }
@@ -187,8 +189,25 @@ public class SnapshotControl {
 
     @RequestMapping("/mySnapshotsCodeReport")
     public String mySnapshotsCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String sort, Model model) {
-        Map<String, Map<String, List<Map<String, Object>>>> codeRelationships = new HashMap<>();
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
+        return buildMySnapshotsCodeReport(projectId, snapshots, model);
+    }
+
+    @RequestMapping("/mySnapshotCodeReport")
+    public String mySnapshotCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String snapshotId, Model model) {
+        Assert.hasText(snapshotId, "参数'snapshotId'不能为空");
+        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), null);
+        SnapshotVo targetSnapshot = snapshots.stream()
+                .filter(snapshot -> snapshotId.equals(snapshot.getId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("找不到对应快照或无权限访问"));
+        model.addAttribute("snapshotId", targetSnapshot.getId());
+        model.addAttribute("selectedSnapshotName", targetSnapshot.getName());
+        return buildMySnapshotsCodeReport(projectId, Collections.singletonList(targetSnapshot), model);
+    }
+
+    private String buildMySnapshotsCodeReport(String projectId, List<SnapshotVo> snapshots, Model model) {
+        Map<String, Map<String, List<Map<String, Object>>>> codeRelationships = new HashMap<>();
 
         // 用于计算聚合指标
         long totalMethods = 0;
@@ -652,6 +671,10 @@ public class SnapshotControl {
     @RequestMapping("/detail/{id}")
     public String openDetail(@PathVariable String projectId, @PathVariable String id, Model model, HttpServletRequest request) {
         SnapshotVo snapshotVo = snapshotService.get(id);
+        if (snapshotVo == null) {
+            logger.warn("我的快照不存在, projectId={}, snapshotId={}", projectId, id);
+            return "redirect:/p/" + projectId + "/snapshot/my?missingSnapshotId=" + id;
+        }
         model.addAttribute("snapshot", snapshotVo);
         UserVo user = userService.getUser(snapshotVo.getCreateUser());
         model.addAttribute("createUser", user);

@@ -32,9 +32,9 @@
 <#assign usecaseItemActive="active">
 <#include "../projectHeader.ftl">
 
-<#assign snapshotListHref=(snapshot.appId??)?then('/p/' + project.id + '/' + snapshot.appId + '/snapshot/list', '/p/' + project.id + '/snapshot/list')/>
+<#assign snapshotListHref=(snapshot.appId??)?then(systemSnapshotListHref(project.id, snapshot.appId), '/p/' + project.id + '/snapshot/list')/>
 <#assign settingsHref=(snapshot.appId??)?then('/p/' + project.id + '/app/' + snapshot.appId + '/settings', '/p/' + project.id + '/edit')/>
-<#assign snapshotDetailHref=(snapshot.appId??)?then('/p/' + project.id + '/' + snapshot.appId + '/snapshot/detail/' + snapshot.id, '/p/' + project.id + '/snapshot/detail/' + snapshot.id)/>
+<#assign snapshotDetailHref=(snapshot.appId??)?then(systemSnapshotDetailHref(project.id, snapshot.appId, snapshot.id), mySnapshotDetailHref(project.id, snapshot.id))/>
 
 <#--面包屑导航-->
 <div class="ui breadcrumb" style="margin: 5px">

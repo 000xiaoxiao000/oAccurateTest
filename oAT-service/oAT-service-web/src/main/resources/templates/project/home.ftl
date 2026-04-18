@@ -73,7 +73,7 @@
                 <#list snapshots as snap>
                     <tr>
                         <td>
-                            <a href="/p/${project.id}/snapshot/detail/${snap.id}">${snap.name}</a>
+                            <a href="${mySnapshotDetailHref(project.id, snap.id)}">${snap.name}</a>
                         </td>
                         <td class="right aligned" style="color: grey" title="${snap.createTimeText!'-'}">${snap.createTimeText!'-'}</td>
                     </tr>

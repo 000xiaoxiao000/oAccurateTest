@@ -110,7 +110,9 @@
     // 进入快照详情页
     function openSnapshotDetailPage() {
         var snapshot = $("#content_menu")[0].data;
-        var url = "/p/${project.id}/" + snapshot.appId + "/snapshot/detail/" + snapshot.id
+        var url = "${systemSnapshotDetailHref(project.id, 'APP_ID_PLACEHOLDER', 'SNAPSHOT_ID_PLACEHOLDER')}"
+            .replace("APP_ID_PLACEHOLDER", snapshot.appId)
+            .replace("SNAPSHOT_ID_PLACEHOLDER", snapshot.id);
         window.open(url, "_blank");
     }
 

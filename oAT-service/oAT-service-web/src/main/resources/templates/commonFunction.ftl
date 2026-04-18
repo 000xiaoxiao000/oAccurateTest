@@ -3,6 +3,18 @@
 <#assign arrayToString = "com.oAT.web.control.freeMarke.ArrayToStringFunction"?new() />
 <#assign beforeTime = "com.oAT.web.control.freeMarke.BeforeTimeFormat"?new() />
 
+<#function mySnapshotDetailHref projectId snapshotId>
+    <#return '/p/' + projectId + '/snapshot/detail/' + snapshotId>
+</#function>
+
+<#function systemSnapshotListHref projectId appId>
+    <#return '/p/' + projectId + '/' + appId + '/snapshot/list'>
+</#function>
+
+<#function systemSnapshotDetailHref projectId appId snapshotId>
+    <#return '/p/' + projectId + '/' + appId + '/snapshot/detail/' + snapshotId>
+</#function>
+
 <#function relativeTimeText value fallback='-' mode='relative'>
     <#if !value??>
         <#return fallback>

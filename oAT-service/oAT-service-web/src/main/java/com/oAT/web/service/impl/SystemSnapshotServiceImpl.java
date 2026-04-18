@@ -169,15 +169,12 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     }
 
     private String buildSrc(@NotNull StackNodeVo stackNodeVo) {
-        String result = stackNodeVo.getClassName().replaceAll("/", ".");
-        String methodName = stackNodeVo.getMethodName();
-        // TODO Agent 中采集 的javax.servlet.http.HttpServlet service 未按方法签名提交值
-        if (methodName.contains(" ")) {
-            result += " " + methodName.substring(0, methodName.indexOf(" "));
-        } else {
-            result += " " + methodName;
+        String result = stackNodeVo.getClassName().replace('/', '.');
+        String methodName = Optional.ofNullable(stackNodeVo.getMethodName()).orElse("").trim();
+        if (!StringUtils.hasText(methodName)) {
+            return result;
         }
-        return result;
+        return result + " " + methodName;
     }
 
     private Sql buildSql(SqlTraceNode node) {
