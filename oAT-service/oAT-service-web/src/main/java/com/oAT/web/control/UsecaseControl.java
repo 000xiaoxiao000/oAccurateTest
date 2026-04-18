@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.control.entity.DirectoryDeletePreview;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.LabelGroup;
 import com.oAT.web.esDao.entity.SystemSnapshot;
@@ -10,6 +11,7 @@ import com.oAT.web.service.SystemSnapshotService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.UserService;
 import com.oAT.web.service.entity.AppVo;
+import com.oAT.web.service.entity.DirectoryDeleteResult;
 import com.oAT.web.service.entity.LableType;
 import com.oAT.web.service.entity.SimpleRelationOption;
 import com.oAT.web.service.entity.SnapshotVo;
@@ -24,6 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,8 +37,12 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -71,11 +78,13 @@ public class UsecaseControl {
     @RequestMapping("/new")
     public String openNewView(@PathVariable String projectId, @SessionAttribute UserVo user, String directory, Model model) {
         directory = directory == null ? "root" : directory;
+        String currentDirName = resolveDirectoryName(projectId, directory);
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId());
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase);
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("systemSnapshots", getSystemSnapshotOptions(projectId));
         model.addAttribute("currentDir", directory);
+        model.addAttribute("currentDirName", currentDirName);
         model.addAttribute("labels", labels);
         return "/usecase/usecaseNew";
     }
@@ -128,6 +137,7 @@ public class UsecaseControl {
                 .count());
         model.addAttribute("usecase", usecase);
         model.addAttribute("currentDir", usecase.getDirectory());
+        model.addAttribute("currentDirName", resolveDirectoryName(projectId, usecase.getDirectory()));
         model.addAttribute("labels", labels);
         model.addAttribute("selectLabels", arrayToString(usecase.getLabels()));// 已选中的节点
         model.addAttribute("selectSnapshots", arrayToString(usecase.getSnapshots()));//已选中的快照
@@ -150,6 +160,21 @@ public class UsecaseControl {
             sb.append(labels[i]);
         }
         return sb.toString();
+    }
+
+    private String resolveDirectoryName(String projectId, String directoryId) {
+        if (!StringUtils.hasText(directoryId) || "root".equalsIgnoreCase(directoryId)) {
+            return "ROOT";
+        }
+        try {
+            return usecaseService.getDirectoryTier(projectId, directoryId).stream()
+                    .findFirst()
+                    .map(UsecaseDirectoryVo::getName)
+                    .filter(StringUtils::hasText)
+                    .orElse("未知目录");
+        } catch (Exception e) {
+            return "未知目录";
+        }
     }
 
     private String arrayToMultiLine(String[] values) {
@@ -224,10 +249,26 @@ public class UsecaseControl {
             result.setData(vo.getId());
             return result;
         } else {
+            UsecaseVo current = usecaseService.getUsecase(projectId, usecase.getId());
+            usecase.setSnapshots(intersectExistingIds(usecase.getSnapshots(), current == null ? null : current.getSnapshots()));
+            usecase.setSystemSnapshots(intersectExistingIds(usecase.getSystemSnapshots(), current == null ? null : current.getSystemSnapshots()));
             usecaseService.doUpdate(user.getId(), usecase);
             result = new ResultNotified<>(true, "用例保存成功");
             return result;
         }
+    }
+
+    private String[] intersectExistingIds(String[] selectedIds, String[] currentIds) {
+        if (selectedIds == null) {
+            return null;
+        }
+        if (currentIds == null || currentIds.length == 0) {
+            return selectedIds;
+        }
+        Set<String> currentSet = new LinkedHashSet<>(Arrays.asList(currentIds));
+        return Arrays.stream(selectedIds)
+                .filter(currentSet::contains)
+                .toArray(String[]::new);
     }
 
     /**
@@ -239,13 +280,15 @@ public class UsecaseControl {
      * @return
      */
     @RequestMapping("/list")
-    public String openListView(@PathVariable String projectId, String directory, String sort, Model model) {
+    public String openListView(@PathVariable String projectId, String directory, String sort, String keyword, Model model) {
         // 默认root
         directory = directory == null ? "root" : directory;
         sort = sort == null ? "updateTime" : sort;
         model.addAttribute("directory", directory);
         model.addAttribute("sort", sort);
-        List<UsecaseVo> list = usecaseService.getUsecases(projectId, directory, sort);
+        model.addAttribute("keyword", keyword);
+        List<UsecaseVo> list = usecaseService.getUsecases(projectId, directory, sort, keyword);
+        Map<String, String> maintainerNameMap = buildMaintainerNameMap(list);
         List<UsecaseDirectoryVo> directorys = usecaseService.getDirectory(projectId, directory);
         if (!"root".equals(directory)) {
             // 查找目录层级
@@ -258,6 +301,7 @@ public class UsecaseControl {
         AppVo app = apps.isEmpty() ? null : apps.get(0);
         model.addAttribute("app", app);
         model.addAttribute("cases", list);
+        model.addAttribute("maintainerNameMap", maintainerNameMap);
         model.addAttribute("dirs", directorys);
         model.addAttribute("currentDir", directory);
         return "/usecase/usecaseList";
@@ -284,7 +328,7 @@ public class UsecaseControl {
      */
     @RequestMapping("/directory/new")
     @ResponseBody
-    public ResultNotified doCreateDirectory(@PathVariable String projectId, String parentId, String name) {
+    public ResultNotified<String> doCreateDirectory(@PathVariable String projectId, String parentId, String name) {
         //参数parentId不能为空
         Assert.isTrue(name != null, "父级用例路径不能为空");
         //参数dir.name不能为空
@@ -295,7 +339,7 @@ public class UsecaseControl {
 
     @RequestMapping("/directory/save")
     @ResponseBody
-    public ResultNotified doEditDirectory(String id, String parentId, String name) {
+    public ResultNotified<String> doEditDirectory(String id, String parentId, String name) {
         //id不能为空
         Assert.hasText(id, "用例路径不能为空");
         //parentId不能为空
@@ -306,20 +350,31 @@ public class UsecaseControl {
         return new ResultNotified(true, "目录保存成功");
     }
 
+    private ResultNotified<DirectoryDeletePreview> buildDirectoryDeletePreviewResult(DirectoryDeleteResult serviceResult) {
+        DirectoryDeletePreview preview = new DirectoryDeletePreview();
+        preview.setDirectoryCount(serviceResult.getDirectoryCount());
+        preview.setUsecaseCount(serviceResult.getUsecaseCount());
+        preview.setRequiresCascade(serviceResult.isRequiresCascade());
+        return new ResultNotified<>(serviceResult.isDeleted() || !serviceResult.isRequiresCascade(), serviceResult.getMessage(), preview);
+    }
+
+    @RequestMapping("/directory/deletePreview")
+    @ResponseBody
+    public ResultNotified<DirectoryDeletePreview> deleteDirectoryPreview(@PathVariable String projectId, String id, String parentId, String name) {
+        Assert.hasText(id, "用例路径不能为空");
+        Assert.hasText(parentId, "上层路径不能为空");
+        Assert.hasText(name, "路径名称不能为空");
+        return buildDirectoryDeletePreviewResult(usecaseService.previewDeleteDirectory(projectId, id));
+    }
+
+
     @RequestMapping("/directory/del")
     @ResponseBody
-    public ResultNotified doDelDirectory(@PathVariable String projectId, String id, String parentId, String name) {
-        //id不能为空
+    public ResultNotified<DirectoryDeletePreview> doDelDirectory(@PathVariable String projectId, String id, String parentId, String name, Boolean deleteUsecases) {
         Assert.hasText(id, "用例路径不能为空");
-        //parentId不能为空
         Assert.hasText(parentId, "上层路径不能为空");
-        //name不能为空
         Assert.hasText(name, "路径名称不能为空");
-        boolean b = usecaseService.delFolder(projectId, id, parentId, name);
-        if (b) {
-            return new ResultNotified(true, "用例目录删除成功");
-        }
-        return new ResultNotified(false, "用例目录不为空，删除失败");
+        return buildDirectoryDeletePreviewResult(usecaseService.deleteDirectory(projectId, id, parentId, name, Boolean.TRUE.equals(deleteUsecases)));
     }
 
     private String[] parseMultiLine(String text) {
@@ -331,6 +386,31 @@ public class UsecaseControl {
                 .filter(StringUtils::hasText)
                 .distinct()
                 .toArray(String[]::new);
+    }
+
+    private Map<String, String> buildMaintainerNameMap(List<UsecaseVo> usecases) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (CollectionUtils.isEmpty(usecases)) {
+            return result;
+        }
+        Set<String> userIds = usecases.stream()
+                .flatMap(usecase -> Stream.of(
+                        usecase.getLastUpdateAuthor(),
+                        ArrayUtils.isEmpty(usecase.getAuthors()) ? null : usecase.getAuthors()[0]
+                ))
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        for (String userId : userIds) {
+            UserVo user = userService.getUser(userId);
+            if (user == null) {
+                continue;
+            }
+            String displayName = StringUtils.hasText(user.getNickname()) ? user.getNickname() : user.getName();
+            if (StringUtils.hasText(displayName)) {
+                result.put(userId, displayName);
+            }
+        }
+        return result;
     }
 
     private List<SimpleRelationOption> getSystemSnapshotOptions(String projectId) {

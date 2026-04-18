@@ -34,6 +34,10 @@ public class UsecaseVo implements Serializable {
     private String lastUpdateAuthor;
     private Date createTime;
     private Date updateTime;
+    // 有效关联快照数量（过滤已删除数据）
+    private Integer snapshotCount;
+    // 有效关联系统快照数量（过滤已删除数据）
+    private Integer systemSnapshotCount;
 
 
     public String getId() {
@@ -170,6 +174,22 @@ public class UsecaseVo implements Serializable {
 
     public void setLastUpdateAuthor(String lastUpdateAuthor) {
         this.lastUpdateAuthor = lastUpdateAuthor;
+    }
+
+    public Integer getSnapshotCount() {
+        return snapshotCount;
+    }
+
+    public void setSnapshotCount(Integer snapshotCount) {
+        this.snapshotCount = snapshotCount;
+    }
+
+    public Integer getSystemSnapshotCount() {
+        return systemSnapshotCount;
+    }
+
+    public void setSystemSnapshotCount(Integer systemSnapshotCount) {
+        this.systemSnapshotCount = systemSnapshotCount;
     }
 
 }

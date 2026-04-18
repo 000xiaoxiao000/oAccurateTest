@@ -7,6 +7,7 @@ import com.oAT.web.esDao.entity.StandardDate;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.exceptions.DirtyDataException;
 import com.oAT.web.service.AppService;
+import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.Directory;
 import org.springframework.beans.BeanUtils;
@@ -27,6 +28,8 @@ public class AppServiceImpl implements AppService, StandardDate {
     private SystemRepository systemRepository;
     @Autowired
     private SystemSnapshotRepository systemSnapshotRepository;
+    @Autowired
+    private UsecaseService usecaseService;
 
     /**
      * 创建新的应用
@@ -271,6 +274,7 @@ public class AppServiceImpl implements AppService, StandardDate {
      */
     @Override
     public void deleteSnapshot(String id) {
+        usecaseService.removeSystemSnapshotRelation(id);
         systemSnapshotRepository.deleteById(id);
     }
 

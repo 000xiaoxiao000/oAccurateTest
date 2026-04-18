@@ -46,6 +46,13 @@
                         <form id="filterForm" class="ui form" action="list">
                             <input type="hidden" name="directory" value="${directory!'root'}">
                             <div class="ui text menu" style="margin: auto;float: right">
+                                <div class="ui icon input" style="margin-right: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                                    <input type="text" name="keyword" value="${keyword!}" placeholder="搜索名称..." style="min-width: 180px;">
+                                    <i class="search icon"></i>
+                                    <#if (keyword!'')?has_content>
+                                        <a class="ui basic mini button" href="/p/${project.id}/usecase/list?directory=${directory!}<#if sort?? && sort?has_content>&sort=${sort}</#if>">清空</a>
+                                    </#if>
+                                </div>
                                 <div class="ui filter dropdown item" tabindex="2">
                                     <input id="filterSort" type="hidden" name="sort" value="${sort!}">
                                     <i class="ui sort numeric ascending link icon"> </i>
@@ -98,24 +105,85 @@
     <!-- 中间内容 -->
     <div class="ui twelve wide column">
 
-        <table class="ui selectable table">
+        <style>
+            #usecaseListTable thead th,
+            #usecaseListTable tbody td {
+                padding-top: 0.56em;
+                padding-bottom: 0.56em;
+            }
+
+            #usecaseListTable thead th {
+                font-size: 0.92em;
+            }
+
+            #usecaseListTable .usecase-title,
+            #usecaseListTable .dir-title {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35em;
+                line-height: 1.25;
+                max-width: 100%;
+            }
+
+            #usecaseListTable .usecase-title span,
+            #usecaseListTable .dir-title span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            #usecaseListTable .relation-overview {
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: 2;
+                overflow: hidden;
+                max-height: 3.2em;
+            }
+
+            #usecaseListTable .meta-text {
+                font-size: 0.88em;
+                color: #666;
+                white-space: nowrap;
+            }
+
+            #usecaseListTable .quickMenu {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-width: 24px;
+            }
+
+            #usecaseListTable .quickMenu > .icon {
+                margin: 0;
+            }
+
+            #usecaseListTable .empty-state-row td {
+                color: #999;
+                padding: 30px 0;
+                text-align: center;
+            }
+        </style>
+
+        <table id="usecaseListTable" class="ui selectable compact very basic table" style="table-layout: fixed; border: 1px solid rgba(34,36,38,.08);">
             <thead>
             <tr>
                 <th>文件名</th>
-                <th class="two wide">关联概览</th>
-                <th class="three wide">更新时间</th>
-                <th class="one wide">操作</th>
+                <th class="three wide">关联概览</th>
+                <th style="width: 96px;">维护者</th>
+                <th style="width: 170px;">更新时间</th>
+                <th style="width: 72px; text-align: center;">操作</th>
             </tr>
             </thead>
-            <tbody>
+            <tbody id="usecaseTableBody">
             <#list dirs as dir>
-                <tr>
+                <tr data-directory-id="${dir.id}">
                     <td>
-                        <a href="/p/${project.id}/usecase/list?directory=${dir.id}"> <i class="folder icon"></i> ${dir.name}
+                        <a class="dir-title" href="/p/${project.id}/usecase/list?directory=${dir.id}<#if sort?? && sort?has_content>&sort=${sort}</#if><#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>"><i class="folder icon"></i><span>${dir.name}</span>
                         </a>
                     </td>
                     <td>-</td>
-                    <td>${dir.updateTime?datetime}</td>
+                    <td class="meta-text">-</td>
+                    <td class="meta-text" title="${(dir.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}">${(dir.updateTime??)?then((beforeTime??)?then(beforeTime(dir.updateTime?datetime), dir.updateTime?string('yyyy-MM-dd HH:mm:ss')), '-')}</td>
                     <td>
                         <div class="ui dropdown quickMenu">
                             <i class="list link setting icon"></i>
@@ -134,20 +202,23 @@
                 </tr>
             </#list>
             <#list cases as cas>
-                <tr>
+                <tr data-usecase-id="${cas.id}">
                     <td>
-                        <a href="/p/${project.id}/usecase/detail?id=${cas.id}"> <i
-                                    class="file outline icon"></i> ${cas.title}</a>
+                        <a class="usecase-title" href="/p/${project.id}/usecase/detail?id=${cas.id}"><i
+                                    class="file outline icon"></i><span>${cas.title}</span></a>
                     </td>
                     <td>
-                        <div class="ui mini labels">
-                            <span class="ui basic label">快照 ${(cas.snapshots?size)!0}</span>
-                            <span class="ui basic label">系统快照 ${(cas.systemSnapshots?size)!0}</span>
-                            <span class="ui basic label">缺陷 ${(cas.defects?size)!0}</span>
-                            <span class="ui basic label">PRD ${(cas.prdRequirements?size)!0}</span>
+                        <div class="relation-overview">
+                            <div class="ui mini labels" style="margin: 0; line-height: 1.15;">
+                                <span class="ui basic label" style="margin: 0 3px 3px 0; padding: 0.2em 0.46em;">快照 ${cas.snapshotCount!0}</span>
+                                <span class="ui basic label" style="margin: 0 3px 3px 0; padding: 0.2em 0.46em;">系统快照 ${cas.systemSnapshotCount!0}</span>
+                                <span class="ui basic label" style="margin: 0 3px 3px 0; padding: 0.2em 0.46em;">缺陷 ${(cas.defects?size)!0}</span>
+                                <span class="ui basic label" style="margin: 0 3px 3px 0; padding: 0.2em 0.46em;">PRD ${(cas.prdRequirements?size)!0}</span>
+                            </div>
                         </div>
                     </td>
-                    <td>${cas.updateTime?datetime}</td>
+                    <td class="meta-text">${maintainerNameMap[cas.lastUpdateAuthor]!maintainerNameMap[(cas.authors[0])!'']!'未设置'}</td>
+                    <td class="meta-text" title="${(cas.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}">${(cas.updateTime??)?then((beforeTime??)?then(beforeTime(cas.updateTime?datetime), cas.updateTime?string('yyyy-MM-dd HH:mm:ss')), '-')}</td>
                     <td>
                         <div class="ui dropdown quickMenu">
                             <i class="list link setting icon"></i>
@@ -166,6 +237,11 @@
                     </td>
                 </tr>
             </#list>
+            <#if dirs?size == 0 && cases?size == 0>
+                <tr id="usecaseEmptyRow" class="empty-state-row">
+                    <td colspan="5">暂无数据</td>
+                </tr>
+            </#if>
             </tbody>
         </table>
     </div>
@@ -203,16 +279,20 @@
 <!-- 删除目录弹出框-->
 <div id="delFolder" class="ui small modal">
     <div class="header">删除用例路径</div>
-    <div class="ui negative message">
+    <div class="content">
         <input type="hidden" value="${currentDir}" id="parentId">
-        <div class="header">
-            你确定删除该用例路径吗？
+        <div class="ui negative message" style="margin-bottom: 1em;">
+            <div class="header">该操作不可恢复</div>
+            <p id="deFolderContent"></p>
         </div>
-        <p id="deFolderContent"></p>
+        <div id="deFolderImpact" class="ui list" style="display: none; margin-top: 0;">
+            <div id="deFolderImpactDirectories" class="item"></div>
+            <div id="deFolderImpactUsecases" class="item"></div>
+        </div>
     </div>
     <div class="actions">
         <div id="deFolderButton" class="ui negative button">删除</div>
-        <div class="ui cancel button">不</div>
+        <div class="ui cancel button">取消</div>
     </div>
 </div>
 
@@ -242,6 +322,20 @@
         on: 'click'
     });
 
+    function getResultMessage(resultInform, fallbackMessage) {
+        return resultInform?.errorMessage || resultInform?.message || fallbackMessage;
+    }
+
+    function ensureUsecaseEmptyState() {
+        var hasDataRow = $('#usecaseTableBody tr[data-directory-id], #usecaseTableBody tr[data-usecase-id]').length > 0;
+        if (!hasDataRow && $('#usecaseEmptyRow').length === 0) {
+            $('#usecaseTableBody').append('<tr id="usecaseEmptyRow" class="empty-state-row"><td colspan="5">暂无数据</td></tr>');
+        }
+        if (hasDataRow) {
+            $('#usecaseEmptyRow').remove();
+        }
+    }
+
     // 打开 新增目录窗口
     function openAddFolderDialog() {
         $('#addFolderForm')[0].reset();
@@ -257,37 +351,107 @@
         $("#editFolder").modal('show');
     }
 
-    // 打开 删除目录窗口并删除目录
+    function reloadUsecaseList(targetDirectory) {
+        var currentDirectory = '${currentDir}';
+        var nextDirectory = targetDirectory || currentDirectory || 'root';
+        window.location = '/p/${project.id}/usecase/list?directory=' + encodeURIComponent(nextDirectory) + '&sort=' + encodeURIComponent($('#filterSort').val() || '${sort!"updateTime"}');
+    }
+
+    function renderFolderDeleteDialog(directoryName, impact) {
+        if (impact.hasImpact) {
+            $('#deFolderContent').html('确定删除目录“' + directoryName + '”以及其关联内容吗？');
+            $('#deFolderImpact').show();
+            if (impact.directoryCount > 0) {
+                $('#deFolderImpactDirectories').html('<i class="folder icon"></i>将一并删除 <strong>' + impact.directoryCount + '</strong> 个子目录');
+                $('#deFolderImpactDirectories').show();
+            } else {
+                $('#deFolderImpactDirectories').hide();
+            }
+            if (impact.usecaseCount > 0) {
+                $('#deFolderImpactUsecases').html('<i class="file outline icon"></i>将一并删除 <strong>' + impact.usecaseCount + '</strong> 个用例');
+                $('#deFolderImpactUsecases').show();
+            } else {
+                $('#deFolderImpactUsecases').hide();
+            }
+            return;
+        }
+        $('#deFolderContent').html('确定删除目录“' + directoryName + '”吗？');
+        $('#deFolderImpact').hide();
+        $('#deFolderImpactDirectories').hide();
+        $('#deFolderImpactUsecases').hide();
+    }
+
+    function buildFolderDeleteImpact(resultInform) {
+        var data = resultInform && resultInform.data ? resultInform.data : {};
+        return {
+            hasImpact: !!data.requiresCascade,
+            directoryCount: data.directoryCount || 0,
+            usecaseCount: data.usecaseCount || 0
+        };
+    }
+
     function openDelFolderDialog(directoryId, directoryName) {
-        $("#deFolderContent").html(directoryName);
         var parentId = $("#parentId").val();
-        $("#deFolderButton").click(function () {
-            var resultInform = $.ajax({
-                url: "/p/${project.id}/usecase/directory/del?id=" + directoryId + "&parentId=" + parentId + "&name=" + directoryName,
+        var previewUrl = "/p/${project.id}/usecase/directory/deletePreview?id=" + encodeURIComponent(directoryId)
+            + "&parentId=" + encodeURIComponent(parentId)
+            + "&name=" + encodeURIComponent(directoryName);
+        var baseUrl = "/p/${project.id}/usecase/directory/del?id=" + encodeURIComponent(directoryId)
+            + "&parentId=" + encodeURIComponent(parentId)
+            + "&name=" + encodeURIComponent(directoryName);
+
+        var previewResult = $.ajax({
+            url: previewUrl,
+            type: 'GET',
+            async: false
+        }).responseJSON;
+
+        if (!previewResult) {
+            showToast('目录删除失败', 'error');
+            return;
+        }
+
+        var message = getResultMessage(previewResult, '目录删除失败');
+        var impact = buildFolderDeleteImpact(previewResult);
+        renderFolderDeleteDialog(directoryName, impact);
+
+        $('#deFolderButton').off('click').on('click', function () {
+            var requestUrl = baseUrl + (impact.hasImpact ? '&deleteUsecases=true' : '');
+            var deleteResult = $.ajax({
+                url: requestUrl,
                 type: 'DELETE',
                 async: false
             }).responseJSON;
-            if (resultInform.result) {
-                 window.location = window.location;
+            if (deleteResult && deleteResult.result) {
+                showToast(getResultMessage(deleteResult, '目录删除成功'), 'success');
+                $('#delFolder').modal('hide');
+                var currentDirectory = '${currentDir}';
+                if (currentDirectory === directoryId) {
+                    reloadUsecaseList('${directory!"root"}' === 'root' ? 'root' : $('#parentId').val());
+                    return;
+                }
+                reloadUsecaseList();
             } else {
-                showToast(resultInform.message, 'error');
+                showToast(getResultMessage(deleteResult, '目录删除失败'), 'error');
             }
         });
+
         $('#delFolder').modal('show');
     }
 
     function openDeleteCaseDialog(id, name) {
-        $("#deleteUsecaseContent").html(name)
-        $("#deleteUsecaseButton").click(function () {
+        $("#deleteUsecaseContent").html(name);
+        $("#deleteUsecaseButton").off('click').on('click', function () {
             var resultInform = $.ajax({
                 url: "/p/${project.id}/usecase/doDelete?id=" + id,
                 type: 'DELETE',
                 async: false
             }).responseJSON;
             if (resultInform.result) {
-                 window.location = window.location;
+                showToast(getResultMessage(resultInform, '用例删除成功'), 'success');
+                $("#deleteUsecaseDialog").modal('hide');
+                reloadUsecaseList();
             } else {
-                showToast(resultInform.errorMessage, 'error');
+                showToast(getResultMessage(resultInform, '用例删除失败'), 'error');
             }
         });
         $("#deleteUsecaseDialog").modal('show');
@@ -300,9 +464,10 @@
             async: false
         }).responseJSON;
         if (resultInform.result) {
-             window.location = window.location;
+            showToast(getResultMessage(resultInform, '目录创建成功'), 'success');
+            window.location = window.location;
         } else {
-            showToast(resultInform.errorMessage, 'error');
+            showToast(getResultMessage(resultInform, '目录创建失败'), 'error');
         }
     }
 
@@ -313,9 +478,10 @@
             async: false
         }).responseJSON;
         if (resultInform.result) {
-             window.location = window.location;
+            showToast(getResultMessage(resultInform, '目录保存成功'), 'success');
+            window.location = window.location;
         } else {
-            showToast(resultInform.errorMessage, 'error');
+            showToast(getResultMessage(resultInform, '目录保存失败'), 'error');
         }
     }
 

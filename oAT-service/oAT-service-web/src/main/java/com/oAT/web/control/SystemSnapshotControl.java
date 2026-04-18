@@ -60,7 +60,7 @@ public class SystemSnapshotControl {
     // 打开系统快照列表
     @RequestMapping("/list")
     public String openList(@PathVariable String projectId, @PathVariable String appId, String directoryId, String sort,
-                           @SessionAttribute UserVo user, Model model) {
+                           String keyword, @SessionAttribute UserVo user, Model model) {
         AppVo app = appService.getApp(appId);
         directoryId = StringUtils.hasText(directoryId) ? directoryId : "root";
         final String finalDirId = directoryId;
@@ -71,7 +71,7 @@ public class SystemSnapshotControl {
         model.addAttribute("app", app);
         List<AppVo> apps = appService.getAppList(projectId);
         model.addAttribute("apps", apps);
-        List<SystemSnapshot> snapshots = systemSnapshotService.findBy(projectId, appId, directoryId);
+        List<SystemSnapshot> snapshots = systemSnapshotService.findBy(projectId, appId, directoryId, keyword);
         //  排序
         snapshots = snapshots.stream().sorted((a, b) -> {
             if ("name".equals(sort)) {
@@ -95,6 +95,7 @@ public class SystemSnapshotControl {
         model.addAttribute("loginNameRole", loginNameRole);
 
         model.addAttribute("sort", sort);
+        model.addAttribute("keyword", keyword);
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("currentDir", directoryId);
         model.addAttribute("dirTiers", appService.getDirectoryTiers(appId, directoryId));

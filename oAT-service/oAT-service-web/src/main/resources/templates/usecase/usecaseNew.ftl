@@ -421,7 +421,7 @@
             <i class="home icon"></i>用例中心
         </a>
         <div class="usecase-edit-meta">
-            <span class="usecase-meta-chip"><i class="folder open outline icon"></i>${currentDir}</span>
+            <span class="usecase-meta-chip"><i class="folder open outline icon"></i>${currentDirName!currentDir}</span>
             <span class="usecase-meta-chip"><i class="plus circle icon"></i>新建模式</span>
         </div>
     </div>
@@ -447,7 +447,7 @@
             <div class="usecase-edit-summary">
                 <div class="summary-box">
                     <div class="summary-box-label">默认目录</div>
-                    <div class="summary-box-value">1</div>
+                    <div class="summary-box-value">${currentDirName!currentDir}</div>
                 </div>
                 <div class="summary-box">
                     <div class="summary-box-label">快照候选</div>
@@ -568,7 +568,7 @@
                         推荐结构：业务背景 → 前置条件 → 操作步骤 → 断言结果 → 备注
                     </div>
                     <div class="editor-actions">
-                        <div class="ui secondary button" onclick="doCancelUsecase()">取消用例</div>
+                        <div class="ui secondary button" onclick="doCancelUsecase()">离开用例</div>
                         <div class="ui primary button" onclick="doSaveUsecase()">新增用例</div>
                     </div>
                 </div>
@@ -579,9 +579,9 @@
     </form>
 </div>
 
-<!-- 取消用例弹出框-->
+<!-- 离开用例弹出框-->
 <div id="cancelUsecaseDialog" class="ui small modal">
-    <div class="header">取消用例</div>
+    <div class="header">离开用例</div>
     <div class="ui negative message">
         <div class="header">
             你确定离开该用例吗？

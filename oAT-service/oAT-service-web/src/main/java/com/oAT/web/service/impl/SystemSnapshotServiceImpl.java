@@ -225,11 +225,18 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     }
 
     @Override
-    public List<SystemSnapshot> findBy(String projectId, String appId, String directory) {
+    public List<SystemSnapshot> findBy(String projectId, String appId, String directory, String keyword) {
         Assert.notNull(projectId, "参数projectId不能为空");
         Assert.notNull(appId, "参数appId不能为空");
         Assert.notNull(directory, "参数directory不能为空");
         List<SystemSnapshot> list = repository.findByProjectIdAndAppIdAndDirectory(projectId, appId, directory);
+        if (StringUtils.hasText(keyword)) {
+            String normalizedKeyword = keyword.trim().toLowerCase();
+            list = list.stream()
+                    .filter(snapshot -> StringUtils.hasText(snapshot.getTitle()))
+                    .filter(snapshot -> snapshot.getTitle().toLowerCase().contains(normalizedKeyword))
+                    .collect(Collectors.toList());
+        }
         return list;
     }
 
