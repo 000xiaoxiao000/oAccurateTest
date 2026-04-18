@@ -41,6 +41,10 @@
             box-shadow: none !important;
         }
 
+        .compare-empty-state {
+            min-height: 180px;
+        }
+
         .coverage-report-meta {
             margin-top: 6px;
             font-size: 0.9em;
@@ -631,7 +635,7 @@
                         </div>
                     </#if>
                 <#else>
-                    <div class="ui placeholder segment">
+                    <div class="ui placeholder segment compare-empty-state">
                         <div class="ui icon header">
                             <i class="law icon"></i>
                             暂无代码比对记录
@@ -767,22 +771,23 @@
 
                     var remainingRows = $("table.ui.fixed.selectable.table.celled tbody tr").length;
                     var remainingTotal = Math.max(compareTotalElements - 1, 0);
+                    var targetTotalPages = Math.max(Math.ceil(remainingTotal / comparePageSize), 1);
+                    var targetPageNumber = Math.min(comparePageNumber, targetTotalPages - 1);
                     $(".compare-total-count").text(remainingTotal);
                     if ($(".compare-page-summary").length > 0) {
-                        $(".compare-current-page").text(comparePageNumber + 1);
-                        $(".compare-total-pages").text(Math.max(parseInt($(".compare-total-pages").text(), 10) || 1, 1));
+                        $(".compare-current-page").text(targetPageNumber + 1);
+                        $(".compare-total-pages").text(targetTotalPages);
                     }
                     if (remainingRows === 0) {
                         if (remainingTotal === 0) {
-                            var placeholder = '<div class="ui placeholder segment">'
+                            var placeholder = '<div class="ui placeholder segment compare-empty-state">'
                                 + '<div class="ui icon header">'
                                 + '<i class="law icon"></i>'
                                 + '暂无代码比对记录</div>'
                                 + '</div>';
                             $("table.ui.fixed.selectable.table.celled").parent().html(placeholder);
                         } else {
-                            var targetPage = Math.max(comparePageNumber - 1, 0);
-                            window.location.href = buildCompareListUrl(targetPage, comparePageSize);
+                            window.location.href = buildCompareListUrl(targetPageNumber, comparePageSize);
                         }
                     }
                 } else {

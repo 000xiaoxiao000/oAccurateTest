@@ -183,7 +183,7 @@
                     </td>
                     <td>-</td>
                     <td class="meta-text">-</td>
-                    <td class="meta-text" title="${(dir.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}">${(dir.updateTime??)?then((beforeTime??)?then(beforeTime(dir.updateTime?datetime), dir.updateTime?string('yyyy-MM-dd HH:mm:ss')), '-')}</td>
+                    <td class="meta-text" title="${(dir.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}"><@relativeTime value=dir.updateTime /></td>
                     <td>
                         <div class="ui dropdown quickMenu">
                             <i class="list link setting icon"></i>
@@ -218,7 +218,7 @@
                         </div>
                     </td>
                     <td class="meta-text">${maintainerNameMap[cas.lastUpdateAuthor]!maintainerNameMap[(cas.authors[0])!'']!'未设置'}</td>
-                    <td class="meta-text" title="${(cas.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}">${(cas.updateTime??)?then((beforeTime??)?then(beforeTime(cas.updateTime?datetime), cas.updateTime?string('yyyy-MM-dd HH:mm:ss')), '-')}</td>
+                    <td class="meta-text" title="${(cas.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}"><@relativeTime value=cas.updateTime /></td>
                     <td>
                         <div class="ui dropdown quickMenu">
                             <i class="list link setting icon"></i>
