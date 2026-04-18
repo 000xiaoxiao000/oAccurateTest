@@ -217,11 +217,14 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         node.setServerIp(NetUtils.getLocalHost());
         node.setServerPort(String.valueOf(requestAdapter.getServerPort()));
 
+        boolean requestMultipart = requestAdapter.getHeader("Content-Type") != null
+                && requestAdapter.getHeader("Content-Type").toLowerCase().startsWith("multipart/");
+
         //设置 http 参数
         try {
             boolean collectParams = Boolean.parseBoolean(this.traceContext.getConfig(
                     "collect.httpRequestParams", "true"));
-            if (collectParams) {
+            if (collectParams && !requestMultipart) {
                 Map<String, String[]> paramMap = requestAdapter.getParameterMap();
                 node.setRequestParamNames(paramMap.keySet().toArray(new String[0]));
                 String[] values = new String[paramMap.size()];
@@ -242,7 +245,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
 
         boolean collectBody = Boolean.parseBoolean(this.traceContext.getConfig(
                 "collect.httpRequestBody", "true"));
-        if (collectBody) {
+        if (collectBody && !requestMultipart) {
             String body = requestAdapter.getInputStream();
             if (body != null && body.length() > 8192) {
                 body = body.substring(0, 8192) + "...";

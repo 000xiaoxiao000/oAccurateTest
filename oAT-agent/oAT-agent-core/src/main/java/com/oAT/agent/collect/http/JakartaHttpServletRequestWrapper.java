@@ -7,10 +7,10 @@ import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
-import jakarta.servlet.http.Part;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,12 +23,9 @@ public class JakartaHttpServletRequestWrapper extends HttpServletRequestWrapper 
 
     public JakartaHttpServletRequestWrapper(HttpServletRequest request) {
         super(request);
-        this.headers = new HashMap<String, String>();
-        java.util.Enumeration<String> headerNames = request.getHeaderNames();
-        while (headerNames.hasMoreElements()) {
-            String name = headerNames.nextElement();
-            headers.put(name, request.getHeader(name));
-        }
+        this.headers = new HashMap<>();
+        Collections.list(request.getHeaderNames())
+                .forEach(name -> headers.put(name, request.getHeader(name)));
         // 不在构造时直接cache，延迟到真正需要时
     }
 
@@ -40,16 +37,13 @@ public class JakartaHttpServletRequestWrapper extends HttpServletRequestWrapper 
             return "";
         }
         try {
-            String s = new String(cachedBody, getCharacterEncoding() != null ? getCharacterEncoding() : "UTF-8");
+            String s = new String(cachedBody, getCharacterEncoding() != null ? getCharacterEncoding() : StandardCharsets.UTF_8.name());
             if (s.length() > 8192) {
                 return s.substring(0, 8192) + "...";
             }
             return s;
         } catch (Throwable e) {
-            String s = "";
-            try {
-                s = new String(cachedBody, "UTF-8");
-            } catch (UnsupportedEncodingException ignore) {}
+            String s = new String(cachedBody, StandardCharsets.UTF_8);
             if (s.length() > 8192) {
                 return s.substring(0, 8192) + "...";
             }
@@ -58,7 +52,11 @@ public class JakartaHttpServletRequestWrapper extends HttpServletRequestWrapper 
     }
 
     @Override
-    public ServletInputStream getInputStream() {
+    public jakarta.servlet.ServletInputStream getInputStream() throws IOException {
+        String contentType = getContentType();
+        if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+            return super.getInputStream();
+        }
         if (!bodyRead) {
             cacheRequestBody();
         }
@@ -66,11 +64,15 @@ public class JakartaHttpServletRequestWrapper extends HttpServletRequestWrapper 
         if (cachedBody == null) {
             cachedBody = new byte[0];
         }
-        return new CachedBodyServletInputStream(cachedBody);
+        return new JakartaHttpServletRequestWrapper.CachedBodyServletInputStream(cachedBody);
     }
 
     @Override
     public BufferedReader getReader() throws IOException {
+        String contentType = getContentType();
+        if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+            return super.getReader();
+        }
         if (!bodyRead) {
             cacheRequestBody();
         }
@@ -89,45 +91,27 @@ public class JakartaHttpServletRequestWrapper extends HttpServletRequestWrapper 
             return;
         }
         try {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             String contentType = getContentType();
-            if (contentType != null && contentType.startsWith("multipart/")) {
-                try {
-                    for (Part part : getParts()) {
-                        if (part.getSubmittedFileName() != null) {
-                            try (InputStream partStream = part.getInputStream()) {
-                                byte[] buffer = new byte[8192];
-                                int bytesRead;
-                                while ((bytesRead = partStream.read(buffer)) != -1) {
-                                    outputStream.write(buffer, 0, bytesRead);
-                                }
-                            } catch (Throwable e) {
-                                // 降级，单个 part 读取异常不影响整体
-                                logger.warn("[Agent-cacheRequestBody]Read part stream error, fallback to skip part" + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                            }
-                        }
-                    }
-                } catch (Throwable e) {
-                    // 降级，multipart 解析异常
-                    logger.warn("[Agent-cacheRequestBody]Get parts error, fallback to empty body" + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                    cachedBody = new byte[0];
+            if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+                cachedBody = "[multipart omitted]".getBytes(StandardCharsets.UTF_8);
+                return;
+            }
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            try (InputStream inputStream = super.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
                 }
-            } else {
-                try (InputStream inputStream = super.getInputStream()) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        outputStream.write(buffer, 0, bytesRead);
-                    }
-                } catch (IOException e) {
-                    // 处理 Stream closed 或其他 IO 异常，降级为空 body
-                    logger.warn("[Agent-cacheRequestBody]InputStream closed or IO error, fallback to empty body. " + e.getMessage());
-                    cachedBody = new byte[0];
-                } catch (Throwable e) {
-                    // 其他异常也降级
-                    logger.warn("[Agent-cacheRequestBody]Unexpected error, fallback to empty body" + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                    cachedBody = new byte[0];
-                }
+            } catch (IOException e) {
+                // 处理 Stream closed 或其他 IO 异常，降级为空 body
+                logger.warn("[Agent-cacheRequestBody]InputStream closed or IO error, fallback to empty body. " + e.getMessage());
+                cachedBody = new byte[0];
+            } catch (Throwable e) {
+                // 其他异常也降级
+                logger.warn("[Agent-cacheRequestBody]Unexpected error, fallback to empty body" + StackTraceFormatter.formatExceptionWithAgentMark(e));
+                cachedBody = new byte[0];
             }
             // 如果 cachedBody 还未赋值，正常赋值
             if (cachedBody == null) {
@@ -144,14 +128,12 @@ public class JakartaHttpServletRequestWrapper extends HttpServletRequestWrapper 
 
     @Override
     public String getHeader(String name) {
-        String value = headers.get(name);
-        return value != null ? value : super.getHeader(name);
+        return headers.getOrDefault(name, super.getHeader(name));
     }
 
     @Override
     public String getContentType() {
-        String value = headers.get("Content-Type");
-        return value != null ? value : super.getContentType();
+        return headers.getOrDefault("Content-Type", super.getContentType());
     }
 
     private static class CachedBodyServletInputStream extends ServletInputStream {
