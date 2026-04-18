@@ -26,6 +26,8 @@ import org.springframework.util.StringUtils;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import org.jetbrains.annotations.NotNull;
+
 @Service
 public class UsecaseServiceImpl implements UsecaseService {
 
@@ -164,13 +166,26 @@ public class UsecaseServiceImpl implements UsecaseService {
         }
     }
 
+    private String buildUsecaseSrc(@NotNull StackNodeVo nodeVo) {
+        StringBuilder result = new StringBuilder(nodeVo.getClassName());
+        String methodName = nodeVo.getMethodName();
+        if (StringUtils.hasText(methodName)) {
+            if (methodName.contains(" ")) {
+                result.append(" ").append(methodName, 0, methodName.indexOf(" "));
+            } else {
+                result.append(" ").append(methodName);
+            }
+        }
+        return result.toString();
+    }
+
     private String[] parseCoeStack(List<StackNodeVo> nodeVos) {
-        Set<String> result = new HashSet<>(nodeVos.size());
+        Set<String> result = new LinkedHashSet<>(nodeVos.size());
         for (StackNodeVo nodeVo : nodeVos) {
             if (nodeVo == null) {
                 continue;
             }
-            result.add(nodeVo.getClassName() + " " + nodeVo.getMethodName());
+            result.add(buildUsecaseSrc(nodeVo));
         }
         return result.toArray(new String[0]);
     }

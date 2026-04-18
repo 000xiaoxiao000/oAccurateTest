@@ -1,4 +1,4 @@
-<#include "../commonFunction.ftl">
+<#include "../common.ftl">
 <span class="ui sub header">为您找到:${searchPage.total}条结果</span>
 <div class="ui link divided  items">
        <#list searchPage.contents as item>

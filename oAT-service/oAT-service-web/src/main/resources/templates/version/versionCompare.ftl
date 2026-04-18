@@ -360,6 +360,104 @@
         font-size: 13px;
     }
 
+    .compare-record-heading {
+        margin-top: 18px !important;
+        margin-bottom: 0 !important;
+        border-radius: .28571429rem .28571429rem 0 0 !important;
+    }
+
+    .compare-record-segment {
+        border-top: none !important;
+    }
+
+    .compare-record-stats {
+        margin-top: 6px;
+        font-size: 0.85em;
+        color: #666;
+    }
+
+    .compare-record-git-meta {
+        font-size: 0.9em;
+        color: #666;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        white-space: normal;
+        max-width: 100%;
+        line-height: 1.6;
+        vertical-align: middle;
+    }
+
+    .compare-record-git-meta > span {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .compare-record-git-meta .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid #dde3ea;
+        background: #f7f8fa;
+        color: #4b5563;
+        line-height: 1.4;
+    }
+
+    .compare-record-git-meta-label {
+        color: #999;
+    }
+
+    .compare-record-git-meta-label-old {
+        color: #c97a1f;
+    }
+
+    .compare-record-git-meta-label-new {
+        color: #2185d0;
+    }
+
+    .compare-record-git-meta .commit-id {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        border: 1px solid #dde3ea;
+        color: #34495e;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .compare-record-git-meta .commit-id-old {
+        background: #fff4e8;
+        border-color: #f0d2b4;
+        color: #9a5b16;
+    }
+
+    .compare-record-git-meta .commit-id-new {
+        background: #edf6ff;
+        border-color: #c8ddf4;
+        color: #1f5f96;
+    }
+
+    .compare-record-action-group {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+    }
+
+    .compare-record-action-group .ui.button {
+        margin: 0 !important;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    .compare-empty-state {
+        min-height: 180px;
+    }
+
     @media (max-width: 1200px) {
         .git-compare-panel .git-entry-grid {
             grid-template-columns: 1fr;
@@ -572,68 +670,85 @@
         </div>
 
 
-        <h4 class="ui header top attached block">
-            <i class="grey icon history"></i>
-            比对记录
-        </h4>
-        <div class="ui attached segment">
-            <table class="ui fixed selectable table celled">
-                <thead>
-                <tr>
-                    <th class="five wide">报告名称</th>
-                    <th class="four wide center aligned">创建时间</th>
-                    <th class="four wide center aligned">比对版本 (新 / 旧)</th>
-                    <th class="three wide center aligned">操作</th>
-                </tr>
-                </thead>
-                <tbody>
-                <#list reports as report >
-                <tr>
-                    <td class="ellipsis-tooltip" title="${report.name!}"><b>${report.name!}</b>
-                        <#if report.addClassCount?? || report.updateClassCount?? || report.deleteClassCount?? || report.addMethodCount?? || report.updateMethodCount?? || report.deleteMethodCount?? || report.impactCaseCount??>
-                            <div style="margin-top:6px;font-size:0.85em;color:#666;">
-                                <#if report.addClassCount??>
-                                    <span class="ui mini green label">新增类 ${report.addClassCount}</span>
+        <h4 class="ui dividing header compare-record-heading">代码比对报告记录</h4>
+        <div class="ui attached segment compare-record-segment">
+            <#if reports?? && (reports?size > 0)>
+                <table class="ui fixed selectable table celled">
+                    <thead>
+                    <tr>
+                        <th class="five wide">报告名称</th>
+                        <th class="three wide center aligned">生成时间</th>
+                        <th class="four wide center aligned">比对版本</th>
+                        <th class="two wide center aligned">操作</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <#list reports as report >
+                    <tr>
+                        <td class="ellipsis-tooltip" title="${report.name!}"><b>${report.name!}</b>
+                            <#if report.addClassCount?? || report.updateClassCount?? || report.deleteClassCount?? || report.addMethodCount?? || report.updateMethodCount?? || report.deleteMethodCount?? || report.impactCaseCount??>
+                                <div class="compare-record-stats">
+                                    <#if report.addClassCount??>
+                                        <span class="ui mini green label">新增类 ${report.addClassCount}</span>
+                                    </#if>
+                                    <#if report.updateClassCount??>
+                                        <span class="ui mini orange label">更新类 ${report.updateClassCount}</span>
+                                    </#if>
+                                    <#if report.deleteClassCount??>
+                                        <span class="ui mini red label">删除类 ${report.deleteClassCount}</span>
+                                    </#if>
+                                    <#if report.addMethodCount??>
+                                        <span class="ui mini green label">新增方法 ${report.addMethodCount}</span>
+                                    </#if>
+                                    <#if report.updateMethodCount??>
+                                        <span class="ui mini label">更新方法 ${report.updateMethodCount}</span>
+                                    </#if>
+                                    <#if report.deleteMethodCount??>
+                                        <span class="ui mini red label">删除方法 ${report.deleteMethodCount}</span>
+                                    </#if>
+                                    <#if report.impactCaseCount??>
+                                        <span class="ui mini label">影响用例 ${report.impactCaseCount}</span>
+                                    </#if>
+                                </div>
+                            </#if>
+                        </td>
+                        <td class="center aligned">
+                            ${(report.createTime?string("yyyy-MM-dd HH:mm"))!'-'}
+                        </td>
+                        <td class="center aligned">
+                            <div class="compare-record-git-meta">
+                                <#if report.gitBranch?has_content>
+                                    <span class="meta-chip"><span class="compare-record-git-meta-label">分支:</span> <b>${report.gitBranch}</b></span>
+                                <#elseif report.sourceVersion?has_content || report.targetVersion?has_content>
+                                    <span class="meta-chip"><span class="compare-record-git-meta-label-new">新:</span> <b>${report.sourceVersion!'-'}</b></span>
+                                    <span class="meta-chip"><span class="compare-record-git-meta-label-old">旧:</span> <b>${report.targetVersion!'-'}</b></span>
                                 </#if>
-                                <#if report.updateClassCount??>
-                                    <span class="ui mini orange label">更新类 ${report.updateClassCount}</span>
+                                <#if report.gitOldCommit?has_content>
+                                    <span><span class="compare-record-git-meta-label-old">旧:</span> <code class="commit-id commit-id-old" data-content="${report.gitOldCommit}" data-position="top center">${(report.gitOldCommit?length > 8)?then(report.gitOldCommit?substring(0,8), report.gitOldCommit)}</code></span>
                                 </#if>
-                                <#if report.deleteClassCount??>
-                                    <span class="ui mini red label">删除类 ${report.deleteClassCount}</span>
-                                </#if>
-                                <#if report.addMethodCount??>
-                                    <span class="ui mini">新增方法 ${report.addMethodCount}</span>
-                                </#if>
-                                <#if report.updateMethodCount??>
-                                    <span class="ui mini">更新方法 ${report.updateMethodCount}</span>
-                                </#if>
-                                <#if report.deleteMethodCount??>
-                                    <span class="ui mini red">删除方法 ${report.deleteMethodCount}</span>
-                                </#if>
-                                <#if report.impactCaseCount??>
-                                    <span class="ui mini label">影响用例 ${report.impactCaseCount}</span>
+                                <#if report.gitNewCommit?has_content>
+                                    <span><span class="compare-record-git-meta-label-new">新:</span> <code class="commit-id commit-id-new" data-content="${report.gitNewCommit}" data-position="top center">${(report.gitNewCommit?length > 8)?then(report.gitNewCommit?substring(0,8), report.gitNewCommit)}</code></span>
                                 </#if>
                             </div>
-                        </#if>
-                    </td>
-                    <td class="center aligned">
-                        ${report.createTime?datetime}
-                    </td>
-                    <td class="center aligned">
-                        <div class="ui mini label">${report.sourceVersion!'-'}</div>
-                        <i class="right arrow icon"></i>
-                        <div class="ui mini label">${report.targetVersion!'-'}</div>
-                    </td>
-                    <td class="center aligned">
-                        <div style="display: flex; justify-content: center; gap: 5px;">
-                            <a href="/p/${project.id}/version/report/detail/${report.id}" class="ui mini basic blue button">查看</a>
-                            <button class="ui mini basic red button" onclick="doDeleteReport('${report.id}', this)">删除</button>
-                        </div>
-                    </td>
-                </tr>
-                </#list>
-                </tbody>
-            </table>
+                        </td>
+                        <td class="center aligned">
+                            <div class="compare-record-action-group">
+                                <a href="/p/${project.id}/version/report/${report.id}" class="ui mini basic blue button">查看</a>
+                                <button class="ui mini basic red button" onclick="doDeleteReport('${report.id}', this)">删除</button>
+                            </div>
+                        </td>
+                    </tr>
+                    </#list>
+                    </tbody>
+                </table>
+            <#else>
+                <div class="ui placeholder segment compare-empty-state">
+                    <div class="ui icon header">
+                        <i class="law icon"></i>
+                        暂无代码比对记录
+                    </div>
+                </div>
+            </#if>
         </div>
     </div>
 </div>
@@ -1228,11 +1343,10 @@
                         $("#deleteVersionDialog").modal('hide');
                         // 如果表格已空，替换为占位提示
                         if ($("table.ui.fixed.selectable.table.celled tbody tr").length === 0) {
-                            var placeholder = '<div class="ui placeholder segment">'
+                            var placeholder = '<div class="ui placeholder segment compare-empty-state">'
                                 + '<div class="ui icon header">'
                                 + '<i class="law icon"></i>'
                                 + '暂无代码比对记录</div>'
-                                + '<a href="/p/${project.id}/${appId}/version/compare" class="ui primary button">前往发起比对</a>'
                                 + '</div>';
                             $("table.ui.fixed.selectable.table.celled").parent().html(placeholder);
                         }

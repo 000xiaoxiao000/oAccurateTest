@@ -173,7 +173,7 @@
                             <span>${snapshot.title}</span>
                         </a>
                     </td>
-                    <td class="meta-text" title="${(snapshot.versionLastUpdate?string('yyyy-MM-dd HH:mm:ss'))!'-'}"><@relativeTime value=snapshot.versionLastUpdate /></td>
+                    <td class="meta-text"><@relativeTime value=snapshot.versionLastUpdate showTooltip=true /></td>
                     <td>
                         <#if loginNameRole != "visitor">
                             <div class="ui dropdown quickMenu" tabindex="0">

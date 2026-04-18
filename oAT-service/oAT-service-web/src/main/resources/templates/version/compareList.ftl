@@ -41,10 +41,6 @@
             box-shadow: none !important;
         }
 
-        .compare-empty-state {
-            min-height: 180px;
-        }
-
         .coverage-report-meta {
             margin-top: 6px;
             font-size: 0.9em;
@@ -194,9 +190,13 @@
             margin: 0;
         }
 
-        .compare-report-stats {
+        .compare-record-stats {
+            margin-top: 6px;
+            font-size: 0.85em;
+            color: #666;
+        }
 
-        .compare-git-meta {
+        .compare-record-meta {
             font-size: 0.9em;
             color: #666;
             display: inline-flex;
@@ -210,24 +210,24 @@
             vertical-align: middle;
         }
 
-        .compare-git-meta > span {
+        .compare-record-meta > span {
             display: inline-flex;
             align-items: center;
         }
 
-        .compare-git-meta-label {
+        .compare-record-meta-label {
             color: #999;
         }
 
-        .compare-git-meta-label-old {
+        .compare-record-meta-label-old {
             color: #c97a1f;
         }
 
-        .compare-git-meta-label-new {
+        .compare-record-meta-label-new {
             color: #2185d0;
         }
 
-        .compare-git-meta .meta-chip {
+        .compare-record-meta .meta-chip {
             display: inline-flex;
             align-items: center;
             gap: 4px;
@@ -239,7 +239,7 @@
             line-height: 1.4;
         }
 
-        .compare-git-meta .commit-id {
+        .compare-record-meta .commit-id {
             display: inline-block;
             padding: 2px 8px;
             border-radius: 999px;
@@ -249,26 +249,26 @@
             line-height: 1.4;
         }
 
-        .compare-git-meta .commit-id-old {
+        .compare-record-meta .commit-id-old {
             background: #fff4e8;
             border-color: #f0d2b4;
             color: #9a5b16;
         }
 
-        .compare-git-meta .commit-id-new {
+        .compare-record-meta .commit-id-new {
             background: #edf6ff;
             border-color: #c8ddf4;
             color: #1f5f96;
         }
 
-        .compare-action-group {
+        .compare-record-action-group {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 4px;
         }
 
-        .compare-action-group .ui.button {
+        .compare-record-action-group .ui.button {
             margin: 0 !important;
             padding-left: 10px;
             padding-right: 10px;
@@ -483,9 +483,9 @@
                     </div>
                 </div>
             <#elseif tab == 'compare'>
-                <h4 class="ui dividing header">代码比对报告记录</h4>
+                <h4 class="ui dividing header compare-record-heading">代码比对报告记录</h4>
                 <#if reports?? && (reports?size > 0)>
-                    <table class="ui fixed selectable table celled">
+                    <div class="compare-record-segment">
                         <thead>
                         <tr>
                             <th class="five wide">报告名称</th>
@@ -500,7 +500,7 @@
                                 <td class="ellipsis-tooltip" title="${report.name!}"><b>${report.name!}</b><#if highlightReportId?? && highlightReportId == report.id><span class="compare-report-new-badge">刚生成</span></#if>
                                     <#-- 显示统计子信息（如果 report 对象包含统计字段） -->
                                     <#if report.addClassCount?? || report.updateClassCount?? || report.deleteClassCount?? || report.addMethodCount?? || report.updateMethodCount?? || report.deleteMethodCount?? || report.impactCaseCount??>
-                                        <div class="compare-report-stats">
+                                        <div class="compare-record-stats">
                                             <#if report.addClassCount??>
                                                 <span class="ui mini green label">新增类 ${report.addClassCount}</span>
                                             </#if>
@@ -527,20 +527,20 @@
                                 </td>
                                 <td class="center aligned">${(report.createTime?string("yyyy-MM-dd HH:mm"))!'-'}</td>
                                 <td class="center aligned">
-                                    <div class="compare-git-meta">
+                                    <div class="compare-record-meta">
                                         <#if report.gitBranch?has_content>
-                                            <span class="meta-chip"><span class="compare-git-meta-label">分支:</span> <b>${report.gitBranch}</b></span>
+                                            <span class="meta-chip"><span class="compare-record-meta-label">分支:</span> <b>${report.gitBranch}</b></span>
                                         </#if>
                                         <#if report.gitOldCommit?has_content>
-                                            <span><span class="compare-git-meta-label-old">旧:</span> <code class="commit-id commit-id-old" data-content="${report.gitOldCommit}" data-position="top center">${(report.gitOldCommit?length > 8)?then(report.gitOldCommit?substring(0,8), report.gitOldCommit)}</code></span>
+                                            <span><span class="compare-record-meta-label-old">旧:</span> <code class="commit-id commit-id-old" data-content="${report.gitOldCommit}" data-position="top center">${(report.gitOldCommit?length > 8)?then(report.gitOldCommit?substring(0,8), report.gitOldCommit)}</code></span>
                                         </#if>
                                         <#if report.gitNewCommit?has_content>
-                                            <span><span class="compare-git-meta-label-new">新:</span> <code class="commit-id commit-id-new" data-content="${report.gitNewCommit}" data-position="top center">${(report.gitNewCommit?length > 8)?then(report.gitNewCommit?substring(0,8), report.gitNewCommit)}</code></span>
+                                            <span><span class="compare-record-meta-label-new">新:</span> <code class="commit-id commit-id-new" data-content="${report.gitNewCommit}" data-position="top center">${(report.gitNewCommit?length > 8)?then(report.gitNewCommit?substring(0,8), report.gitNewCommit)}</code></span>
                                         </#if>
                                     </div>
                                  </td>
                                 <td class="center aligned">
-                                    <div class="compare-action-group">
+                                    <div class="compare-record-action-group">
                                         <a href="/p/${project.id}/version/report/${report.id}"
                                            class="ui mini basic blue button">查看</a>
                                         <button class="ui mini basic red button" onclick="doDeleteReport('${report.id}', this)">
@@ -552,6 +552,7 @@
                         </#list>
                         </tbody>
                     </table>
+                    </div>
                     <#if page?? && page.totalPages gt 1>
                         <#assign currentPage = page.number + 1>
                         <#assign totalPages = page.totalPages>
