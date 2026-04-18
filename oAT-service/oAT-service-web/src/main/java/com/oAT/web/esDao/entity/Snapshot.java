@@ -6,7 +6,6 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import java.io.Serializable;
 
 public class Snapshot implements Serializable {
-    //    @Field(type = FieldType.Keyword)
 
     /*
     名称不能为空
