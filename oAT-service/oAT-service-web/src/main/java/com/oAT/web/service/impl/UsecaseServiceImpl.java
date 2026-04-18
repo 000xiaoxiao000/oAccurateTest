@@ -71,7 +71,8 @@ public class UsecaseServiceImpl implements UsecaseService {
         Usecase usecase = new Usecase();
         String[] srcStack = parseCoeStack(codeNodes);
         usecase.setSrcStack(srcStack);
-        logger.info("buildUsecaseRelations finished: snapshotCount={}, systemSnapshotCount={}, codeNodeCount={}, srcStackCount={}, srcStackPreview={}",
+        logger.debug("buildUsecaseRelations finished: snapshotCount={}, systemSnapshotCount={}, codeNodeCount={}, " +
+                        "srcStackCount={}, srcStackPreview={}",
                 validSnapshotIds.length,
                 validSystemSnapshotIds.length,
                 codeNodes.size(),
@@ -132,7 +133,8 @@ public class UsecaseServiceImpl implements UsecaseService {
             }
             String[] codes = snapshot.getCodes();
             if (!ObjectUtils.isEmpty(codes)) {
-                logger.info("collectSystemSnapshotTraceNodes use codes: snapshotId={}, traceId={}, codesCount={}, codesPreview={}",
+                logger.debug("collectSystemSnapshotTraceNodes use codes: snapshotId={}, traceId={}, codesCount={}, " +
+                                "codesPreview={}",
                         snapshot.getId(), snapshot.getTraceId(), codes.length, previewSrcStack(codes));
                 collectSystemSnapshotCodes(codes, codeNodes);
                 continue;
