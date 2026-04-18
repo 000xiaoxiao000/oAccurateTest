@@ -249,9 +249,6 @@ public class UsecaseControl {
             result.setData(vo.getId());
             return result;
         } else {
-            UsecaseVo current = usecaseService.getUsecase(projectId, usecase.getId());
-            usecase.setSnapshots(intersectExistingIds(usecase.getSnapshots(), current == null ? null : current.getSnapshots()));
-            usecase.setSystemSnapshots(intersectExistingIds(usecase.getSystemSnapshots(), current == null ? null : current.getSystemSnapshots()));
             usecaseService.doUpdate(user.getId(), usecase);
             result = new ResultNotified<>(true, "用例保存成功");
             return result;

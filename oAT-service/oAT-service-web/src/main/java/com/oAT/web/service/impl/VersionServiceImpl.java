@@ -814,15 +814,19 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
         if (compareResult.getModel() == CompareResult.Model.delete || compareResult.getModel() == CompareResult.Model.add) {
             usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
-            job.getLogger().info(String.format("查找影响用例 类名：%s 类级检索影响数：%s",
-                    classDot, usecases.size()));
+            String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+            String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+            job.getLogger().info(String.format("查找影响用例 类名：%s 类级检索影响数：%s，命中用例ID：%s，命中用例：%s",
+                    classDot, usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
         } else if (compareResult.getModel() == CompareResult.Model.update) {
             List<String> filteredNames = normalizeMethodNamesForSearch(classDot, compareResult);
             List<String> fallbackMethodNames = buildMethodFallbackCandidates(filteredNames);
             if (fallbackMethodNames.isEmpty()) {
                 usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
-                job.getLogger().info(String.format("查找影响用例 类名：%s (方法未解析或仅占位) 影响数：%s",
-                        classDot, usecases.size()));
+                String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                job.getLogger().info(String.format("查找影响用例 类名：%s (方法未解析或仅占位) 影响数：%s，命中用例ID：%s，命中用例：%s",
+                        classDot, usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
             } else {
                 LinkedHashSet<String> srcMethods = new LinkedHashSet<>();
                 for (String methodName : fallbackMethodNames) {
@@ -831,16 +835,27 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                     }
                 }
                 if (!srcMethods.isEmpty()) {
-                    usecases = usecaseSearchService.getBySrcMethod(projectId, srcMethods.toArray(new String[0]));
+                    LinkedHashSet<String> queryMethods = new LinkedHashSet<>(srcMethods);
+                    for (String methodName : fallbackMethodNames) {
+                        if (StringUtils.hasText(methodName)) {
+                            queryMethods.add(classDot + " " + methodName);
+                        }
+                    }
+                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法源码键：%s",
+                            classDot, String.join(" | ", queryMethods)));
+                    usecases = usecaseSearchService.getBySrcMethod(projectId, queryMethods.toArray(new String[0]));
                 }
                 if (usecases.isEmpty()) {
                     usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
-                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 未找到，回退到类级别检索，影响数：%s",
-                            classDot, String.join(", ", fallbackMethodNames), usecases.size()));
-                } else {
+                    String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
                     String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 影响数：%s，命中用例：%s",
-                            classDot, String.join(", ", fallbackMethodNames), usecases.size(), StringUtils.hasText(titles) ? titles : "-"));
+                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 未找到，回退到类级别检索，影响数：%s，命中用例ID：%s，命中用例：%s",
+                            classDot, String.join(", ", fallbackMethodNames), usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
+                } else {
+                    String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                    String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
+                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 影响数：%s，命中用例ID：%s，命中用例：%s",
+                            classDot, String.join(", ", fallbackMethodNames), usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
                 }
             }
         }
@@ -848,9 +863,19 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         if (usecases.isEmpty()) {
             List<UsecaseVo> fallbackUsecases = collectUsecasesByMatchedSnapshots(projectId, cases, matchedSnapshots);
             if (!fallbackUsecases.isEmpty()) {
+                String snapshotIds = Optional.ofNullable(matchedSnapshots).orElse(Collections.emptyList()).stream()
+                        .map(SystemSnapshot::getId)
+                        .filter(StringUtils::hasText)
+                        .distinct()
+                        .collect(Collectors.joining(", "));
+                String usecaseIds = fallbackUsecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
                 String titles = fallbackUsecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                job.getLogger().info(String.format("查找影响用例 类名：%s 直接源码检索未命中，改为基于当前命中系统快照反推，影响数：%s，命中用例：%s",
-                        classDot, fallbackUsecases.size(), StringUtils.hasText(titles) ? titles : "-"));
+                job.getLogger().info(String.format("查找影响用例 类名：%s 直接源码检索未命中，改为基于当前命中系统快照反推，命中快照ID：%s，影响数：%s，命中用例ID：%s，命中用例：%s",
+                        classDot,
+                        StringUtils.hasText(snapshotIds) ? snapshotIds : "-",
+                        fallbackUsecases.size(),
+                        StringUtils.hasText(usecaseIds) ? usecaseIds : "-",
+                        StringUtils.hasText(titles) ? titles : "-"));
                 usecases = fallbackUsecases;
             }
         }
