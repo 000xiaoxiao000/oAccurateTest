@@ -936,6 +936,9 @@ public class VersionItemControl {
     }
 
     private String resolveUsecaseDirectoryPath(String projectId, String directoryId) {
+        if (!StringUtils.hasText(directoryId) || "root".equalsIgnoreCase(directoryId)) {
+            return "ROOT";
+        }
         try {
             List<UsecaseDirectoryVo> tiers = usecaseService.getDirectoryTier(projectId, directoryId);
             if (tiers == null || tiers.isEmpty()) {
