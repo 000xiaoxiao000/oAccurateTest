@@ -31,6 +31,7 @@ import org.jetbrains.annotations.NotNull;
 public class UsecaseServiceImpl implements UsecaseService {
 
     private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(UsecaseServiceImpl.class);
 
     @Autowired
     CaseCenterRepository centerRepository;
@@ -58,6 +59,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         boolean noSnapshots = ObjectUtils.isEmpty(validSnapshotIds);
         boolean noSystemSnapshots = ObjectUtils.isEmpty(validSystemSnapshotIds);
         if (noSnapshots && noSystemSnapshots) {
+            logger.info("buildUsecaseRelations skipped: no snapshot relations");
             return new Usecase();
         }
 
@@ -67,7 +69,14 @@ public class UsecaseServiceImpl implements UsecaseService {
         collectSystemSnapshotTraceNodes(validSystemSnapshotIds, codeNodes);
 
         Usecase usecase = new Usecase();
-        usecase.setSrcStack(parseCoeStack(codeNodes));
+        String[] srcStack = parseCoeStack(codeNodes);
+        usecase.setSrcStack(srcStack);
+        logger.info("buildUsecaseRelations finished: snapshotCount={}, systemSnapshotCount={}, codeNodeCount={}, srcStackCount={}, srcStackPreview={}",
+                validSnapshotIds.length,
+                validSystemSnapshotIds.length,
+                codeNodes.size(),
+                srcStack == null ? 0 : srcStack.length,
+                previewSrcStack(srcStack));
         return usecase;
     }
 
@@ -121,7 +130,28 @@ public class UsecaseServiceImpl implements UsecaseService {
             if (snapshot == null) {
                 continue;
             }
+            String[] codes = snapshot.getCodes();
+            if (!ObjectUtils.isEmpty(codes)) {
+                logger.info("collectSystemSnapshotTraceNodes use codes: snapshotId={}, traceId={}, codesCount={}, codesPreview={}",
+                        snapshot.getId(), snapshot.getTraceId(), codes.length, previewSrcStack(codes));
+                collectSystemSnapshotCodes(codes, codeNodes);
+                continue;
+            }
+            logger.warn("collectSystemSnapshotTraceNodes fallback to trace nodes: snapshotId={}, traceId={}, codes empty", snapshot.getId(), snapshot.getTraceId());
             collectTraceNodes(snapshot.getTraceId(), codeNodes);
+        }
+    }
+
+    private void collectSystemSnapshotCodes(String[] codes,
+                                            List<StackNodeVo> codeNodes) {
+        if (ObjectUtils.isEmpty(codes)) {
+            return;
+        }
+        for (String code : codes) {
+            if (!StringUtils.hasText(code)) {
+                continue;
+            }
+            codeNodes.add(buildCodeNodeFromSnapshotCode(code));
         }
     }
 
@@ -143,13 +173,24 @@ public class UsecaseServiceImpl implements UsecaseService {
         StringBuilder result = new StringBuilder(nodeVo.getClassName().replace('/', '.'));
         String methodName = nodeVo.getMethodName();
         if (StringUtils.hasText(methodName)) {
-            if (methodName.contains(" ")) {
-                result.append(" ").append(methodName, 0, methodName.indexOf(" "));
-            } else {
-                result.append(" ").append(methodName);
-            }
+            result.append(" ").append(methodName.trim());
         }
         return result.toString();
+    }
+
+    private StackNodeVo buildCodeNodeFromSnapshotCode(String code) {
+        StackNodeVo nodeVo = new StackNodeVo();
+        String normalizedCode = code.trim();
+        int splitIndex = normalizedCode.indexOf(' ');
+        if (splitIndex < 0) {
+            nodeVo.setClassName(normalizedCode.replace('.', '/'));
+            return nodeVo;
+        }
+        String className = normalizedCode.substring(0, splitIndex).trim();
+        String methodName = normalizedCode.substring(splitIndex + 1).trim();
+        nodeVo.setClassName(className.replace('.', '/'));
+        nodeVo.setMethodName(methodName);
+        return nodeVo;
     }
 
     private String[] parseCoeStack(List<StackNodeVo> nodeVos) {
@@ -161,6 +202,16 @@ public class UsecaseServiceImpl implements UsecaseService {
             result.add(buildUsecaseSrc(nodeVo));
         }
         return result.toArray(new String[0]);
+    }
+
+    private String previewSrcStack(String[] values) {
+        if (ObjectUtils.isEmpty(values)) {
+            return "[]";
+        }
+        return Arrays.stream(values)
+                .filter(StringUtils::hasText)
+                .limit(5)
+                .collect(Collectors.joining(" | ", "[", values.length > 5 ? " | ...]" : "]"));
     }
 
     @Override
