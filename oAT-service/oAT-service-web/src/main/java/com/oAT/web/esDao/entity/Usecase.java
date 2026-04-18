@@ -64,16 +64,6 @@ public class Usecase implements Serializable, StandardDate{
      */
     @Field(type = FieldType.Keyword)
     private String lastUpdateAuthor;
-    /**
-    sql
-     */
-    @Field(type = FieldType.Object)
-    private UsecaseSql sql;
-    /**
-     远程调用
-     */
-    @Field(type = FieldType.Object)
-    private UsecaseRemote remote;
     // 该字段值有可能为超出256 keyword 的限制
     // 执行的源代码堆栈 格式：类名 方法名 方法签名 示例如下：
     //org/eclipse/jetty/servlet/DefaultServlet doGet (Ljavax/servlet/http/HttpServletRequest;Ljavax/servlet/http/HttpServletResponse;)V
@@ -174,22 +164,6 @@ public class Usecase implements Serializable, StandardDate{
 
     public void setLastUpdateAuthor(String lastUpdateAuthor) {
         this.lastUpdateAuthor = lastUpdateAuthor;
-    }
-
-    public UsecaseSql getSql() {
-        return sql;
-    }
-
-    public void setSql(UsecaseSql sql) {
-        this.sql = sql;
-    }
-
-    public UsecaseRemote getRemote() {
-        return remote;
-    }
-
-    public void setRemote(UsecaseRemote remote) {
-        this.remote = remote;
     }
 
     public String[] getSrcStack() {
