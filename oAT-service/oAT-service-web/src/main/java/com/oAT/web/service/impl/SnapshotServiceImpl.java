@@ -46,7 +46,7 @@ public class SnapshotServiceImpl implements SnapshotService{
         }
 
         // 如果快照对象本身没有记录 appId，尝试从上传的节点中提取第一个有效的 appId 进行关联
-        if (!StringUtils.hasText(snapshot.getAppId()) && nodes != null && !nodes.isEmpty()) {
+        if (!StringUtils.hasText(snapshot.getAppId()) && !nodes.isEmpty()) {
             for (TraceNode node : nodes) {
                 if (node.getApp() != null && StringUtils.hasText(node.getApp().getAppId())) {
                     snapshot.setAppId(node.getApp().getAppId());
@@ -75,7 +75,7 @@ public class SnapshotServiceImpl implements SnapshotService{
             list = list.stream()
                     .filter(index -> index.getSnapshot() != null && StringUtils.hasText(index.getSnapshot().getName()))
                     .filter(index -> index.getSnapshot().getName().toLowerCase().contains(normalizedKeyword))
-                    .collect(java.util.stream.Collectors.toList());
+                    .toList();
         }
         List<SnapshotVo> result = new ArrayList<>(list.size());
         for (CaseCenterIndex index : list) {
