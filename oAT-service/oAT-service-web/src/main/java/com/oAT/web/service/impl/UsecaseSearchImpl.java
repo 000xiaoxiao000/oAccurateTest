@@ -1,13 +1,11 @@
 package com.oAT.web.service.impl;
 
 import com.oAT.web.esDao.entity.CaseCenterIndex;
-import com.oAT.web.esDao.entity.UsecaseSql;
 import com.oAT.web.service.UsecaseSearchService;
 import com.oAT.web.service.entity.CaseSearchResult;
 import com.oAT.web.service.entity.SearchPage;
 import com.oAT.web.service.entity.TableToUsecase;
 import com.oAT.web.service.entity.UsecaseVo;
-import org.apache.commons.lang3.ArrayUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -21,6 +19,7 @@ import org.elasticsearch.index.query.QueryBuilders;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -36,7 +35,7 @@ public class UsecaseSearchImpl implements UsecaseSearchService {
         NativeSearchQueryBuilder searchBuilder = new NativeSearchQueryBuilder();
         searchBuilder.withFilter(QueryBuilders.termQuery("usecase.projectId", projectId));
         searchBuilder.withQuery(QueryBuilders.multiMatchQuery(keyWords,
-                "usecase.title", "usecase.content", "usecase.sql.contents", "usecase.remote.content", "usecase.srcStack"));
+                "usecase.title", "usecase.content", "usecase.srcStack"));
 
         SearchHits<CaseCenterIndex> searchHits = elasticsearchOperations.search(searchBuilder.build(), CaseCenterIndex.class);
         List<CaseSearchResult> results = searchHits.getSearchHits().stream()
@@ -70,10 +69,28 @@ public class UsecaseSearchImpl implements UsecaseSearchService {
     public List<UsecaseVo> getBySrcMethod(String projectId, String... srcMethods) {
         Assert.notNull(projectId, "参数projectId 不能为空");
         Assert.notNull(srcMethods, "srcMethod 不能为空");
+        LinkedHashSet<String> normalizedMethods = Arrays.stream(srcMethods)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(method -> !method.isEmpty())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (normalizedMethods.isEmpty()) {
+            return new ArrayList<>();
+        }
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
         boolQuery.must(QueryBuilders.termQuery("usecase.projectId", projectId));
         boolQuery.must(QueryBuilders.termQuery("type", "usecase"));
-        boolQuery.must(QueryBuilders.termsQuery("usecase.srcStack.keyword", srcMethods));
+
+        BoolQueryBuilder srcStackQuery = QueryBuilders.boolQuery();
+        srcStackQuery.should(QueryBuilders.termsQuery("usecase.srcStack.keyword", normalizedMethods));
+        srcStackQuery.should(QueryBuilders.termsQuery("usecase.srcStack", normalizedMethods));
+        for (String method : normalizedMethods) {
+            srcStackQuery.should(QueryBuilders.prefixQuery("usecase.srcStack.keyword", method + "("));
+            srcStackQuery.should(QueryBuilders.wildcardQuery("usecase.srcStack.keyword", method + "(*"));
+            srcStackQuery.should(QueryBuilders.wildcardQuery("usecase.srcStack.keyword", method + " *"));
+        }
+        srcStackQuery.minimumShouldMatch(1);
+        boolQuery.must(srcStackQuery);
         return queryUsecases(boolQuery);
     }
 
@@ -86,69 +103,19 @@ public class UsecaseSearchImpl implements UsecaseSearchService {
         BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
         boolQuery.must(QueryBuilders.termQuery("usecase.projectId", projectId));
         boolQuery.must(QueryBuilders.termQuery("type", "usecase"));
-        boolQuery.must(QueryBuilders.matchPhraseQuery("usecase.srcStack", normalizedSrcClass));
+
+        BoolQueryBuilder srcStackQuery = QueryBuilders.boolQuery();
+        srcStackQuery.should(QueryBuilders.matchPhraseQuery("usecase.srcStack", normalizedSrcClass));
+        srcStackQuery.should(QueryBuilders.wildcardQuery("usecase.srcStack.keyword", normalizedSrcClass + " *"));
+        srcStackQuery.should(QueryBuilders.prefixQuery("usecase.srcStack.keyword", normalizedSrcClass + " "));
+        srcStackQuery.minimumShouldMatch(1);
+        boolQuery.must(srcStackQuery);
         return queryUsecases(boolQuery);
     }
 
     @Override
     public List<TableToUsecase> getByTable(String projectId, String databaseName, String tableName) {
-        Assert.hasText(databaseName, "参数databaseName 不能为空");
-        Assert.hasText(tableName, "参数tableName 不能为空");
-
-        String queryParam = databaseName + "." + tableName;
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
-        boolQuery.must(QueryBuilders.termQuery("usecase.projectId", projectId));
-        boolQuery.must(QueryBuilders.termQuery("type", "usecase"));
-        boolQuery.should(QueryBuilders.prefixQuery("usecase.sql.selects.name", queryParam));
-        boolQuery.should(QueryBuilders.prefixQuery("usecase.sql.deletes.name", queryParam));
-        boolQuery.should(QueryBuilders.prefixQuery("usecase.sql.inserts.name", queryParam));
-        boolQuery.should(QueryBuilders.prefixQuery("usecase.sql.updates.name", queryParam));
-        boolQuery.minimumShouldMatch(1);
-
-        NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
-        builder.withFilter(boolQuery);
-
-        SearchHits<CaseCenterIndex> searchHits = elasticsearchOperations.search(builder.build(), CaseCenterIndex.class);
-        List<TableToUsecase> result = new ArrayList<>();
-        for (SearchHit<CaseCenterIndex> hit : searchHits) {
-            CaseCenterIndex caseCenterIndex = hit.getContent();
-            if (caseCenterIndex == null || caseCenterIndex.getUsecase() == null) {
-                continue;
-            }
-            UsecaseVo usecaseVo = new UsecaseVo();
-            BeanUtils.copyProperties(caseCenterIndex.getUsecase(), usecaseVo);
-            usecaseVo.setId(caseCenterIndex.getId());
-            usecaseVo.setUpdateTime(caseCenterIndex.getUpdateTime());
-            TableToUsecase tableToUsecase = new TableToUsecase();
-            tableToUsecase.setTable(tableName);
-            tableToUsecase.setDatabase(databaseName);
-            tableToUsecase.setUsecaseVo(usecaseVo);
-            tableToUsecase.setAction(parseAction(caseCenterIndex.getUsecase().getSql(), databaseName, tableName));
-            result.add(tableToUsecase);
-        }
-        return result;
-    }
-
-    private String[] parseAction(UsecaseSql sql, String database, String name) {
-        boolean insert = Arrays.stream(sql.getInserts()).anyMatch(a -> a.getName().startsWith(database + "." + name));
-        boolean update = Arrays.stream(sql.getUpdates()).anyMatch(a -> a.getName().startsWith(database + "." + name));
-        boolean delete = Arrays.stream(sql.getDeletes()).anyMatch(a -> a.getName().startsWith(database + "." + name));
-        boolean select = Arrays.stream(sql.getSelects()).anyMatch(a -> a.getName().startsWith(database + "." + name));
-        List<String> list = new ArrayList<>();
-        if (insert) {
-            list.add("insert");
-        }
-        if (update) {
-            list.add("update");
-        }
-        if (delete) {
-            list.add("delete");
-        }
-        if (select) {
-            list.add("select");
-        }
-
-        return list.toArray(new String[0]);
+        return new ArrayList<>();
     }
 
     private List<UsecaseVo> queryUsecases(BoolQueryBuilder boolQuery) {

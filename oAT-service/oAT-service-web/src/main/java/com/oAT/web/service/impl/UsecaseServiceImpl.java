@@ -1,8 +1,6 @@
 package com.oAT.web.service.impl;
 
 import com.oAT.agent.model.*;
-import com.oAT.web.common.SqlParseInfo;
-import com.oAT.web.common.SqlStatParse;
 import com.oAT.web.esDao.CaseCenterRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
@@ -63,19 +61,12 @@ public class UsecaseServiceImpl implements UsecaseService {
             return new Usecase();
         }
 
-        Map<SqlTraceNode, String> sqlTraceNodes = new HashMap<>();
-        Map<CKSqlTraceNode, String> cksqlTraceNodes = new HashMap<>();
-        Map<DubboTraceNode, String> dubboTraceNodes = new HashMap<>();
-        Map<RedisTraceNode, String> redisTraceNodes = new HashMap<>();
         List<StackNodeVo> codeNodes = new ArrayList<>();
 
-        collectMySnapshotTraceNodes(validSnapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
-        collectSystemSnapshotTraceNodes(validSystemSnapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+        collectMySnapshotTraceNodes(validSnapshotIds, codeNodes);
+        collectSystemSnapshotTraceNodes(validSystemSnapshotIds, codeNodes);
 
         Usecase usecase = new Usecase();
-        usecase.setSql(parseSql(sqlTraceNodes));
-        usecase.setSql(parseCKSql(cksqlTraceNodes));
-        usecase.setRemote(parseRemote(dubboTraceNodes));
         usecase.setSrcStack(parseCoeStack(codeNodes));
         return usecase;
     }
@@ -107,10 +98,6 @@ public class UsecaseServiceImpl implements UsecaseService {
     }
 
     private void collectMySnapshotTraceNodes(String[] snapshotIds,
-                                             Map<SqlTraceNode, String> sqlTraceNodes,
-                                             Map<CKSqlTraceNode, String> cksqlTraceNodes,
-                                             Map<DubboTraceNode, String> dubboTraceNodes,
-                                             Map<RedisTraceNode, String> redisTraceNodes,
                                              List<StackNodeVo> codeNodes) {
         if (ObjectUtils.isEmpty(snapshotIds)) {
             return;
@@ -120,15 +107,11 @@ public class UsecaseServiceImpl implements UsecaseService {
             if (snapshot == null || snapshot.getSnapshot() == null) {
                 continue;
             }
-            collectTraceNodes(snapshot.getSnapshot().getTraceId(), snapshot.getId(), sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+            collectTraceNodes(snapshot.getSnapshot().getTraceId(), codeNodes);
         }
     }
 
     private void collectSystemSnapshotTraceNodes(String[] systemSnapshotIds,
-                                                 Map<SqlTraceNode, String> sqlTraceNodes,
-                                                 Map<CKSqlTraceNode, String> cksqlTraceNodes,
-                                                 Map<DubboTraceNode, String> dubboTraceNodes,
-                                                 Map<RedisTraceNode, String> redisTraceNodes,
                                                  List<StackNodeVo> codeNodes) {
         if (ObjectUtils.isEmpty(systemSnapshotIds)) {
             return;
@@ -138,16 +121,11 @@ public class UsecaseServiceImpl implements UsecaseService {
             if (snapshot == null) {
                 continue;
             }
-            collectTraceNodes(snapshot.getTraceId(), snapshot.getId(), sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+            collectTraceNodes(snapshot.getTraceId(), codeNodes);
         }
     }
 
     private void collectTraceNodes(String traceId,
-                                   String relationId,
-                                   Map<SqlTraceNode, String> sqlTraceNodes,
-                                   Map<CKSqlTraceNode, String> cksqlTraceNodes,
-                                   Map<DubboTraceNode, String> dubboTraceNodes,
-                                   Map<RedisTraceNode, String> redisTraceNodes,
                                    List<StackNodeVo> codeNodes) {
         List<TraceNodeIndex> nodeIndexs = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
         if (CollectionUtils.isEmpty(nodeIndexs)) {
@@ -155,15 +133,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         }
         for (TraceNodeIndex nodeIndex : nodeIndexs) {
             TraceNode node = nodeIndex.toTraceNode();
-            if (node instanceof SqlTraceNode) {
-                sqlTraceNodes.put((SqlTraceNode) node, relationId);
-            } else if (node instanceof CKSqlTraceNode) {
-                cksqlTraceNodes.put((CKSqlTraceNode) node, relationId);
-            } else if (node instanceof DubboTraceNode) {
-                dubboTraceNodes.put((DubboTraceNode) node, relationId);
-            } else if (node instanceof RedisTraceNode) {
-                redisTraceNodes.put((RedisTraceNode) node, relationId);
-            } else if (node instanceof CodeNodeBean && ((CodeNodeBean) node).getCodeNodes() != null) {
+            if (node instanceof CodeNodeBean && ((CodeNodeBean) node).getCodeNodes() != null) {
                 codeNodes.addAll(Arrays.asList(((CodeNodeBean) node).getCodeNodes()));
             }
         }
@@ -191,125 +161,6 @@ public class UsecaseServiceImpl implements UsecaseService {
             result.add(buildUsecaseSrc(nodeVo));
         }
         return result.toArray(new String[0]);
-    }
-
-    private UsecaseSql parseSql(Map<SqlTraceNode, String> nods) {
-        UsecaseSql result = new UsecaseSql();
-        List<String> sqls = new ArrayList<>();
-        List<UsecaseSql.SqlAction> inserts = new ArrayList<>();
-        List<UsecaseSql.SqlAction> updates = new ArrayList<>();
-        List<UsecaseSql.SqlAction> deletes = new ArrayList<>();
-        List<UsecaseSql.SqlAction> selects = new ArrayList<>();
-        List<UsecaseSql.SqlAction> drops = new ArrayList<>();
-        List<UsecaseSql.SqlAction> creates = new ArrayList<>();
-
-        for (Map.Entry<SqlTraceNode, String> entry : nods.entrySet()) {
-            SqlTraceNode sqlNode = entry.getKey();
-            String snapshot = entry.getValue();
-            if (sqls.contains(sqlNode.getSql())) {
-                continue;
-            }
-            //${db_type} ${db_name}  ${sql} 格式拼装sql内容
-            sqls.add(sqlNode.getDatabase().getType() + " " + sqlNode.getDatabase().getName() + " " + sqlNode.getSql());
-            SqlStatParse parse = new SqlStatParse();
-            parse.addSql(sqlNode.getSql(), sqlNode.getDatabase().getType());
-            String databaseName = sqlNode.getDatabase().getName();
-            int sqlIndex = sqls.size() - 1;
-            inserts.addAll(buildSqlAction(sqlIndex, parse.getAdds(), databaseName, snapshot));
-            updates.addAll(buildSqlAction(sqlIndex, parse.getUpdates(), databaseName, snapshot));
-            deletes.addAll(buildSqlAction(sqlIndex, parse.getDeletes(), databaseName, snapshot));
-            selects.addAll(buildSqlAction(sqlIndex, parse.getSelects(), databaseName, snapshot));
-            drops.addAll(buildSqlAction(sqlIndex, parse.getDrops(), databaseName, snapshot));
-            creates.addAll(buildSqlAction(sqlIndex, parse.getCreates(), databaseName, snapshot));
-        }
-
-        result.setContents(sqls.toArray(new String[0]));
-        // UsecaseSql.SqlAction  可能会重复
-        result.setInserts(inserts.toArray(new UsecaseSql.SqlAction[0]));
-        result.setUpdates(updates.toArray(new UsecaseSql.SqlAction[0]));
-        result.setSelects(selects.toArray(new UsecaseSql.SqlAction[0]));
-        result.setDeletes(deletes.toArray(new UsecaseSql.SqlAction[0]));
-        result.setDrops(drops.toArray(new UsecaseSql.SqlAction[0]));
-        result.setCreates(creates.toArray(new UsecaseSql.SqlAction[0]));
-        return result;
-    }
-
-    private UsecaseSql parseCKSql(Map<CKSqlTraceNode, String> nods) {
-        UsecaseSql result = new UsecaseSql();
-        List<String> sqls = new ArrayList<>();
-        List<UsecaseSql.SqlAction> inserts = new ArrayList<>();
-        List<UsecaseSql.SqlAction> updates = new ArrayList<>();
-        List<UsecaseSql.SqlAction> deletes = new ArrayList<>();
-        List<UsecaseSql.SqlAction> selects = new ArrayList<>();
-        List<UsecaseSql.SqlAction> drops = new ArrayList<>();
-        List<UsecaseSql.SqlAction> creates = new ArrayList<>();
-
-        for (Map.Entry<CKSqlTraceNode, String> entry : nods.entrySet()) {
-            CKSqlTraceNode sqlNode = entry.getKey();
-            String snapshot = entry.getValue();
-            if (sqls.contains(sqlNode.getSql())) {
-                continue;
-            }
-            //${db_type} ${db_name}  ${sql} 格式拼装sql内容
-            sqls.add(sqlNode.getDatabase().getType() + " " + sqlNode.getDatabase().getName() + " " + sqlNode.getSql());
-            SqlStatParse parse = new SqlStatParse();
-            parse.addSql(sqlNode.getSql(), sqlNode.getDatabase().getType());
-            String databaseName = sqlNode.getDatabase().getName();
-            int sqlIndex = sqls.size() - 1;
-            inserts.addAll(buildSqlAction(sqlIndex, parse.getAdds(), databaseName, snapshot));
-            updates.addAll(buildSqlAction(sqlIndex, parse.getUpdates(), databaseName, snapshot));
-            deletes.addAll(buildSqlAction(sqlIndex, parse.getDeletes(), databaseName, snapshot));
-            selects.addAll(buildSqlAction(sqlIndex, parse.getSelects(), databaseName, snapshot));
-            drops.addAll(buildSqlAction(sqlIndex, parse.getDrops(), databaseName, snapshot));
-            creates.addAll(buildSqlAction(sqlIndex, parse.getCreates(), databaseName, snapshot));
-        }
-
-        result.setContents(sqls.toArray(new String[0]));
-        // UsecaseSql.SqlAction  可能会重复
-        result.setInserts(inserts.toArray(new UsecaseSql.SqlAction[0]));
-        result.setUpdates(updates.toArray(new UsecaseSql.SqlAction[0]));
-        result.setSelects(selects.toArray(new UsecaseSql.SqlAction[0]));
-        result.setDeletes(deletes.toArray(new UsecaseSql.SqlAction[0]));
-        result.setDrops(drops.toArray(new UsecaseSql.SqlAction[0]));
-        result.setCreates(creates.toArray(new UsecaseSql.SqlAction[0]));
-        return result;
-    }
-
-    private List<UsecaseSql.SqlAction> buildSqlAction(int sqlIndex, List<SqlParseInfo> sqlInfos, String databaseName, String snapshot) {
-        List<UsecaseSql.SqlAction> result = new ArrayList<>();
-        for (SqlParseInfo sqlInfo : sqlInfos) {
-            for (String column : sqlInfo.getColumns()) {
-                UsecaseSql.SqlAction action = new UsecaseSql.SqlAction();
-                action.setName(databaseName + "." + sqlInfo.getTableName() + "." + column);
-                action.setSnapshot(snapshot);
-                action.setIndex(sqlIndex);
-                result.add(action);
-            }
-        }
-        return result;
-    }
-
-    // 仅完成dubbo 的解析，还应包括其它远程调用
-    public UsecaseRemote parseRemote(Map<DubboTraceNode, String> dubboNodes) {
-        UsecaseRemote remote = new UsecaseRemote();
-        List<String> serviceInterface = new ArrayList<>(dubboNodes.size());
-        List<String> contents = new ArrayList<>(dubboNodes.size());
-        DubboTraceNode node;
-        String interfaceName, content;
-        for (Map.Entry<DubboTraceNode, String> entry : dubboNodes.entrySet()) {
-            node = entry.getKey();
-            interfaceName = node.getServiceInterface() + "." + node.getServiceMethodName();
-            content = node.getRemoteUrl();
-            if (!serviceInterface.contains(interfaceName)) {
-                serviceInterface.add(interfaceName);
-            }
-            if (!contents.contains(content)) {
-                contents.add(content);
-            }
-        }
-        remote.setDubbo(serviceInterface.toArray(new String[0]));
-        remote.setContent(contents.toArray(new String[0]));
-        return remote;
     }
 
     @Override
@@ -371,27 +222,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         detailVo.setId(caseCenterIndex.getId());
         detailVo.setCreateTime(caseCenterIndex.getCreateTime());
         detailVo.setUpdateTime(caseCenterIndex.getUpdateTime());
-        UsecaseSql usecaseSql = caseCenterIndex.getUsecase().getSql();
-        if (usecaseSql != null) {
-            detailVo.setSqls(convertUsecaseSql(usecaseSql));
-        }
         return detailVo;
-    }
-
-    private UsecaseDetailVo.UsecaseDetaiSql[] convertUsecaseSql(UsecaseSql usecaseSql) {
-        int firstIndex, secondIndex;
-        String dbType, dbName, sql;
-        List<UsecaseDetailVo.UsecaseDetaiSql> detaiSqls = new ArrayList<>(usecaseSql.getContents().length);
-        // sql content 格式：${db_type} ${db_name}  ${sql}
-        for (String content : usecaseSql.getContents()) {
-            firstIndex = content.indexOf(" ");
-            secondIndex = content.indexOf(" ", firstIndex + 1);
-            dbType = content.substring(0, firstIndex);
-            dbName = content.substring(firstIndex + 1, secondIndex);
-            sql = content.substring(secondIndex + 1, content.length());
-            detaiSqls.add(new UsecaseDetailVo.UsecaseDetaiSql(dbType, dbName, sql));
-        }
-        return detaiSqls.toArray(new UsecaseDetailVo.UsecaseDetaiSql[0]);
     }
 
     /**
@@ -523,13 +354,9 @@ public class UsecaseServiceImpl implements UsecaseService {
         CaseCenterIndex index = optional.get();
         // 更新快照中包含的信息
         if (ObjectUtils.isEmpty(usecaseParam.getSnapshots()) && ObjectUtils.isEmpty(usecaseParam.getSystemSnapshots())) {
-            index.getUsecase().setRemote(null);
-            index.getUsecase().setSql(null);
             index.getUsecase().setSrcStack(null);
         } else {
             Usecase usecase = buildUsecaseRelations(usecaseParam.getSnapshots(), usecaseParam.getSystemSnapshots());
-            index.getUsecase().setRemote(usecase.getRemote());
-            index.getUsecase().setSql(usecase.getSql());
             index.getUsecase().setSrcStack(usecase.getSrcStack());
         }
 
@@ -750,8 +577,6 @@ public class UsecaseServiceImpl implements UsecaseService {
                 continue;
             }
             Usecase rebuilt = buildUsecaseRelations(current.getSnapshots(), current.getSystemSnapshots());
-            current.setRemote(rebuilt.getRemote());
-            current.setSql(rebuilt.getSql());
             current.setSrcStack(rebuilt.getSrcStack());
             if (StringUtils.hasText(operator)) {
                 current.setLastUpdateAuthor(operator);

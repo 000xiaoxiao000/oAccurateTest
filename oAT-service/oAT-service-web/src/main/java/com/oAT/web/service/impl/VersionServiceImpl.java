@@ -1042,7 +1042,6 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         final String simpleClassName = classDot.contains(".") ? classDot.substring(classDot.lastIndexOf('.') + 1) : classDot;
         final String nestedPrefix = simpleClassName + "$";
         LinkedHashSet<String> filteredNames = Arrays.stream(compareResult.getMethods())
-                .filter(m -> m.getModel() != CompareResult.Model.add)
                 .map(CompareResult.Method::getName)
                 .filter(Objects::nonNull)
                 .map(String::trim)
