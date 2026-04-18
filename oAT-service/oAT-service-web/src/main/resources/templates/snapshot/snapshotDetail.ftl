@@ -71,7 +71,7 @@
                 <div class="ui right sub header" style="margin-top: -15px;font-size: 13px">
                     <span>${createUser.name}</span>
                     <span>更新于</span>
-                    <span> ${snapshot.updateTime?datetime} </span>
+                    <span title="${snapshot.updateTimeText!'-'}">${snapshot.updateTimeText!'-'}</span>
                 </div>
             </h2>
             <div id="monitorDetail" class="ui">

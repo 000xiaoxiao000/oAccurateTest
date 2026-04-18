@@ -183,7 +183,7 @@
                     </td>
                     <td>-</td>
                     <td class="meta-text">-</td>
-                    <td class="meta-text"><@relativeTime value=dir.updateTime showTooltip=true /></td>
+                    <td class="meta-text"><span title="${dir.updateTimeText!'-'}">${dir.updateTimeRelativeText!'-'}</span></td>
                     <td>
                         <div class="ui dropdown quickMenu">
                             <i class="list link setting icon"></i>
@@ -218,7 +218,7 @@
                         </div>
                     </td>
                     <td class="meta-text">${maintainerNameMap[cas.lastUpdateAuthor]!maintainerNameMap[(cas.authors[0])!'']!'未设置'}</td>
-                    <td class="meta-text"><@relativeTime value=cas.updateTime showTooltip=true /></td>
+                    <td class="meta-text"><span title="${cas.updateTimeText!'-'}">${cas.updateTimeText!'-'}</span></td>
                     <td>
                         <div class="ui dropdown quickMenu">
                             <i class="list link setting icon"></i>

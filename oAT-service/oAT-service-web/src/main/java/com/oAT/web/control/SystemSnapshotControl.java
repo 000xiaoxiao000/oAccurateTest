@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.Serializable;
 import java.net.URI;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -31,6 +32,8 @@ import java.util.stream.Stream;
 @Controller
 @RequestMapping("/p/{projectId}/{appId}/snapshot/")
 public class SystemSnapshotControl {
+
+    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
     final Logger logger = LoggerFactory.getLogger(SystemSnapshotControl.class);
     @Autowired
@@ -97,6 +100,8 @@ public class SystemSnapshotControl {
         model.addAttribute("sort", sort);
         model.addAttribute("keyword", keyword);
         model.addAttribute("snapshots", snapshots);
+        model.addAttribute("snapshotTimeTextMap", buildSnapshotTimeTextMap(snapshots));
+        model.addAttribute("snapshotRelativeTimeTextMap", buildSnapshotRelativeTimeTextMap(snapshots));
         model.addAttribute("currentDir", directoryId);
         model.addAttribute("dirTiers", appService.getDirectoryTiers(appId, directoryId));
         return "/snapshot/systemSnapshotList";
@@ -159,6 +164,8 @@ public class SystemSnapshotControl {
         Assert.notNull(snapshot, "找不到系统快照id=" + id);
         model.addAttribute("snapshot", snapshot);
         model.addAttribute("activeTab", StringUtils.hasText(tab) ? tab : "definition");
+        model.addAttribute("snapshotVersionLastUpdateText", formatDateTime(snapshot.getVersionLastUpdate()));
+        model.addAttribute("snapshotVersionLastUpdateRelativeText", formatRelativeTime(snapshot.getVersionLastUpdate()));
         // 加载所有标签
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.snapshot);
         model.addAttribute("labels", labels);
@@ -272,6 +279,36 @@ public class SystemSnapshotControl {
                 .limit(names.length)
                 .map(i -> new Param(names[i], values != null && i < values.length ? values[i] : null))
                 .collect(Collectors.toList());
+    }
+
+    private Map<String, String> buildSnapshotTimeTextMap(List<SystemSnapshot> snapshots) {
+        Map<String, String> result = new HashMap<>();
+        for (SystemSnapshot snapshot : snapshots) {
+            result.put(snapshot.getId(), formatDateTime(snapshot.getVersionLastUpdate()));
+        }
+        return result;
+    }
+
+    private Map<String, String> buildSnapshotRelativeTimeTextMap(List<SystemSnapshot> snapshots) {
+        Map<String, String> result = new HashMap<>();
+        for (SystemSnapshot snapshot : snapshots) {
+            result.put(snapshot.getId(), formatRelativeTime(snapshot.getVersionLastUpdate()));
+        }
+        return result;
+    }
+
+    private String formatDateTime(Date date) {
+        if (date == null) {
+            return "-";
+        }
+        return new SimpleDateFormat(DATE_TIME_PATTERN).format(date);
+    }
+
+    private String formatRelativeTime(Date date) {
+        if (date == null) {
+            return "-";
+        }
+        return DateUtil.timeDifference(date) + "前";
     }
 
     private HttpTraceNode resolveHttpNodeWithLiveFallback(String traceId, HttpTraceNode snapshotNode) {
