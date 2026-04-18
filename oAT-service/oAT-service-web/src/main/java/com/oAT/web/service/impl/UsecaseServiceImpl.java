@@ -9,6 +9,7 @@ import com.oAT.web.esDao.TraceNodeRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.DirtyDataException;
 import com.oAT.web.service.UsecaseService;
+import com.oAT.web.service.entity.DirectoryDeleteResult;
 import com.oAT.web.service.entity.UsecaseDetailVo;
 import com.oAT.web.service.entity.UsecaseDirectoryVo;
 import com.oAT.web.service.entity.UsecaseVo;
@@ -23,6 +24,7 @@ import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class UsecaseServiceImpl implements UsecaseService {
@@ -48,8 +50,10 @@ public class UsecaseServiceImpl implements UsecaseService {
     }
 
     private Usecase buildUsecaseRelations(String[] snapshotIds, String[] systemSnapshotIds) {
-        boolean noSnapshots = ObjectUtils.isEmpty(snapshotIds);
-        boolean noSystemSnapshots = ObjectUtils.isEmpty(systemSnapshotIds);
+        String[] validSnapshotIds = filterValidSnapshotIds(snapshotIds);
+        String[] validSystemSnapshotIds = filterValidSystemSnapshotIds(systemSnapshotIds);
+        boolean noSnapshots = ObjectUtils.isEmpty(validSnapshotIds);
+        boolean noSystemSnapshots = ObjectUtils.isEmpty(validSystemSnapshotIds);
         if (noSnapshots && noSystemSnapshots) {
             return new Usecase();
         }
@@ -60,8 +64,8 @@ public class UsecaseServiceImpl implements UsecaseService {
         Map<RedisTraceNode, String> redisTraceNodes = new HashMap<>();
         List<StackNodeVo> codeNodes = new ArrayList<>();
 
-        collectMySnapshotTraceNodes(snapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
-        collectSystemSnapshotTraceNodes(systemSnapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+        collectMySnapshotTraceNodes(validSnapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
+        collectSystemSnapshotTraceNodes(validSystemSnapshotIds, sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
 
         Usecase usecase = new Usecase();
         usecase.setSql(parseSql(sqlTraceNodes));
@@ -69,6 +73,32 @@ public class UsecaseServiceImpl implements UsecaseService {
         usecase.setRemote(parseRemote(dubboTraceNodes));
         usecase.setSrcStack(parseCoeStack(codeNodes));
         return usecase;
+    }
+
+    private String[] filterValidSnapshotIds(String[] snapshotIds) {
+        if (ObjectUtils.isEmpty(snapshotIds)) {
+            return new String[0];
+        }
+        List<String> validIds = new ArrayList<>();
+        for (CaseCenterIndex snapshot : centerRepository.findAllById(Arrays.asList(snapshotIds))) {
+            if (snapshot != null && snapshot.getSnapshot() != null) {
+                validIds.add(snapshot.getId());
+            }
+        }
+        return validIds.toArray(new String[0]);
+    }
+
+    private String[] filterValidSystemSnapshotIds(String[] systemSnapshotIds) {
+        if (ObjectUtils.isEmpty(systemSnapshotIds)) {
+            return new String[0];
+        }
+        List<String> validIds = new ArrayList<>();
+        for (SystemSnapshot snapshot : systemSnapshotRepository.findAllById(Arrays.asList(systemSnapshotIds))) {
+            if (snapshot != null && StringUtils.hasText(snapshot.getId())) {
+                validIds.add(snapshot.getId());
+            }
+        }
+        return validIds.toArray(new String[0]);
     }
 
     private void collectMySnapshotTraceNodes(String[] snapshotIds,
@@ -81,13 +111,12 @@ public class UsecaseServiceImpl implements UsecaseService {
             return;
         }
         Iterable<CaseCenterIndex> snapshots = centerRepository.findAllById(Arrays.asList(snapshotIds));
-        int count = 0;
         for (CaseCenterIndex snapshot : snapshots) {
-            Assert.notNull(snapshot.getSnapshot(), "列表中存在无效的 Snapshot ID:" + Arrays.toString(snapshotIds));
+            if (snapshot == null || snapshot.getSnapshot() == null) {
+                continue;
+            }
             collectTraceNodes(snapshot.getSnapshot().getTraceId(), snapshot.getId(), sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
-            count++;
         }
-        Assert.isTrue(count == snapshotIds.length, "列表中存在无效的 Snapshot ID:" + Arrays.toString(snapshotIds));
     }
 
     private void collectSystemSnapshotTraceNodes(String[] systemSnapshotIds,
@@ -100,12 +129,12 @@ public class UsecaseServiceImpl implements UsecaseService {
             return;
         }
         Iterable<SystemSnapshot> snapshots = systemSnapshotRepository.findAllById(Arrays.asList(systemSnapshotIds));
-        int count = 0;
         for (SystemSnapshot snapshot : snapshots) {
+            if (snapshot == null) {
+                continue;
+            }
             collectTraceNodes(snapshot.getTraceId(), snapshot.getId(), sqlTraceNodes, cksqlTraceNodes, dubboTraceNodes, redisTraceNodes, codeNodes);
-            count++;
         }
-        Assert.isTrue(count == systemSnapshotIds.length, "列表中存在无效的 SystemSnapshot ID:" + Arrays.toString(systemSnapshotIds));
     }
 
     private void collectTraceNodes(String traceId,
@@ -266,7 +295,7 @@ public class UsecaseServiceImpl implements UsecaseService {
     }
 
     @Override
-    public List<UsecaseVo> getUsecases(String projectId, String directory, String sort) {
+    public List<UsecaseVo> getUsecases(String projectId, String directory, String sort, String keyword) {
         Assert.notNull(projectId, "param 'projectId' must be not null");
         Assert.notNull(directory, "param 'directory' must be not null");
 
@@ -274,8 +303,14 @@ public class UsecaseServiceImpl implements UsecaseService {
             sort = "usecase.title.keyword";
         }
 
-        // 不分页 按单页最大值100显示，业务上限定每个目录不能超过100个用例
         List<CaseCenterIndex> list = centerRepository.findByUsecase_ProjectIdAndAndUsecase_Directory(projectId, directory, PageRequest.of(0, 100, Sort.Direction.DESC, sort));
+        if (StringUtils.hasText(keyword)) {
+            String normalizedKeyword = keyword.trim().toLowerCase();
+            list = list.stream()
+                    .filter(item -> item.getUsecase() != null && StringUtils.hasText(item.getUsecase().getTitle()))
+                    .filter(item -> item.getUsecase().getTitle().toLowerCase().contains(normalizedKeyword))
+                    .collect(Collectors.toList());
+        }
         List<UsecaseVo> result = new ArrayList<>();
         for (CaseCenterIndex caseCenterIndex : list) {
             result.add(convertUsecase(caseCenterIndex));
@@ -504,9 +539,183 @@ public class UsecaseServiceImpl implements UsecaseService {
     public void doDeleteUsecase(String projectId, String id) {
         Optional<CaseCenterIndex> op = centerRepository.findById(id);
         Assert.isTrue(op.isPresent(), "not found usecase by id=" + id);
+        Assert.notNull(op.get().getUsecase(), "not found usecase by id=" + id);
         Assert.isTrue(op.get().getUsecase().getProjectId().equals(projectId), "the usecase not belong to project Id=" + projectId);
-        // 不直接删除，只是标识其disable 等于true
-        centerRepository.save(op.get());
+        centerRepository.deleteById(id);
+    }
+
+    @Override
+    public int countUsecasesInDirectory(String projectId, String directoryId) {
+        Assert.hasText(projectId, "param 'projectId' must be not null");
+        Assert.hasText(directoryId, "param 'directoryId' must be not null");
+        return collectDirectoryDeleteStats(projectId, directoryId).usecaseCount;
+    }
+
+    @Override
+    public int countDirectoryDescendants(String projectId, String directoryId) {
+        Assert.hasText(projectId, "param 'projectId' must be not null");
+        Assert.hasText(directoryId, "param 'directoryId' must be not null");
+        DirectoryDeleteStats stats = collectDirectoryDeleteStats(projectId, directoryId);
+        return Math.max(stats.directoryIds.size() - 1, 0);
+    }
+
+    @Override
+    public int deleteDirectoryWithUsecases(String projectId, String directoryId, String parentId, String name) {
+        Assert.hasText(projectId, "param 'projectId' must be not null");
+        Assert.hasText(directoryId, "param 'directoryId' must be not null");
+        Assert.hasText(parentId, "param 'parentId' must be not null");
+        Assert.hasText(name, "param 'name' must be not null");
+
+        DirectoryDeleteStats stats = collectDirectoryDeleteStats(projectId, directoryId);
+        for (String usecaseId : stats.usecaseIds) {
+            centerRepository.deleteById(usecaseId);
+        }
+        for (int i = stats.directoryIds.size() - 1; i >= 0; i--) {
+            String currentDirectoryId = stats.directoryIds.get(i);
+            CaseCenterIndex currentDirectoryIndex = centerRepository.findById(currentDirectoryId).orElse(null);
+            if (currentDirectoryIndex == null || currentDirectoryIndex.getDirectory() == null) {
+                continue;
+            }
+            unlinkDirectoryFromParent(currentDirectoryIndex.getDirectory().getParentId(), currentDirectoryId);
+            centerRepository.deleteById(currentDirectoryId);
+        }
+        return stats.usecaseCount;
+    }
+
+    @Override
+    public DirectoryDeleteResult previewDeleteDirectory(String projectId, String directoryId) {
+        Assert.hasText(projectId, "param 'projectId' must be not null");
+        Assert.hasText(directoryId, "param 'directoryId' must be not null");
+        DirectoryDeleteResult result = new DirectoryDeleteResult();
+        result.setDirectoryCount(countDirectoryDescendants(projectId, directoryId));
+        result.setUsecaseCount(countUsecasesInDirectory(projectId, directoryId));
+        result.setRequiresCascade(result.getDirectoryCount() > 0 || result.getUsecaseCount() > 0);
+        result.setDeleted(false);
+        if (result.isRequiresCascade()) {
+            StringBuilder message = new StringBuilder("该目录删除前需要确认级联删除");
+            if (result.getDirectoryCount() > 0 || result.getUsecaseCount() > 0) {
+                message.append("：");
+                if (result.getDirectoryCount() > 0) {
+                    message.append(result.getDirectoryCount()).append("个子目录");
+                }
+                if (result.getUsecaseCount() > 0) {
+                    if (result.getDirectoryCount() > 0) {
+                        message.append("，");
+                    }
+                    message.append(result.getUsecaseCount()).append("个用例");
+                }
+                message.append(" 将一并删除");
+            }
+            result.setMessage(message.toString());
+        } else {
+            result.setMessage("目录删除预检成功");
+        }
+        return result;
+    }
+
+    @Override
+    public DirectoryDeleteResult deleteDirectory(String projectId, String directoryId, String parentId, String name, boolean cascade) {
+        Assert.hasText(projectId, "param 'projectId' must be not null");
+        Assert.hasText(directoryId, "param 'directoryId' must be not null");
+        Assert.hasText(parentId, "param 'parentId' must be not null");
+        Assert.hasText(name, "param 'name' must be not null");
+
+        DirectoryDeleteResult result = previewDeleteDirectory(projectId, directoryId);
+        if (result.isRequiresCascade() && !cascade) {
+            return result;
+        }
+        if (result.isRequiresCascade()) {
+            int deletedUsecaseCount = deleteDirectoryWithUsecases(projectId, directoryId, parentId, name);
+            result.setUsecaseCount(deletedUsecaseCount);
+            result.setDeleted(true);
+            StringBuilder message = new StringBuilder("目录删除成功");
+            if (result.getDirectoryCount() > 0 || deletedUsecaseCount > 0) {
+                message.append("，共删除");
+                if (result.getDirectoryCount() > 0) {
+                    message.append(result.getDirectoryCount()).append("个子目录");
+                }
+                if (deletedUsecaseCount > 0) {
+                    if (result.getDirectoryCount() > 0) {
+                        message.append("和");
+                    }
+                    message.append(deletedUsecaseCount).append("个用例");
+                }
+            }
+            result.setMessage(message.toString());
+            return result;
+        }
+
+        boolean deleted = delFolder(projectId, directoryId, parentId, name);
+        result.setDeleted(deleted);
+        result.setMessage(deleted ? "用例目录删除成功" : "用例目录不为空，删除失败");
+        return result;
+    }
+
+    private DirectoryDeleteStats collectDirectoryDeleteStats(String projectId, String directoryId) {
+        DirectoryDeleteStats stats = new DirectoryDeleteStats();
+        Deque<String> stack = new ArrayDeque<>();
+        stack.push(directoryId);
+        while (!stack.isEmpty()) {
+            String currentDirectoryId = stack.pop();
+            CaseCenterIndex directoryIndex = centerRepository.findById(currentDirectoryId).orElse(null);
+            if (directoryIndex == null || directoryIndex.getDirectory() == null) {
+                continue;
+            }
+            if (!projectId.equals(directoryIndex.getDirectory().getProjectId())) {
+                continue;
+            }
+            if (!stats.visitedDirectoryIds.add(currentDirectoryId)) {
+                continue;
+            }
+            stats.directoryIds.add(currentDirectoryId);
+
+            List<CaseCenterIndex> usecases = centerRepository.findByUsecase_ProjectIdAndAndUsecase_Directory(projectId, currentDirectoryId, PageRequest.of(0, 1000));
+            for (CaseCenterIndex usecaseIndex : usecases) {
+                if (usecaseIndex == null || usecaseIndex.getUsecase() == null) {
+                    continue;
+                }
+                if (stats.visitedUsecaseIds.add(usecaseIndex.getId())) {
+                    stats.usecaseIds.add(usecaseIndex.getId());
+                    stats.usecaseCount++;
+                }
+            }
+
+            String[] childIds = directoryIndex.getDirectory().getChildId();
+            if (childIds == null || childIds.length == 0) {
+                continue;
+            }
+            for (int i = childIds.length - 1; i >= 0; i--) {
+                String childId = childIds[i];
+                if (StringUtils.hasText(childId)) {
+                    stack.push(childId);
+                }
+            }
+        }
+        return stats;
+    }
+
+    private void unlinkDirectoryFromParent(String parentId, String directoryId) {
+        if (!StringUtils.hasText(parentId) || "root".equals(parentId)) {
+            return;
+        }
+        CaseCenterIndex parentIndex = centerRepository.findById(parentId).orElse(null);
+        if (parentIndex == null || parentIndex.getDirectory() == null || parentIndex.getDirectory().getChildId() == null) {
+            return;
+        }
+        List<String> parentChildIdList = new ArrayList<>(Arrays.asList(parentIndex.getDirectory().getChildId()));
+        if (!parentChildIdList.remove(directoryId)) {
+            return;
+        }
+        parentIndex.getDirectory().setChildId(parentChildIdList.toArray(new String[0]));
+        centerRepository.save(parentIndex);
+    }
+
+    private static class DirectoryDeleteStats {
+        private final List<String> directoryIds = new ArrayList<>();
+        private final List<String> usecaseIds = new ArrayList<>();
+        private final Set<String> visitedDirectoryIds = new HashSet<>();
+        private final Set<String> visitedUsecaseIds = new HashSet<>();
+        private int usecaseCount;
     }
 
     @Override
@@ -541,6 +750,50 @@ public class UsecaseServiceImpl implements UsecaseService {
         return updated;
     }
 
+    @Override
+    public void removeSnapshotRelation(String snapshotId) {
+        if (!StringUtils.hasText(snapshotId)) {
+            return;
+        }
+        for (CaseCenterIndex index : centerRepository.findByUsecaseIsNotNull()) {
+            Usecase usecase = index.getUsecase();
+            if (usecase == null || ObjectUtils.isEmpty(usecase.getSnapshots())) {
+                continue;
+            }
+            String[] original = usecase.getSnapshots();
+            String[] filtered = Arrays.stream(original)
+                    .filter(id -> !snapshotId.equals(id))
+                    .toArray(String[]::new);
+            if (filtered.length != original.length) {
+                usecase.setSnapshots(filtered);
+                index.setUpdateTime(new Date());
+                centerRepository.save(index);
+            }
+        }
+    }
+
+    @Override
+    public void removeSystemSnapshotRelation(String systemSnapshotId) {
+        if (!StringUtils.hasText(systemSnapshotId)) {
+            return;
+        }
+        for (CaseCenterIndex index : centerRepository.findByUsecaseIsNotNull()) {
+            Usecase usecase = index.getUsecase();
+            if (usecase == null || ObjectUtils.isEmpty(usecase.getSystemSnapshots())) {
+                continue;
+            }
+            String[] original = usecase.getSystemSnapshots();
+            String[] filtered = Arrays.stream(original)
+                    .filter(id -> !systemSnapshotId.equals(id))
+                    .toArray(String[]::new);
+            if (filtered.length != original.length) {
+                usecase.setSystemSnapshots(filtered);
+                index.setUpdateTime(new Date());
+                centerRepository.save(index);
+            }
+        }
+    }
+
     private UsecaseDirectoryVo convertDirectory(CaseCenterIndex index) {
         UsecaseDirectoryVo vo = new UsecaseDirectoryVo();
         BeanUtils.copyProperties(index.getDirectory(), vo);
@@ -556,7 +809,35 @@ public class UsecaseServiceImpl implements UsecaseService {
         usecaseVo.setId(caseCenterIndex.getId());
         usecaseVo.setCreateTime(caseCenterIndex.getCreateTime());
         usecaseVo.setUpdateTime(caseCenterIndex.getUpdateTime());
+        usecaseVo.setSnapshotCount(countExistingSnapshots(usecaseVo.getSnapshots()));
+        usecaseVo.setSystemSnapshotCount(countExistingSystemSnapshots(usecaseVo.getSystemSnapshots()));
         return usecaseVo;
+    }
+
+    private int countExistingSnapshots(String[] snapshotIds) {
+        if (ObjectUtils.isEmpty(snapshotIds)) {
+            return 0;
+        }
+        int count = 0;
+        for (CaseCenterIndex index : centerRepository.findAllById(Arrays.asList(snapshotIds))) {
+            if (index != null && index.getSnapshot() != null) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int countExistingSystemSnapshots(String[] systemSnapshotIds) {
+        if (ObjectUtils.isEmpty(systemSnapshotIds)) {
+            return 0;
+        }
+        int count = 0;
+        for (SystemSnapshot snapshot : systemSnapshotRepository.findAllById(Arrays.asList(systemSnapshotIds))) {
+            if (snapshot != null) {
+                count++;
+            }
+        }
+        return count;
     }
 
 }

@@ -1,5 +1,6 @@
 package com.oAT.web.service;
 
+import com.oAT.web.service.entity.DirectoryDeleteResult;
 import com.oAT.web.service.entity.UsecaseDetailVo;
 import com.oAT.web.service.entity.UsecaseDirectoryVo;
 import com.oAT.web.service.entity.UsecaseVo;
@@ -14,7 +15,7 @@ public interface UsecaseService {
 
     UsecaseVo doAdd(String author, UsecaseVo usecaseParam);
 
-    List<UsecaseVo> getUsecases(String projectId, String directory, String sort);
+    List<UsecaseVo> getUsecases(String projectId, String directory, String sort, String keyword);
 
     UsecaseVo getUsecase(String projectId, String id);
 
@@ -60,6 +61,20 @@ public interface UsecaseService {
      */
     void doDeleteUsecase(String projectId, String id);
 
+    int countUsecasesInDirectory(String projectId, String directoryId);
+
+    int countDirectoryDescendants(String projectId, String directoryId);
+
+    int deleteDirectoryWithUsecases(String projectId, String directoryId, String parentId, String name);
+
+    DirectoryDeleteResult previewDeleteDirectory(String projectId, String directoryId);
+
+    DirectoryDeleteResult deleteDirectory(String projectId, String directoryId, String parentId, String name, boolean cascade);
+
     int rebuildUsecaseSearchData(String projectId, String operator);
+
+    void removeSnapshotRelation(String snapshotId);
+
+    void removeSystemSnapshotRelation(String systemSnapshotId);
 
 }

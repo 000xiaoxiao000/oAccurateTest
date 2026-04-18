@@ -145,6 +145,13 @@
                     </div>
                 </div>
             </div>
+            <div class="ui icon input" style="margin-right: 8px; display: inline-flex; align-items: center; gap: 6px;">
+                <input type="text" name="keyword" value="${keyword!}" placeholder="搜索快照名称..." style="min-width: 180px;">
+                <i class="search icon"></i>
+                <#if (keyword!'')?has_content>
+                    <a class="ui basic mini button" href="/p/${project.id}/snapshot/my">清空</a>
+                </#if>
+            </div>
             <div class="ui filter click dropdown item" tabindex="2">
                 <input id="filterSort" type="hidden" name="sort" value="${sort!}">
                 <i class="ui sort numeric ascending link icon"> </i>
@@ -165,6 +172,41 @@
     <!-- 主体内容 -->
     <div class="ui grid attached">
         <div class="ui four wide column" style="padding: 0px 0px 0px 10px;">
+            <style>
+                #mySnapshotListTable tbody td {
+                    padding-top: 0.56em;
+                    padding-bottom: 0.56em;
+                }
+
+                #mySnapshotListTable .snapshot-title {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.35em;
+                    max-width: 100%;
+                }
+
+                #mySnapshotListTable .snapshot-title span {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                #mySnapshotListTable .meta-text {
+                    font-size: 0.88em;
+                    color: #666;
+                    white-space: nowrap;
+                }
+
+                #mySnapshotListTable .hover.dropdown > .icon {
+                    margin: 0;
+                }
+
+                #mySnapshotListTable .empty-state-row td {
+                    color: #999;
+                    padding: 30px 0;
+                    text-align: center;
+                }
+            </style>
             <div class="segment">
                 <div class="ui block header top attached segment">
                     <div class="dropdown item" style="margin: auto;float: right">
@@ -187,18 +229,17 @@
                     </div>
                 </div>
                 <div class="ui attached segment" style="padding: 0; height: calc(100vh - 150px);overflow:auto">
-                    <table class="ui selectable single line compact table" style="border: 1px">
-                        <tbody>
+                    <table id="mySnapshotListTable" class="ui selectable compact very basic single line table" style="table-layout: fixed; border: 1px solid rgba(34,36,38,.08);">
+                        <tbody id="mySnapshotTableBody">
                         <#list snapshots as snap >
-                            <tr onclick="openMonitorDetail('${snap.traceId}');">
-                                <td title="">
-                                    ${snap.name}
+                            <tr data-snapshot-id="${snap.id}" onclick="openMonitorDetail('${snap.traceId}');">
+                                <td title="${snap.name}">
+                                    <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
-                                <td class="right aligned" style="font-size: 0.8em" title="${snap.updateTime?datetime}">
-                                    <#--${snap.updateTime?datetime}-->
-                                    ${beforeTime(snap.updateTime?datetime)}
+                                <td class="right aligned meta-text" title="${(snap.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}">
+                                    ${(snap.updateTime??)?then((beforeTime??)?then(beforeTime(snap.updateTime?datetime), snap.updateTime?string('yyyy-MM-dd HH:mm:ss')), '-')}
                                 </td>
-                                <td>
+                                <td style="width: 44px;">
                                     <div class="ui hover dropdown">
                                         <i class="setting link icon"></i>
                                         <div class="ui left menu">
@@ -251,6 +292,11 @@
                                 </td>
                             </tr>
                         </#list>
+                        <#if snapshots?size == 0>
+                            <tr id="mySnapshotEmptyRow" class="empty-state-row">
+                                <td colspan="3">暂无数据</td>
+                            </tr>
+                        </#if>
                         </tbody>
                     </table>
                 </div>
@@ -325,6 +371,16 @@
         </div>
 
         <script>
+            function ensureMySnapshotEmptyState() {
+                var hasDataRow = $('#mySnapshotTableBody tr[data-snapshot-id]').length > 0;
+                if (!hasDataRow && $('#mySnapshotEmptyRow').length === 0) {
+                    $('#mySnapshotTableBody').append('<tr id="mySnapshotEmptyRow" class="empty-state-row"><td colspan="3">暂无数据</td></tr>');
+                }
+                if (hasDataRow) {
+                    $('#mySnapshotEmptyRow').remove();
+                }
+            }
+
             // 删除快照逻辑
             function deleteSnapshot(id) {
                 $('#deleteSnapshotConfirmDialog').modal({
@@ -332,11 +388,10 @@
                         $.post('/p/${project.id}/snapshot/doDelete', {id: id}, function(res) {
                             if (res.success || res.result) {
                                 showToast(res.message || '删除成功', 'success');
-                                setTimeout(function() {
-                                    location.reload();
-                                }, 1000);
+                                $("tr[data-snapshot-id='" + id + "']").remove();
+                                ensureMySnapshotEmptyState();
                             } else {
-                                showToast('删除失败: ' + (res.message || '未知错误'), 'error');
+                                showToast((res.errorMessage || res.message || '删除失败'), 'error');
                             }
                         }).fail(function() {
                             showToast('请求失败', 'error');

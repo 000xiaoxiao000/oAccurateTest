@@ -11,6 +11,8 @@ public interface SnapshotService {
 
     SnapshotVo addSnapshot(Snapshot snapshot, Collection<TraceNode> nodes);
 
+    List<SnapshotVo> findSnapshot(String projectId, String userId, String sort, String keyword);
+
     List<SnapshotVo> findSnapshot(String projectId, String userId, String sort);
 
     List<SnapshotVo> findSnapshot(String projectId, String userId);

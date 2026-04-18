@@ -7,6 +7,7 @@ import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.esDao.entity.Snapshot;
 import com.oAT.web.esDao.entity.TraceNodeIndex;
 import com.oAT.web.service.SnapshotService;
+import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.entity.SnapshotVo;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +26,8 @@ public class SnapshotServiceImpl implements SnapshotService{
     CaseCenterRepository centerRepository;
     @Autowired
     TraceNodeRepository traceNodeRepository;
+    @Autowired
+    private UsecaseService usecaseService;
 
     @Override
     public SnapshotVo addSnapshot(Snapshot snapshot, Collection<TraceNode> nodes) {
@@ -56,7 +59,7 @@ public class SnapshotServiceImpl implements SnapshotService{
     }
 
     @Override
-    public List<SnapshotVo> findSnapshot(String projectId, String userId, String sort) {
+    public List<SnapshotVo> findSnapshot(String projectId, String userId, String sort, String keyword) {
         if ("name".equals(sort)) {
             sort = "snapshot.name.keyword";
         } else if (sort == null) {
@@ -64,11 +67,23 @@ public class SnapshotServiceImpl implements SnapshotService{
         }
         List<CaseCenterIndex> list = centerRepository.findBySnapshot_ProjectIdAndSnapshot_CreateUser(projectId, userId
                 , PageRequest.of(0, 500, Sort.Direction.DESC, sort));
+        if (StringUtils.hasText(keyword)) {
+            String normalizedKeyword = keyword.trim().toLowerCase();
+            list = list.stream()
+                    .filter(index -> index.getSnapshot() != null && StringUtils.hasText(index.getSnapshot().getName()))
+                    .filter(index -> index.getSnapshot().getName().toLowerCase().contains(normalizedKeyword))
+                    .collect(java.util.stream.Collectors.toList());
+        }
         List<SnapshotVo> result = new ArrayList<>(list.size());
         for (CaseCenterIndex index : list) {
             result.add(convert(index));
         }
         return result;
+    }
+
+    @Override
+    public List<SnapshotVo> findSnapshot(String projectId, String userId, String sort) {
+        return findSnapshot(projectId, userId, sort, null);
     }
 
     @Override
@@ -81,6 +96,7 @@ public class SnapshotServiceImpl implements SnapshotService{
         if (!StringUtils.hasText(id)) {
             return;
         }
+        usecaseService.removeSnapshotRelation(id);
         centerRepository.deleteById(id);
     }
 

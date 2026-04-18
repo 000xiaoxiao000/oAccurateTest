@@ -452,7 +452,7 @@
             <i class="home icon"></i>用例中心
         </a>
         <div class="usecase-edit-meta">
-            <span class="usecase-meta-chip"><i class="folder open outline icon"></i>${currentDir}</span>
+            <span class="usecase-meta-chip"><i class="folder open outline icon"></i>${currentDirName!currentDir}</span>
             <span class="usecase-meta-chip"><i class="edit outline icon"></i>编辑模式</span>
         </div>
     </div>
@@ -476,6 +476,10 @@
             </div>
 
             <div class="usecase-edit-summary">
+                <div class="summary-box">
+                    <div class="summary-box-label">默认目录</div>
+                    <div class="summary-box-value">${currentDirName!currentDir}</div>
+                </div>
                 <div class="summary-box">
                     <div class="summary-box-label">已选快照</div>
                     <div class="summary-box-value">${(selectedSnapshotCount)!0}</div>
@@ -610,7 +614,7 @@
                         建议结构：背景 → 前置条件 → 操作步骤 → 预期结果 → 风险与备注
                     </div>
                     <div class="editor-actions">
-                        <div class="ui secondary button" onclick="doCancelUsecase()">取消用例</div>
+                        <div class="ui secondary button" onclick="doCancelUsecase()">离开用例</div>
                         <div class="ui primary button" onclick="doSaveUsecase()">更新用例</div>
                     </div>
                 </div>
@@ -624,9 +628,9 @@
     <i class="angle up icon"></i>
 </button>
 
-<!-- 取消用例弹出框-->
+<!-- 离开用例弹出框-->
 <div id="cancelUsecaseDialog" class="ui small modal">
-    <div class="header">取消用例</div>
+    <div class="header">离开用例</div>
     <div class="ui negative message">
         <div class="header">
             你确定离开该用例吗？

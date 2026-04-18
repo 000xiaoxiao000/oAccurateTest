@@ -21,7 +21,7 @@ public interface SystemSnapshotService {
      * @param directory 对应目录ID
      * @return
      */
-    List<SystemSnapshot> findBy(String projectId, String appId, String directory);
+    List<SystemSnapshot> findBy(String projectId, String appId, String directory, String keyword);
 
 
     List<SystemSnapshot> findAll(String projectId, String appId);
