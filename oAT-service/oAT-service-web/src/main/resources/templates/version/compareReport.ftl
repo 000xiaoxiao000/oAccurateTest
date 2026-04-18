@@ -40,6 +40,13 @@
 </div>
 
 <!--内容主体-->
+<div class="ui text container" style="margin-top: 14px; margin-bottom: 10px;">
+    <a class="ui basic small button" href="/p/${project.id}/${app.id}/version/list">
+        <i class="left arrow icon"></i>
+        返回上一版本比对页
+    </a>
+</div>
+
 <div class="ui text container segment " style="margin-top: 14px">
     <!-- 中间内容 -->
     <h1 class="ui dividing  header oat-wrap-word">${report.jobName}
