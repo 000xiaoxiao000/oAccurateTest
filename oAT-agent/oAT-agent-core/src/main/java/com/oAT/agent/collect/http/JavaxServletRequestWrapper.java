@@ -10,7 +10,6 @@ import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
-import javax.servlet.http.Part;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -64,11 +63,14 @@ public class JavaxServletRequestWrapper extends HttpServletRequestWrapper {
     }
 
     @Override
-    public ServletInputStream getInputStream() {
+    public ServletInputStream getInputStream() throws IOException {
+        String contentType = getContentType();
+        if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+            return super.getInputStream();
+        }
         if (!bodyRead) {
             cacheRequestBody();
         }
-        // 防御性处理，防止 cachedBody 为 null
         if (cachedBody == null) {
             cachedBody = new byte[0];
         }
@@ -77,10 +79,13 @@ public class JavaxServletRequestWrapper extends HttpServletRequestWrapper {
 
     @Override
     public BufferedReader getReader() throws IOException {
+        String contentType = getContentType();
+        if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+            return super.getReader();
+        }
         if (!bodyRead) {
             cacheRequestBody();
         }
-        // 防御性处理，防止 cachedBody 为 null
         if (cachedBody == null) {
             cachedBody = new byte[0];
         }
@@ -93,9 +98,13 @@ public class JavaxServletRequestWrapper extends HttpServletRequestWrapper {
             return;
         }
         try {
-            // 尝试触发 container 解析 parameters，防止后续读取流导致 parameters 丢失
+            String contentType = getContentType();
+            if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+                cachedBody = "[multipart omitted]".getBytes(StandardCharsets.UTF_8);
+                return;
+            }
+
             try {
-                String contentType = getContentType();
                 if (contentType != null && contentType.toLowerCase().startsWith("application/x-www-form-urlencoded")) {
                     super.getParameterMap();
                 }
@@ -103,59 +112,34 @@ public class JavaxServletRequestWrapper extends HttpServletRequestWrapper {
             }
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            String contentType = getContentType();
-            if (contentType != null && contentType.startsWith("multipart/")) {
-                try {
-                    for (Part part : getParts()) {
-                        if (part.getSubmittedFileName() != null) {
-                            try (InputStream partStream = part.getInputStream()) {
-                                byte[] buffer = new byte[8192];
-                                int bytesRead;
-                                while ((bytesRead = partStream.read(buffer)) != -1) {
-                                    outputStream.write(buffer, 0, bytesRead);
-                                }
-                            } catch (Throwable e) {
-                                // 降级，单个 part 读取异常不影响整体
-                                logger.error("[Agent-EXCError]Read part stream error, fallback to skip part. "
-                                        + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                            }
-                        }
-                    }
-                } catch (Throwable e) {
-                    // 降级，multipart 解析异常
-                    logger.error("[Agent-EXCError]Get parts error, fallback to empty body. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                    cachedBody = new byte[0];
+            try (InputStream inputStream = super.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
                 }
-            } else {
-                try {
-                    InputStream inputStream = super.getInputStream();
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        outputStream.write(buffer, 0, bytesRead);
-                    }
-                } catch (IOException e) {
-                    // 处理 Stream closed 或其他 IO 异常，降级为空 body
-                    logger.error("[Agent-EXCError]InputStream closed or IO error, fallback to empty body. " + e.getMessage());
-                    cachedBody = new byte[0];
-                } catch (Throwable e) {
-                    // 其他异常也降级
-                    logger.error("[Agent-EXCError]Unexpected error, fallback to empty body. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                    cachedBody = new byte[0];
-                }
+            } catch (IOException e) {
+                logger.error("[Agent-EXCError]InputStream closed or IO error, fallback to empty body. " + e.getMessage());
+                cachedBody = new byte[0];
+            } catch (Throwable e) {
+                logger.error("[Agent-EXCError]Unexpected error, fallback to empty body. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
+                cachedBody = new byte[0];
             }
-            // 如果 cachedBody 还未赋值，正常赋值
             if (cachedBody == null) {
                 cachedBody = outputStream.toByteArray();
             }
         } catch (Throwable e) {
-            // 任何异常都不影响主流程
             logger.error("[Agent-EXCError]Error caching request body, fallback to empty body. "
                     + StackTraceFormatter.formatExceptionWithAgentMark(e));
             cachedBody = new byte[0];
         } finally {
             bodyRead = true;
         }
+    }
+
+    @Override
+    public Map<String, String[]> getParameterMap() {
+        return super.getParameterMap();
     }
 
     @Override

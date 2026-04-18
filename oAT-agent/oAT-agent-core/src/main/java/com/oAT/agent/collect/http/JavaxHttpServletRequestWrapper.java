@@ -8,12 +8,9 @@ import javax.servlet.ReadListener;
 import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
-import javax.servlet.http.Part;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
     private final static Log logger = LogFactory.getLog(JavaxHttpServletRequestWrapper.class);
@@ -25,12 +22,9 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
     public JavaxHttpServletRequestWrapper(HttpServletRequest request) {
         super(request);
         logger.debug("[Agent-JavaxHttpServletRequestWrapper]" + request.getClass().getName());
-        this.headers = new HashMap<String, String>();
-        Enumeration<String> headerNames = request.getHeaderNames();
-        while (headerNames.hasMoreElements()) {
-            String name = headerNames.nextElement();
-            headers.put(name, request.getHeader(name));
-        }
+        this.headers = new HashMap<>();
+        Collections.list(request.getHeaderNames())
+                .forEach(name -> headers.put(name, request.getHeader(name)));
         // 不在构造时直接cache，延迟到真正需要时
     }
 
@@ -43,7 +37,7 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
         }
         try {
             String s = new String(cachedBody, getCharacterEncoding() != null ? getCharacterEncoding() :
-                    "UTF-8");
+                    StandardCharsets.UTF_8.name());
             if (s.length() > 8192) {
                 return s.substring(0, 8192) + "...";
             }
@@ -58,7 +52,11 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
     }
 
     @Override
-    public ServletInputStream getInputStream() {
+    public ServletInputStream getInputStream() throws IOException {
+        String contentType = getContentType();
+        if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+            return super.getInputStream();
+        }
         if (!bodyRead) {
             cacheRequestBody();
         }
@@ -71,6 +69,10 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
 
     @Override
     public BufferedReader getReader() throws IOException {
+        String contentType = getContentType();
+        if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+            return super.getReader();
+        }
         if (!bodyRead) {
             cacheRequestBody();
         }
@@ -87,46 +89,27 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
             return;
         }
         try {
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             String contentType = getContentType();
-            if (contentType != null && contentType.startsWith("multipart/")) {
-                try {
-                    for (Part part : getParts()) {
-                        if (part.getSubmittedFileName() != null) {
-                            try (InputStream partStream = part.getInputStream()) {
-                                byte[] buffer = new byte[8192];
-                                int bytesRead;
-                                while ((bytesRead = partStream.read(buffer)) != -1) {
-                                    outputStream.write(buffer, 0, bytesRead);
-                                }
-                            } catch (Throwable e) {
-                                // 降级，单个 part 读取异常不影响整体
-                                logger.error("[Agent-EXCError]Read part stream error, fallback to skip part. "
-                                        + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                            }
-                        }
-                    }
-                } catch (Throwable e) {
-                    // 降级，multipart 解析异常
-                    logger.error("[Agent-EXCError]Get parts error, fallback to empty body. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                    cachedBody = new byte[0];
+            if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
+                cachedBody = "[multipart omitted]".getBytes(StandardCharsets.UTF_8);
+                return;
+            }
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            try (InputStream inputStream = super.getInputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
                 }
-            } else {
-                try (InputStream inputStream = super.getInputStream()) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        outputStream.write(buffer, 0, bytesRead);
-                    }
-                } catch (IOException e) {
-                    // 处理 Stream closed 或其他 IO 异常，降级为空 body
-                    logger.error("[Agent-EXCError]InputStream closed or IO error, fallback to empty body. " + e.getMessage());
-                    cachedBody = new byte[0];
-                } catch (Throwable e) {
-                    // 其他异常也降级
-                    logger.error("[Agent-EXCError]Unexpected error, fallback to empty body. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                    cachedBody = new byte[0];
-                }
+            } catch (IOException e) {
+                // 处理 Stream closed 或其他 IO 异常，降级为空 body
+                logger.error("[Agent-EXCError]InputStream closed or IO error, fallback to empty body. " + e.getMessage());
+                cachedBody = new byte[0];
+            } catch (Throwable e) {
+                // 其他异常也降级
+                logger.error("[Agent-EXCError]Unexpected error, fallback to empty body. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
+                cachedBody = new byte[0];
             }
             // 如果 cachedBody 还未赋值，正常赋值
             if (cachedBody == null) {
@@ -144,14 +127,12 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
 
     @Override
     public String getHeader(String name) {
-        String value = headers.get(name);
-        return value != null ? value : super.getHeader(name);
+        return headers.getOrDefault(name, super.getHeader(name));
     }
 
     @Override
     public String getContentType() {
-        String value = headers.get("Content-Type");
-        return value != null ? value : super.getContentType();
+        return headers.getOrDefault("Content-Type", super.getContentType());
     }
 
     private static class CachedBodyServletInputStream extends ServletInputStream {
