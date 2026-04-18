@@ -1,4 +1,4 @@
-<#include "../commonFunction.ftl">
+<#include "../common.ftl">
 <div class="ui small tabular menu" style="margin: -1px 0px 0px -1px;">
     <div class="item active" data-tab="base-info">基本信息</div>
     <div class="item" data-tab="redis-invoke">Redis访问</div>

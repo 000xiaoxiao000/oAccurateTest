@@ -236,8 +236,8 @@
                                 <td title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
-                                <td class="right aligned meta-text" title="${(snap.updateTime?string('yyyy-MM-dd HH:mm:ss'))!'-'}">
-                                    <@relativeTime value=snap.updateTime />
+                                <td class="right aligned meta-text">
+                                    <@relativeTime value=snap.updateTime showTooltip=true />
                                 </td>
                                 <td style="width: 44px;">
                                     <div class="ui hover dropdown">

@@ -3,14 +3,32 @@
 <#assign arrayToString = "com.oAT.web.control.freeMarke.ArrayToStringFunction"?new() />
 <#assign beforeTime = "com.oAT.web.control.freeMarke.BeforeTimeFormat"?new() />
 
-<#macro relativeTime value fallback='-'>
-    <#if value??>
-        <#if beforeTime??>
-            ${beforeTime(value?datetime)}
+<#function relativeTimeText value fallback='-' mode='relative'>
+    <#if !value??>
+        <#return fallback>
+    </#if>
+    <#if mode == 'absolute'>
+        <#return value?string('yyyy-MM-dd HH:mm:ss')>
+    </#if>
+    <#if beforeTime??>
+        <#return beforeTime(value?datetime)>
+    </#if>
+    <#return value?string('yyyy-MM-dd HH:mm:ss')>
+</#function>
+
+<#macro relativeTime value fallback='-' mode='relative' showTooltip=false tooltip=''>
+    <#local text = relativeTimeText(value=value fallback=fallback mode=mode)>
+    <#local tooltipText = tooltip>
+    <#if !tooltipText?has_content && showTooltip>
+        <#if value??>
+            <#local tooltipText = value?string('yyyy-MM-dd HH:mm:ss')>
         <#else>
-            ${value?string('yyyy-MM-dd HH:mm:ss')}
+            <#local tooltipText = fallback>
         </#if>
+    </#if>
+    <#if tooltipText?has_content>
+        <span title="${tooltipText}">${text}</span>
     <#else>
-        ${fallback}
+        ${text}
     </#if>
 </#macro>

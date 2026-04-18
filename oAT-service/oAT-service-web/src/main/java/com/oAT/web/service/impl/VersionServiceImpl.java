@@ -802,10 +802,10 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             cases.get(a.getId()).getClasses().add(compareResult.getClassName());
         });
 
-        collectUsecaseImpact(job, compareResult, classDot);
+        collectUsecaseImpact(job, compareResult, classDot, list);
     }
 
-    private void collectUsecaseImpact(Job<CompareJobVo> job, CompareResult compareResult, String classDot) {
+    private void collectUsecaseImpact(Job<CompareJobVo> job, CompareResult compareResult, String classDot, List<SystemSnapshot> matchedSnapshots) {
         Map<String, CompareJobVo.UsecaseUnion> cases = job.getData().getImpactUsecases();
         if (cases == null) {
             return;
@@ -847,10 +847,10 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         }
 
         if (usecases.isEmpty()) {
-            List<UsecaseVo> fallbackUsecases = collectUsecasesByMatchedSnapshots(projectId, cases, job.getData().getImpactSnapshot());
+            List<UsecaseVo> fallbackUsecases = collectUsecasesByMatchedSnapshots(projectId, cases, matchedSnapshots);
             if (!fallbackUsecases.isEmpty()) {
                 String titles = fallbackUsecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                job.getLogger().info(String.format("查找影响用例 类名：%s 直接源码检索未命中，改为基于系统快照反推，影响数：%s，命中用例：%s",
+                job.getLogger().info(String.format("查找影响用例 类名：%s 直接源码检索未命中，改为基于当前命中系统快照反推，影响数：%s，命中用例：%s",
                         classDot, fallbackUsecases.size(), StringUtils.hasText(titles) ? titles : "-"));
                 usecases = fallbackUsecases;
             }
@@ -866,15 +866,16 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     private List<UsecaseVo> collectUsecasesByMatchedSnapshots(String projectId,
                                                               Map<String, CompareJobVo.UsecaseUnion> existingCases,
-                                                              Map<String, CompareJobVo.SnapshotUnion> impactSnapshots) {
-        if (impactSnapshots == null || impactSnapshots.isEmpty()) {
+                                                              List<SystemSnapshot> matchedSnapshots) {
+        if (matchedSnapshots == null || matchedSnapshots.isEmpty()) {
             return Collections.emptyList();
         }
         LinkedHashMap<String, UsecaseVo> collected = new LinkedHashMap<>();
-        for (String snapshotId : impactSnapshots.keySet()) {
-            if (!StringUtils.hasText(snapshotId)) {
+        for (SystemSnapshot matchedSnapshot : matchedSnapshots) {
+            if (matchedSnapshot == null || !StringUtils.hasText(matchedSnapshot.getId())) {
                 continue;
             }
+            String snapshotId = matchedSnapshot.getId();
             List<CaseCenterIndex> indexes = caseCenterRepository.findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshotId);
             for (CaseCenterIndex index : indexes) {
                 if (index == null || index.getUsecase() == null || !StringUtils.hasText(index.getId())) {
