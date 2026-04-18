@@ -11,16 +11,16 @@
         <#return value?string('yyyy-MM-dd HH:mm:ss')>
     </#if>
     <#if beforeTime??>
-        <#return beforeTime(value?datetime)>
+        <#return beforeTime(value)>
     </#if>
-    <#return value?string('yyyy-MM-dd HH:mm:ss')>
+    <#return fallback>
 </#function>
 
 <#macro relativeTime value fallback='-' mode='relative' showTooltip=false tooltip=''>
     <#local text = relativeTimeText(value=value fallback=fallback mode=mode)>
     <#local tooltipText = tooltip>
     <#if !tooltipText?has_content && showTooltip>
-        <#if value??>
+        <#if value?? && mode == 'absolute'>
             <#local tooltipText = value?string('yyyy-MM-dd HH:mm:ss')>
         <#else>
             <#local tooltipText = fallback>

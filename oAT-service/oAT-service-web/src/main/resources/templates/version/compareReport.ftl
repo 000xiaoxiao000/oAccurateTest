@@ -45,7 +45,7 @@
     <h1 class="ui dividing  header oat-wrap-word">${report.jobName}
         <br>
         <div class="ui right aligned sub header  " style="margin-top: -15px;font-size: 13px">
-            <span>${report.createTime?datetime}</span>
+            <span>${report.createTime?string('yyyy-MM-dd HH:mm:ss')}</span>
         </div>
     </h1>
     <#-- Git 元信息 -->

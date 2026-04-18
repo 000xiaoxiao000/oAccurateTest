@@ -8,6 +8,8 @@ public class UsecaseDirectoryVo {
     private String parentId;
     private String projectId;
     private Date updateTime;
+    private String updateTimeText;
+    private String updateTimeRelativeText;
 
     public String getId() {
         return id;
@@ -47,5 +49,21 @@ public class UsecaseDirectoryVo {
 
     public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public String getUpdateTimeText() {
+        return updateTimeText;
+    }
+
+    public void setUpdateTimeText(String updateTimeText) {
+        this.updateTimeText = updateTimeText;
+    }
+
+    public String getUpdateTimeRelativeText() {
+        return updateTimeRelativeText;
+    }
+
+    public void setUpdateTimeRelativeText(String updateTimeRelativeText) {
+        this.updateTimeRelativeText = updateTimeRelativeText;
     }
 }

@@ -237,7 +237,7 @@
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
                                 <td class="right aligned meta-text">
-                                    <@relativeTime value=snap.updateTime showTooltip=true />
+                                    <span title="${snap.updateTimeText!'-'}">${snap.updateTimeRelativeText!'-'}</span>
                                 </td>
                                 <td style="width: 44px;">
                                     <div class="ui hover dropdown">

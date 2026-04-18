@@ -100,7 +100,7 @@
                             </#list>
                         </#if>
                     </td>
-                    <td> ${snap.createTime?datetime}</td>
+                    <td> ${snap.createTimeText!'-'}</td>
                     <td>
                         <div class="spanshotItem ui dropdown">
                             <i class="setting link icon"></i>

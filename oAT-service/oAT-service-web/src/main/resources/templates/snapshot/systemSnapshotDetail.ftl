@@ -232,7 +232,7 @@
                         </div>
                     </#if>
                     <#if dynamic.type=="comment">
-                        <div class="meta" onclick="doDelDescribe('${snapshot.id}','${dynamic.describe}','${dynamic.date?datetime}')">
+                        <div class="meta" onclick="doDelDescribe('${snapshot.id}','${dynamic.describe}','${dynamic.date?string('yyyy-MM-dd HH:mm:ss')}')">
                             <a class="like">
                                 <i class="close icon"></i>删除评论
                             </a>
@@ -380,7 +380,7 @@
         <#elseif snapshot.reportStatus == 2>
             <div class="ui success message">
                 <div class="header">报告已就绪</div>
-                <p>最后更新时间：${snapshot.coverageReport.createTime?datetime}</p>
+                <p>最后更新时间：${snapshot.coverageReport.createTime?string('yyyy-MM-dd HH:mm:ss')}</p>
             </div>
             <div class="ui grid">
                 <div class="eight wide column">

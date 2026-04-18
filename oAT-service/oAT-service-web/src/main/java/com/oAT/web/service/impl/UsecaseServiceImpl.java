@@ -23,6 +23,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.ObjectUtils;
 import org.springframework.util.StringUtils;
 
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -30,6 +31,8 @@ import org.jetbrains.annotations.NotNull;
 
 @Service
 public class UsecaseServiceImpl implements UsecaseService {
+
+    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
     @Autowired
     CaseCenterRepository centerRepository;
@@ -814,6 +817,8 @@ public class UsecaseServiceImpl implements UsecaseService {
         BeanUtils.copyProperties(index.getDirectory(), vo);
         vo.setId(index.getId());
         vo.setUpdateTime(index.getUpdateTime());
+        vo.setUpdateTimeText(formatDateTime(index.getUpdateTime()));
+        vo.setUpdateTimeRelativeText(formatRelativeTime(index.getUpdateTime()));
 
         return vo;
     }
@@ -824,9 +829,24 @@ public class UsecaseServiceImpl implements UsecaseService {
         usecaseVo.setId(caseCenterIndex.getId());
         usecaseVo.setCreateTime(caseCenterIndex.getCreateTime());
         usecaseVo.setUpdateTime(caseCenterIndex.getUpdateTime());
+        usecaseVo.setUpdateTimeText(formatDateTime(caseCenterIndex.getUpdateTime()));
         usecaseVo.setSnapshotCount(countExistingSnapshots(usecaseVo.getSnapshots()));
         usecaseVo.setSystemSnapshotCount(countExistingSystemSnapshots(usecaseVo.getSystemSnapshots()));
         return usecaseVo;
+    }
+
+    private String formatDateTime(Date date) {
+        if (date == null) {
+            return null;
+        }
+        return new SimpleDateFormat(DATE_TIME_PATTERN).format(date);
+    }
+
+    private String formatRelativeTime(Date date) {
+        if (date == null) {
+            return "-";
+        }
+        return com.oAT.web.common.DateUtil.timeDifference(date) + "前";
     }
 
     private int countExistingSnapshots(String[] snapshotIds) {

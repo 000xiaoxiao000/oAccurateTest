@@ -29,7 +29,7 @@
                             ${log.message!}
                         </div>
                         <div class="extra">
-                            ${log.createTime?datetime}
+                            ${log.createTime?string('yyyy-MM-dd HH:mm:ss')}
                         </div>
                     </div>
                 </div>
@@ -75,7 +75,7 @@
                         <td>
                             <a href="/p/${project.id}/snapshot/detail/${snap.id}">${snap.name}</a>
                         </td>
-                        <td class="right aligned" style="color: grey">${snap.createTime?datetime}</td>
+                        <td class="right aligned" style="color: grey" title="${snap.createTimeText!'-'}">${snap.createTimeText!'-'}</td>
                     </tr>
                 </#list>
             </table>

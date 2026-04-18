@@ -34,6 +34,7 @@ public class UsecaseVo implements Serializable {
     private String lastUpdateAuthor;
     private Date createTime;
     private Date updateTime;
+    private String updateTimeText;
     // 有效关联快照数量（过滤已删除数据）
     private Integer snapshotCount;
     // 有效关联系统快照数量（过滤已删除数据）
@@ -166,6 +167,14 @@ public class UsecaseVo implements Serializable {
 
     public void setUpdateTime(Date updateTime) {
         this.updateTime = updateTime;
+    }
+
+    public String getUpdateTimeText() {
+        return updateTimeText;
+    }
+
+    public void setUpdateTimeText(String updateTimeText) {
+        this.updateTimeText = updateTimeText;
     }
 
     public String getLastUpdateAuthor() {

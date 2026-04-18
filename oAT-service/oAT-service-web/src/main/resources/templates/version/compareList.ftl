@@ -485,7 +485,7 @@
             <#elseif tab == 'compare'>
                 <h4 class="ui dividing header compare-record-heading">代码比对报告记录</h4>
                 <#if reports?? && (reports?size > 0)>
-                    <div class="compare-record-segment">
+                    <table class="ui very basic celled table compare-record-table">
                         <thead>
                         <tr>
                             <th class="five wide">报告名称</th>
@@ -552,7 +552,6 @@
                         </#list>
                         </tbody>
                     </table>
-                    </div>
                     <#if page?? && page.totalPages gt 1>
                         <#assign currentPage = page.number + 1>
                         <#assign totalPages = page.totalPages>

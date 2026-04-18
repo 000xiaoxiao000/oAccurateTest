@@ -17,10 +17,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 @Service
 public class SnapshotServiceImpl implements SnapshotService{
+
+    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
     @Autowired
     CaseCenterRepository centerRepository;
@@ -176,12 +179,29 @@ public class SnapshotServiceImpl implements SnapshotService{
         BeanUtils.copyProperties(index.getSnapshot(), vo);
         vo.setId(index.getId());
         vo.setCreateTime(index.getCreateTime());
+        vo.setCreateTimeText(formatDateTime(index.getCreateTime()));
         if (index.getUpdateTime() != null) {
             vo.setUpdateTime(index.getUpdateTime());
         } else {
             vo.setUpdateTime(index.getCreateTime());
         }
+        vo.setUpdateTimeText(formatDateTime(vo.getUpdateTime()));
+        vo.setUpdateTimeRelativeText(formatRelativeTime(vo.getUpdateTime()));
         return vo;
+    }
+
+    private String formatDateTime(Date date) {
+        if (date == null) {
+            return "-";
+        }
+        return new SimpleDateFormat(DATE_TIME_PATTERN).format(date);
+    }
+
+    private String formatRelativeTime(Date date) {
+        if (date == null) {
+            return "-";
+        }
+        return com.oAT.web.common.DateUtil.timeDifference(date) + "前";
     }
 
 }
