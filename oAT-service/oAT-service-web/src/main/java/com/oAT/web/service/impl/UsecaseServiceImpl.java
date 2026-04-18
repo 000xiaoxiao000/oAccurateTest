@@ -170,7 +170,7 @@ public class UsecaseServiceImpl implements UsecaseService {
     }
 
     private String buildUsecaseSrc(@NotNull StackNodeVo nodeVo) {
-        StringBuilder result = new StringBuilder(nodeVo.getClassName());
+        StringBuilder result = new StringBuilder(nodeVo.getClassName().replace('/', '.'));
         String methodName = nodeVo.getMethodName();
         if (StringUtils.hasText(methodName)) {
             if (methodName.contains(" ")) {

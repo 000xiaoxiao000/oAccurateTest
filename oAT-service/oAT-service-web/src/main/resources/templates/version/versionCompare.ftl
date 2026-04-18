@@ -733,7 +733,7 @@
                         </td>
                         <td class="center aligned">
                             <div class="compare-record-action-group">
-                                <a href="/p/${project.id}/version/report/${report.id}" class="ui mini basic blue button">查看</a>
+                                <a href="/p/${project.id}/version/report/detail/${report.id}" class="ui mini basic blue button">查看</a>
                                 <button class="ui mini basic red button" onclick="doDeleteReport('${report.id}', this)">删除</button>
                             </div>
                         </td>
