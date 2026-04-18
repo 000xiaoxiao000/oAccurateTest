@@ -834,7 +834,7 @@
                             <tr>
                                 <td>
                                     <#if snap.appId??>
-                                        <a href="/p/${project.id}/${snap.appId}/snapshot/detail/${snap.id}">${snap.name}</a>
+                                        <a href="/p/${project.id}/snapshot/my?snapshotId=${snap.id}">${snap.name}</a>
                                     <#else>
                                         <span>${snap.name}</span>
                                     </#if>
