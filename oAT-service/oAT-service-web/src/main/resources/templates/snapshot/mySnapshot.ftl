@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>系统快照-我的快照</title>
+    <title>我的快照</title>
     <#include "../common.ftl">
     <script src="/js/tipsy.js?v=${.now}"></script>
     <link href="/css/tipsy.css" rel="stylesheet">
@@ -119,14 +119,147 @@
     <#include "../projectHeader.ftl">
 
     <!--中间过滤条件-->
+    <style>
+        .snapshot-page {
+            padding: 10px 10px 0;
+        }
+
+        .snapshot-toolbar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 14px;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid rgba(34, 36, 38, .08);
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
+        }
+
+        .snapshot-layout {
+            display: flex;
+            align-items: stretch;
+            gap: 0;
+            min-height: calc(100vh - 150px);
+        }
+
+        .snapshot-list-panel {
+            flex: 0 0 360px;
+            min-width: 280px;
+            max-width: 720px;
+            padding-right: 0;
+        }
+
+        .snapshot-resizer {
+            flex: 0 0 12px;
+            position: relative;
+            cursor: col-resize;
+            user-select: none;
+            transition: background-color 0.2s ease;
+        }
+
+        .snapshot-resizer:hover,
+        .snapshot-resizer.dragging {
+            background: rgba(33, 133, 208, 0.05);
+        }
+
+        .snapshot-resizer:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 1px;
+            background: rgba(34, 36, 38, .12);
+            transform: translateX(-50%);
+        }
+
+        .snapshot-resizer:after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 42px;
+            border-radius: 999px;
+            background: rgba(34, 36, 38, .16);
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 0 4px #f7f7f7;
+            transition: background-color 0.2s ease, height 0.2s ease;
+        }
+
+        .snapshot-resizer:hover:after,
+        .snapshot-resizer.dragging:after {
+            background: #2185d0;
+            height: 58px;
+        }
+
+        .snapshot-resizer-hint {
+            position: absolute;
+            top: 50%;
+            left: calc(100% + 8px);
+            transform: translateY(-50%);
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: rgba(31, 45, 61, 0.86);
+            color: #fff;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .snapshot-resizer:hover .snapshot-resizer-hint,
+        .snapshot-resizer.dragging .snapshot-resizer-hint {
+            opacity: 1;
+        }
+
+        .snapshot-detail-panel {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding-left: 0;
+        }
+
+        .snapshot-panel-segment {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .snapshot-list-scroll {
+            padding: 0;
+            height: calc(100vh - 212px);
+            overflow: auto;
+        }
+
+        @media (max-width: 960px) {
+            .snapshot-layout {
+                flex-direction: column;
+            }
+
+            .snapshot-list-panel,
+            .snapshot-detail-panel {
+                flex: 1 1 auto;
+                max-width: none;
+                min-width: 0;
+            }
+
+            .snapshot-resizer {
+                display: none;
+            }
+
+            .snapshot-list-scroll {
+                height: auto;
+                max-height: 45vh;
+            }
+        }
+    </style>
+
+    <div class="snapshot-page">
     <form id="filterForm" class="ui form" action="/p/${project.id}/snapshot/my">
-        <#if (missingSnapshotId!'')?has_content>
-            <div class="ui warning message" style="margin: 0 10px 16px 10px;">
-                <div class="header">我的快照不存在或已被删除</div>
-                <p>未找到快照 ID：${missingSnapshotId}</p>
-            </div>
-        </#if>
-        <div class="ui text small menu" style="margin: 10px 10px 20px 10px">
+        <div class="ui text small menu snapshot-toolbar" style="margin: 0;">
             <div class="ui multiple click dropdown item">
                 <input id="filterLabels" type="hidden" name="labels" value="${filterLabels!}">
                 <i class="tag link icon"></i>
@@ -169,15 +302,15 @@
             </div>
             <div class="ui multiple click dropdown item" tabindex="3">
                 <i class="file icon"> </i>
-                <a class="text" style="margin: auto" title="我的快照中所有接口" href="/p/${project.id}/snapshot/mySnapshotsCodeReport">
+                <span class="text" style="margin: auto" title="我的快照中所有接口" onclick="openCodeReport()">
                     查看报告
-                </a>
+                </span>
             </div>
         </div>
     </form>
     <!-- 主体内容 -->
-    <div class="ui grid attached">
-        <div class="ui four wide column" style="padding: 0px 0px 0px 10px;">
+    <div class="snapshot-layout">
+        <div id="snapshotListPanel" class="snapshot-list-panel">
             <style>
                 #mySnapshotListTable tbody td {
                     padding-top: 0.56em;
@@ -192,8 +325,8 @@
                 }
 
                 #mySnapshotListTable .snapshot-title span {
-                    overflow: hidden;
-                    text-overflow: ellipsis;
+                    overflow: visible;
+                    text-overflow: unset;
                     white-space: nowrap;
                 }
 
@@ -213,28 +346,28 @@
                     text-align: center;
                 }
             </style>
-            <div class="segment">
-                <div class="ui block header top attached segment">
-                    <div class="dropdown item" style="margin: auto;float: right">
-                        <i class="icon refresh"> </i>
-                        <a href="javascript:location.reload()">刷新</a>
-                    </div>
-                    <div class="ui inline click dropdown">
-                        <div class="text">
+            <div class="ui segment snapshot-panel-segment">
+                <div class="ui block header top attached segment" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                    <div class="ui compact tiny menu" style="margin: 0; box-shadow: none; border: 1px solid rgba(34,36,38,.12); border-radius: 999px; overflow: hidden;">
+                        <a class="item" href="/p/${project.id}/monitor" style="font-weight: 500;">
+                            <i class="line graph icon"></i>
+                            实时监控
+                        </a>
+                        <a class="item active" href="/p/${project.id}/snapshot/my" style="font-weight: 600; background: rgba(33,133,208,.08); color: #1b6fb8;">
+                            <i class="copy outline icon"></i>
                             我的快照
+                        </a>
+                    </div>
+                    <div style="display: inline-flex; align-items: center; gap: 8px;">
+                        <div class="ui mini basic button" onclick="resetSnapshotLayoutWidth()" title="恢复默认宽度">
+                            默认宽度
                         </div>
-                        <i class="dropdown icon"></i>
-                        <div class="menu">
-                            <a class="item" href="/p/${project.id}/monitor">
-                                实时监控
-                            </a>
-                            <a class="item active" href="/p/${project.id}/snapshot/my">
-                                我的快照
-                            </a>
+                        <div class="ui mini basic icon button" onclick="location.reload()" title="刷新列表">
+                            <i class="refresh icon"></i>
                         </div>
                     </div>
                 </div>
-                <div class="ui attached segment" style="padding: 0; height: calc(100vh - 150px);overflow:auto">
+                <div class="ui attached segment snapshot-list-scroll">
                     <table id="mySnapshotListTable" class="ui selectable compact very basic single line table" style="table-layout: fixed; border: 1px solid rgba(34,36,38,.08);">
                         <tbody id="mySnapshotTableBody">
                         <#list snapshots as snap >
@@ -308,7 +441,10 @@
                 </div>
             </div>
         </div>
-        <div class="ui twelve wide column" style="padding: 0px 14px 0px 14px;">
+        <div id="snapshotResizer" class="snapshot-resizer" aria-hidden="true">
+            <span class="snapshot-resizer-hint">拖拽调整宽度</span>
+        </div>
+        <div class="snapshot-detail-panel" style="padding-right: 0;">
             <!--未选择请求时提示-->
             <div id="emptyTip" class="ui grid middle aligned center aligned segment"
                  style="height: 100%;margin-top: 0px; background: #f7f7f7">
@@ -452,6 +588,18 @@
                 buildStackTable(traceId);
             }
 
+            function openSnapshotById(snapshotId) {
+                if (!snapshotId) {
+                    return false;
+                }
+                var targetRow = $("#mySnapshotTableBody tr[data-snapshot-id='" + snapshotId + "']").first();
+                if (targetRow.length === 0) {
+                    return false;
+                }
+                targetRow.trigger('click');
+                return true;
+            }
+
             function buildStackTable(traceId) {
                 let stackTab = $("#monitorDetail .ui.tab[data-tab='stack']");
                 // 加载内容
@@ -515,6 +663,108 @@
                 $('#snapshotEditDialog').load('/p/${project.id}/snapshot/edit?id=' + id);
                 $('#snapshotEditDialog').modal('show');
             }
+
+            var snapshotLayoutWidthController = {
+                storageKey: 'mySnapshotListWidth',
+                defaultWidth: 360,
+                minWidth: 280,
+                maxReservedWidth: 360,
+                page: null,
+                listPanel: null,
+                resizer: null,
+                applyWidth: function (width) {
+                    if (!this.page || !this.listPanel) {
+                        return width;
+                    }
+                    var maxWidth = Math.max(this.minWidth, this.page.width() - this.maxReservedWidth);
+                    var nextWidth = Math.min(Math.max(width, this.minWidth), maxWidth);
+                    this.listPanel.css('flex-basis', nextWidth + 'px');
+                    return nextWidth;
+                }
+            };
+
+            function resetSnapshotLayoutWidth() {
+                if (window.innerWidth <= 960) {
+                    return;
+                }
+                localStorage.removeItem(snapshotLayoutWidthController.storageKey);
+                snapshotLayoutWidthController.applyWidth(snapshotLayoutWidthController.defaultWidth);
+            }
+
+            function initSnapshotLayoutResizer() {
+                var controller = snapshotLayoutWidthController;
+                controller.page = $('.snapshot-page');
+                controller.listPanel = $('#snapshotListPanel');
+                controller.resizer = $('#snapshotResizer');
+                if (!controller.page.length || !controller.listPanel.length || !controller.resizer.length || window.innerWidth <= 960) {
+                    return;
+                }
+
+                var storedWidth = parseInt(localStorage.getItem(controller.storageKey), 10);
+                if (!isNaN(storedWidth)) {
+                    controller.applyWidth(storedWidth);
+                } else {
+                    controller.applyWidth(controller.defaultWidth);
+                }
+
+                var dragging = false;
+
+                controller.resizer.on('mousedown', function (event) {
+                    if (window.innerWidth <= 960) {
+                        return;
+                    }
+                    dragging = true;
+                    controller.resizer.addClass('dragging');
+                    $('body').css('cursor', 'col-resize');
+                    event.preventDefault();
+                });
+
+                $(document).on('mousemove.snapshotResizer', function (event) {
+                    if (!dragging) {
+                        return;
+                    }
+                    var pageOffset = controller.page.offset();
+                    if (!pageOffset) {
+                        return;
+                    }
+                    var width = event.pageX - pageOffset.left;
+                    controller.applyWidth(width);
+                });
+
+                $(document).on('mouseup.snapshotResizer', function () {
+                    if (!dragging) {
+                        return;
+                    }
+                    dragging = false;
+                    controller.resizer.removeClass('dragging');
+                    $('body').css('cursor', '');
+                    var currentWidth = parseInt(controller.listPanel.css('flex-basis'), 10);
+                    if (!isNaN(currentWidth)) {
+                        localStorage.setItem(controller.storageKey, currentWidth);
+                    }
+                });
+
+                $(window).on('resize.snapshotResizer', function () {
+                    if (window.innerWidth <= 960) {
+                        controller.listPanel.css('flex-basis', 'auto');
+                        return;
+                    }
+                    var currentWidth = parseInt(localStorage.getItem(controller.storageKey), 10);
+                    if (!isNaN(currentWidth)) {
+                        controller.applyWidth(currentWidth);
+                    } else {
+                        controller.applyWidth(controller.defaultWidth);
+                    }
+                });
+            }
+
+            $(function () {
+                initSnapshotLayoutResizer();
+                var requestedSnapshotId = '${snapshotId!}';
+                if (requestedSnapshotId) {
+                    openSnapshotById(requestedSnapshotId);
+                }
+            });
         </script>
     </div>
 </div>

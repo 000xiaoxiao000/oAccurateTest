@@ -152,7 +152,7 @@ public class SnapshotControl {
 
     @RequestMapping("/my")
     public String mySnapshotList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, String keyword,
-                                 String missingSnapshotId, Model model) {
+                                 String snapshotId, String missingSnapshotId, Model model) {
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null, keyword);
         // 基于标签过滤
         if (ArrayUtils.isNotEmpty(labels)) {
@@ -168,6 +168,7 @@ public class SnapshotControl {
         model.addAttribute("filterLabels", StringUtils.arrayToDelimitedString(labels, ","));
         model.addAttribute("sort", sort);
         model.addAttribute("keyword", keyword);
+        model.addAttribute("snapshotId", snapshotId);
         model.addAttribute("missingSnapshotId", missingSnapshotId);
 
         return "/snapshot/mySnapshot";
