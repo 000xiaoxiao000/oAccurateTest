@@ -81,6 +81,14 @@
 </div>
 <!--内容主体-->
 <div class="ui grid attached  container">
+    <#if missingUsecaseMessage?? && missingUsecaseMessage?has_content>
+        <div class="sixteen wide column" style="padding-bottom: 0;">
+            <div class="ui warning message">
+                <div class="header">用例不可访问</div>
+                <p>${missingUsecaseMessage}</p>
+            </div>
+        </div>
+    </#if>
     <!-- 左边导航菜单 -->
     <div class="ui four wide column">
         <div class="ui vertical menu">

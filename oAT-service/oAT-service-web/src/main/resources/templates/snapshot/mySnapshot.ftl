@@ -4,61 +4,9 @@
     <meta charset="UTF-8">
     <title>系统快照-我的快照</title>
     <#include "../common.ftl">
-    <script src="/js/tipsy.js?v=${.now}"></script>
-    <link href="/css/tipsy.css" rel="stylesheet">
-    <script src="/js/systemSnapshotFlow.js?v=${.now}"></script>
-    <script src="/js/treeTable.js?v=${.now}"></script>
-    <link href="/css/treeTable.css" rel="stylesheet">
-    <script src="/js/d3.min.js"></script>
-    <script src="/js/dagre-d3.min.js"></script>
-    <!--语法高亮-->
-    <link href="/css/github.min.css" rel="stylesheet">
-    <script src="/js/highlight.min.js"></script>
-    <script src="/js/spark-md5.min.js"></script>
-    <script src="/js/upload.js"></script>
 </head>
 
 <style id="css">
-    .node rect {
-        stroke: #999;
-        fill: #fff;
-        stroke-width: 1.5px;
-        cursor: pointer;
-    }
-
-    .node.error rect {
-        stroke: red;
-    }
-
-    .node rect:hover {
-        /*fill: azure;*/
-        stroke: dodgerblue;
-        stroke-width: 1.5px;
-    }
-
-    .node .label {
-        pointer-events: none;
-    }
-
-    .node text {
-        font-weight: 300;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
-        font-size: 14px;
-        pointer-events: none;
-    }
-
-    .edgePath path {
-        stroke: #333;
-        stroke-width: 1.5px;
-    }
-
-    #stackNodeDetail.max {
-        left: 0px;
-        right: 0px;
-        padding: 20px;
-        width: 100vw;
-    }
-
     tr.selected td {
         background-color: #ffe48d;
     }
@@ -66,52 +14,10 @@
     body.pushable > .pusher {
         background: #f7f7f7;
     }
-
-    /*鼠标悬浮*/
-    .ellipsis-tooltip {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: none; /* 控制元素最大宽度 */
-        cursor: pointer;
-        box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-        background-color: #f0f0f0;
-        border: 1px solid #ccc;
-    }
-
-    .tooltip-content {
-        display: none;
-        position: absolute;
-        border: 1px solid #ccc;
-        padding: 5px;
-        background-color: #fff;
-        z-index: 9999;
-
-    }
 </style>
 
 <body>
 <#include "../commonFunction.ftl">
-
-<div id="stackNodeDetail" class="ui right vertical wide sidebar raised segment"
-     style="background-color: white;overflow: hidden">
-    <div class="ui top attached label" style="border: none;top: -0.5px">
-        节点详情
-        <i class="close link icon" style="float: right;font-size: 1.1em;"
-           onclick="$('#stackNodeDetail').sidebar('hide');"></i>
-
-        <script>
-            function maxDetailWindow() {
-                $('#stackNodeDetail').toggleClass('max');
-                $('#stackNodeDetail .window.icon').toggleClass('maximize');
-                $('#stackNodeDetail .window.icon').toggleClass('restore');
-            }
-        </script>
-        <i class="window maximize outline link icon" onclick="maxDetailWindow();" style="float: right;font-size: 1.1em;"></i>
-    </div>
-    <div class="ui content container" style="padding: 5px;position:absolute;top: 5px;bottom:5px;overflow-y: auto;word-break: break-all">
-    </div>
-</div>
 
 <div class="pusher">
     <!--头部菜单 引入-->
@@ -120,6 +26,12 @@
 
     <!--中间过滤条件-->
     <form id="filterForm" class="ui form" action="/p/${project.id}/snapshot/my">
+        <#if (missingSnapshotId!'')?has_content>
+            <div class="ui warning message" style="margin: 0 10px 16px 10px;">
+                <div class="header">我的快照不存在或已被删除</div>
+                <p>未找到快照 ID：${missingSnapshotId}</p>
+            </div>
+        </#if>
         <div class="ui text small menu" style="margin: 10px 10px 20px 10px">
             <div class="ui multiple click dropdown item">
                 <input id="filterLabels" type="hidden" name="labels" value="${filterLabels!}">
@@ -163,9 +75,9 @@
             </div>
             <div class="ui multiple click dropdown item" tabindex="3">
                 <i class="file icon"> </i>
-                <span class="text" style="margin: auto" title="我的快照中所有接口" onclick="openCodeReport()">
+                <a class="text" style="margin: auto" title="我的快照中所有接口" href="/p/${project.id}/snapshot/mySnapshotsCodeReport">
                     查看报告
-                </span>
+                </a>
             </div>
         </div>
     </form>
@@ -232,7 +144,7 @@
                     <table id="mySnapshotListTable" class="ui selectable compact very basic single line table" style="table-layout: fixed; border: 1px solid rgba(34,36,38,.08);">
                         <tbody id="mySnapshotTableBody">
                         <#list snapshots as snap >
-                            <tr data-snapshot-id="${snap.id}" onclick="openMonitorDetail('${snap.traceId}');">
+                            <tr class="snapshot-row" data-snapshot-id="${snap.id}" onclick="window.location.href='${mySnapshotDetailHref(project.id, snap.id)}';">
                                 <td title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
@@ -303,56 +215,84 @@
             </div>
         </div>
         <div class="ui twelve wide column" style="padding: 0px 14px 0px 14px;">
-            <!--未选择请求时提示-->
-            <div id="emptyTip" class="ui grid middle aligned center aligned segment"
-                 style="height: 100%;margin-top: 0px; background: #f7f7f7">
-                <div class="column">
-                    <h2 class="ui header ">
-                        监控详情视图
-                        <div class="ui sub header">
-                            从左边监控列表选择您要查控的请求
-                        </div>
-                    </h2>
+            <div class="analysis-panel-shell">
+                <div class="analysis-hero">
+                    <div class="analysis-hero-title">快照分析工作台</div>
+                    <div class="analysis-hero-subtitle">选中左侧快照后，可在这里查看覆盖报告、影响分析日志和汇总信息。</div>
+                    <div class="analysis-hero-tags">
+                        <span class="analysis-hero-tag">覆盖分析</span>
+                        <span class="analysis-hero-tag">影响追踪</span>
+                        <span class="analysis-hero-tag">用例命中</span>
+                    </div>
                 </div>
-            </div>
+                <div class="analysis-body">
+                    <div class="analysis-summary-grid">
+                        <div class="analysis-stat-card primary">
+                            <div class="label">当前选中</div>
+                            <div id="analysisSelectedCount" class="value">0</div>
+                            <div class="hint">已选快照数量</div>
+                        </div>
+                        <div class="analysis-stat-card positive">
+                            <div class="label">我的快照</div>
+                            <div id="analysisSnapshotCount" class="value">${snapshots?size}</div>
+                            <div class="hint">当前筛选结果</div>
+                        </div>
+                        <div class="analysis-stat-card warning">
+                            <div class="label">标签筛选</div>
+                            <div id="analysisLabelCount" class="value">${(filterLabels!'')?has_content?then(filterLabels?split(',')?size, 0)}</div>
+                            <div class="hint">已启用标签数</div>
+                        </div>
+                        <div class="analysis-stat-card danger">
+                            <div class="label">关键词搜索</div>
+                            <div id="analysisKeywordState" class="value">${(keyword!'')?has_content?then('ON', 'OFF')}</div>
+                            <div class="hint">当前是否按名称筛选</div>
+                        </div>
+                    </div>
 
-            <!--监控详情-->
-            <div id="monitorDetail" style="display: none" traceId="">
-                <!--表头-->
-                <div id="tabSwitch" class="ui top attached secondary compact menu">
-                    <a class="item active" data-tab="flow">流程图</a>
-                    <a class="item" data-tab="stack">堆栈列表</a>
-                    <span id="monitorDetailTitle" class="ui tiny header" style="color: gray;padding: 0;margin-top: 12px;margin-bottom: 10px;"></span>
-                    <div class="right menu">
-                        <div class="item">
-                            <div class="ui secondary button" data-tooltip="保存至系统快照" data-position="left center"
-                                 onclick="openCreateSystemSnapshot();" style="font-size: 0.9em;">
-                                保存
+                    <div id="analysisEmptyState" class="analysis-empty">
+                        <i class="chart bar outline icon"></i>
+                        <div class="analysis-empty-title">分析工作台即将开放</div>
+                        <div class="analysis-empty-desc">
+                            当前页面主要用于管理“我的快照”。如需继续操作，请从左侧进入快照详情，或直接打开覆盖报告。这里后续会接入真实分析数据，不再展示示意日志。
+                        </div>
+                    </div>
+
+                    <div id="analysisWorkspace" style="display: none;">
+                        <div class="analysis-section-title">
+                            <h4 class="ui header">工作台规划</h4>
+                            <span class="ui mini grey basic label">占位说明</span>
+                        </div>
+                        <div class="ui placeholder segment" style="border-radius: 12px; min-height: 220px;">
+                            <div class="paragraph">
+                                <div class="line"></div>
+                                <div class="line"></div>
+                                <div class="line"></div>
+                                <div class="line"></div>
+                            </div>
+                            <div class="ui small message" style="margin-top: 16px; text-align: left;">
+                                <div class="header">后续计划展示内容</div>
+                                <ul class="list" style="margin-top: 8px;">
+                                    <li>快照变更摘要</li>
+                                    <li>真实影响分析日志</li>
+                                    <li>覆盖率与命中用例联动信息</li>
+                                </ul>
+                            </div>
+                            <div style="margin-top: 14px;">
+                                <a class="ui mini primary basic button" href="/p/${project.id}/snapshot/mySnapshotsCodeReport">查看覆盖报告</a>
                             </div>
                         </div>
                     </div>
-                </div>
-                <!-- 内容 -->
-                <div class="ui segment attached" style="min-height: calc(100vh - 150px);padding: 0px;">
-                    <div class="ui tab active" data-tab="flow" style="padding: 2px">
-                        <svg id="svg-canvas" style="min-height: calc(100vh - 150px);padding: 0px;" width="100%"></svg>
+
+                    <!--代码报告-->
+                    <div id="codeReport" style="display: none; margin-top: 18px;">
+                        <div class="analysis-section-title">
+                            <h4 class="ui header">覆盖率报告</h4>
+                        </div>
+                        <div class="ui tab active" data-tab="report" style="padding: 2px; max-height: calc(100vh - 110px);overflow:auto">
+                        </div>
                     </div>
-                    <div class="ui tab" data-tab="stack" style="padding: 2px">
-                    </div>
-                    <!--节点详情-->
                 </div>
             </div>
-
-            <!--代码报告-->
-            <div id="codeReport" style="display: none">
-                <div class="ui tab active" data-tab="report" style="padding: 2px; max-height: calc(100vh - 110px);overflow:auto">
-                </div>
-            </div>
-        </div>
-
-
-        <#--保存系统快照 窗口-->
-        <div id="systemSnapshotDialog" class="ui modal standard save snapshot">
         </div>
 
         <#-- 删除确认 Modal -->
@@ -371,6 +311,146 @@
         </div>
 
         <script>
+            function escapeAnalysisHtml(text) {
+                return $('<div>').text(text || '').html();
+            }
+
+            function detectAnalysisLogType(line) {
+                if (line.indexOf('新增') >= 0) {
+                    return 'add';
+                }
+                if (line.indexOf('修改') >= 0) {
+                    return 'update';
+                }
+                if (line.indexOf('删除') >= 0) {
+                    return 'delete';
+                }
+                if (line.indexOf('比对完成') >= 0 || line.indexOf('分析完成') >= 0 || line.indexOf('报告') >= 0) {
+                    return 'done';
+                }
+                if (line.indexOf('查找') >= 0 || line.indexOf('检索') >= 0 || line.indexOf('命中') >= 0 || line.indexOf('影响') >= 0) {
+                    return 'search';
+                }
+                return 'default';
+            }
+
+            function detectAnalysisLogGroup(line) {
+                if (line.indexOf('发现 [新增]') >= 0 || line.indexOf('发现 [修改]') >= 0 || line.indexOf('发现 [删除]') >= 0) {
+                    return '变更发现';
+                }
+                if (line.indexOf('比对完成') >= 0 || line.indexOf('变更统计') >= 0 || line.indexOf('当前应用快照数') >= 0) {
+                    return '比对汇总';
+                }
+                if (line.indexOf('开始分析用例影响') >= 0 || line.indexOf('查找快照影响') >= 0 || line.indexOf('查找影响用例') >= 0 || line.indexOf('命中用例') >= 0) {
+                    return '影响分析';
+                }
+                return '运行日志';
+            }
+
+            function highlightAnalysisLogText(text) {
+                var html = escapeAnalysisHtml(text);
+                html = html.replace(/(类名|类级候选|方法候选|检索候选|方法源码键|影响数|命中用例ID|命中用例|当前应用快照数|变更统计)(：|:)/g, '<span class="highlight-key">$1$2</span>');
+                html = html.replace(/(发现 \[新增\]|发现 \[修改\]|发现 \[删除\]|比对完成|开始分析用例影响)/g, '<span class="highlight-key">$1</span>');
+                html = html.replace(/(影响数\s*[：:]?\s*0|命中快照\s*[：:]?\s*-|命中用例ID\s*[：:]?\s*-|命中用例\s*[：:]?\s*-|未找到)/g, '<span class="highlight-danger">$1</span>');
+                html = html.replace(/(影响数\s*[：:]?\s*[1-9]\d*|命中用例ID\s*[：:]?\s*[^,，\s]+|命中用例\s*[：:]?\s*\[[^\]]+\])/g, '<span class="highlight-success">$1</span>');
+                html = html.replace(/(web3Server\.[A-Za-z0-9_$.]+|[A-Za-z0-9_/$.-]+\.[A-Za-z0-9_$.]+\([^)]*\)|\/[A-Za-z0-9_\-\/{}]+|[A-Za-z0-9_.$-]+\*[A-Za-z0-9_.$*\-]*)/g, '<span class="highlight-value">$1</span>');
+                html = html.replace(/(候选|检索|回退到类级别检索|源码键)/g, '<span class="highlight-warning">$1</span>');
+                return html;
+            }
+
+            function buildAnalysisLogTag(type) {
+                var labels = {
+                    add: '新增',
+                    update: '修改',
+                    delete: '删除',
+                    done: '完成',
+                    search: '分析',
+                    default: '日志'
+                };
+                return '<span class="analysis-log-tag ' + type + '">' + labels[type] + '</span>';
+            }
+
+            function renderAnalysisLogs(logText) {
+                if (!logText) {
+                    return '<div class="analysis-log-placeholder">暂无分析日志，当前展示的是预留面板样式。</div>';
+                }
+
+                var groups = [];
+                var groupMap = {};
+                logText.split(/\r?\n/)
+                    .filter(function (line) { return $.trim(line).length > 0; })
+                    .forEach(function (line) {
+                        var groupName = detectAnalysisLogGroup(line);
+                        if (!groupMap[groupName]) {
+                            groupMap[groupName] = { name: groupName, lines: [] };
+                            groups.push(groupMap[groupName]);
+                        }
+                        groupMap[groupName].lines.push(line);
+                    });
+
+                return groups.map(function (group) {
+                    var body = group.lines.map(function (line) {
+                        var match = line.match(/^(\d{2}:\d{2}:\d{2})\s*(.*)$/);
+                        var time = match ? match[1] : '日志';
+                        var content = match ? match[2] : line;
+                        var type = detectAnalysisLogType(content);
+                        return '<div class="analysis-log-line">'
+                            + '<span class="analysis-log-marker ' + type + '"></span>'
+                            + '<div class="analysis-log-main">'
+                            + '<span class="analysis-log-time">' + escapeAnalysisHtml(time) + '</span>'
+                            + '<div class="analysis-log-content">'
+                            + '<span class="analysis-log-tags">' + buildAnalysisLogTag(type) + '</span>'
+                            + '<span class="analysis-log-text">' + highlightAnalysisLogText(content) + '</span>'
+                            + '</div>'
+                            + '</div>'
+                            + '</div>';
+                    }).join('');
+
+                    return '<div class="analysis-log-group">'
+                        + '<div class="analysis-log-group-header">'
+                        + '<div class="analysis-log-group-title"><i class="tasks icon"></i><span>' + escapeAnalysisHtml(group.name) + '</span></div>'
+                        + '<div class="analysis-log-group-count">' + group.lines.length + ' 条</div>'
+                        + '</div>'
+                        + '<div class="analysis-log-group-body">' + body + '</div>'
+                        + '</div>';
+                }).join('');
+            }
+
+            function buildDemoAnalysisLog(snapshotName) {
+                return [
+                    '22:35:56 发现 [新增] 类: web3Server.config.MultipartConfig',
+                    '22:35:56 发现 [新增] 类: web3Server.controller.DetailController',
+                    '22:35:56 发现 [修改] 类: web3Server.controller.FileUploadController',
+                    '22:35:56 比对完成: 共分析 5 个类(新增:2, 修改:3, 删除:0)',
+                    '22:35:56 变更统计: 新增:6, 修改:1, 删除:0',
+                    '22:35:56 当前应用快照数: 1',
+                    '22:35:56 开始分析用例影响',
+                    '22:35:56 查找快照影响类名: web3Server.controller.FileUploadController 方法: uploadFileWithCommons 影响数: 1, 命中用例ID: Xt_QoJ0BpIVhk_7mKoVb, 命中用例: [' + snapshotName + ' /web3/upload/commons]',
+                    '22:35:57 查找影响用例类名: web3Server.controller.Web3Controller 方法: web3 未找到, 回退到类级别检索, 影响数: 0, 命中用例ID: -, 命中用例: -'
+                ].join('\n');
+            }
+
+            function showAnalysisForSnapshot(snapshotId, snapshotName, snapshotTime, detailUrl) {
+                $('#analysisSelectedCount').text(snapshotId ? 1 : 0);
+                $('#analysisSnapshotName').text(snapshotName || '-');
+                $('#analysisSnapshotTime').text(snapshotTime || '-');
+                $('#analysisDetailLink').attr('href', detailUrl || 'javascript:void(0);');
+                $('#analysisEmptyState').hide();
+                $('#analysisWorkspace').show();
+                $('#analysisLogBoard').html(renderAnalysisLogs(buildDemoAnalysisLog(snapshotName || '当前快照')));
+                openCodeReport(snapshotId, snapshotName);
+            }
+
+            function clearAnalysisWorkspace() {
+                $('#analysisSelectedCount').text(0);
+                $('#analysisEmptyState').show();
+                $('#analysisWorkspace').hide();
+                $('#analysisSnapshotName').text('-');
+                $('#analysisSnapshotTime').text('-');
+                $('#analysisDetailLink').attr('href', 'javascript:void(0);');
+                $('#analysisLogBoard').html(renderAnalysisLogs(''));
+            }
+
             function ensureMySnapshotEmptyState() {
                 var hasDataRow = $('#mySnapshotTableBody tr[data-snapshot-id]').length > 0;
                 if (!hasDataRow && $('#mySnapshotEmptyRow').length === 0) {
@@ -379,6 +459,38 @@
                 if (hasDataRow) {
                     $('#mySnapshotEmptyRow').remove();
                 }
+            }
+
+            function openCodeReport(snapshotId, snapshotName) {
+                $('#codeReport').show();
+                let reportTab = $('#codeReport .ui.tab[data-tab="report"]');
+                let url = snapshotId
+                    ? '/p/${project.id}/snapshot/mySnapshotCodeReport?snapshotId=' + encodeURIComponent(snapshotId)
+                    : '/p/${project.id}/snapshot/mySnapshotsCodeReport';
+
+                reportTab.html(
+                    '<div class="ui active inverted dimmer" style="min-height: 240px; border-radius: 12px;">'
+                    + '<div class="ui text loader">正在加载' + escapeAnalysisHtml(snapshotName || '覆盖率报告') + '...</div>'
+                    + '</div>'
+                );
+
+                $.ajax({
+                    url: url,
+                    dataType: 'html',
+                    success: function (responseHtml) {
+                        reportTab.html(responseHtml);
+                        if (snapshotName) {
+                            reportTab.prepend(
+                                '<div class="ui small positive message" style="margin-bottom:12px;">'
+                                + '当前已选快照：<strong>' + escapeAnalysisHtml(snapshotName) + '</strong>，已自动加载该快照的专属覆盖率报告。'
+                                + '</div>'
+                            );
+                        }
+                    },
+                    error: function () {
+                        reportTab.html('<div class="ui negative message">报告加载失败，请稍后重试。</div>');
+                    }
+                });
             }
 
             // 删除快照逻辑
@@ -413,64 +525,21 @@
             $('.ui.click.dropdown').dropdown({
                 on: 'click'
             });
-            $(".menu .item[data-tab]").tab();
-            $("#stackNodeDetail").sidebar({
-                "transition": 'overlay',
-                "dimPage": false
-            });
-            $("table.selectable tr").click(function (e) {
-                $(this).parent().children("tr").removeClass("selected");
+            $("table.selectable tr.snapshot-row").click(function (e) {
+                $(this).parent().children("tr.snapshot-row").removeClass("selected");
                 $(this).addClass("selected");
-            })
+            });
 
-            function openMonitorDetail(traceId) {
-                // 初始化界面
-                $("#emptyTip").hide();
-                $("#codeReport").hide();
-                $("#monitorDetail").show();
-                $('#monitorDetail').attr('traceId', traceId);
-                $.tab('change tab', 'flow');
-                $("#tabSwitch .item.active").removeClass("active");
-                $("#tabSwitch .item[data-tab='flow']").addClass("active");
-                // 装载监控数据
-                $.ajax({
-                    url: "detail/graph/" + traceId,
-                    dataType: "json",
-                    success: function (monitorData) {
-                        $("#monitorDetailTitle").text(monitorData.title);
-                        $("#svg-canvas").children().remove();
-                        buildTopo("svg-canvas", monitorData);
-                    }
-                });
-                // 构建堆栈列表
-                buildStackTable(traceId);
-            }
+            $('#analysisLogBoard').html(renderAnalysisLogs(''));
 
-            function buildStackTable(traceId) {
-                let stackTab = $("#monitorDetail .ui.tab[data-tab='stack']");
-                // 加载内容
-                $.ajax({
-                    "url": "detail/stack/" + traceId,
-                    "dataType": "html",
-                    "success": function (responseHtml) {
-                        //  清空选项卡
-                        // stackTab.empty();
-                        stackTab.html(responseHtml);
-                        // 构建树表格
-                        treeTable(stackTab.find('.tree.table'));
-
-                        $(".tree.table tbody tr").click(function (e) {
-                            e.stopPropagation();//阻止事件冒泡
-                            $(this).parent().children("tr").removeClass("selected");
-                            $(this).addClass("selected");
-                            $('#stackNodeDetail').sidebar('show');
-                            $('#stackNodeDetail .ui.content')
-                                .first()
-                                .load("node?traceId=" + traceId + "&nodeId=" + $(this).attr('nodeId'))
-                        });
-                    }
-                });
-            }
+            $("table.selectable tr.snapshot-row").on('click', function (e) {
+                var $row = $(this);
+                var snapshotId = $row.data('snapshot-id');
+                var snapshotName = $.trim($row.find('.snapshot-title span').text());
+                var snapshotTime = $.trim($row.find('.meta-text span').attr('title') || $row.find('.meta-text span').text());
+                var detailUrl = $row.attr('onclick').match(/window.location.href='([^']+)'/);
+                showAnalysisForSnapshot(snapshotId, snapshotName, snapshotTime, detailUrl ? detailUrl[1] : 'javascript:void(0);');
+            });
 
             $("#filterLabels").change(function () {
                 $("#filterForm").submit();
@@ -478,32 +547,6 @@
             $("#filterSort").change(function () {
                 $("#filterForm").submit();
             });
-
-            // 代码关系图
-            function openCodeMap(traceId) {
-                let url = "/p/${project.id}/map/code?traceId=" + traceId;
-                window.open(url, 'codeMapDialog', 'toolbar=no,location=no,resizable=no, height=500, width=680,,scrollbars=yes ,left=380,top=100');
-            }
-
-            // 代码报告
-            function openCodeReport() {
-                $("#emptyTip").hide();
-                $("#monitorDetail").hide();
-                $("#codeReport").show();
-                let reportTab = $("#codeReport .ui.tab[data-tab='report']");
-                let url = "/p/${project.id}/snapshot/mySnapshotsCodeReport";
-                // window.open(url, 'codeMapDialog', 'toolbar=no,location=no,resizable=no, height=500, width=680,,scrollbars=yes ,left=380,top=100');
-
-                // 加载内容
-                $.ajax({
-                    "url": url,
-                    "dataType": "html",
-                    "success": function (responseHtml) {
-                        reportTab.html(responseHtml);
-                    }
-                });
-
-            }
 
             function openSnapshotEdit(id) {
                 $('#snapshotEditDialog').load('/p/${project.id}/snapshot/edit?id=' + id);

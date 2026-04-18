@@ -91,8 +91,13 @@ public class UsecaseControl {
 
     @RequestMapping("/edit")
     public String openEditView(@PathVariable String projectId, @SessionAttribute UserVo user, String id, Model model) {
-        UsecaseVo usecase = usecaseService.getUsecase(projectId, id);
-        Assert.notNull(usecase, "not fount usecase by id. id=" + id);
+        UsecaseVo usecase;
+        try {
+            usecase = usecaseService.getUsecase(projectId, id);
+        } catch (IllegalArgumentException ex) {
+            model.addAttribute("missingUsecaseMessage", "要编辑的用例不存在或已被删除");
+            return openListView(projectId, "root", "updateTime", null, model);
+        }
         // 获取当前用户下所有的快照
         List<SnapshotVo> selectedSnapshots = ArrayUtils.isNotEmpty(usecase.getSnapshots())
                 ? snapshotService.getByIds(usecase.getSnapshots())
@@ -186,7 +191,13 @@ public class UsecaseControl {
 
     @RequestMapping("/detail")
     public String openDetails(@PathVariable String projectId, String id, Model model) {
-        UsecaseDetailVo usecase = usecaseService.getUsecaseDetail(projectId, id);
+        UsecaseDetailVo usecase;
+        try {
+            usecase = usecaseService.getUsecaseDetail(projectId, id);
+        } catch (IllegalArgumentException ex) {
+            model.addAttribute("missingUsecaseMessage", "要查看的用例不存在或已被删除");
+            return openListView(projectId, "root", "updateTime", null, model);
+        }
 
         model.addAttribute("usecase", usecase);
         UserVo lastUpdateAuthor = userService.getUser(usecase.getLastUpdateAuthor());

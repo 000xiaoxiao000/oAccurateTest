@@ -20,6 +20,12 @@
 </div>
 <!--过滤条件-->
 <div class="ui container">
+    <#if (missingSnapshotId!'')?has_content>
+        <div class="ui warning message">
+            <div class="header">系统快照不存在或已被删除</div>
+            <p>未找到系统快照 ID：${missingSnapshotId}</p>
+        </div>
+    </#if>
     <div class="ui grid">
         <div class="four wide column"></div>
         <div class="ui twelve wide column" style="padding-bottom: 0px">

@@ -2,7 +2,7 @@
 <span class="ui sub header">为您找到:${searchPage.total}条结果</span>
 <div class="ui link divided  items">
        <#list searchPage.contents as item>
-           <a class="item" target="_blank" href="/p/${project.id}/${item.appId}/snapshot/detail/${item.id}">
+           <a class="item" target="_blank" href="${systemSnapshotDetailHref(project.id, item.appId, item.id)}">
                <div class="ui tiny image">
                    <#if item.headImage??>
                        <img src="/r/${item.headImage}">

@@ -63,7 +63,7 @@ public class SystemSnapshotControl {
     // 打开系统快照列表
     @RequestMapping("/list")
     public String openList(@PathVariable String projectId, @PathVariable String appId, String directoryId, String sort,
-                           String keyword, @SessionAttribute UserVo user, Model model) {
+                           String keyword, String missingSnapshotId, @SessionAttribute UserVo user, Model model) {
         AppVo app = appService.getApp(appId);
         directoryId = StringUtils.hasText(directoryId) ? directoryId : "root";
         final String finalDirId = directoryId;
@@ -99,6 +99,7 @@ public class SystemSnapshotControl {
 
         model.addAttribute("sort", sort);
         model.addAttribute("keyword", keyword);
+        model.addAttribute("missingSnapshotId", missingSnapshotId);
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("snapshotTimeTextMap", buildSnapshotTimeTextMap(snapshots));
         model.addAttribute("snapshotRelativeTimeTextMap", buildSnapshotRelativeTimeTextMap(snapshots));
@@ -157,11 +158,14 @@ public class SystemSnapshotControl {
      * @return
      */
     @RequestMapping("/detail/{id}")
-    public String open(@PathVariable String projectId, @PathVariable String id,
+    public String open(@PathVariable String projectId, @PathVariable String appId, @PathVariable String id,
                        @RequestParam(value = "tab", required = false) String tab,
                        Model model) {
         SystemSnapshot snapshot = systemSnapshotService.getById(id);
-        Assert.notNull(snapshot, "找不到系统快照id=" + id);
+        if (snapshot == null) {
+            logger.warn("系统快照不存在, projectId={}, appId={}, snapshotId={}", projectId, appId, id);
+            return "redirect:/p/" + projectId + "/" + appId + "/snapshot/list?missingSnapshotId=" + id;
+        }
         model.addAttribute("snapshot", snapshot);
         model.addAttribute("activeTab", StringUtils.hasText(tab) ? tab : "definition");
         model.addAttribute("snapshotVersionLastUpdateText", formatDateTime(snapshot.getVersionLastUpdate()));

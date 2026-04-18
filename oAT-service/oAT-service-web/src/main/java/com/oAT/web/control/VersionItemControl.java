@@ -25,9 +25,11 @@ import java.io.UnsupportedEncodingException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -322,7 +324,7 @@ public class VersionItemControl {
          }
     }
 
-    // New: start a compare based on git diff between two commits (no checkout/build)
+    // 基于两个提交之间的 Git 差异比较（无需检出/构建）
     @RequestMapping("{appId}/version/git/compare")
     public String startGitDiffCompare(@PathVariable String projectId,
                                       @PathVariable String appId,
@@ -450,10 +452,14 @@ public class VersionItemControl {
 
     @RequestMapping("/version/compare/console")
     public String openCompareJobConsole(@PathVariable String projectId, String jobId, Model model) {
+        if (!StringUtils.hasText(jobId)) {
+            model.addAttribute("errorMessage", "比对任务不存在");
+            return "forward:/error/404";
+        }
+
         CompareJobVo job = versionService.getCompareJob(jobId);
-        // 重定向至报告页
-        if (job == null|| jobId.isEmpty()) {
-            return "redirect:/p/" + projectId + "/version/report/" + jobId;
+        if (job == null || job.isFinish()) {
+            return "redirect:/p/" + projectId + "/version/report/detail/" + jobId;
         }
         model.addAttribute("appInfo", appService.getApp(job.getAppId()));
         model.addAttribute("apps", appService.getAppList(projectId));
@@ -897,20 +903,20 @@ public class VersionItemControl {
             model.addAttribute("different", differenceClass.values());
 
             List<UsecaseBo> usecaseBos = new ArrayList<>();
+            AtomicInteger skippedDeletedUsecaseCount = new AtomicInteger();
             VersionCompareReport.ImpactCase[] casesArr = report.getCases();
             if (casesArr != null) {
                 Arrays.stream(casesArr).forEach(a -> {
+                    if (a == null || a.getCaseId() == null) return;
                     try {
-                        if (a == null || a.getCaseId() == null) return;
                         UsecaseVo usecase = usecaseService.getUsecase(report.getProjectId(), a.getCaseId());
-                        if (usecase == null) {
-                            logger.info("无法找到影响用例，id={}", a.getCaseId());
-                            return;
-                        }
                         List<LabelGroup.Label> labels = projectService.getLables(report.getProjectId(), LableType.usecase, usecase.getLabels());
                         UsecaseBo bo = new UsecaseBo(usecase.getId(), usecase.getTitle(), labels, a.getDifferences());
                         bo.setDirectoryPath(resolveUsecaseDirectoryPath(report.getProjectId(), Optional.ofNullable(usecase.getDirectory()).orElse("root")));
                         usecaseBos.add(bo);
+                    } catch (IllegalArgumentException ex) {
+                        skippedDeletedUsecaseCount.incrementAndGet();
+                        logger.info("影响用例已不存在，跳过展示 projectId={}, reportId={}, caseId={}", report.getProjectId(), reportId, a.getCaseId());
                     } catch (Exception ex) {
                         logger.warn("处理影响用例时发生异常, id={}", a.getCaseId(), ex);
                     }
@@ -919,8 +925,10 @@ public class VersionItemControl {
                 ArrayList<UsecaseGroup> usecaseGroups = new ArrayList<>();
                 grouped.forEach((k, v) -> usecaseGroups.add(new UsecaseGroup(k, v)));
                 model.addAttribute("usecaseGroups", usecaseGroups);
+                model.addAttribute("skippedDeletedUsecaseCount", skippedDeletedUsecaseCount.get());
             } else {
                 model.addAttribute("usecaseGroups", Collections.emptyList());
+                model.addAttribute("skippedDeletedUsecaseCount", 0);
             }
 
             model.addAttribute("impactHintSummary", buildImpactHintSummary(report.getJobLog()));

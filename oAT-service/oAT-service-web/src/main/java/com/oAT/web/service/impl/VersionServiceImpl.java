@@ -22,8 +22,8 @@ import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.oAT.web.common.Job;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.common.compare.CompareUtils;
-import com.oAT.web.esDao.VersionCenterRepository;
 import com.oAT.web.esDao.CaseCenterRepository;
+import com.oAT.web.esDao.VersionCenterRepository;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.esDao.entity.VersionCenterIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
@@ -34,6 +34,7 @@ import com.oAT.web.service.SystemSnapshotService;
 import com.oAT.web.service.UsecaseSearchService;
 import com.oAT.web.service.VersionService;
 import com.oAT.web.service.entity.*;
+import com.oAT.web.service.entity.GitDiffVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
@@ -64,7 +65,6 @@ import static java.util.concurrent.Executors.*;
 
 import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
-import com.oAT.web.service.entity.GitDiffVo;
 
 @Service
 public class VersionServiceImpl implements VersionService, InitializingBean {
@@ -965,18 +965,15 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Override
     public VersionCompareReport getCompareReport(String compareId) {
+        Assert.hasText(compareId, "参数compareId不能为空");
+
         Optional<VersionCenterIndex> optional = versionCenterRepository.findById(compareId);
-        if (!optional.isPresent() && StringUtils.hasText(compareId)) {
-            Pageable pageable = PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "createTime"));
-            Page<VersionCompareReportVo> reportPage = getCompareReportList(null, compareId, pageable);
-            if (!reportPage.isEmpty()) {
-                String fallbackReportId = reportPage.getContent().get(0).getId();
-                optional = versionCenterRepository.findById(fallbackReportId);
-            }
-        }
         Assert.isTrue(optional.isPresent(), String.format("找不到id=%s的比对报告", compareId));
+
         VersionCenterIndex index = optional.get();
+        Assert.isTrue("compareReport".equalsIgnoreCase(index.getType()), String.format("id=%s对应的记录不是比对报告", compareId));
         Assert.notNull(index.getCompareReport(), String.format("id=%s对应的记录不是比对报告", compareId));
+
         VersionCompareReport report = index.getCompareReport();
         report.setCreateTime(index.getCreateTime());
         return report;
