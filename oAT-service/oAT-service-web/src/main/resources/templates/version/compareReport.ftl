@@ -41,9 +41,9 @@
 
 <!--内容主体-->
 <div class="ui text container" style="margin-top: 14px; margin-bottom: 10px;">
-    <a class="ui basic small button" href="/p/${project.id}/${app.id}/version/list">
+    <a class="ui basic small button" href="/p/${project.id}/${app.id}/version/compare">
         <i class="left arrow icon"></i>
-        返回上一版本比对页
+        返回版本比对页
     </a>
 </div>
 
