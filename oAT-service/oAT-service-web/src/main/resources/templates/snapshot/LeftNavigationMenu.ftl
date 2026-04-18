@@ -60,7 +60,7 @@
     <div class="subnav-group item">
         <div class="subnav-label">${snapshotGroupName}</div>
         <div class="subnav-menu">
-            <a class="item subnav-item ${systemSnapshotListActive!}" href="${snapshotListHref}">快照列表</a>
+            <a class="item subnav-item ${systemSnapshotListActive!}" href="${snapshotListHref}">我的快照</a>
             <#if snapshotDetailHref??>
                 <a class="item subnav-item ${snapshotDetailActive!}" href="${snapshotDetailHref}">详情视图</a>
             </#if>

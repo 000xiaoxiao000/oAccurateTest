@@ -725,7 +725,7 @@
                 </button>
                 <div class="ui vertical menu usecase-anchor-menu">
                     <a class="item active" data-anchor-target="snapshotHeader" href="#snapshotHeader">
-                        <span>快照列表</span>
+                        <span>我的快照</span>
                         <div class="ui label">${(snapshots?size)!'0'}</div>
                     </a>
                     <a class="item" data-anchor-target="systemSnapshotHeader" href="#systemSnapshotHeader">
@@ -817,7 +817,7 @@
 
             <section class="usecase-section" id="snapshotHeader">
                 <div class="usecase-section-header">
-                    <h3 class="usecase-section-title">快照列表</h3>
+                    <h3 class="usecase-section-title">我的快照</h3>
                     <span class="usecase-section-subtitle">关联测试快照一览</span>
                 </div>
                 <#if snapshots??>
