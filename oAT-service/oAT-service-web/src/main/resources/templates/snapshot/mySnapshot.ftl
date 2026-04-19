@@ -318,16 +318,28 @@
                 }
 
                 #mySnapshotListTable .snapshot-title {
-                    display: inline-flex;
+                    display: flex;
                     align-items: center;
                     gap: 0.35em;
-                    max-width: 100%;
+                    width: 100%;
+                    min-width: 0;
                 }
 
                 #mySnapshotListTable .snapshot-title span {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                #mySnapshotListTable .snapshot-name-cell {
+                    min-width: 0;
+                }
+
+                #mySnapshotListTable.show-full-name .snapshot-title span {
                     overflow: visible;
                     text-overflow: unset;
-                    white-space: nowrap;
                 }
 
                 #mySnapshotListTable .meta-text {
@@ -372,7 +384,7 @@
                         <tbody id="mySnapshotTableBody">
                         <#list snapshots as snap >
                             <tr data-snapshot-id="${snap.id}" onclick="openMonitorDetail('${snap.traceId}');">
-                                <td title="${snap.name}">
+                                <td class="snapshot-name-cell" title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
                                 <td class="right aligned meta-text">
@@ -689,6 +701,19 @@
                 }
                 localStorage.removeItem(snapshotLayoutWidthController.storageKey);
                 snapshotLayoutWidthController.applyWidth(snapshotLayoutWidthController.defaultWidth);
+                syncSnapshotTitleDisplay(snapshotLayoutWidthController.defaultWidth);
+            }
+
+            function syncSnapshotTitleDisplay(width) {
+                var table = $('#mySnapshotListTable');
+                if (!table.length) {
+                    return;
+                }
+                if (width >= 460) {
+                    table.addClass('show-full-name');
+                } else {
+                    table.removeClass('show-full-name');
+                }
             }
 
             function initSnapshotLayoutResizer() {
@@ -703,11 +728,17 @@
                 var storedWidth = parseInt(localStorage.getItem(controller.storageKey), 10);
                 if (!isNaN(storedWidth)) {
                     controller.applyWidth(storedWidth);
+                    syncSnapshotTitleDisplay(storedWidth);
                 } else {
                     controller.applyWidth(controller.defaultWidth);
+                    syncSnapshotTitleDisplay(controller.defaultWidth);
                 }
 
                 var dragging = false;
+
+                controller.resizer.on('dblclick', function () {
+                    resetSnapshotLayoutWidth();
+                });
 
                 controller.resizer.on('mousedown', function (event) {
                     if (window.innerWidth <= 960) {
@@ -728,7 +759,8 @@
                         return;
                     }
                     var width = event.pageX - pageOffset.left;
-                    controller.applyWidth(width);
+                    var appliedWidth = controller.applyWidth(width);
+                    syncSnapshotTitleDisplay(appliedWidth);
                 });
 
                 $(document).on('mouseup.snapshotResizer', function () {
@@ -741,19 +773,23 @@
                     var currentWidth = parseInt(controller.listPanel.css('flex-basis'), 10);
                     if (!isNaN(currentWidth)) {
                         localStorage.setItem(controller.storageKey, currentWidth);
+                        syncSnapshotTitleDisplay(currentWidth);
                     }
                 });
 
                 $(window).on('resize.snapshotResizer', function () {
                     if (window.innerWidth <= 960) {
                         controller.listPanel.css('flex-basis', 'auto');
+                        $('#mySnapshotListTable').addClass('show-full-name');
                         return;
                     }
                     var currentWidth = parseInt(localStorage.getItem(controller.storageKey), 10);
                     if (!isNaN(currentWidth)) {
                         controller.applyWidth(currentWidth);
+                        syncSnapshotTitleDisplay(currentWidth);
                     } else {
                         controller.applyWidth(controller.defaultWidth);
+                        syncSnapshotTitleDisplay(controller.defaultWidth);
                     }
                 });
             }
