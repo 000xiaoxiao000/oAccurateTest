@@ -6,34 +6,89 @@
     <#include "../common.ftl">
     <link href="/css/font-awesome.min.css" rel="stylesheet">
     <style>
-        body { padding: 20px; background-color: #f4f7f6; }
+        body {
+            padding: 16px 20px 20px;
+            background-color: #f4f7f6;
+        }
+        .report-page {
+            max-width: 100%;
+        }
+        .report-overview {
+            margin-top: 0;
+            margin-bottom: 24px;
+            padding: 18px 20px;
+            background: #f9f9f9;
+            border-top: 3px solid #21ba45;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
+        }
+        .report-overview .ui.cards {
+            margin: 0 -0.75em;
+        }
+        .report-overview .card {
+            border-radius: 10px;
+        }
+        .report-tabs {
+            margin-top: 0;
+            margin-bottom: 18px;
+        }
+        .report-tabs .item {
+            border-radius: 8px 8px 0 0;
+            transition: color .2s ease, background-color .2s ease;
+        }
+        .report-tabs .item:hover {
+            color: var(--page-accent);
+            background: rgba(27, 111, 184, .04);
+        }
+        .report-tabs .item.active {
+            color: var(--page-accent) !important;
+            border-color: var(--page-accent) !important;
+            font-weight: 600;
+        }
+        .ui.table tbody tr:hover {
+            background: rgba(27, 111, 184, .03);
+        }
         .stat-value { font-size: 24px; font-weight: bold; color: #21ba45; }
         .card .content .header { margin-bottom: 10px; }
         .ui.progress { margin-top: 5px; margin-bottom: 5px; }
         .table-progress { margin: 0 !important; }
         .interface-name { font-family: monospace; color: #4183c4; font-weight: bold; word-break: break-all; }
+
+        @media (max-width: 1200px) {
+            .report-overview .ui.four.cards {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 14px;
+                margin: 0;
+            }
+
+            .report-overview .ui.four.cards > .card {
+                width: auto;
+                margin: 0;
+            }
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 12px 14px 18px;
+            }
+
+            .report-overview {
+                padding: 16px;
+                margin-bottom: 18px;
+            }
+
+            .report-overview .ui.four.cards {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
-<body>
-
-<div class="ui breadcrumb" style="margin-bottom: 20px;">
-    <#if fromVersionCenter?? && fromVersionCenter>
-        <a class="section" href="/p/${projectId}/version/apps">版本中心</a>
-        <i class="right angle icon divider"></i>
-        <a class="section" href="/p/${projectId}/${appId}/version/report/list">报告列表</a>
-    <#elseif fromSystemSnapshot?? && fromSystemSnapshot>
-        <a class="section" href="/p/${projectId}/${appId}/snapshot/list">系统快照</a>
-        <i class="right angle icon divider"></i>
-        <a class="section" href="/p/${projectId}/${appId}/snapshot/detail/${snapshotId}">快照详情</a>
-    <#else>
-        <a class="section" href="/p/${projectId}/snapshot/my">我的快照</a>
-    </#if>
-    <i class="right angle icon divider"></i>
-    <div class="active section">覆盖率报告</div>
-</div>
+<body class="page-theme">
+<div class="report-page">
 
 <#if report??>
-    <div class="ui segment" style="background: #f9f9f9; border-top: 3px solid #21ba45;">
+    <div class="ui segment report-overview">
         <h3 class="ui dividing header">快照概览</h3>
         <div class="ui four cards">
             <#-- Summary cards already exist in previous code, ensure they fit well -->
@@ -98,7 +153,7 @@
 </#if>
 
 <!-- View Switcher -->
-<div class="ui secondary pointing menu" style="margin-top: 30px;">
+<div class="ui secondary pointing menu report-tabs">
     <a class="active item" data-tab="interfaceDetail">
         <i class="sitemap icon"></i> 接口/地址维度
     </a>
@@ -320,5 +375,6 @@
     <p>内容已复制</p>
 </div>
 
+</div>
 </body>
 </html>

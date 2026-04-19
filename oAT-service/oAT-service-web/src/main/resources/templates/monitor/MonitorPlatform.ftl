@@ -28,31 +28,121 @@
             float: right
         }
 
-        tr.focus {
-            background-color: #e1e1e1;
+        #monitorListBody tr.focus .monitor-primary-text {
+            color: var(--page-accent);
         }
 
         #monitorListBody tr {
             cursor: pointer;
         }
+
+        .monitor-page {
+            padding: 10px 10px 0;
+        }
+
+        .monitor-toolbar-left {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .monitor-detail-content {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .monitor-detail-title.page-detail-title {
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        .monitor-graph-card {
+            min-height: 220px;
+        }
+
+        .monitor-node-card {
+            min-height: calc(100vh - 520px);
+        }
+
+        .monitor-panel-segment {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .monitor-list-scroll {
+            padding: 0;
+            height: calc(100vh - 212px);
+            overflow: auto;
+        }
+
+        #monitorListTable .monitor-name-cell {
+            min-width: 0;
+        }
+
+        #monitorListTable .monitor-primary {
+            display: flex;
+            align-items: center;
+            gap: 0.35em;
+            width: 100%;
+            min-width: 0;
+        }
+
+        #monitorListTable .monitor-primary-text {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #monitorListTable.show-full-name .monitor-primary-text {
+            overflow: visible;
+            text-overflow: unset;
+        }
+
+        @media (max-width: 960px) {
+            .monitor-layout {
+                flex-direction: column;
+            }
+
+            .monitor-list-panel,
+            .monitor-detail-panel {
+                flex: 1 1 auto;
+                max-width: none;
+                min-width: 0;
+            }
+
+            .monitor-resizer {
+                display: none;
+            }
+
+            .monitor-list-scroll {
+                height: auto;
+                max-height: 45vh;
+            }
+        }
     </style>
 
-</head>
+<body class="page-theme">
 <!--头部菜单 引入-->
 <#assign  monitorItemActive="active">
 <#include "../projectHeader.ftl">
 
+<div class="monitor-page">
 <!--中间过滤条件-->
-<div id="middleFilter" class="ui sticky top segment grid " style="margin-bottom: -8px">
-    <!--右对齐-->
-    <div class="thirteen wide column left aligned" style="padding: 0px">
-        <form id="itemFilter" class="ui form" action="/p/${projectId}/monitor/getNodeByTime">
-            <div class="inline fields" style="margin: 5px 0px 0px 5px">
-                <span style="display: inline-block;margin: 6px 0px 6px 0px">
+<div id="middleFilter" class="ui sticky top segment monitor-toolbar" style="margin-bottom: 14px;">
+    <div class="monitor-toolbar-left">
+        <form id="itemFilter" class="ui form" action="/p/${projectId}/monitor/getNodeByTime" style="margin: 0;">
+            <div class="inline fields" style="margin: 0; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <span style="display: inline-block; margin: 0; white-space: nowrap;">
                     <i class="filter icon"></i>条件过滤：
                 </span>
                 <input type="hidden" name="maxSize" value="100">
-                <div class="ui dropdown" style="padding: 7px;margin-bottom: -5px;min-width: 100px">
+                <div class="ui dropdown" style="padding: 7px; min-width: 100px">
                     <#--默认值3分钟-->
                     <input type="hidden" name="upToTime" value="180">
                     <span class="text">三分钟内</span>
@@ -74,7 +164,7 @@
                 </div>
 
                 <div class="ui multiple search compact selection dropdown"
-                     style="border: none;margin-right: 0px;padding-right: 7px;min-width: 120px">
+                     style="border: none; margin-right: 0px; padding-right: 7px; min-width: 120px">
                     <input type="hidden" name="appIds" value="${appId!}">
                     <input class="search" autocomplete="off" tabindex="0">
                     <div class="text">应用过滤</div>
@@ -86,9 +176,8 @@
                     </div>
                 </div>
                 <div class="ui multiple compact search selection dropdown ipFilter"
-                     style="border: none;min-width: 110px;padding-right: 7px">
+                     style="border: none; min-width: 110px; padding-right: 7px">
                     <input type="hidden" name="clientIps">
-                    <!--加入该输入项即可解决网页抖动问题 -->
                     <input class="search" autocomplete="off" tabindex="0">
                     <div class=" default text">ip 过滤</div>
                     <div class="ui divider" style="margin: 0px"></div>
@@ -98,16 +187,15 @@
         </form>
     </div>
 
-    <div class="three wide column right aligned" style="padding: 0px">
-        <div class="ui pointing dropdown small " tabindex="-1">
-            <button class="ui primary <#--save  snapshot  icon--> button" style="margin: 5px">
-                保存快照
-            </button>
-            <div class="menu" tabindex="1">
-                <div class="item" onclick="openCreateSnapshot();">我的快照</div>
-                <div class="item" onclick="openCreateSystemSnapshot();">系统快照</div>
-            </div>
+    <div class="ui pointing dropdown small" tabindex="-1">
+        <button class="ui primary button" style="margin: 0;">
+            保存快照
+        </button>
+        <div class="menu" tabindex="1">
+            <div class="item" onclick="openCreateSnapshot();">我的快照</div>
+            <div class="item" onclick="openCreateSystemSnapshot();">系统快照</div>
         </div>
+    </div>
         <!--保存快照弹出框-->
         <div id="snapshotDialog" class="ui modal standard  save snapshot">
             <div class="ui block header attached ">
@@ -157,33 +245,29 @@
         </div>
     </div>
 </div>
-<div class="ui grid">
-    <div class="ui four wide column" style="padding: 0px 0px 0px 10px;">
-        <div class="segment">
-            <div class="ui block header top attached segment">
-                <div class="ui inline click dropdown">
-                    <div class="text">
+<div class="monitor-layout page-split-layout">
+    <div id="monitorListPanel" class="monitor-list-panel page-split-list-panel">
+        <div class="ui segment monitor-panel-segment page-panel-shell">
+            <div class="ui block header top attached segment page-section-header">
+                <div class="ui compact tiny menu page-nav-menu">
+                    <a class="item page-nav-link active" href="/p/${projectId}/monitor">
+                        <i class="line graph icon"></i>
                         实时监控
-                    </div>
-                    <i class="dropdown icon"></i>
-                    <div class="menu">
-                        <a class="item active" href="/p/${projectId}/monitor">
-                            实时监控
-                        </a>
-                        <a class="item" href="/p/${projectId}/snapshot/my">
-                            我的快照
-                        </a>
-                    </div>
-                </div>
-                <div class="ui right aligned">
-                    <a class="poping up" onclick="pullNewItem('${projectId}');" data-content="获取最新数据"
-                       data-variation="tiny inverted">
-                        <i class="ui refresh icon"></i>
+                    </a>
+                    <a class="item page-nav-link" href="/p/${projectId}/snapshot/my">
+                        <i class="copy outline icon"></i>
+                        我的快照
                     </a>
                 </div>
+                <div class="page-section-actions">
+                    <div class="ui mini basic icon button poping up" onclick="pullNewItem('${projectId}');" data-content="获取最新数据"
+                         data-variation="tiny inverted" title="刷新列表">
+                        <i class="refresh icon"></i>
+                    </div>
+                </div>
             </div>
-            <div class="ui attached segment" style="padding: 0; height: calc(100vh - 190px);overflow:auto">
-                <table class="ui selectable single line compact fixed table" style="border: 1px">
+            <div class="ui attached segment monitor-list-scroll">
+                <table id="monitorListTable" class="ui selectable single line compact fixed table" style="border: 1px solid rgba(34,36,38,.08);">
                     <tbody id="monitorListBody">
                     <!-- 监控列表 -->
                     </tbody>
@@ -191,10 +275,12 @@
             </div>
         </div>
     </div>
-    <div class="ui twelve wide column" style="padding: 0px 14px 0px 14px;">
+    <div id="monitorResizer" class="monitor-resizer split-resizer" aria-hidden="true">
+        <span class="monitor-resizer-hint split-resizer-hint">拖拽调整宽度</span>
+    </div>
+    <div class="monitor-detail-panel page-split-detail-panel" style="padding-right: 0;">
         <!--欢迎提示面版-->
-        <div id="emptyTip" class="ui grid middle aligned center aligned segment  "
-             style="height: 100%;margin-top: 0px; background: #f7f7f7">
+        <div id="emptyTip" class="ui grid middle aligned center aligned segment monitor-empty-state page-empty-state">
             <div class="column">
                 <h2 class="ui header">
                     监控详情视图
@@ -207,33 +293,24 @@
 
         <!--监控详情-->
         <div id="monitorDetail" style="display: none">
-            <!--表头-->
-            <div class="ui block header top attached segment">
-            <span class="ui">
-                详情：
-                <span id="monitorDetailTitle" style="color: #888888">
-            </span>
-            </span>
-                <div class="ui right">
-                    <#-- <a class="poping up" href="#" data-content="图表视图"
-                           data-variation="tiny inverted" data-position="left center">
-                            <i class="ui area chart icon"></i>
-                        </a>
-                        <a class="poping up" href="#" data-content="列表视图"
-                           data-variation="tiny inverted" data-position="left center">
-                            <i class="ui list icon"></i>
-                        </a>
-                        <a class="poping up" href="#" data-content="性能视图"
-                           data-variation="tiny inverted" data-position="left center">
-                            <i class="ui rocket icon"></i>
-                        </a>-->
+            <div class="monitor-detail-shell page-detail-shell">
+                <div class="monitor-detail-header page-detail-header-card">
+                    <div class="monitor-detail-header-main page-detail-title-row">
+                        <div>
+                            <div class="monitor-detail-kicker page-detail-kicker">实时监控详情</div>
+                            <div id="monitorDetailTitle" class="monitor-detail-title page-detail-title"></div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <!-- 内容 -->
-            <div class="ui segment attached" style="min-height: 200px;padding: 0px;">
-                <svg id="svg-canvas" height="200" width="900"></svg>
-                <!--节点详情-->
-                <div id="nodeDetail" class="ui segment" style=" min-height: calc(100vh - 500px);padding: 0px;">
+                <div class="monitor-detail-content">
+                    <div class="monitor-graph-card page-detail-card">
+                        <div class="monitor-card-title page-detail-card-title">调用链路</div>
+                        <svg id="svg-canvas" height="200" width="900"></svg>
+                    </div>
+                    <div class="monitor-node-card page-detail-card">
+                        <div class="monitor-card-title page-detail-card-title">节点详情</div>
+                        <div id="nodeDetail" class="ui segment basic" style="min-height: calc(100vh - 560px); padding: 0;"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -244,6 +321,130 @@
 </div>
 <#--界面初始化-->
 <script language="JavaScript">
+    var monitorLayoutWidthController = {
+        storageKey: 'monitorListWidth',
+        defaultWidth: 360,
+        minWidth: 280,
+        maxReservedWidth: 360,
+        page: null,
+        listPanel: null,
+        resizer: null,
+        applyWidth: function (width) {
+            if (!this.page || !this.listPanel) {
+                return width;
+            }
+            var maxWidth = Math.max(this.minWidth, this.page.width() - this.maxReservedWidth);
+            var nextWidth = Math.min(Math.max(width, this.minWidth), maxWidth);
+            this.listPanel.css('flex-basis', nextWidth + 'px');
+            return nextWidth;
+        }
+    };
+
+    function syncMonitorTitleDisplay(width) {
+        var table = $('#monitorListTable');
+        if (!table.length) {
+            return;
+        }
+        if (width >= 460 || window.innerWidth <= 960) {
+            table.addClass('show-full-name');
+        } else {
+            table.removeClass('show-full-name');
+        }
+    }
+
+    function resetMonitorLayoutWidth() {
+        if (window.innerWidth <= 960) {
+            return;
+        }
+        localStorage.removeItem(monitorLayoutWidthController.storageKey);
+        monitorLayoutWidthController.applyWidth(monitorLayoutWidthController.defaultWidth);
+        syncMonitorTitleDisplay(monitorLayoutWidthController.defaultWidth);
+    }
+
+    function initMonitorLayoutResizer() {
+        var controller = monitorLayoutWidthController;
+        controller.page = $('.monitor-page');
+        controller.listPanel = $('#monitorListPanel');
+        controller.resizer = $('#monitorResizer');
+        if (!controller.page.length || !controller.listPanel.length || !controller.resizer.length) {
+            return;
+        }
+
+        if (window.innerWidth <= 960) {
+            controller.listPanel.css('flex-basis', 'auto');
+            syncMonitorTitleDisplay(controller.defaultWidth);
+            return;
+        }
+
+        var storedWidth = parseInt(localStorage.getItem(controller.storageKey), 10);
+        if (!isNaN(storedWidth)) {
+            controller.applyWidth(storedWidth);
+            syncMonitorTitleDisplay(storedWidth);
+        } else {
+            controller.applyWidth(controller.defaultWidth);
+            syncMonitorTitleDisplay(controller.defaultWidth);
+        }
+
+        var dragging = false;
+
+        controller.resizer.on('dblclick', function () {
+            resetMonitorLayoutWidth();
+        });
+
+        controller.resizer.on('mousedown', function (event) {
+            if (window.innerWidth <= 960) {
+                return;
+            }
+            dragging = true;
+            controller.resizer.addClass('dragging');
+            $('body').css('cursor', 'col-resize');
+            event.preventDefault();
+        });
+
+        $(document).on('mousemove.monitorResizer', function (event) {
+            if (!dragging) {
+                return;
+            }
+            var pageOffset = controller.page.offset();
+            if (!pageOffset) {
+                return;
+            }
+            var width = event.pageX - pageOffset.left;
+            var appliedWidth = controller.applyWidth(width);
+            syncMonitorTitleDisplay(appliedWidth);
+        });
+
+        $(document).on('mouseup.monitorResizer', function () {
+            if (!dragging) {
+                return;
+            }
+            dragging = false;
+            controller.resizer.removeClass('dragging');
+            $('body').css('cursor', '');
+            var currentWidth = parseInt(controller.listPanel.css('flex-basis'), 10);
+            if (!isNaN(currentWidth)) {
+                localStorage.setItem(controller.storageKey, currentWidth);
+                syncMonitorTitleDisplay(currentWidth);
+            }
+        });
+
+        $(window).on('resize.monitorResizer', function () {
+            if (window.innerWidth <= 960) {
+                controller.listPanel.css('flex-basis', 'auto');
+                $('#monitorListTable').addClass('show-full-name');
+                return;
+            }
+            var currentWidth = parseInt(localStorage.getItem(controller.storageKey), 10);
+            if (!isNaN(currentWidth)) {
+                controller.applyWidth(currentWidth);
+                syncMonitorTitleDisplay(currentWidth);
+            } else {
+                controller.applyWidth(controller.defaultWidth);
+                syncMonitorTitleDisplay(controller.defaultWidth);
+            }
+        });
+    }
+
     $('.ui.sticky').sticky();
     $('#middleFilter .ui.dropdown').dropdown({
         onChange: function (value, text, selectedItem) {
@@ -272,6 +473,7 @@
     $('.poping.up').popup();
 
     $(function () {
+        initMonitorLayoutResizer();
         // 初始化表单验证规则
         $('#newSnapshotForm').form({
                 inline: false,

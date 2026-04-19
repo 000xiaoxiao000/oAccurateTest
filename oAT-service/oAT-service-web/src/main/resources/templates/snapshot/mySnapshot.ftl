@@ -16,109 +16,6 @@
     <script src="/js/highlight.min.js"></script>
     <script src="/js/spark-md5.min.js"></script>
     <script src="/js/upload.js"></script>
-</head>
-
-<style id="css">
-    .node rect {
-        stroke: #999;
-        fill: #fff;
-        stroke-width: 1.5px;
-        cursor: pointer;
-    }
-
-    .node.error rect {
-        stroke: red;
-    }
-
-    .node rect:hover {
-        /*fill: azure;*/
-        stroke: dodgerblue;
-        stroke-width: 1.5px;
-    }
-
-    .node .label {
-        pointer-events: none;
-    }
-
-    .node text {
-        font-weight: 300;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
-        font-size: 14px;
-        pointer-events: none;
-    }
-
-    .edgePath path {
-        stroke: #333;
-        stroke-width: 1.5px;
-    }
-
-    #stackNodeDetail.max {
-        left: 0px;
-        right: 0px;
-        padding: 20px;
-        width: 100vw;
-    }
-
-    tr.selected td {
-        background-color: #ffe48d;
-    }
-
-    body.pushable > .pusher {
-        background: #f7f7f7;
-    }
-
-    /*鼠标悬浮*/
-    .ellipsis-tooltip {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: none; /* 控制元素最大宽度 */
-        cursor: pointer;
-        box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
-        background-color: #f0f0f0;
-        border: 1px solid #ccc;
-    }
-
-    .tooltip-content {
-        display: none;
-        position: absolute;
-        border: 1px solid #ccc;
-        padding: 5px;
-        background-color: #fff;
-        z-index: 9999;
-
-    }
-</style>
-
-<body>
-<#include "../commonFunction.ftl">
-
-<div id="stackNodeDetail" class="ui right vertical wide sidebar raised segment"
-     style="background-color: white;overflow: hidden">
-    <div class="ui top attached label" style="border: none;top: -0.5px">
-        节点详情
-        <i class="close link icon" style="float: right;font-size: 1.1em;"
-           onclick="$('#stackNodeDetail').sidebar('hide');"></i>
-
-        <script>
-            function maxDetailWindow() {
-                $('#stackNodeDetail').toggleClass('max');
-                $('#stackNodeDetail .window.icon').toggleClass('maximize');
-                $('#stackNodeDetail .window.icon').toggleClass('restore');
-            }
-        </script>
-        <i class="window maximize outline link icon" onclick="maxDetailWindow();" style="float: right;font-size: 1.1em;"></i>
-    </div>
-    <div class="ui content container" style="padding: 5px;position:absolute;top: 5px;bottom:5px;overflow-y: auto;word-break: break-all">
-    </div>
-</div>
-
-<div class="pusher">
-    <!--头部菜单 引入-->
-    <#assign monitorItemActive="active">
-    <#include "../projectHeader.ftl">
-
-    <!--中间过滤条件-->
     <style>
         .snapshot-page {
             padding: 10px 10px 0;
@@ -129,109 +26,91 @@
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
-            margin-bottom: 14px;
-            padding: 10px 12px;
-            background: #fff;
+        }
+
+        .snapshot-detail-body .ui.secondary.compact.menu {
+            margin: 0;
+            border-bottom: 1px solid rgba(34, 36, 38, .08);
+            box-shadow: none;
+            background: #fbfcfd;
+        }
+
+        .snapshot-detail-body .ui.secondary.compact.menu .item.active {
+            color: var(--page-accent);
+            font-weight: 600;
+            border-color: var(--page-accent);
+        }
+
+        #mySnapshotListTable {
+            table-layout: fixed;
             border: 1px solid rgba(34, 36, 38, .08);
-            border-radius: 10px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
         }
 
-        .snapshot-layout {
-            display: flex;
-            align-items: stretch;
-            gap: 0;
-            min-height: calc(100vh - 150px);
+        #mySnapshotListTable tbody tr.focus .snapshot-title,
+        #mySnapshotListTable tbody tr.selected .snapshot-title {
+            color: var(--page-accent);
         }
 
-        .snapshot-list-panel {
-            flex: 0 0 360px;
-            min-width: 280px;
-            max-width: 720px;
-            padding-right: 0;
+        .snapshot-filter-input {
+            margin-right: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        .snapshot-resizer {
-            flex: 0 0 12px;
-            position: relative;
-            cursor: col-resize;
-            user-select: none;
-            transition: background-color 0.2s ease;
+        .snapshot-filter-input input {
+            min-width: 180px;
         }
 
-        .snapshot-resizer:hover,
-        .snapshot-resizer.dragging {
-            background: rgba(33, 133, 208, 0.05);
-        }
-
-        .snapshot-resizer:before {
-            content: '';
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 50%;
-            width: 1px;
-            background: rgba(34, 36, 38, .12);
-            transform: translateX(-50%);
-        }
-
-        .snapshot-resizer:after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 4px;
-            height: 42px;
-            border-radius: 999px;
-            background: rgba(34, 36, 38, .16);
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 0 4px #f7f7f7;
-            transition: background-color 0.2s ease, height 0.2s ease;
-        }
-
-        .snapshot-resizer:hover:after,
-        .snapshot-resizer.dragging:after {
-            background: #2185d0;
-            height: 58px;
-        }
-
-        .snapshot-resizer-hint {
-            position: absolute;
-            top: 50%;
-            left: calc(100% + 8px);
-            transform: translateY(-50%);
-            padding: 4px 8px;
-            border-radius: 999px;
-            background: rgba(31, 45, 61, 0.86);
-            color: #fff;
-            font-size: 12px;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease;
-        }
-
-        .snapshot-resizer:hover .snapshot-resizer-hint,
-        .snapshot-resizer.dragging .snapshot-resizer-hint {
-            opacity: 1;
-        }
-
-        .snapshot-detail-panel {
-            flex: 1 1 auto;
-            min-width: 0;
-            padding-left: 0;
-        }
-
-        .snapshot-panel-segment {
-            height: 100%;
-            display: flex;
-            flex-direction: column;
+        .snapshot-toolbar-text {
+            margin: auto;
         }
 
         .snapshot-list-scroll {
             padding: 0;
             height: calc(100vh - 212px);
             overflow: auto;
+        }
+
+        #mySnapshotListTable .snapshot-title {
+            display: flex;
+            align-items: center;
+            gap: 0.35em;
+            width: 100%;
+            min-width: 0;
+        }
+
+        #mySnapshotListTable .snapshot-title span {
+            flex: 1 1 auto;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        #mySnapshotListTable .snapshot-name-cell {
+            min-width: 0;
+        }
+
+        #mySnapshotListTable.show-full-name .snapshot-title span {
+            overflow: visible;
+            text-overflow: unset;
+        }
+
+        #mySnapshotListTable .meta-text {
+            font-size: 0.88em;
+            color: #666;
+            white-space: nowrap;
+        }
+
+        #mySnapshotListTable .hover.dropdown > .icon {
+            margin: 0;
+        }
+
+        #mySnapshotListTable .empty-state-row td {
+            color: #999;
+            padding: 30px 0;
+            text-align: center;
         }
 
         @media (max-width: 960px) {
@@ -255,15 +134,112 @@
                 max-height: 45vh;
             }
         }
+
+        .node rect {
+            stroke: #999;
+            fill: #fff;
+            stroke-width: 1.5px;
+            cursor: pointer;
+        }
+
+        .node.error rect {
+            stroke: red;
+        }
+
+        .node rect:hover {
+            /*fill: azure;*/
+            stroke: dodgerblue;
+            stroke-width: 1.5px;
+        }
+
+        .node .label {
+            pointer-events: none;
+        }
+
+        .node text {
+            font-weight: 300;
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        .edgePath path {
+            stroke: #333;
+            stroke-width: 1.5px;
+        }
+
+        #stackNodeDetail.max {
+            left: 0px;
+            right: 0px;
+            padding: 20px;
+            width: 100vw;
+        }
+
+        tr.selected td {
+            background-color: #ffe48d;
+        }
+
+        body.pushable > .pusher {
+            background: #f7f7f7;
+        }
+
+        /*鼠标悬浮*/
+        .ellipsis-tooltip {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: none; /* 控制元素最大宽度 */
+            cursor: pointer;
+            box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+        }
+
+        .tooltip-content {
+            display: none;
+            position: absolute;
+            border: 1px solid #ccc;
+            padding: 5px;
+            background-color: #fff;
+            z-index: 9999;
+
+        }
     </style>
+</head>
+<body class="page-theme">
+<#include "../commonFunction.ftl">
+
+<div id="stackNodeDetail" class="ui right vertical wide sidebar raised segment"
+     style="background-color: white;overflow: hidden">
+    <div class="ui top attached label" style="border: none;top: -0.5px">
+        节点详情
+        <i class="close link icon snapshot-detail-close" style="float: right;font-size: 1.1em;"></i>
+
+        <script>
+            function maxDetailWindow() {
+                $('#stackNodeDetail').toggleClass('max');
+                $('#stackNodeDetail .window.icon').toggleClass('maximize');
+                $('#stackNodeDetail .window.icon').toggleClass('restore');
+            }
+        </script>
+        <i class="window maximize outline link icon snapshot-detail-toggle" style="float: right;font-size: 1.1em;"></i>
+    </div>
+    <div class="ui content container" style="padding: 5px;position:absolute;top: 5px;bottom:5px;overflow-y: auto;word-break: break-all">
+    </div>
+</div>
+
+<div class="pusher">
+    <!--头部菜单 引入-->
+    <#assign monitorItemActive="active">
+    <#include "../projectHeader.ftl">
 
     <div class="snapshot-page">
-    <form id="filterForm" class="ui form" action="/p/${project.id}/snapshot/my">
-        <div class="ui text small menu snapshot-toolbar" style="margin: 0;">
+        <form id="filterForm" class="ui form" action="/p/${project.id}/snapshot/my">
+        <div class="ui text small menu snapshot-toolbar page-toolbar-card">
             <div class="ui multiple click dropdown item">
                 <input id="filterLabels" type="hidden" name="labels" value="${filterLabels!}">
                 <i class="tag link icon"></i>
-                <span class="text" style="margin: auto">标签过滤</span>
+                <span class="text snapshot-toolbar-text">标签过滤</span>
                 <div class="menu">
                     <div class="ui icon search input">
                         <i class="search icon"></i>
@@ -284,8 +260,8 @@
                     </div>
                 </div>
             </div>
-            <div class="ui icon input" style="margin-right: 8px; display: inline-flex; align-items: center; gap: 6px;">
-                <input type="text" name="keyword" value="${keyword!}" placeholder="搜索快照名称..." style="min-width: 180px;">
+            <div class="ui icon input snapshot-filter-input">
+                <input type="text" name="keyword" value="${keyword!}" placeholder="搜索快照名称...">
                 <i class="search icon"></i>
                 <#if (keyword!'')?has_content>
                     <a class="ui basic mini button" href="/p/${project.id}/snapshot/my">清空</a>
@@ -302,88 +278,38 @@
             </div>
             <div class="ui multiple click dropdown item" tabindex="3">
                 <i class="file icon"> </i>
-                <span class="text" style="margin: auto" title="我的快照中所有接口" onclick="openCodeReport()">
+                <span class="text snapshot-open-report snapshot-toolbar-text" title="我的快照中所有接口">
                     查看报告
                 </span>
             </div>
         </div>
     </form>
     <!-- 主体内容 -->
-    <div class="snapshot-layout">
-        <div id="snapshotListPanel" class="snapshot-list-panel">
-            <style>
-                #mySnapshotListTable tbody td {
-                    padding-top: 0.56em;
-                    padding-bottom: 0.56em;
-                }
-
-                #mySnapshotListTable .snapshot-title {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.35em;
-                    width: 100%;
-                    min-width: 0;
-                }
-
-                #mySnapshotListTable .snapshot-title span {
-                    flex: 1 1 auto;
-                    min-width: 0;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-
-                #mySnapshotListTable .snapshot-name-cell {
-                    min-width: 0;
-                }
-
-                #mySnapshotListTable.show-full-name .snapshot-title span {
-                    overflow: visible;
-                    text-overflow: unset;
-                }
-
-                #mySnapshotListTable .meta-text {
-                    font-size: 0.88em;
-                    color: #666;
-                    white-space: nowrap;
-                }
-
-                #mySnapshotListTable .hover.dropdown > .icon {
-                    margin: 0;
-                }
-
-                #mySnapshotListTable .empty-state-row td {
-                    color: #999;
-                    padding: 30px 0;
-                    text-align: center;
-                }
-            </style>
-            <div class="ui segment snapshot-panel-segment">
-                <div class="ui block header top attached segment" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-                    <div class="ui compact tiny menu" style="margin: 0; box-shadow: none; border: 1px solid rgba(34,36,38,.12); border-radius: 999px; overflow: hidden;">
-                        <a class="item" href="/p/${project.id}/monitor" style="font-weight: 500;">
+    <div class="snapshot-layout page-split-layout">
+        <div id="snapshotListPanel" class="snapshot-list-panel page-split-list-panel">
+            <div class="ui segment snapshot-panel-segment page-panel-shell">
+                <div class="ui block header top attached segment snapshot-header-main page-section-header">
+                    <div class="ui compact tiny menu snapshot-nav-menu page-nav-menu">
+                        <a class="item snapshot-nav-link page-nav-link" href="/p/${project.id}/monitor">
                             <i class="line graph icon"></i>
                             实时监控
                         </a>
-                        <a class="item active" href="/p/${project.id}/snapshot/my" style="font-weight: 600; background: rgba(33,133,208,.08); color: #1b6fb8;">
+                        <a class="item snapshot-nav-link page-nav-link active" href="/p/${project.id}/snapshot/my">
                             <i class="copy outline icon"></i>
                             我的快照
                         </a>
                     </div>
-                    <div style="display: inline-flex; align-items: center; gap: 8px;">
-                        <div class="ui mini basic button" onclick="resetSnapshotLayoutWidth()" title="恢复默认宽度">
-                            默认宽度
-                        </div>
-                        <div class="ui mini basic icon button" onclick="location.reload()" title="刷新列表">
+                    <div class="snapshot-header-actions page-section-actions">
+                        <div class="ui mini basic icon button snapshot-refresh-list" title="刷新列表">
                             <i class="refresh icon"></i>
                         </div>
                     </div>
                 </div>
                 <div class="ui attached segment snapshot-list-scroll">
-                    <table id="mySnapshotListTable" class="ui selectable compact very basic single line table" style="table-layout: fixed; border: 1px solid rgba(34,36,38,.08);">
+                    <table id="mySnapshotListTable" class="ui selectable compact very basic single line table">
                         <tbody id="mySnapshotTableBody">
                         <#list snapshots as snap >
-                            <tr data-snapshot-id="${snap.id}" onclick="openMonitorDetail('${snap.traceId}');">
+                            <tr data-snapshot-id="${snap.id}" data-trace-id="${snap.traceId}" class="snapshot-row">
                                 <td class="snapshot-name-cell" title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
@@ -400,26 +326,11 @@
                                                 共享设置
                                                 <div class="menu">
                                                     <div class="header">
-                                                        <div class="ui toggle checkbox ${snap.id}">
+                                                        <div class="ui toggle checkbox snapshot-share-toggle ${snap.id}"
+                                                             data-snapshot-id="${snap.id}">
                                                             <input type="checkbox" <#if snap.share??&&snap.share==true>
                                                                 checked="checked"</#if> >
                                                         </div>
-                                                        <script>
-                                                            $(function () {
-                                                                $('.ui.checkbox.${snap.id}').checkbox({
-                                                                    onChecked: function () {
-                                                                        $.getJSON("/p/${project.id}/snapshot/openShare/${snap.id}", function (results) {
-                                                                            $(".shareUrl.${snap.id}").removeClass("disabled");
-                                                                        })
-                                                                    },
-                                                                    onUnchecked: function () {
-                                                                        $.getJSON("/p/${project.id}/snapshot/closeShare/${snap.id}", function (results) {
-                                                                            $(".shareUrl.${snap.id}").addClass("disabled");
-                                                                        })
-                                                                    }
-                                                                });
-                                                            })
-                                                        </script>
                                                     </div>
                                                     <a class="item shareUrl ${snap.id} <#if snap.share??&&snap.share==true>  <#else>disabled </#if> "
                                                        href="/share/snapshot/${snap.id}" target="_blank">
@@ -428,13 +339,11 @@
                                                     </a>
                                                 </div>
                                             </div>
-                                            <a class="item" onclick="openSnapshotEdit('${snap.id}');"><i class="edit icon"></i>
+                                            <a class="item snapshot-edit-trigger" data-snapshot-id="${snap.id}"><i class="edit icon"></i>
                                                 编辑
-                                                <div id="snapshotEditDialog" class="ui dynamic modal standard">
-                                                </div>
                                             </a>
                                             <div class="divider"></div>
-                                            <a class="item" href="javascript:void(0);" onclick="deleteSnapshot('${snap.id}');">
+                                            <a class="item snapshot-delete-trigger" href="javascript:void(0);" data-snapshot-id="${snap.id}">
                                                 <i class="remove icon red color"></i>
                                                 <span class="text" style="color: red">删除</span>
                                             </a>
@@ -453,13 +362,13 @@
                 </div>
             </div>
         </div>
-        <div id="snapshotResizer" class="snapshot-resizer" aria-hidden="true">
-            <span class="snapshot-resizer-hint">拖拽调整宽度</span>
+        <div id="snapshotResizer" class="snapshot-resizer split-resizer" aria-hidden="true">
+            <span class="snapshot-resizer-hint split-resizer-hint">拖拽调整宽度</span>
         </div>
-        <div class="snapshot-detail-panel" style="padding-right: 0;">
+        <div class="snapshot-detail-panel page-split-detail-panel" style="padding-right: 0;">
             <!--未选择请求时提示-->
-            <div id="emptyTip" class="ui grid middle aligned center aligned segment"
-                 style="height: 100%;margin-top: 0px; background: #f7f7f7">
+            <div id="emptyTip" class="ui grid middle aligned center aligned segment page-empty-state snapshot-empty-state"
+                 style="background: #f7f7f7">
                 <div class="column">
                     <h2 class="ui header ">
                         监控详情视图
@@ -472,28 +381,37 @@
 
             <!--监控详情-->
             <div id="monitorDetail" style="display: none" traceId="">
-                <!--表头-->
-                <div id="tabSwitch" class="ui top attached secondary compact menu">
-                    <a class="item active" data-tab="flow">流程图</a>
-                    <a class="item" data-tab="stack">堆栈列表</a>
-                    <span id="monitorDetailTitle" class="ui tiny header" style="color: gray;padding: 0;margin-top: 12px;margin-bottom: 10px;"></span>
-                    <div class="right menu">
-                        <div class="item">
-                            <div class="ui secondary button" data-tooltip="保存至系统快照" data-position="left center"
-                                 onclick="openCreateSystemSnapshot();" style="font-size: 0.9em;">
-                                保存
+                <div class="snapshot-detail-shell page-detail-shell">
+                    <div class="snapshot-detail-header page-detail-header-card">
+                        <div class="snapshot-detail-title-row page-detail-title-row">
+                            <div>
+                                <div class="snapshot-detail-kicker page-detail-kicker">快照详情</div>
+                                <div id="monitorDetailTitle" class="snapshot-detail-title page-detail-title"></div>
+                            </div>
+                            <div class="snapshot-header-actions page-action-group page-section-actions">
+                                <div class="ui secondary button snapshot-save-system" data-tooltip="保存至系统快照" data-position="left center"
+                                     style="font-size: 0.9em;">
+                                    保存
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-                <!-- 内容 -->
-                <div class="ui segment attached" style="min-height: calc(100vh - 150px);padding: 0px;">
-                    <div class="ui tab active" data-tab="flow" style="padding: 2px">
-                        <svg id="svg-canvas" style="min-height: calc(100vh - 150px);padding: 0px;" width="100%"></svg>
+                    <div class="snapshot-detail-body page-detail-card">
+                        <!--表头-->
+                        <div id="tabSwitch" class="ui top attached secondary compact menu">
+                            <a class="item active" data-tab="flow">流程图</a>
+                            <a class="item" data-tab="stack">堆栈列表</a>
+                        </div>
+                        <!-- 内容 -->
+                        <div class="ui attached segment page-plain-segment page-fill-height">
+                            <div class="ui tab active" data-tab="flow" style="padding: 2px">
+                                <svg id="svg-canvas" class="page-fill-height" style="padding: 0px;" width="100%"></svg>
+                            </div>
+                            <div class="ui tab" data-tab="stack" style="padding: 2px">
+                            </div>
+                            <!--节点详情-->
+                        </div>
                     </div>
-                    <div class="ui tab" data-tab="stack" style="padding: 2px">
-                    </div>
-                    <!--节点详情-->
                 </div>
             </div>
 
@@ -503,14 +421,17 @@
                 </div>
             </div>
         </div>
+    </div>
 
+    <#--保存系统快照 窗口-->
+    <div id="systemSnapshotDialog" class="ui modal standard save snapshot">
+    </div>
 
-        <#--保存系统快照 窗口-->
-        <div id="systemSnapshotDialog" class="ui modal standard save snapshot">
-        </div>
+    <div id="snapshotEditDialog" class="ui dynamic modal standard">
+    </div>
 
-        <#-- 删除确认 Modal -->
-        <div id="deleteSnapshotConfirmDialog" class="ui small modal">
+    <#-- 删除确认 Modal -->
+    <div id="deleteSnapshotConfirmDialog" class="ui small modal">
             <div class="header">删除快照</div>
             <div class="content">
                 <p>确认要删除该快照吗？此操作不可恢复。</p>
@@ -561,6 +482,53 @@
                 $("#systemSnapshotDialog").modal('show');
             }
 
+            $('.snapshot-detail-close').on('click', function () {
+                $('#stackNodeDetail').sidebar('hide');
+            });
+            $('.snapshot-detail-toggle').on('click', function () {
+                maxDetailWindow();
+            });
+            $('.snapshot-open-report').on('click', function () {
+                openCodeReport();
+            });
+            $('.snapshot-refresh-list').on('click', function () {
+                location.reload();
+            });
+            $(document).on('click', '.snapshot-row', function () {
+                var traceId = $(this).data('trace-id');
+                if (traceId) {
+                    openMonitorDetail(traceId);
+                }
+            });
+            $(document).on('click', '.snapshot-edit-trigger', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openSnapshotEdit($(this).data('snapshot-id'));
+            });
+            $(document).on('click', '.snapshot-delete-trigger', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                deleteSnapshot($(this).data('snapshot-id'));
+            });
+            $('.snapshot-save-system').on('click', function () {
+                openCreateSystemSnapshot();
+            });
+            $('.snapshot-share-toggle').each(function () {
+                var checkbox = $(this);
+                var snapshotId = checkbox.data('snapshot-id');
+                checkbox.checkbox({
+                    onChecked: function () {
+                        $.getJSON('/p/${project.id}/snapshot/openShare/' + snapshotId, function () {
+                            $('.shareUrl.' + snapshotId).removeClass('disabled');
+                        });
+                    },
+                    onUnchecked: function () {
+                        $.getJSON('/p/${project.id}/snapshot/closeShare/' + snapshotId, function () {
+                            $('.shareUrl.' + snapshotId).addClass('disabled');
+                        });
+                    }
+                });
+            });
             $('.ui.hover.dropdown').dropdown({
                 on: 'hover'
             });

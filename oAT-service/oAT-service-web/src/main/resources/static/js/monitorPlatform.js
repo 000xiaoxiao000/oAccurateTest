@@ -102,9 +102,17 @@ function appendItems(projectid, newItems) {
         return;
     }
     newItems.some(function (value, index, array) {
-        var itemText = "<tr onclick=\"doSelect(this); openMonitorDetail('" + projectid + "','" + value.traceId + "')\">" + value.title + "<td title='" + value.title + "'>" + value.title
-            + "<br>" + (new Date(value.cacheTime)).toLocaleDateString() + " " + (new Date(value.cacheTime)).toLocaleTimeString()
-            + "</td>"
+        var cacheDate = new Date(value.cacheTime);
+        var timeText = cacheDate.toLocaleDateString() + " " + cacheDate.toLocaleTimeString();
+        var itemText = ""
+            + "<tr data-trace-id='" + value.traceId + "' onclick=\"doSelect(this); openMonitorDetail('" + projectid + "','" + value.traceId + "')\">"
+            + "  <td class='monitor-name-cell' title='" + value.title + "'>"
+            + "    <div class='monitor-primary'>"
+            + "      <i class='feed icon'></i>"
+            + "      <span class='monitor-primary-text'>" + value.title + "</span>"
+            + "    </div>"
+            + "    <div class='ui mini grey text' style='margin-top: 4px; white-space: nowrap;'>" + timeText + "</div>"
+            + "  </td>"
             + "</tr>";
         $("#monitorListBody").prepend(itemText);
     });
