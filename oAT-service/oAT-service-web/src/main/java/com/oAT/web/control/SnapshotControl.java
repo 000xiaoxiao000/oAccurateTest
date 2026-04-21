@@ -15,7 +15,6 @@ import com.oAT.web.esDao.entity.Snapshot;
 import com.oAT.web.esDao.entity.StaticSourceInfo;
 import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import com.oAT.web.service.*;
-import com.oAT.web.service.entity.UsecaseDirectoryVo;
 import com.oAT.web.service.entity.*;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.BooleanUtils;
