@@ -777,24 +777,6 @@ public class SnapshotControl {
         return new ResultNotified<>(true, "快照更新成功");
     }
 
-    private List<UsecaseVo> collectAllProjectUsecases(String projectId) {
-        LinkedHashMap<String, UsecaseVo> result = new LinkedHashMap<>();
-        Deque<String> directoryQueue = new ArrayDeque<>();
-        directoryQueue.add("root");
-        while (!directoryQueue.isEmpty()) {
-            String directoryId = directoryQueue.poll();
-            for (UsecaseVo usecaseVo : usecaseService.getUsecases(projectId, directoryId, "updateTime", null)) {
-                result.putIfAbsent(usecaseVo.getId(), usecaseVo);
-            }
-            for (com.oAT.web.service.entity.UsecaseDirectoryVo directoryVo : usecaseService.getDirectory(projectId, directoryId)) {
-                if (directoryVo != null && StringUtils.hasText(directoryVo.getId())) {
-                    directoryQueue.add(directoryVo.getId());
-                }
-            }
-        }
-        return new ArrayList<>(result.values());
-    }
-
     private Map<String, List<Integer>> normalizeMethodBranchTargetProbeMap(Map<String, List<Integer>> total,
                                                                             Map<String, List<Integer>> covered) {
         if (total == null || total.isEmpty()) {
