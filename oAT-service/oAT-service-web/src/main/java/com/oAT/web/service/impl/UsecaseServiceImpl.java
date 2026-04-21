@@ -11,6 +11,7 @@ import com.oAT.web.service.entity.DirectoryDeleteResult;
 import com.oAT.web.service.entity.UsecaseDetailVo;
 import com.oAT.web.service.entity.UsecaseDirectoryVo;
 import com.oAT.web.service.entity.UsecaseVo;
+import org.apache.commons.lang3.ArrayUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -258,6 +259,106 @@ public class UsecaseServiceImpl implements UsecaseService {
             result.add(convertUsecase(aCase));
         }
         return result;
+    }
+
+    @Override
+    public List<UsecaseVo> getUsecasesBySnapshot(String projectId, String snapshotId) {
+        Assert.hasText(projectId, "projectId不能为空");
+        Assert.hasText(snapshotId, "snapshotId不能为空");
+        List<UsecaseVo> result = new ArrayList<>();
+        for (CaseCenterIndex index : centerRepository.findByUsecaseIsNotNull()) {
+            if (index == null || index.getUsecase() == null) {
+                continue;
+            }
+            Usecase usecase = index.getUsecase();
+            if (!projectId.equals(usecase.getProjectId())) {
+                continue;
+            }
+            if (ArrayUtils.contains(usecase.getSnapshots(), snapshotId)) {
+                result.add(convertUsecase(index));
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public List<UsecaseVo> getUsecasesBySystemSnapshot(String projectId, String systemSnapshotId) {
+        Assert.hasText(projectId, "projectId不能为空");
+        Assert.hasText(systemSnapshotId, "systemSnapshotId不能为空");
+        List<UsecaseVo> result = new ArrayList<>();
+        for (CaseCenterIndex index : centerRepository.findByUsecaseIsNotNull()) {
+            if (index == null || index.getUsecase() == null) {
+                continue;
+            }
+            Usecase usecase = index.getUsecase();
+            if (!projectId.equals(usecase.getProjectId())) {
+                continue;
+            }
+            if (ArrayUtils.contains(usecase.getSystemSnapshots(), systemSnapshotId)) {
+                result.add(convertUsecase(index));
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public void bindSnapshotToUsecases(String projectId, String operator, String snapshotId, String[] usecaseIds) {
+        Assert.hasText(projectId, "projectId不能为空");
+        Assert.hasText(snapshotId, "snapshotId不能为空");
+        bindRelations(projectId, operator, usecaseIds, usecase -> usecase.getSnapshots(), (usecase, values) -> usecase.setSnapshots(values), snapshotId);
+    }
+
+    @Override
+    public void batchAppendSnapshotsToUsecases(String projectId, String operator, String[] snapshotIds, String[] usecaseIds) {
+        Assert.hasText(projectId, "projectId不能为空");
+        Assert.isTrue(!ObjectUtils.isEmpty(snapshotIds), "snapshotIds不能为空");
+        Assert.isTrue(!ObjectUtils.isEmpty(usecaseIds), "usecaseIds不能为空");
+        LinkedHashSet<String> normalizedSnapshotIds = Arrays.stream(snapshotIds)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        LinkedHashSet<String> normalizedUsecaseIds = Arrays.stream(usecaseIds)
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (normalizedSnapshotIds.isEmpty() || normalizedUsecaseIds.isEmpty()) {
+            return;
+        }
+        for (String usecaseId : normalizedUsecaseIds) {
+            CaseCenterIndex index = centerRepository.findById(usecaseId).orElse(null);
+            if (index == null || index.getUsecase() == null) {
+                continue;
+            }
+            Usecase usecase = index.getUsecase();
+            Assert.isTrue(projectId.equals(usecase.getProjectId()), "the usecase not belong to project Id=" + projectId);
+            LinkedHashSet<String> snapshotSet = Arrays.stream(Optional.ofNullable(usecase.getSnapshots()).orElse(new String[0]))
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            boolean changed = snapshotSet.addAll(normalizedSnapshotIds);
+            if (!changed) {
+                continue;
+            }
+            usecase.setSnapshots(snapshotSet.toArray(new String[0]));
+            Usecase rebuilt = buildUsecaseRelations(usecase.getSnapshots(), usecase.getSystemSnapshots());
+            usecase.setSrcStack(rebuilt.getSrcStack());
+            if (StringUtils.hasText(operator)) {
+                usecase.setLastUpdateAuthor(operator);
+                List<String> authors = new ArrayList<>(Arrays.asList(Optional.ofNullable(usecase.getAuthors()).orElse(new String[0])));
+                if (!authors.contains(operator)) {
+                    authors.add(operator);
+                }
+                usecase.setAuthors(authors.toArray(new String[0]));
+            }
+            index.setUpdateTime(new Date());
+            centerRepository.save(index);
+        }
+    }
+
+    @Override
+    public void bindSystemSnapshotToUsecases(String projectId, String operator, String systemSnapshotId, String[] usecaseIds) {
+        Assert.hasText(projectId, "projectId不能为空");
+        Assert.hasText(systemSnapshotId, "systemSnapshotId不能为空");
+        bindRelations(projectId, operator, usecaseIds, usecase -> usecase.getSystemSnapshots(), (usecase, values) -> usecase.setSystemSnapshots(values), systemSnapshotId);
     }
 
     @Override
@@ -606,6 +707,61 @@ public class UsecaseServiceImpl implements UsecaseService {
         }
         parentIndex.getDirectory().setChildId(parentChildIdList.toArray(new String[0]));
         centerRepository.save(parentIndex);
+    }
+
+    private void bindRelations(String projectId, String operator, String[] usecaseIds,
+                               java.util.function.Function<Usecase, String[]> getter,
+                               java.util.function.BiConsumer<Usecase, String[]> setter,
+                               String relationId) {
+        LinkedHashSet<String> selectedIds = new LinkedHashSet<>();
+        if (!ObjectUtils.isEmpty(usecaseIds)) {
+            for (String usecaseId : usecaseIds) {
+                if (StringUtils.hasText(usecaseId)) {
+                    selectedIds.add(usecaseId.trim());
+                }
+            }
+        }
+
+        for (CaseCenterIndex index : centerRepository.findByUsecaseIsNotNull()) {
+            if (index == null || index.getUsecase() == null) {
+                continue;
+            }
+            Usecase usecase = index.getUsecase();
+            if (!projectId.equals(usecase.getProjectId())) {
+                continue;
+            }
+            boolean selected = selectedIds.contains(index.getId());
+            String[] original = Optional.ofNullable(getter.apply(usecase)).orElse(new String[0]);
+            LinkedHashSet<String> relationIds = Arrays.stream(original)
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            boolean changed;
+            if (selected) {
+                changed = relationIds.add(relationId);
+            } else {
+                changed = relationIds.remove(relationId);
+            }
+            if (!changed) {
+                continue;
+            }
+            setter.accept(usecase, relationIds.toArray(new String[0]));
+            if (ObjectUtils.isEmpty(usecase.getSnapshots()) && ObjectUtils.isEmpty(usecase.getSystemSnapshots())) {
+                usecase.setSrcStack(null);
+            } else {
+                Usecase rebuilt = buildUsecaseRelations(usecase.getSnapshots(), usecase.getSystemSnapshots());
+                usecase.setSrcStack(rebuilt.getSrcStack());
+            }
+            if (StringUtils.hasText(operator)) {
+                usecase.setLastUpdateAuthor(operator);
+                List<String> authors = new ArrayList<>(Arrays.asList(Optional.ofNullable(usecase.getAuthors()).orElse(new String[0])));
+                if (!authors.contains(operator)) {
+                    authors.add(operator);
+                }
+                usecase.setAuthors(authors.toArray(new String[0]));
+            }
+            index.setUpdateTime(new Date());
+            centerRepository.save(index);
+        }
     }
 
     private static class DirectoryDeleteStats {

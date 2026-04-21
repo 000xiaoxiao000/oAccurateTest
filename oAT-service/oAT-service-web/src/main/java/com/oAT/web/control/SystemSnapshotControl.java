@@ -60,6 +60,9 @@ public class SystemSnapshotControl {
     @Autowired
     StaticInfoRepository staticInfoRepository;
 
+    @Autowired
+    UsecaseService usecaseService;
+
     // 打开系统快照列表
     @RequestMapping("/list")
     public String openList(@PathVariable String projectId, @PathVariable String appId, String directoryId, String sort,
@@ -221,7 +224,32 @@ public class SystemSnapshotControl {
         Collection<TraceNode> traceNodes = snapshotService.getTraceNodes(snapshot.getTraceId());
         StackItemHelp stackItemHelp = new StackItemHelp(traceNodes);
         model.addAttribute("stackItems", stackItemHelp.buildItems());
+        model.addAttribute("usecases", usecaseService.getUsecasesBySystemSnapshot(projectId, id));
+        model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
         return "/snapshot/systemSnapshotDetail";
+    }
+
+    @RequestMapping("/{id}/usecase/bind")
+    @ResponseBody
+    public ResultNotified<Integer> bindUsecases(@PathVariable String projectId,
+                                                @PathVariable String appId,
+                                                @PathVariable String id,
+                                                @SessionAttribute UserVo user,
+                                                String[] usecaseIds) {
+        try {
+            SystemSnapshot snapshot = systemSnapshotService.getById(id);
+            Assert.notNull(snapshot, "找不到系统快照 id=" + id);
+            Assert.isTrue(projectId.equals(snapshot.getProjectId()), "系统快照不属于当前项目");
+            usecaseService.bindSystemSnapshotToUsecases(projectId, user.getId(), id, usecaseIds);
+            ResultNotified<Integer> result = new ResultNotified<>(true, "测试用例关联已更新");
+            result.setData(usecaseIds == null ? 0 : usecaseIds.length);
+            return result;
+        } catch (Exception e) {
+            logger.warn("更新系统快照关联测试用例失败, projectId={}, appId={}, snapshotId={}", projectId, appId, id, e);
+            ResultNotified<Integer> result = new ResultNotified<>(false, "测试用例关联更新失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
     }
 
     /**
@@ -306,6 +334,24 @@ public class SystemSnapshotControl {
             return "-";
         }
         return new SimpleDateFormat(DATE_TIME_PATTERN).format(date);
+    }
+
+    private List<com.oAT.web.service.entity.UsecaseVo> collectAllProjectUsecases(String projectId) {
+        LinkedHashMap<String, com.oAT.web.service.entity.UsecaseVo> result = new LinkedHashMap<>();
+        Deque<String> directoryQueue = new ArrayDeque<>();
+        directoryQueue.add("root");
+        while (!directoryQueue.isEmpty()) {
+            String directoryId = directoryQueue.poll();
+            for (com.oAT.web.service.entity.UsecaseVo usecaseVo : usecaseService.getUsecases(projectId, directoryId, "updateTime", null)) {
+                result.putIfAbsent(usecaseVo.getId(), usecaseVo);
+            }
+            for (com.oAT.web.service.entity.UsecaseDirectoryVo directoryVo : usecaseService.getDirectory(projectId, directoryId)) {
+                if (directoryVo != null && StringUtils.hasText(directoryVo.getId())) {
+                    directoryQueue.add(directoryVo.getId());
+                }
+            }
+        }
+        return new ArrayList<>(result.values());
     }
 
     private String formatRelativeTime(Date date) {

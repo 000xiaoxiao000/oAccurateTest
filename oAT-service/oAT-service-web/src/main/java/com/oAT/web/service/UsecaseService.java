@@ -23,6 +23,16 @@ public interface UsecaseService {
 
     UsecaseDetailVo getUsecaseDetail(String projectId, String id);
 
+    List<UsecaseVo> getUsecasesBySnapshot(String projectId, String snapshotId);
+
+    List<UsecaseVo> getUsecasesBySystemSnapshot(String projectId, String systemSnapshotId);
+
+    void bindSnapshotToUsecases(String projectId, String operator, String snapshotId, String[] usecaseIds);
+
+    void batchAppendSnapshotsToUsecases(String projectId, String operator, String[] snapshotIds, String[] usecaseIds);
+
+    void bindSystemSnapshotToUsecases(String projectId, String operator, String systemSnapshotId, String[] usecaseIds);
+
     /**
      * 创建用例目录
      */

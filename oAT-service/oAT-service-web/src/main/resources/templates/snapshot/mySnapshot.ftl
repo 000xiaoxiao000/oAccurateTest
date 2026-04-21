@@ -28,6 +28,19 @@
             gap: 10px;
         }
 
+        .snapshot-toolbar .snapshot-bulk-action {
+            margin-left: auto;
+        }
+
+        .snapshot-select-cell {
+            width: 42px;
+            text-align: center;
+        }
+
+        .snapshot-select-cell .ui.checkbox {
+            margin: 0;
+        }
+
         .snapshot-detail-body .ui.secondary.compact.menu {
             margin: 0;
             border-bottom: 1px solid rgba(34, 36, 38, .08);
@@ -282,6 +295,10 @@
                     查看报告
                 </span>
             </div>
+            <button type="button" class="ui primary mini button snapshot-bulk-action" id="snapshotBatchBindTrigger">
+                <i class="linkify icon"></i>
+                批量关联用例
+            </button>
         </div>
     </form>
     <!-- 主体内容 -->
@@ -310,6 +327,12 @@
                         <tbody id="mySnapshotTableBody">
                         <#list snapshots as snap >
                             <tr data-snapshot-id="${snap.id}" data-trace-id="${snap.traceId}" class="snapshot-row">
+                                <td class="snapshot-select-cell">
+                                    <div class="ui checkbox snapshot-select-checkbox">
+                                        <input type="checkbox" class="snapshot-batch-select" value="${snap.id}">
+                                        <label></label>
+                                    </div>
+                                </td>
                                 <td class="snapshot-name-cell" title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
@@ -354,7 +377,7 @@
                         </#list>
                         <#if snapshots?size == 0>
                             <tr id="mySnapshotEmptyRow" class="empty-state-row">
-                                <td colspan="3">暂无数据</td>
+                                <td colspan="4">暂无数据</td>
                             </tr>
                         </#if>
                         </tbody>
@@ -430,6 +453,37 @@
     <div id="snapshotEditDialog" class="ui dynamic modal standard">
     </div>
 
+    <div id="snapshotBatchBindDialog" class="ui small modal">
+        <div class="header">批量关联测试用例</div>
+        <div class="content">
+            <div class="ui form">
+                <div class="field">
+                    <label>已选快照</label>
+                    <div id="snapshotBatchBindSelectedText" style="color: #666; line-height: 1.8;">未选择快照</div>
+                </div>
+                <div class="field">
+                    <label>关联到测试用例</label>
+                    <div class="ui multiple search selection dropdown fluid" id="snapshotBatchUsecaseDropdown">
+                        <input type="hidden" id="snapshotBatchUsecaseIds">
+                        <i class="dropdown icon"></i>
+                        <div class="default text">选择要追加关联的测试用例</div>
+                        <div class="menu">
+                            <#if allUsecases??>
+                                <#list allUsecases as item>
+                                    <div class="item" data-value="${item.id}">${item.title}</div>
+                                </#list>
+                            </#if>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="actions">
+            <div class="ui cancel button">取消</div>
+            <div class="ui primary button" id="snapshotBatchBindConfirm">确认关联</div>
+        </div>
+    </div>
+
     <#-- 删除确认 Modal -->
     <div id="deleteSnapshotConfirmDialog" class="ui small modal">
             <div class="header">删除快照</div>
@@ -449,11 +503,66 @@
             function ensureMySnapshotEmptyState() {
                 var hasDataRow = $('#mySnapshotTableBody tr[data-snapshot-id]').length > 0;
                 if (!hasDataRow && $('#mySnapshotEmptyRow').length === 0) {
-                    $('#mySnapshotTableBody').append('<tr id="mySnapshotEmptyRow" class="empty-state-row"><td colspan="3">暂无数据</td></tr>');
+                    $('#mySnapshotTableBody').append('<tr id="mySnapshotEmptyRow" class="empty-state-row"><td colspan="4">暂无数据</td></tr>');
                 }
                 if (hasDataRow) {
                     $('#mySnapshotEmptyRow').remove();
                 }
+            }
+
+            function getSelectedSnapshotIds() {
+                return $('.snapshot-batch-select:checked').map(function () {
+                    return $(this).val();
+                }).get();
+            }
+
+            function openSnapshotBatchBindDialog() {
+                var selectedIds = getSelectedSnapshotIds();
+                if (!selectedIds.length) {
+                    showToast('请先勾选要关联的快照', 'warning');
+                    return;
+                }
+                var selectedNames = [];
+                selectedIds.forEach(function (id) {
+                    var row = $("#mySnapshotTableBody tr[data-snapshot-id='" + id + "']");
+                    var name = $.trim(row.find('.snapshot-title span').text());
+                    if (name) {
+                        selectedNames.push(name);
+                    }
+                });
+                $('#snapshotBatchUsecaseDropdown').dropdown('clear');
+                $('#snapshotBatchBindSelectedText').text(selectedNames.join('、'));
+                $('#snapshotBatchBindDialog').modal('show');
+            }
+
+            function bindSelectedSnapshotsToUsecases() {
+                var snapshotIds = getSelectedSnapshotIds();
+                if (!snapshotIds.length) {
+                    showToast('请先勾选要关联的快照', 'warning');
+                    return;
+                }
+                var usecaseValues = $('#snapshotBatchUsecaseDropdown').dropdown('get value');
+                var usecaseIds = usecaseValues ? usecaseValues.split(',').filter(Boolean) : [];
+                if (!usecaseIds.length) {
+                    showToast('请选择要关联的测试用例', 'warning');
+                    return;
+                }
+                $.ajax({
+                    url: '/p/${project.id}/snapshot/usecase/batchBind',
+                    data: {snapshotIds: snapshotIds, usecaseIds: usecaseIds},
+                    traditional: true,
+                    success: function (result) {
+                        if (result && (result.result || result.success)) {
+                            showToast(result.message || '批量关联成功', 'success');
+                            $('#snapshotBatchBindDialog').modal('hide');
+                        } else {
+                            showToast((result && (result.errorMessage || result.message)) || '批量关联失败', 'error');
+                        }
+                    },
+                    error: function () {
+                        showToast('批量关联失败', 'error');
+                    }
+                });
             }
 
             // 删除快照逻辑
@@ -500,6 +609,15 @@
                     openMonitorDetail(traceId);
                 }
             });
+            $(document).on('click', '.snapshot-select-cell input, .snapshot-select-cell label', function (e) {
+                e.stopPropagation();
+            });
+            $('#snapshotBatchBindTrigger').on('click', function () {
+                openSnapshotBatchBindDialog();
+            });
+            $('#snapshotBatchBindConfirm').on('click', function () {
+                bindSelectedSnapshotsToUsecases();
+            });
             $(document).on('click', '.snapshot-edit-trigger', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -533,6 +651,10 @@
                 on: 'hover'
             });
             $('.ui.click.dropdown').dropdown({
+                on: 'click'
+            });
+            $('.snapshot-select-checkbox').checkbox();
+            $('#snapshotBatchUsecaseDropdown').dropdown({
                 on: 'click'
             });
             $(".menu .item[data-tab]").tab();
