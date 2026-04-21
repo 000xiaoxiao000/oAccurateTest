@@ -106,6 +106,7 @@ public class SystemSnapshotControl {
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("snapshotTimeTextMap", buildSnapshotTimeTextMap(snapshots));
         model.addAttribute("snapshotRelativeTimeTextMap", buildSnapshotRelativeTimeTextMap(snapshots));
+        model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
         model.addAttribute("currentDir", directoryId);
         model.addAttribute("dirTiers", appService.getDirectoryTiers(appId, directoryId));
         return "/snapshot/systemSnapshotList";
@@ -247,6 +248,41 @@ public class SystemSnapshotControl {
         } catch (Exception e) {
             logger.warn("更新系统快照关联测试用例失败, projectId={}, appId={}, snapshotId={}", projectId, appId, id, e);
             ResultNotified<Integer> result = new ResultNotified<>(false, "测试用例关联更新失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
+    }
+
+    @RequestMapping("/usecase/batchBind")
+    @ResponseBody
+    public ResultNotified<Integer> batchBindUsecases(@PathVariable String projectId,
+                                                     @PathVariable String appId,
+                                                     @SessionAttribute UserVo user,
+                                                     String[] snapshotIds,
+                                                     String[] usecaseIds) {
+        try {
+            Assert.isTrue(!org.springframework.util.ObjectUtils.isEmpty(snapshotIds), "snapshotIds不能为空");
+            for (String snapshotId : snapshotIds) {
+                if (!StringUtils.hasText(snapshotId)) {
+                    continue;
+                }
+                SystemSnapshot snapshot = systemSnapshotService.getById(snapshotId.trim());
+                Assert.notNull(snapshot, "找不到系统快照 id=" + snapshotId);
+                Assert.isTrue(projectId.equals(snapshot.getProjectId()), "系统快照不属于当前项目");
+                Assert.isTrue(appId.equals(snapshot.getAppId()), "系统快照不属于当前应用");
+            }
+            for (String snapshotId : snapshotIds) {
+                if (!StringUtils.hasText(snapshotId)) {
+                    continue;
+                }
+                usecaseService.bindSystemSnapshotToUsecases(projectId, user.getId(), snapshotId.trim(), usecaseIds);
+            }
+            ResultNotified<Integer> result = new ResultNotified<>(true, "批量关联成功");
+            result.setData(snapshotIds.length);
+            return result;
+        } catch (Exception e) {
+            logger.warn("批量关联系统快照测试用例失败, projectId={}, appId={}", projectId, appId, e);
+            ResultNotified<Integer> result = new ResultNotified<>(false, "批量关联失败");
             result.setErrorMessage(e.getMessage());
             return result;
         }

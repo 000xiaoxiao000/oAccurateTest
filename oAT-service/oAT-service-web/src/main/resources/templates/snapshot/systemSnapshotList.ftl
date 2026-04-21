@@ -72,6 +72,17 @@
                                         <i class="folder icon"></i>
                                         新建目录
                                     </div>
+                                    <button type="button" class="ui primary mini button" id="systemSnapshotBatchBindTrigger" style="margin-left: 8px;">
+                                        <i class="linkify icon"></i>
+                                        批量关联用例
+                                    </button>
+                                    <div class="ui mini basic buttons" style="margin-left: 8px;">
+                                        <button type="button" class="ui button" id="systemSnapshotSelectAllTrigger">全选</button>
+                                        <button type="button" class="ui button" id="systemSnapshotClearSelectionTrigger">清空选择</button>
+                                    </div>
+                                    <div class="item" style="padding-left: 0; color: #666;">
+                                        已选 <span id="systemSnapshotSelectedCount">0</span> 项
+                                    </div>
                                 </#if>
                             </div>
                         </form>
@@ -126,6 +137,15 @@
                 margin: 0;
             }
 
+            #systemSnapshotListTable .snapshot-select-cell {
+                width: 42px;
+                text-align: center;
+            }
+
+            #systemSnapshotListTable .snapshot-select-cell .ui.checkbox {
+                margin: 0;
+            }
+
             #systemSnapshotListTable .empty-state-row td {
                 color: #999;
                 padding: 30px 0;
@@ -135,6 +155,7 @@
         <table id="systemSnapshotListTable" class="ui selectable compact very basic table" style="table-layout: fixed;">
             <thead>
             <tr>
+                <th style="width: 42px;"></th>
                 <th>快照名称</th>
                 <th style="width: 110px;">更新时间</th>
                 <th style="width: 56px;">操作</th>
@@ -144,6 +165,7 @@
             <#--            路径-->
             <#list dirs as dir>
                 <tr data-directory-id="${dir.id}">
+                    <td class="snapshot-select-cell"></td>
                     <td>
                         <a class="dir-title" href="list?directoryId=${dir.id}&sort=${sort!'updateTime'}<#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>"><i class="folder icon"></i><span>${dir.name}</span>
                         </a>
@@ -173,6 +195,12 @@
             <#--快照-->
             <#list snapshots as snapshot >
                 <tr data-system-snapshot-id="${snapshot.id}">
+                    <td class="snapshot-select-cell">
+                        <div class="ui checkbox system-snapshot-select-checkbox">
+                            <input type="checkbox" class="system-snapshot-batch-select" value="${snapshot.id}">
+                            <label></label>
+                        </div>
+                    </td>
                     <td>
                         <a class="snapshot-title" href="detail/${snapshot.id}">
                             <i class="file outline icon"></i>
@@ -198,7 +226,7 @@
             </#list>
             <#if dirs?size == 0 && snapshots?size == 0>
                 <tr id="systemSnapshotEmptyRow" class="empty-state-row">
-                    <td colspan="3">暂无数据</td>
+                    <td colspan="4">暂无数据</td>
                 </tr>
             </#if>
             </tbody>
@@ -240,6 +268,37 @@
 </div>
 
 <!-- 删除快照弹出框-->
+<div id="systemSnapshotBatchBindDialog" class="ui small modal">
+    <div class="header">批量关联测试用例</div>
+    <div class="content">
+        <div class="ui form">
+            <div class="field">
+                <label>已选系统快照</label>
+                <div id="systemSnapshotBatchBindSelectedText" style="color: #666; line-height: 1.8;">未选择系统快照</div>
+            </div>
+            <div class="field">
+                <label>关联到测试用例</label>
+                <div class="ui multiple search selection dropdown fluid" id="systemSnapshotBatchUsecaseDropdown">
+                    <input type="hidden" id="systemSnapshotBatchUsecaseIds">
+                    <i class="dropdown icon"></i>
+                    <div class="default text">选择要关联的测试用例</div>
+                    <div class="menu">
+                        <#if allUsecases??>
+                            <#list allUsecases as item>
+                                <div class="item" data-value="${item.id}">${item.title}</div>
+                            </#list>
+                        </#if>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">取消</div>
+        <div class="ui primary button" id="systemSnapshotBatchBindConfirm">确认关联</div>
+    </div>
+</div>
+
 <div id="deleteSystemSnapshotDialog" class="ui small modal">
     <div class="header">删除用例</div>
     <div class="ui negative message">
@@ -265,11 +324,82 @@
     function ensureSystemSnapshotEmptyState() {
         var hasDataRow = $('#systemSnapshotTableBody tr[data-directory-id], #systemSnapshotTableBody tr[data-system-snapshot-id]').length > 0;
         if (!hasDataRow && $('#systemSnapshotEmptyRow').length === 0) {
-            $('#systemSnapshotTableBody').append('<tr id="systemSnapshotEmptyRow" class="empty-state-row"><td colspan="3">暂无数据</td></tr>');
+            $('#systemSnapshotTableBody').append('<tr id="systemSnapshotEmptyRow" class="empty-state-row"><td colspan="4">暂无数据</td></tr>');
         }
         if (hasDataRow) {
             $('#systemSnapshotEmptyRow').remove();
         }
+    }
+
+    function getSelectedSystemSnapshotIds() {
+        return $('.system-snapshot-batch-select:checked').map(function () {
+            return $(this).val();
+        }).get();
+    }
+
+    function updateSystemSnapshotSelectionState() {
+        $('#systemSnapshotSelectedCount').text(getSelectedSystemSnapshotIds().length);
+    }
+
+    function selectAllSystemSnapshots() {
+        $('.system-snapshot-batch-select').prop('checked', true);
+        $('.system-snapshot-select-checkbox').checkbox('set checked');
+        updateSystemSnapshotSelectionState();
+    }
+
+    function clearSystemSnapshotSelection() {
+        $('.system-snapshot-batch-select').prop('checked', false);
+        $('.system-snapshot-select-checkbox').checkbox('set unchecked');
+        updateSystemSnapshotSelectionState();
+    }
+
+    function openSystemSnapshotBatchBindDialog() {
+        var selectedIds = getSelectedSystemSnapshotIds();
+        if (!selectedIds.length) {
+            showToast('请先勾选要关联的系统快照', 'warning');
+            return;
+        }
+        var selectedNames = [];
+        selectedIds.forEach(function (id) {
+            var row = $("#systemSnapshotTableBody tr[data-system-snapshot-id='" + id + "']");
+            var name = $.trim(row.find('.snapshot-title span').text());
+            if (name) {
+                selectedNames.push(name);
+            }
+        });
+        $('#systemSnapshotBatchUsecaseDropdown').dropdown('clear');
+        $('#systemSnapshotBatchBindSelectedText').text(selectedNames.join('、'));
+        $('#systemSnapshotBatchBindDialog').modal('show');
+    }
+
+    function bindSelectedSystemSnapshotsToUsecases() {
+        var snapshotIds = getSelectedSystemSnapshotIds();
+        if (!snapshotIds.length) {
+            showToast('请先勾选要关联的系统快照', 'warning');
+            return;
+        }
+        var usecaseValues = $('#systemSnapshotBatchUsecaseDropdown').dropdown('get value');
+        var usecaseIds = usecaseValues ? usecaseValues.split(',').filter(Boolean) : [];
+        if (!usecaseIds.length) {
+            showToast('请选择要关联的测试用例', 'warning');
+            return;
+        }
+        $.ajax({
+            url: '/p/${project.id}/${app.id}/snapshot/usecase/batchBind',
+            data: {snapshotIds: snapshotIds, usecaseIds: usecaseIds},
+            traditional: true,
+            success: function (result) {
+                if (result && (result.result || result.success)) {
+                    showToast(result.message || '批量关联成功', 'success');
+                    $('#systemSnapshotBatchBindDialog').modal('hide');
+                } else {
+                    showToast((result && (result.errorMessage || result.message)) || '批量关联失败', 'error');
+                }
+            },
+            error: function () {
+                showToast('批量关联失败', 'error');
+            }
+        });
     }
 
     $(function () {
@@ -279,6 +409,32 @@
         $('.ui.filter.dropdown').dropdown({
             on: 'click'
         });
+        $('.system-snapshot-select-checkbox').checkbox({
+            onChecked: updateSystemSnapshotSelectionState,
+            onUnchecked: updateSystemSnapshotSelectionState
+        });
+        $('#systemSnapshotBatchUsecaseDropdown').dropdown({
+            on: 'click'
+        });
+        $('#systemSnapshotBatchBindTrigger').on('click', function () {
+            openSystemSnapshotBatchBindDialog();
+        });
+        $('#systemSnapshotSelectAllTrigger').on('click', function () {
+            selectAllSystemSnapshots();
+        });
+        $('#systemSnapshotClearSelectionTrigger').on('click', function () {
+            clearSystemSnapshotSelection();
+        });
+        $('#systemSnapshotBatchBindConfirm').on('click', function () {
+            bindSelectedSystemSnapshotsToUsecases();
+        });
+        $(document).on('change', '.system-snapshot-batch-select', function () {
+            updateSystemSnapshotSelectionState();
+        });
+        $(document).on('click', '.snapshot-select-cell input, .snapshot-select-cell label', function (e) {
+            e.stopPropagation();
+        });
+        updateSystemSnapshotSelectionState();
     });
 
     // 打开 目录编辑窗口

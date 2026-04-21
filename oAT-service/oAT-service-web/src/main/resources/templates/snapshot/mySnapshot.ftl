@@ -299,6 +299,13 @@
                 <i class="linkify icon"></i>
                 批量关联用例
             </button>
+            <div class="ui mini basic buttons">
+                <button type="button" class="ui button" id="snapshotSelectAllTrigger">全选</button>
+                <button type="button" class="ui button" id="snapshotClearSelectionTrigger">清空选择</button>
+            </div>
+            <div class="item" style="padding-left: 0; color: #666;">
+                已选 <span id="snapshotSelectedCount">0</span> 项
+            </div>
         </div>
     </form>
     <!-- 主体内容 -->
@@ -516,6 +523,22 @@
                 }).get();
             }
 
+            function updateSnapshotSelectionState() {
+                $('#snapshotSelectedCount').text(getSelectedSnapshotIds().length);
+            }
+
+            function selectAllSnapshots() {
+                $('.snapshot-batch-select').prop('checked', true);
+                $('.snapshot-select-checkbox').checkbox('set checked');
+                updateSnapshotSelectionState();
+            }
+
+            function clearSnapshotSelection() {
+                $('.snapshot-batch-select').prop('checked', false);
+                $('.snapshot-select-checkbox').checkbox('set unchecked');
+                updateSnapshotSelectionState();
+            }
+
             function openSnapshotBatchBindDialog() {
                 var selectedIds = getSelectedSnapshotIds();
                 if (!selectedIds.length) {
@@ -615,8 +638,17 @@
             $('#snapshotBatchBindTrigger').on('click', function () {
                 openSnapshotBatchBindDialog();
             });
+            $('#snapshotSelectAllTrigger').on('click', function () {
+                selectAllSnapshots();
+            });
+            $('#snapshotClearSelectionTrigger').on('click', function () {
+                clearSnapshotSelection();
+            });
             $('#snapshotBatchBindConfirm').on('click', function () {
                 bindSelectedSnapshotsToUsecases();
+            });
+            $(document).on('change', '.snapshot-batch-select', function () {
+                updateSnapshotSelectionState();
             });
             $(document).on('click', '.snapshot-edit-trigger', function (e) {
                 e.preventDefault();
@@ -653,7 +685,10 @@
             $('.ui.click.dropdown').dropdown({
                 on: 'click'
             });
-            $('.snapshot-select-checkbox').checkbox();
+            $('.snapshot-select-checkbox').checkbox({
+                onChecked: updateSnapshotSelectionState,
+                onUnchecked: updateSnapshotSelectionState
+            });
             $('#snapshotBatchUsecaseDropdown').dropdown({
                 on: 'click'
             });
@@ -886,6 +921,7 @@
 
             $(function () {
                 initSnapshotLayoutResizer();
+                updateSnapshotSelectionState();
                 var requestedSnapshotId = '${snapshotId!}';
                 if (requestedSnapshotId) {
                     openSnapshotById(requestedSnapshotId);
