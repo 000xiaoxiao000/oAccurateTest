@@ -74,6 +74,36 @@
                     <span title="${snapshot.updateTimeText!'-'}">${snapshot.updateTimeText!'-'}</span>
                 </div>
             </h2>
+            <div class="ui segment">
+                <div class="ui stackable grid">
+                    <div class="ten wide column">
+                        <h4 class="ui header">关联测试用例</h4>
+                        <div class="ui multiple search selection dropdown fluid" id="snapshotUsecaseDropdown">
+                            <input type="hidden" id="snapshotUsecaseIds" value="<#list usecases as item><#if item_index gt 0>,</#if>${item.id}</#list>">
+                            <i class="dropdown icon"></i>
+                            <div class="default text">选择要关联的测试用例</div>
+                            <div class="menu">
+                                <#list allUsecases as item>
+                                    <div class="item" data-value="${item.id}">${item.title}</div>
+                                </#list>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="six wide column">
+                        <h4 class="ui header">已关联用例</h4>
+                        <div class="ui relaxed list" id="snapshotUsecaseList">
+                            <#if usecases?? && usecases?size gt 0>
+                                <#list usecases as item>
+                                    <div class="item"><i class="file alternate outline icon"></i><div class="content"><a href="/p/${project.id}/usecase/detail?id=${item.id}">${item.title}</a></div></div>
+                                </#list>
+                            <#else>
+                                <div class="item" style="color:#888;">暂无关联测试用例</div>
+                            </#if>
+                        </div>
+                        <button class="ui primary button" type="button" onclick="bindSnapshotUsecases()">保存测试用例关联</button>
+                    </div>
+                </div>
+            </div>
             <div id="monitorDetail" class="ui">
                 <div class="ui block header top attached  segment">
                     <span class="ui">
@@ -193,6 +223,26 @@
         var htmlobj = $.ajax({url: "/p/" + projectid + "/monitor/" + traceId + "/" + nodeId + ".html", async: false});
         nodeDiv.html(htmlobj.responseText);
         $("#nodeDetail").append(nodeDiv);
+    }
+
+    function bindSnapshotUsecases() {
+        var values = $('#snapshotUsecaseDropdown').dropdown('get value');
+        $.ajax({
+            url: '/p/${project.id}/snapshot/${snapshot.id}/usecase/bind',
+            data: {usecaseIds: values ? values.split(',').filter(Boolean) : []},
+            traditional: true,
+            success: function (result) {
+                if (result && (result.result || result.success)) {
+                    showToast(result.message || '保存成功', 'success');
+                    window.location.reload();
+                } else {
+                    showToast((result && result.errorMessage) || '保存失败', 'error');
+                }
+            },
+            error: function () {
+                showToast('保存失败', 'error');
+            }
+        });
     }
 </script>
 

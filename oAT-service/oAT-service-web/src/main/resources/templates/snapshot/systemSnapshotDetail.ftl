@@ -190,6 +190,37 @@
             <textarea rows="2" name="describe" value="${snapshot.describe!}">${snapshot.describe!}</textarea>
         </div>
     </form>
+
+    <div class="ui segment" style="margin-top: 20px;">
+        <div class="ui stackable grid">
+            <div class="ten wide column">
+                <h4 class="ui header">关联测试用例</h4>
+                <div class="ui multiple search selection dropdown fluid" id="systemSnapshotUsecaseDropdown">
+                    <input type="hidden" id="systemSnapshotUsecaseIds" value="<#list usecases as item><#if item_index gt 0>,</#if>${item.id}</#list>">
+                    <i class="dropdown icon"></i>
+                    <div class="default text">选择要关联的测试用例</div>
+                    <div class="menu">
+                        <#list allUsecases as item>
+                            <div class="item" data-value="${item.id}">${item.title}</div>
+                        </#list>
+                    </div>
+                </div>
+            </div>
+            <div class="six wide column">
+                <h4 class="ui header">已关联用例</h4>
+                <div class="ui relaxed list">
+                    <#if usecases?? && usecases?size gt 0>
+                        <#list usecases as item>
+                            <div class="item"><i class="file alternate outline icon"></i><div class="content"><a href="/p/${project.id}/usecase/detail?id=${item.id}">${item.title}</a></div></div>
+                        </#list>
+                    <#else>
+                        <div class="item" style="color:#888;">暂无关联测试用例</div>
+                    </#if>
+                </div>
+                <button class="ui primary button" type="button" onclick="bindSystemSnapshotUsecases()">保存测试用例关联</button>
+            </div>
+        </div>
+    </div>
     <!--标题图片-->
     <#if (snapshot.topicImage)?? &&(snapshot.topicImage?length>1)>
         <img id="topicImage" class="ui centered bordered large image" src="/r/${snapshot.topicImage!}"
@@ -462,6 +493,7 @@
         $('.ui.click.dropdown').dropdown({
             on: 'click'
         })
+        $('#systemSnapshotUsecaseDropdown').dropdown();
     });
 
     // 构建流程图
@@ -477,6 +509,26 @@
                 }
             });
             initFlow = true;
+        });
+    }
+
+    function bindSystemSnapshotUsecases() {
+        var values = $('#systemSnapshotUsecaseDropdown').dropdown('get value');
+        $.ajax({
+            url: '/p/${project.id}/${app.id}/snapshot/${snapshot.id}/usecase/bind',
+            data: {usecaseIds: values ? values.split(',').filter(Boolean) : []},
+            traditional: true,
+            success: function (result) {
+                if (result && (result.result || result.success)) {
+                    showToast(result.message || '保存成功', 'success');
+                    refreshCurrentTab();
+                } else {
+                    showToast((result && result.errorMessage) || '保存失败', 'error');
+                }
+            },
+            error: function () {
+                showToast('保存失败', 'error');
+            }
         });
     }
 

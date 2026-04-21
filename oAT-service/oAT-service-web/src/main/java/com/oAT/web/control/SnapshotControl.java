@@ -15,6 +15,7 @@ import com.oAT.web.esDao.entity.Snapshot;
 import com.oAT.web.esDao.entity.StaticSourceInfo;
 import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import com.oAT.web.service.*;
+import com.oAT.web.service.entity.UsecaseDirectoryVo;
 import com.oAT.web.service.entity.*;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.BooleanUtils;
@@ -66,6 +67,9 @@ public class SnapshotControl {
 
     @Autowired
     private StaticInfoRepository staticInfoRepository;
+
+    @Autowired
+    private UsecaseService usecaseService;
 
     @RequestMapping("/save")
     @ResponseBody
@@ -170,6 +174,7 @@ public class SnapshotControl {
         model.addAttribute("keyword", keyword);
         model.addAttribute("snapshotId", snapshotId);
         model.addAttribute("missingSnapshotId", missingSnapshotId);
+        model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
 
         return "/snapshot/mySnapshot";
     }
@@ -186,6 +191,28 @@ public class SnapshotControl {
             }
         }
         return false;
+    }
+
+    private List<UsecaseVo> collectAllProjectUsecases(String projectId) {
+        LinkedHashMap<String, UsecaseVo> result = new LinkedHashMap<>();
+        Deque<String> directoryQueue = new ArrayDeque<>();
+        directoryQueue.add("root");
+        while (!directoryQueue.isEmpty()) {
+            String directoryId = directoryQueue.poll();
+            for (UsecaseVo usecaseVo : usecaseService.getUsecases(projectId, directoryId, "updateTime", null)) {
+                result.putIfAbsent(usecaseVo.getId(), usecaseVo);
+            }
+            List<UsecaseDirectoryVo> childDirectories = usecaseService.getDirectory(projectId, directoryId);
+            if (childDirectories == null) {
+                continue;
+            }
+            for (UsecaseDirectoryVo directoryVo : childDirectories) {
+                if (directoryVo != null && StringUtils.hasText(directoryVo.getId())) {
+                    directoryQueue.add(directoryVo.getId());
+                }
+            }
+        }
+        return new ArrayList<>(result.values());
     }
 
     @RequestMapping("/mySnapshotsCodeReport")
@@ -205,6 +232,25 @@ public class SnapshotControl {
         model.addAttribute("snapshotId", targetSnapshot.getId());
         model.addAttribute("selectedSnapshotName", targetSnapshot.getName());
         return buildMySnapshotsCodeReport(projectId, Collections.singletonList(targetSnapshot), model);
+    }
+
+    @RequestMapping("/usecase/batchBind")
+    @ResponseBody
+    public ResultNotified<Integer> batchBindUsecases(@PathVariable String projectId,
+                                                     @SessionAttribute UserVo user,
+                                                     String[] snapshotIds,
+                                                     String[] usecaseIds) {
+        try {
+            usecaseService.batchAppendSnapshotsToUsecases(projectId, user.getId(), snapshotIds, usecaseIds);
+            ResultNotified<Integer> result = new ResultNotified<>(true, "批量关联成功");
+            result.setData(snapshotIds == null ? 0 : snapshotIds.length);
+            return result;
+        } catch (Exception e) {
+            logger.warn("批量关联快照测试用例失败, projectId={}", projectId, e);
+            ResultNotified<Integer> result = new ResultNotified<>(false, "批量关联失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
     }
 
     private String buildMySnapshotsCodeReport(String projectId, List<SnapshotVo> snapshots, Model model) {
@@ -684,12 +730,36 @@ public class SnapshotControl {
         } else {
             model.addAttribute("labels", new ArrayList<>());
         }
+        model.addAttribute("usecases", usecaseService.getUsecasesBySnapshot(projectId, id));
+        model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
         // 跳转至快照共享页
         Boolean share = (Boolean) request.getAttribute("_share");
         if (BooleanUtils.isTrue(share)) {
             return "/snapshot/shareSnapshotDetail";
         }
         return "/snapshot/snapshotDetail";
+    }
+
+    @RequestMapping("/{snapshotId}/usecase/bind")
+    @ResponseBody
+    public ResultNotified<Integer> bindUsecases(@PathVariable String projectId,
+                                                @PathVariable String snapshotId,
+                                                @SessionAttribute UserVo user,
+                                                String[] usecaseIds) {
+        try {
+            SnapshotVo snapshotVo = snapshotService.get(snapshotId);
+            Assert.notNull(snapshotVo, "找不到快照 id=" + snapshotId);
+            Assert.isTrue(projectId.equals(snapshotVo.getProjectId()), "快照不属于当前项目");
+            usecaseService.bindSnapshotToUsecases(projectId, user.getId(), snapshotId, usecaseIds);
+            ResultNotified<Integer> result = new ResultNotified<>(true, "测试用例关联已更新");
+            result.setData(usecaseIds == null ? 0 : usecaseIds.length);
+            return result;
+        } catch (Exception e) {
+            logger.warn("更新快照关联测试用例失败, projectId={}, snapshotId={}", projectId, snapshotId, e);
+            ResultNotified<Integer> result = new ResultNotified<>(false, "测试用例关联更新失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
     }
 
     @RequestMapping("/doDelete")
@@ -705,6 +775,24 @@ public class SnapshotControl {
     public ResultNotified<Serializable> doUpdate(@PathVariable String projectId, String id, Snapshot snapshot) {
         snapshotService.doUpdate(id, snapshot);
         return new ResultNotified<>(true, "快照更新成功");
+    }
+
+    private List<UsecaseVo> collectAllProjectUsecases(String projectId) {
+        LinkedHashMap<String, UsecaseVo> result = new LinkedHashMap<>();
+        Deque<String> directoryQueue = new ArrayDeque<>();
+        directoryQueue.add("root");
+        while (!directoryQueue.isEmpty()) {
+            String directoryId = directoryQueue.poll();
+            for (UsecaseVo usecaseVo : usecaseService.getUsecases(projectId, directoryId, "updateTime", null)) {
+                result.putIfAbsent(usecaseVo.getId(), usecaseVo);
+            }
+            for (com.oAT.web.service.entity.UsecaseDirectoryVo directoryVo : usecaseService.getDirectory(projectId, directoryId)) {
+                if (directoryVo != null && StringUtils.hasText(directoryVo.getId())) {
+                    directoryQueue.add(directoryVo.getId());
+                }
+            }
+        }
+        return new ArrayList<>(result.values());
     }
 
     private Map<String, List<Integer>> normalizeMethodBranchTargetProbeMap(Map<String, List<Integer>> total,
