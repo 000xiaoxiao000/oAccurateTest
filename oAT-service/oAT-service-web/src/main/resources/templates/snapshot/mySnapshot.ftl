@@ -32,6 +32,50 @@
             margin-left: auto;
         }
 
+        .snapshot-bulk-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: rgba(33, 133, 208, 0.06);
+            border: 1px solid rgba(33, 133, 208, 0.14);
+        }
+
+        .snapshot-selected-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #f3f4f6;
+            color: #6b7280;
+            border: 1px solid rgba(34, 36, 38, .08);
+            font-weight: 600;
+            line-height: 1;
+            transition: all .2s ease;
+        }
+
+        .snapshot-selected-badge.active {
+            background: rgba(33, 133, 208, 0.12);
+            color: #1f2937;
+            border-color: rgba(33, 133, 208, 0.24);
+            box-shadow: 0 0 0 1px rgba(33, 133, 208, 0.05) inset;
+        }
+
+        .snapshot-selected-badge .count {
+            color: inherit;
+            font-size: 1.05em;
+        }
+
+        .snapshot-selected-badge.active .count {
+            color: var(--page-accent);
+        }
+
+        .snapshot-report-entry {
+            margin-left: 2px;
+        }
+
         .snapshot-select-cell {
             width: 42px;
             text-align: center;
@@ -289,22 +333,24 @@
                     <div class="item" data-value="name">快照名称</div>
                 </div>
             </div>
-            <div class="ui multiple click dropdown item" tabindex="3">
+            <div class="snapshot-bulk-group">
+                <button type="button" class="ui primary mini button snapshot-bulk-action" id="snapshotBatchBindTrigger">
+                    <i class="linkify icon"></i>
+                    批量关联用例
+                </button>
+                <div class="ui mini basic buttons">
+                    <button type="button" class="ui button" id="snapshotSelectAllTrigger">全选</button>
+                    <button type="button" class="ui button" id="snapshotClearSelectionTrigger">清空选择</button>
+                </div>
+                <div class="snapshot-selected-badge" title="当前已选中的快照数量">
+                    已选 <span class="count" id="snapshotSelectedCount">0</span> 项
+                </div>
+            </div>
+            <div class="ui multiple click dropdown item snapshot-report-entry" tabindex="3">
                 <i class="file icon"> </i>
                 <span class="text snapshot-open-report snapshot-toolbar-text" title="我的快照中所有接口">
                     查看报告
                 </span>
-            </div>
-            <button type="button" class="ui primary mini button snapshot-bulk-action" id="snapshotBatchBindTrigger">
-                <i class="linkify icon"></i>
-                批量关联用例
-            </button>
-            <div class="ui mini basic buttons">
-                <button type="button" class="ui button" id="snapshotSelectAllTrigger">全选</button>
-                <button type="button" class="ui button" id="snapshotClearSelectionTrigger">清空选择</button>
-            </div>
-            <div class="item" style="padding-left: 0; color: #666;">
-                已选 <span id="snapshotSelectedCount">0</span> 项
             </div>
         </div>
     </form>
@@ -524,7 +570,11 @@
             }
 
             function updateSnapshotSelectionState() {
-                $('#snapshotSelectedCount').text(getSelectedSnapshotIds().length);
+                var selectedCount = getSelectedSnapshotIds().length;
+                $('#snapshotSelectedCount').text(selectedCount);
+                $('#snapshotBatchBindTrigger').toggleClass('disabled', selectedCount === 0);
+                $('#snapshotClearSelectionTrigger').toggleClass('disabled', selectedCount === 0);
+                $('.snapshot-selected-badge').toggleClass('active', selectedCount > 0);
             }
 
             function selectAllSnapshots() {
@@ -636,12 +686,18 @@
                 e.stopPropagation();
             });
             $('#snapshotBatchBindTrigger').on('click', function () {
+                if ($(this).hasClass('disabled')) {
+                    return;
+                }
                 openSnapshotBatchBindDialog();
             });
             $('#snapshotSelectAllTrigger').on('click', function () {
                 selectAllSnapshots();
             });
             $('#snapshotClearSelectionTrigger').on('click', function () {
+                if ($(this).hasClass('disabled')) {
+                    return;
+                }
                 clearSnapshotSelection();
             });
             $('#snapshotBatchBindConfirm').on('click', function () {
@@ -689,6 +745,7 @@
                 onChecked: updateSnapshotSelectionState,
                 onUnchecked: updateSnapshotSelectionState
             });
+            updateSnapshotSelectionState();
             $('#snapshotBatchUsecaseDropdown').dropdown({
                 on: 'click'
             });

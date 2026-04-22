@@ -1,9 +1,17 @@
 var selectTraceId = null;
+var currentMonitorTitle = '';
+var currentAutoSaveRequestToken = 0;
+var currentProjectId = null;
+var autoSavedTraceCache = {
+    my: {},
+    system: {}
+};
 
 /*
  * 打开监控详情
  * */
 function openMonitorDetail(projectid, traceId) {
+    currentProjectId = projectid;
     // 初始化界面
     $("#emptyTip").hide();
     $("#monitorDetail").show();
@@ -18,7 +26,8 @@ function openMonitorDetail(projectid, traceId) {
     }).responseJSON;
 
     // 设置标题
-    $("#monitorDetailTitle").text(monitorData.title);
+    currentMonitorTitle = monitorData.title || '';
+    $("#monitorDetailTitle").text(currentMonitorTitle);
 
     // 构建流程图
     buildFlow(projectid, traceId, monitorData);
@@ -27,6 +36,7 @@ function openMonitorDetail(projectid, traceId) {
     openNodeDetails(projectid, traceId, monitorData.showDefaultNode.id);
     selectTraceId = traceId;
     $(".button.save.snapshot").removeClass("disabled");
+    updateMonitorActionAvailability();
 }
 
 function buildFlow(projectId, traceId, data) {
@@ -68,6 +78,7 @@ function refreshMonitorList(projectid) {
     }).responseJSON;
 
     if (newItems === undefined || newItems.length == 0) {
+        resetMonitorSelectionState();
         $("#emptyTip").show();
         $("#monitorDetail").hide();
     } else {
@@ -98,6 +109,7 @@ function pullNewItem(projectid) {
 }
 
 function appendItems(projectid, newItems) {
+    currentProjectId = projectid;
     if (newItems === undefined || newItems.length == 0) {
         return;
     }
@@ -115,6 +127,7 @@ function appendItems(projectid, newItems) {
             + "  </td>"
             + "</tr>";
         $("#monitorListBody").prepend(itemText);
+        tryAutoSaveSnapshots(projectid, value.traceId, value.title || '');
     });
     lastIndex = newItems[newItems.length - 1].index;
 }
@@ -129,6 +142,21 @@ function doSelect(t) {
     $(t).toggleClass("focus");//设定当前行为选中行
 }
 
+function updateMonitorActionAvailability() {
+    var hasSelection = !!selectTraceId;
+    var selectionHint = hasSelection ? '已选中当前链路，可手动保存；自动保存会在新监控数据进入列表时触发' : '自动保存会在新监控数据进入列表时触发；手动保存请先选择一条记录';
+
+    $('#saveSnapshotDropdown').toggleClass('disabled', !hasSelection);
+    $('#saveSnapshotDropdownButton').toggleClass('disabled', !hasSelection);
+    $('#monitorActionHint').text(selectionHint);
+}
+
+function resetMonitorSelectionState() {
+    selectTraceId = null;
+    currentMonitorTitle = '';
+    updateMonitorActionAvailability();
+}
+
 function buildEncodedFormData($form, extraFields) {
     var formArray = $form.serializeArray();
     $.each(extraFields || {}, function (name, value) {
@@ -138,6 +166,170 @@ function buildEncodedFormData($form, extraFields) {
         });
     });
     return $.param(formArray, true);
+}
+
+function getMonitorAutoSaveStorageKey(projectId, type) {
+    return 'monitorAutoSave:' + projectId + ':' + type;
+}
+
+function isMonitorAutoSaveEnabled(projectId, type) {
+    return localStorage.getItem(getMonitorAutoSaveStorageKey(projectId, type)) === 'true';
+}
+
+function setMonitorAutoSaveEnabled(projectId, type, enabled) {
+    localStorage.setItem(getMonitorAutoSaveStorageKey(projectId, type), enabled ? 'true' : 'false');
+}
+
+function syncMonitorAutoSaveSwitches(projectId) {
+    $('#autoSaveMySnapshotToggle').prop('checked', isMonitorAutoSaveEnabled(projectId, 'my'));
+    $('#autoSaveSystemSnapshotToggle').prop('checked', isMonitorAutoSaveEnabled(projectId, 'system'));
+    updateMonitorActionAvailability();
+}
+
+function buildAutoSnapshotName(prefix, title) {
+    var normalizedTitle = $.trim(title || '未命名链路');
+    if (normalizedTitle.length > 24) {
+        normalizedTitle = normalizedTitle.substring(0, 24);
+    }
+    var now = new Date();
+    var pad = function (value) {
+        return value < 10 ? '0' + value : '' + value;
+    };
+    var timestamp = now.getFullYear()
+        + pad(now.getMonth() + 1)
+        + pad(now.getDate())
+        + pad(now.getHours())
+        + pad(now.getMinutes())
+        + pad(now.getSeconds());
+    return prefix + '-' + normalizedTitle + '-' + timestamp;
+}
+
+function extractRequestErrorMessage(xhr, defaultMessage) {
+    var errorMessage = defaultMessage || '网络请求失败';
+    if (xhr && xhr.responseJSON) {
+        errorMessage = xhr.responseJSON.errorMessage || xhr.responseJSON.message || errorMessage;
+    }
+    return errorMessage;
+}
+
+function doAutoSaveMySnapshot(projectid, traceId, title) {
+    return $.ajax({
+        url: '/p/' + projectid + '/snapshot/save',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            traceId: traceId,
+            autoSave: true,
+            name: buildAutoSnapshotName('自动快照', title),
+            describe: '实时监控自动保存',
+            labels: ['自动保存', '实时监控']
+        }
+    });
+}
+
+function doAutoSaveSystemSnapshot(projectid, traceId, title) {
+    return $.ajax({
+        url: '/p/' + projectid + '/monitor/autoSaveSystemSnapshot',
+        type: 'POST',
+        dataType: 'json',
+        data: {
+            traceId: traceId,
+            title: buildAutoSnapshotName('自动系统快照', title)
+        }
+    });
+}
+
+function tryAutoSaveSnapshots(projectid, traceId, title) {
+    if (!traceId) {
+        return;
+    }
+
+    var myEnabled = isMonitorAutoSaveEnabled(projectid, 'my') && !autoSavedTraceCache.my[traceId];
+    var systemEnabled = isMonitorAutoSaveEnabled(projectid, 'system') && !autoSavedTraceCache.system[traceId];
+    if (!myEnabled && !systemEnabled) {
+        return;
+    }
+
+    var token = ++currentAutoSaveRequestToken;
+    var tasks = [];
+    var summary = {
+        success: [],
+        skipped: [],
+        failed: []
+    };
+
+    function pushSummaryResult(bucket, message) {
+        if (message) {
+            summary[bucket].push(message);
+        }
+    }
+
+    function finalizeSummary() {
+        if (token !== currentAutoSaveRequestToken) {
+            return;
+        }
+        var messages = [];
+        if (summary.success.length > 0) {
+            messages.push(summary.success.join('；'));
+        }
+        if (summary.skipped.length > 0) {
+            messages.push(summary.skipped.join('；'));
+        }
+        if (summary.failed.length > 0) {
+            messages.push(summary.failed.join('；'));
+        }
+        if (messages.length === 0) {
+            return;
+        }
+        var toastType = summary.failed.length > 0 ? (summary.success.length > 0 || summary.skipped.length > 0 ? 'warning' : 'error') : 'success';
+        showToast(messages.join('；'), toastType);
+    }
+
+    if (myEnabled) {
+        tasks.push(doAutoSaveMySnapshot(projectid, traceId, title).done(function (resultInform) {
+            if (resultInform && resultInform.result) {
+                var message = resultInform.message || '已自动保存我的快照';
+                if (message.indexOf('已自动保存过') >= 0) {
+                    autoSavedTraceCache.my[traceId] = true;
+                    pushSummaryResult('skipped', message);
+                    return;
+                }
+                autoSavedTraceCache.my[traceId] = true;
+                pushSummaryResult('success', message);
+                return;
+            }
+            pushSummaryResult('failed', (resultInform && (resultInform.errorMessage || resultInform.message)) || '自动保存我的快照失败');
+        }).fail(function (xhr) {
+            pushSummaryResult('failed', '自动保存我的快照失败: ' + extractRequestErrorMessage(xhr, '网络请求失败'));
+        }));
+    }
+
+    if (systemEnabled) {
+        tasks.push(doAutoSaveSystemSnapshot(projectid, traceId, title).done(function (resultInform) {
+            if (resultInform && resultInform.result) {
+                var message = resultInform.message || '已自动保存系统快照';
+                if (message.indexOf('已自动保存过') >= 0) {
+                    autoSavedTraceCache.system[traceId] = true;
+                    pushSummaryResult('skipped', message);
+                    return;
+                }
+                autoSavedTraceCache.system[traceId] = true;
+                pushSummaryResult('success', message);
+                return;
+            }
+            pushSummaryResult('failed', (resultInform && (resultInform.errorMessage || resultInform.message)) || '自动保存系统快照失败');
+        }).fail(function (xhr) {
+            pushSummaryResult('failed', '自动保存系统快照失败: ' + extractRequestErrorMessage(xhr, '网络请求失败'));
+        }));
+    }
+
+    if (tasks.length > 0) {
+        $.when.apply($, tasks).always(function () {
+            finalizeSummary();
+        });
+    }
+
+    return tasks;
 }
 
 function doSaveSnapshot(projectid, onSuccess) {
