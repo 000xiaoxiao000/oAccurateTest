@@ -1818,7 +1818,7 @@ public class AIAgentService {
         }
     }
 
-    private static final class FallbackParameterReport {
+    public static final class FallbackParameterReport {
         private final String parameterName;
         private final String matchedKey;
         private final String strategy;
@@ -1878,9 +1878,41 @@ public class AIAgentService {
         private String describe() {
             return parameterName + "<-" + matchedKey + " [" + strategy + "] " + message;
         }
+
+        public String getParameterName() {
+            return parameterName;
+        }
+
+        public String getMatchedKey() {
+            return matchedKey;
+        }
+
+        public String getStrategy() {
+            return strategy;
+        }
+
+        public String getSourceType() {
+            return sourceType;
+        }
+
+        public String getTargetType() {
+            return targetType;
+        }
+
+        public boolean isUsedDefault() {
+            return usedDefault;
+        }
+
+        public boolean isExplicitNull() {
+            return explicitNull;
+        }
+
+        public String getMessage() {
+            return message;
+        }
     }
 
-    private static final class FallbackReport {
+    public static final class FallbackReport {
         private String toolName;
         private String candidateToolName;
         private String strategy;
@@ -1926,6 +1958,62 @@ public class AIAgentService {
                     + ", error=" + errorMessage
                     + ", schema=" + schemaDescription
                     + ", params=" + paramDescriptions;
+        }
+
+        public String getToolName() {
+            return toolName;
+        }
+
+        public String getCandidateToolName() {
+            return candidateToolName;
+        }
+
+        public String getEffectiveToolName() {
+            return candidateToolName != null && !candidateToolName.isEmpty() ? candidateToolName : toolName;
+        }
+
+        public String getStrategy() {
+            return strategy;
+        }
+
+        public boolean isRetried() {
+            return retried;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        public String getSchemaDescription() {
+            return schemaDescription;
+        }
+
+        public int getResultLength() {
+            return resultLength;
+        }
+
+        public long getStartedAt() {
+            return startedAt;
+        }
+
+        public long getFinishedAt() {
+            return finishedAt;
+        }
+
+        public long getDurationMs() {
+            return Math.max(0, finishedAt - startedAt);
+        }
+
+        public List<FallbackParameterReport> getParameterReports() {
+            List<FallbackParameterReport> copies = new ArrayList<>();
+            for (FallbackParameterReport parameterReport : parameterReports) {
+                copies.add(parameterReport.copy());
+            }
+            return Collections.unmodifiableList(copies);
         }
     }
 

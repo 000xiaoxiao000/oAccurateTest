@@ -18,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -117,6 +118,7 @@ public class AIStreamingControl {
                         "message", "AI正在分析您的问题...",
                         "intent", recommendation != null ? recommendation.detectedIntent : "general"
                 ));
+                sendProcessingStatus(emitter, "analyzing", "AI正在分析您的问题...");
 
                 // 6. 调用 AI 服务
                 String response;
@@ -129,6 +131,7 @@ public class AIStreamingControl {
                 }
 
                 long responseTime = System.currentTimeMillis() - startTime;
+                emitFallbackToolEvents(emitter);
 
                 // 7. 流式发送响应（模拟打字机效果）
                 if (response != null && !response.isEmpty()) {
@@ -207,6 +210,7 @@ public class AIStreamingControl {
 
                 AgentContext context = new AgentContext(projectId, user.getId(), user.getName());
                 sendJsonEvent(emitter, "thinking", Map.of("message", "正在获取源码并分析..."));
+                sendProcessingStatus(emitter, "analyzing", "正在获取源码并分析...");
 
                 // 构建检测问题
                 StringBuilder questionBuilder = new StringBuilder("请对以下代码进行AI Bug检测：");
@@ -221,6 +225,7 @@ public class AIStreamingControl {
 
                 String response = aiAgentService.chat(context, questionBuilder.toString());
                 long responseTime = System.currentTimeMillis() - startTime;
+                emitFallbackToolEvents(emitter);
 
                 if (response != null && !response.isEmpty()) {
                     sendTypingEffect(emitter, response);
@@ -286,12 +291,14 @@ public class AIStreamingControl {
 
                 AgentContext context = new AgentContext(projectId, user.getId(), user.getName());
                 sendJsonEvent(emitter, "thinking", Map.of("message", "正在分析调用链路..."));
+                sendProcessingStatus(emitter, "analyzing", "正在分析调用链路...");
 
                 String question = "请对TraceID为 " + traceId + " 的调用链进行深度AI分析。\n" +
                         "使用 analyzeCallChain 工具获取完整链路数据，生成Mermaid拓扑图、性能瓶颈定位和异常根因分析。";
 
                 String response = aiAgentService.chat(context, question);
                 long responseTime = System.currentTimeMillis() - startTime;
+                emitFallbackToolEvents(emitter);
 
                 if (response != null && !response.isEmpty()) {
                     sendTypingEffect(emitter, response);
@@ -363,6 +370,7 @@ public class AIStreamingControl {
                 sendJsonEvent(emitter, "thinking", Map.of(
                         "message", "正在对比两条调用链...",
                         "mode", mode));
+                sendProcessingStatus(emitter, "analyzing", "正在对比两条调用链...");
 
                 String question;
                 switch (mode.toLowerCase()) {
@@ -394,6 +402,7 @@ public class AIStreamingControl {
 
                 String response = aiAgentService.chat(context, question);
                 long responseTime = System.currentTimeMillis() - startTime;
+                emitFallbackToolEvents(emitter);
 
                 if (response != null && !response.isEmpty()) {
                     sendTypingEffect(emitter, response);
@@ -441,12 +450,69 @@ public class AIStreamingControl {
                     .name(event)
                     .data(jsonStr)
                     .reconnectTime(3000));
+            emitter.send(SseEmitter.event()
+                    .name("message")
+                    .data(jsonStr)
+                    .id(buildEventId(event))
+                    .reconnectTime(3000));
         } catch (JsonProcessingException e) {
             emitter.send(SseEmitter.event()
                     .name(event)
                     .data("{\"error\":\"serialization_error\"}")
                     .reconnectTime(3000));
         }
+    }
+
+    private void sendProcessingStatus(SseEmitter emitter, String phase, String message) throws IOException {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("type", "status");
+        payload.put("phase", phase);
+        payload.put("message", message);
+        sendJsonEvent(emitter, "status", payload);
+    }
+
+    private void emitFallbackToolEvents(SseEmitter emitter) throws IOException {
+        AIAgentService.FallbackReport report = aiAgentService.getLatestFallbackReport();
+        if (report == null || !report.isSuccess()) {
+            return;
+        }
+
+        Map<String, Object> toolCallPayload = new LinkedHashMap<>();
+        toolCallPayload.put("toolName", report.getEffectiveToolName());
+        toolCallPayload.put("strategy", report.getStrategy());
+        toolCallPayload.put("retried", report.isRetried());
+        toolCallPayload.put("durationMs", report.getDurationMs());
+        toolCallPayload.put("parameterCount", report.getParameterReports().size());
+        sendJsonEvent(emitter, "tool_call", toolCallPayload);
+
+        Map<String, Object> execPayload = new LinkedHashMap<>();
+        execPayload.put("type", "exec");
+        execPayload.put("tool", report.getEffectiveToolName());
+        execPayload.put("success", true);
+        execPayload.put("durationMs", report.getDurationMs());
+        execPayload.put("strategy", report.getStrategy());
+        execPayload.put("resultLength", report.getResultLength());
+        execPayload.put("parameters", buildExecParameterSummary(report));
+        sendJsonEvent(emitter, "exec", execPayload);
+    }
+
+    private Map<String, Object> buildExecParameterSummary(AIAgentService.FallbackReport report) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        for (AIAgentService.FallbackParameterReport parameterReport : report.getParameterReports()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("matchedKey", parameterReport.getMatchedKey());
+            item.put("strategy", parameterReport.getStrategy());
+            item.put("targetType", parameterReport.getTargetType());
+            item.put("usedDefault", parameterReport.isUsedDefault());
+            item.put("explicitNull", parameterReport.isExplicitNull());
+            item.put("message", parameterReport.getMessage());
+            payload.put(parameterReport.getParameterName(), item);
+        }
+        return payload;
+    }
+
+    private String buildEventId(String event) {
+        return event + "-" + System.currentTimeMillis();
     }
 
     /**
@@ -517,6 +583,10 @@ public class AIStreamingControl {
                 .reconnectTime(3000);
 
             emitter.send(event);
+            emitter.send(SseEmitter.event()
+                    .name("token")
+                    .data(chunk)
+                    .reconnectTime(3000));
 
             // 延迟50ms，模拟打字速度
             Thread.sleep(50);

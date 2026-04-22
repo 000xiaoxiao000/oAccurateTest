@@ -77,15 +77,6 @@ public class ClassInfo {
      */
     private final Map<String, Boolean> asyncMethodMap = new HashMap<String, Boolean>();
 
-    /*
-     * 接口URI
-     * Map<类+方法+desc, URI>
-     */
-    private final Map<String, String> methodUriMap = new HashMap<String, String>();
-
-    // 类级别的 URI
-    private String classUri = "";
-
     static boolean isAnonymousClassName(String internalClassName) {
         int dollarPosition = internalClassName == null ? -1 : internalClassName.lastIndexOf('$');
         if (dollarPosition < 0 || dollarPosition + 1 >= internalClassName.length()) {
@@ -137,41 +128,6 @@ public class ClassInfo {
 
                 @Override
                 public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-                    boolean isSpring = descriptor != null && descriptor.contains("org/springframework/web/bind" +
-                            "/annotation");
-                    boolean isJaxRs =
-                            descriptor != null && (descriptor.contains("javax/ws/rs/Path") || descriptor.contains(
-                                    "jakarta/ws/rs/Path"));
-
-                    if (isSpring || isJaxRs) {
-                        return new AnnotationVisitor(asmApiVersion, super.visitAnnotation(descriptor, visible)) {
-                            @Override
-                            public void visit(String name, Object value) {
-                                if ("value".equals(name) || "path".equals(name)) {
-                                    if (classUri.isEmpty()) {
-                                        classUri = String.valueOf(value);
-                                    }
-                                }
-                                super.visit(name, value);
-                            }
-
-                            @Override
-                            public AnnotationVisitor visitArray(String name) {
-                                if ("value".equals(name) || "path".equals(name)) {
-                                    return new AnnotationVisitor(asmApiVersion, super.visitArray(name)) {
-                                        @Override
-                                        public void visit(String name, Object value) {
-                                            if (classUri.isEmpty()) {
-                                                classUri = String.valueOf(value);
-                                            }
-                                            super.visit(name, value);
-                                        }
-                                    };
-                                }
-                                return super.visitArray(name);
-                            }
-                        };
-                    }
                     return super.visitAnnotation(descriptor, visible);
                 }
 
@@ -241,55 +197,9 @@ public class ClassInfo {
                         private int currentLine = -1;   // 当前代码行
                         private int decisionPoints = 0; // 判定节点数
                         private final Map<Integer, Integer> branchLineTargetCounters = new HashMap<>();
-                        private String methodUri = "";
-                        private boolean isHttpInterface = false;
 
                         @Override
                         public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-                            boolean isSpringMapping = descriptor != null && descriptor.contains("org/springframework" +
-                                    "/web/bind/annotation") && descriptor.contains("Mapping");
-                            boolean isJaxRsPath =
-                                    descriptor != null && (descriptor.contains("javax/ws/rs/Path") || descriptor.contains("jakarta/ws/rs/Path"));
-                            boolean isJaxRsVerb =
-                                    descriptor != null && (descriptor.contains("javax/ws/rs") || descriptor.contains(
-                                            "jakarta/ws/rs"))
-                                            && (descriptor.contains("GET") || descriptor.contains("POST") || descriptor.contains("PUT")
-                                            || descriptor.contains("DELETE") || descriptor.contains("PATCH") || descriptor.contains("HEAD") || descriptor.contains("OPTIONS"));
-
-                            if (isSpringMapping || isJaxRsPath || isJaxRsVerb) {
-                                isHttpInterface = true;
-                            }
-
-                            if (isSpringMapping || isJaxRsPath) {
-                                return new AnnotationVisitor(asmApiVersion, super.visitAnnotation(descriptor,
-                                        visible)) {
-                                    @Override
-                                    public void visit(String name, Object value) {
-                                        if ("value".equals(name) || "path".equals(name)) {
-                                            if (methodUri.isEmpty()) {
-                                                methodUri = String.valueOf(value);
-                                            }
-                                        }
-                                        super.visit(name, value);
-                                    }
-
-                                    @Override
-                                    public AnnotationVisitor visitArray(String name) {
-                                        if ("value".equals(name) || "path".equals(name)) {
-                                            return new AnnotationVisitor(asmApiVersion, super.visitArray(name)) {
-                                                @Override
-                                                public void visit(String name, Object value) {
-                                                    if (methodUri.isEmpty()) {
-                                                        methodUri = String.valueOf(value);
-                                                    }
-                                                    super.visit(name, value);
-                                                }
-                                            };
-                                        }
-                                        return super.visitArray(name);
-                                    }
-                                };
-                            }
                             return super.visitAnnotation(descriptor, visible);
                         }
 
@@ -444,16 +354,6 @@ public class ClassInfo {
                                 cyclomaticComplexityMap.put(name + " " + signature, cyclo);
                             }
                             super.visitEnd();
-
-                            if (isHttpInterface) {
-                                String key;
-                                if (signature == null || descriptor != null) {
-                                    key = className + " " + name + " " + descriptor;
-                                } else {
-                                    key = className + " " + name + " " + signature;
-                                }
-                                methodUriMap.put(key, combineUri(classUri, methodUri));
-                            }
                         }
                     };
                 }
@@ -463,20 +363,6 @@ public class ClassInfo {
                     "asmApiVersion:" + " " + asmApiVersion + e.getMessage(), e);
         }
 
-    }
-
-    private String combineUri(String classUri, String methodUri) {
-        StringBuilder uri = new StringBuilder();
-        if (classUri != null && !classUri.isEmpty()) {
-            if (!classUri.startsWith("/")) uri.append("/");
-            uri.append(classUri);
-            if (classUri.endsWith("/")) uri.setLength(uri.length() - 1);
-        }
-        if (methodUri != null && !methodUri.isEmpty()) {
-            if (!methodUri.startsWith("/")) uri.append("/");
-            uri.append(methodUri);
-        }
-        return uri.toString();
     }
 
     // ============ getters ============
@@ -535,9 +421,5 @@ public class ClassInfo {
 
     public Map<String, Boolean> getAsyncMethodMap() {
         return asyncMethodMap;
-    }
-
-    public Map<String, String> getMethodUriMap() {
-        return methodUriMap;
     }
 }

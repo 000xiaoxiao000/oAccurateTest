@@ -1,7 +1,6 @@
 package com.oAT.web.service.impl;
 
 import com.oAT.agent.model.HttpTraceNode;
-import com.oAT.agent.model.TraceNode;
 import com.oAT.ai.agent.AgentDataProvider;
 import com.oAT.ai.agent.cache.ToolCallCache;
 import com.oAT.web.esDao.StaticInfoRepository;
@@ -15,7 +14,6 @@ import com.oAT.web.service.*;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.SnapshotVo;
-import com.oAT.web.service.entity.TraceItemVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,7 +64,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             logger.debug("Returning cached project info for: {}", projectId);
             // 这里简化处理，实际应该缓存Map对象
         }
-        
+
         Map<String, Object> result = new HashMap<>();
         try {
             ProjectVo project = projectService.getProject(projectId);
@@ -78,7 +76,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                 result.put("memberCount", project.getMemberCount());
                 result.put("createTime", project.getCreateTime());
                 result.put("updateTime", project.getUpdateTime());
-                
+
                 // 缓存10分钟
                 cache.put(cacheKey, "cached", 10 * 60 * 1000);
             }
@@ -157,7 +155,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             logger.debug("Returning cached coverage reports for: {}", appId);
             // 简化处理
         }
-        
+
         List<Map<String, Object>> result = new ArrayList<>();
         try {
             List<CoverageReportIndex> reports = coverageService.getReportsByAppId(appId);
@@ -168,7 +166,8 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                     reportMap.put("createTime", report.getCreateTime());
                     // 计算覆盖率
                     reportMap.put("lineRate", calculateRate(report.getCoveredLines(), report.getTotalLines()));
-                    reportMap.put("branchRate", calculateRate(report.getCoveredBranchTargets(), report.getTotalBranchTargets()));
+                    reportMap.put("branchRate", calculateRate(report.getCoveredBranchTargets(),
+                            report.getTotalBranchTargets()));
                     reportMap.put("methodRate", calculateRate(report.getCoveredMethods(), report.getTotalMethods()));
                     reportMap.put("reportType", report.getReportType());
                     result.add(reportMap);
@@ -182,7 +181,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                     if (timeB == null) return -1;
                     return timeB.toString().compareTo(timeA.toString());
                 });
-                
+
                 // 缓存3分钟（覆盖率数据变化不频繁）
                 cache.put(cacheKey, "cached", 3 * 60 * 1000);
             }
@@ -203,7 +202,8 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                 result.put("appName", getAppName(report.getAppId()));
                 result.put("createTime", report.getCreateTime());
                 result.put("lineRate", calculateRate(report.getCoveredLines(), report.getTotalLines()));
-                result.put("branchRate", calculateRate(report.getCoveredBranchTargets(), report.getTotalBranchTargets()));
+                result.put("branchRate", calculateRate(report.getCoveredBranchTargets(),
+                        report.getTotalBranchTargets()));
                 result.put("methodRate", calculateRate(report.getCoveredMethods(), report.getTotalMethods()));
                 result.put("reportType", report.getReportType());
                 result.put("classCount", report.getTotalClasses());
@@ -361,9 +361,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                                     @SuppressWarnings("unchecked")
                                     Map<String, Object> methodMap = (Map<String, Object>) methodObj;
                                     String methodName = (String) methodMap.get("methodName");
-                                    String methodUri = (String) methodMap.get("methodUri");
-                                    if ((methodName != null && methodName.toLowerCase().contains(lowerKeyword))
-                                            || (methodUri != null && methodUri.toLowerCase().contains(lowerKeyword))) {
+                                    if ((methodName != null && methodName.toLowerCase().contains(lowerKeyword))) {
                                         nameMatches = true;
                                         break;
                                     }
@@ -373,25 +371,12 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
                         if (!nameMatches) continue;
 
-                        // 判断是否为 HTTP 接口（有 methodUri 的视为接口）
-                        boolean isInterface = hasHttpInterface(classInfo);
-
-                        if (isInterface) {
-                            Map<String, Object> iface = new HashMap<>();
-                            iface.put("name", fullClassName);
-                            iface.put("appName", app.getName());
-                            iface.put("methods", extractMethodUris(classInfo));
-                            interfaceList.add(iface);
-                        } else {
-                            Map<String, Object> cls = new HashMap<>();
-                            cls.put("name", fullClassName);
-                            cls.put("package", extractPackageName(fullClassName));
-                            cls.put("simpleName", simpleClassName(fullClassName));
-                            cls.put("appName", app.getName());
-                            classList.add(cls);
-                        }
-
-                        if (interfaceList.size() >= matchLimit && classList.size() >= matchLimit) break;
+                        Map<String, Object> cls = new HashMap<>();
+                        cls.put("name", fullClassName);
+                        cls.put("package", extractPackageName(fullClassName));
+                        cls.put("simpleName", simpleClassName(fullClassName));
+                        cls.put("appName", app.getName());
+                        classList.add(cls);
                     }
                 } catch (Exception e) {
                     logger.warn("Search code relation for app {} failed: {}", app.getId(), e.getMessage());
@@ -477,7 +462,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                             for (var codeNode : httpNode.getCodeNodes()) {
                                 if (codeNode.getClassName() != null
                                         && (codeNode.getClassName().toLowerCase().contains(lowerClassName)
-                                            || lowerClassName.contains(simpleClassName(codeNode.getClassName()).toLowerCase()))) {
+                                        || lowerClassName.contains(simpleClassName(codeNode.getClassName()).toLowerCase()))) {
                                     found = true;
                                     // 提取调用方信息
                                     extractCallerFromStack(httpNode.getCodeNodes(), codeNode, callers, seenTraceIds);
@@ -556,7 +541,8 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             for (AppVo app : allApps) {
                 try {
                     // 先尝试精确匹配
-                    List<StaticSourceInfo> infos = staticInfoRepository.findByAppIdAndClassInfo_ClassName(app.getId(), targetClass);
+                    List<StaticSourceInfo> infos = staticInfoRepository.findByAppIdAndClassInfo_ClassName(app.getId()
+                            , targetClass);
                     if (infos != null && !infos.isEmpty()) {
                         for (StaticSourceInfo info : infos) {
                             if (info.getClassInfo() != null && info.getClassInfo().getSourceCode() != null) {
@@ -578,7 +564,8 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                             }
                         }
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
 
             return null;
@@ -656,41 +643,8 @@ public class AgentDataProviderImpl implements AgentDataProvider {
     }
 
     /**
-     * 判断类的静态信息是否包含 HTTP 接口方法（有 methodUri）
-     */
-    private boolean hasHttpInterface(StaticSourceClassInfo classInfo) {
-        if (classInfo == null || classInfo.getMethodMaps() == null) return false;
-        for (Object obj : classInfo.getMethodMaps().values()) {
-            if (obj instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> m = (Map<String, Object>) obj;
-                if (m.get("methodUri") != null && !((String) m.get("methodUri")).isEmpty()) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 提取类中所有方法的 URI 列表（用于接口展示）
-     */
-    private List<String> extractMethodUris(StaticSourceClassInfo classInfo) {
-        List<String> uris = new ArrayList<>();
-        if (classInfo == null || classInfo.getMethodMaps() == null) return uris;
-        for (Object obj : classInfo.getMethodMaps().values()) {
-            if (obj instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> m = (Map<String, Object>) obj;
-                String uri = (String) m.get("methodUri");
-                if (uri != null && !uri.isEmpty()) uris.add(uri);
-            }
-        }
-        return uris.size() > 10 ? uris.subList(0, 10) : uris; // 限制数量
-    }
-
-    /**
      * 在项目下所有应用中搜索类名匹配的静态代码信息
+     *
      * @param className 类名（支持全限定名或简单名模糊匹配）
      * @return Map<appId, StaticSourceInfo> 匹配结果
      */
@@ -703,7 +657,8 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             // 遍历项目下每个应用搜索静态信息（注意：当前接口只传 className，无 projectId）
             // 通过 staticInfoRepository 全量搜索成本高，这里做有限优化：
             // 如果有 appId 前缀信息则精确查，否则返回空让调用方处理
-            logger.debug("findClassStaticInfo called with className={}, note: projectId not available in this API", className);
+            logger.debug("findClassStaticInfo called with className={}, note: projectId not available in this API",
+                    className);
         } catch (Exception e) {
             logger.warn("findClassStaticInfo failed: {}", e.getMessage());
         }
@@ -713,15 +668,15 @@ public class AgentDataProviderImpl implements AgentDataProvider {
     /**
      * 从堆栈节点中提取目标节点的直接调用方（父节点即为调用方）
      *
-     * @param codeNodes  完整的代码堆栈数组
-     * @param targetNode 目标节点（被调用的类/方法所在节点）
-     * @param callers    输出：调用方列表
+     * @param codeNodes    完整的代码堆栈数组
+     * @param targetNode   目标节点（被调用的类/方法所在节点）
+     * @param callers      输出：调用方列表
      * @param seenTraceIds 已处理的 trace ID 集合（用于去重）
      */
     private void extractCallerFromStack(com.oAT.agent.model.StackNodeVo[] codeNodes,
-                                       com.oAT.agent.model.StackNodeVo targetNode,
-                                       List<Map<String, Object>> callers,
-                                       Set<String> seenTraceIds) {
+                                        com.oAT.agent.model.StackNodeVo targetNode,
+                                        List<Map<String, Object>> callers,
+                                        Set<String> seenTraceIds) {
         if (codeNodes == null || targetNode == null) return;
         String targetId = targetNode.getId();
 
