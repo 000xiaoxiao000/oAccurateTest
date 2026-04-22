@@ -26,7 +26,9 @@ import org.springframework.ui.Model;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
@@ -70,9 +72,10 @@ public class SnapshotControl {
     @Autowired
     private UsecaseService usecaseService;
 
-    @RequestMapping("/save")
+    @PostMapping("/save")
     @ResponseBody
-    public ResultNotified<SnapshotVo> doSave(@PathVariable String projectId, @SessionAttribute UserVo user, HttpSession session, Snapshot snapshot) {
+    public ResultNotified<SnapshotVo> doSave(@PathVariable String projectId, @SessionAttribute UserVo user, HttpSession session, Snapshot snapshot,
+                                             @RequestParam(value = "autoSave", required = false, defaultValue = "false") boolean autoSave) {
         try {
             Assert.notNull(snapshot, "参数snapshot不能为空");
             Assert.hasText(snapshot.getTraceId(), "参数'traceId'不能为空");
@@ -81,8 +84,17 @@ public class SnapshotControl {
             Map<String, TraceNode> nodes = getTraceNodesForSave(snapshot.getTraceId(), session);
             Assert.isTrue(!nodes.isEmpty(), "找不到对应链路，请刷新监控后重试");
 
+            if (autoSave) {
+                Assert.hasText(snapshot.getName(), "自动保存时快照名称不能为空");
+                if (snapshotService instanceof com.oAT.web.service.impl.SnapshotServiceImpl snapshotServiceImpl
+                        && snapshotServiceImpl.existsByProjectUserAndTraceId(projectId, user.getId(), snapshot.getTraceId())) {
+                    ResultNotified<SnapshotVo> duplicated = new ResultNotified<>(true, "我的快照已自动保存过");
+                    return duplicated;
+                }
+            }
+
             SnapshotVo vo = snapshotService.addSnapshot(snapshot, nodes.values());
-            ResultNotified<SnapshotVo> result = new ResultNotified<>(true, "快照保存成功");
+            ResultNotified<SnapshotVo> result = new ResultNotified<>(true, autoSave ? "已自动保存我的快照" : "快照保存成功");
             result.setData(vo);
             return result;
         } catch (Exception e) {

@@ -48,6 +48,26 @@
             min-width: 0;
         }
 
+        .monitor-toolbar-right {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .monitor-autosave-inline {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 0;
+            margin: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+        }
+
         .monitor-detail-content {
             display: flex;
             flex-direction: column;
@@ -187,13 +207,30 @@
         </form>
     </div>
 
-    <div class="ui pointing dropdown small" tabindex="-1">
-        <button class="ui primary button" style="margin: 0;">
-            保存快照
-        </button>
-        <div class="menu" tabindex="1">
-            <div class="item" onclick="openCreateSnapshot();">我的快照</div>
-            <div class="item" onclick="openCreateSystemSnapshot();">系统快照</div>
+    <div class="monitor-toolbar-right">
+        <div class="ui pointing dropdown small disabled" id="saveSnapshotDropdown" tabindex="-1">
+            <button class="ui primary button disabled" id="saveSnapshotDropdownButton" style="margin: 0;">
+                保存快照
+            </button>
+            <div class="menu" tabindex="1">
+                <div class="item" onclick="openCreateSnapshot();">我的快照</div>
+                <div class="item" onclick="openCreateSystemSnapshot();">系统快照</div>
+            </div>
+        </div>
+        <div class="ui form monitor-autosave-inline">
+            <div class="field" style="margin: 0;">
+                <div class="ui toggle checkbox" id="autoSaveMySnapshotWrapper" data-tooltip="监控新数据进入列表后自动保存；同一条链路不会重复自动保存" data-position="top center">
+                    <input type="checkbox" id="autoSaveMySnapshotToggle">
+                    <label for="autoSaveMySnapshotToggle">自动保存我的快照</label>
+                </div>
+            </div>
+            <div class="field" style="margin: 0;">
+                <div class="ui toggle checkbox" id="autoSaveSystemSnapshotWrapper" data-tooltip="监控新数据进入列表后自动保存；同一条链路不会重复自动保存" data-position="top center">
+                    <input type="checkbox" id="autoSaveSystemSnapshotToggle">
+                    <label for="autoSaveSystemSnapshotToggle">自动保存系统快照</label>
+                </div>
+            </div>
+            <div id="monitorActionHint" class="ui mini grey text">自动保存会在新监控数据进入列表时触发；手动保存请先选择一条记录</div>
         </div>
     </div>
         <!--保存快照弹出框-->
@@ -474,6 +511,21 @@
 
     $(function () {
         initMonitorLayoutResizer();
+        syncMonitorAutoSaveSwitches('${projectId}');
+        $('.ui.toggle.checkbox').checkbox();
+        $('#autoSaveMySnapshotToggle').on('change', function () {
+            setMonitorAutoSaveEnabled('${projectId}', 'my', $(this).is(':checked'));
+        });
+        $('#autoSaveSystemSnapshotToggle').on('change', function () {
+            setMonitorAutoSaveEnabled('${projectId}', 'system', $(this).is(':checked'));
+        });
+        $('#saveSnapshotDropdown .item').on('click', function (event) {
+            if (!selectTraceId) {
+                event.preventDefault();
+                showToast('请先从左侧监控列表选择一条记录', 'warning');
+            }
+        });
+        updateMonitorActionAvailability();
         // 初始化表单验证规则
         $('#newSnapshotForm').form({
                 inline: false,

@@ -29,6 +29,53 @@
     <div class="ui grid">
         <div class="four wide column"></div>
         <div class="ui twelve wide column" style="padding-bottom: 0px">
+            <style>
+                .system-snapshot-toolbar {
+                    display: flex;
+                    flex-wrap: wrap;
+                    justify-content: flex-end;
+                    gap: 8px 10px;
+                    margin: auto;
+                }
+
+                .system-snapshot-toolbar__line {
+                    display: flex;
+                    flex-wrap: wrap;
+                    justify-content: flex-end;
+                    align-items: center;
+                    gap: 8px;
+                    width: 100%;
+                }
+
+                .system-snapshot-toolbar__line--secondary {
+                    margin-top: 4px;
+                    padding-top: 8px;
+                    border-top: 1px solid rgba(34, 36, 38, 0.08);
+                }
+
+                .system-snapshot-toolbar .ui.icon.input {
+                    margin-right: 0 !important;
+                }
+
+                .system-snapshot-toolbar__selection {
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 4px 10px;
+                    border-radius: 999px;
+                    background: #f8f9fb;
+                    border: 1px solid #dfe3ea;
+                    color: #4a5568;
+                    font-size: 12px;
+                    line-height: 1.4;
+                    white-space: nowrap;
+                }
+
+                .system-snapshot-toolbar__selection strong {
+                    color: #2185d0;
+                    margin: 0 4px;
+                    font-size: 13px;
+                }
+            </style>
             <table class="ui basic compact table" style="border: none">
                 <tbody>
                 <tr>
@@ -46,42 +93,48 @@
                     <td>
                         <form id="filterForm" class="ui form" action="list">
                             <input type="hidden" name="directoryId" value="${currentDir}">
-                            <div class="ui text menu" style="margin: auto;float: right">
-                                <div class="dropdown item">
-                                    <i class="icon refresh"> </i>
-                                    <a href="javascript:location.reload()">刷新</a>
-                                </div>
-                                <div class="ui icon input" style="margin-right: 8px; display: inline-flex; align-items: center; gap: 6px;">
-                                    <input type="text" name="keyword" value="${keyword!}" placeholder="搜索快照名称..." style="min-width: 180px;">
-                                    <i class="search icon"></i>
-                                    <#if (keyword!'')?has_content>
-                                        <a class="ui basic mini button" href="list?directoryId=${currentDir}&sort=${sort!'updateTime'}">清空</a>
+                            <div class="system-snapshot-toolbar">
+                                <div class="system-snapshot-toolbar__line">
+                                    <div class="dropdown item">
+                                        <i class="icon refresh"> </i>
+                                        <a href="javascript:location.reload()">刷新</a>
+                                    </div>
+                                    <div class="ui icon input" style="display: inline-flex; align-items: center; gap: 6px;">
+                                        <input type="text" name="keyword" value="${keyword!}" placeholder="搜索快照名称..." style="min-width: 180px;">
+                                        <i class="search icon"></i>
+                                        <#if (keyword!'')?has_content>
+                                            <a class="ui basic mini button" href="list?directoryId=${currentDir}&sort=${sort!'updateTime'}">清空</a>
+                                        </#if>
+                                    </div>
+                                    <div class="ui filter dropdown item" tabindex="2">
+                                        <input id="filterSort" type="hidden" name="sort" value="${sort!'updateTime'}">
+                                        <i class="ui sort numeric ascending link icon"> </i>
+                                        <span class="text"><#if (sort=='name')??>快照名称<#else >更新时间</#if></span>
+                                        <div class="left menu transition hidden" tabindex="-1">
+                                            <div class="item active selected" data-value="updateTime">更新时间</div>
+                                            <div class="item" data-value="name">快照名称</div>
+                                        </div>
+                                    </div>
+                                    <#if loginNameRole != "visitor">
+                                        <div class="dropdown item" onclick="openDirectoryDialog();">
+                                            <i class="folder icon"></i>
+                                            新建目录
+                                        </div>
                                     </#if>
                                 </div>
-                                <div class="ui filter dropdown item" tabindex="2">
-                                    <input id="filterSort" type="hidden" name="sort" value="${sort!'updateTime'}">
-                                    <i class="ui sort numeric ascending link icon"> </i>
-                                    <span class="text"><#if (sort=='name')??>快照名称<#else >更新时间</#if></span>
-                                    <div class="left menu transition hidden" tabindex="-1">
-                                        <div class="item active selected" data-value="updateTime">更新时间</div>
-                                        <div class="item" data-value="name">快照名称</div>
-                                    </div>
-                                </div>
                                 <#if loginNameRole != "visitor">
-                                    <div class="dropdown item" onclick="openDirectoryDialog();">
-                                        <i class="folder icon"></i>
-                                        新建目录
-                                    </div>
-                                    <button type="button" class="ui primary mini button" id="systemSnapshotBatchBindTrigger" style="margin-left: 8px;">
-                                        <i class="linkify icon"></i>
-                                        批量关联用例
-                                    </button>
-                                    <div class="ui mini basic buttons" style="margin-left: 8px;">
-                                        <button type="button" class="ui button" id="systemSnapshotSelectAllTrigger">全选</button>
-                                        <button type="button" class="ui button" id="systemSnapshotClearSelectionTrigger">清空选择</button>
-                                    </div>
-                                    <div class="item" style="padding-left: 0; color: #666;">
-                                        已选 <span id="systemSnapshotSelectedCount">0</span> 项
+                                    <div class="system-snapshot-toolbar__line system-snapshot-toolbar__line--secondary">
+                                        <button type="button" class="ui primary mini button" id="systemSnapshotBatchBindTrigger">
+                                            <i class="linkify icon"></i>
+                                            批量关联用例
+                                        </button>
+                                        <div class="ui mini basic buttons">
+                                            <button type="button" class="ui button" id="systemSnapshotSelectAllTrigger">全选</button>
+                                            <button type="button" class="ui button" id="systemSnapshotClearSelectionTrigger">清空选择</button>
+                                        </div>
+                                        <div class="system-snapshot-toolbar__selection">
+                                            已选 <strong id="systemSnapshotSelectedCount">0</strong> 项
+                                        </div>
                                     </div>
                                 </#if>
                             </div>

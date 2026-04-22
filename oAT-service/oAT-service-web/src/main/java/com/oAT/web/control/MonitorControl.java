@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -196,6 +197,45 @@ public class MonitorControl {
             snapshot.setSubTitle(((HttpTraceNode) nodes.get("0")).getRequestUrl());
             systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
             return new ResultNotified<>(true, "保存成功");
+        } catch (Exception e) {
+            ResultNotified<String> result = new ResultNotified<>(false, "系统快照保存失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
+    }
+
+    @PostMapping("/autoSaveSystemSnapshot")
+    @ResponseBody
+    public ResultNotified<String> autoSaveSystemSnapshot(@PathVariable String projectId,
+                                                         @SessionAttribute UserVo user,
+                                                         @RequestParam String traceId,
+                                                         @RequestParam(required = false) String title) {
+        try {
+            Map<String, TraceNode> nodes = getTraceNode(traceId);
+            TraceNode rootNode = nodes.get("0");
+            Assert.notNull(rootNode, "找不到主调用节点");
+            Application app = rootNode.getApp();
+            Assert.notNull(app, "找不到应用信息");
+
+            List<SystemSnapshot> existingSnapshots = systemSnapshotService.findAll(projectId, app.getAppId());
+            boolean exists = existingSnapshots.stream().anyMatch(item -> traceId.equals(item.getTraceId()));
+            if (exists) {
+                return new ResultNotified<>(true, "系统快照已自动保存过");
+            }
+
+            SystemSnapshot snapshot = new SystemSnapshot();
+            snapshot.setTraceId(traceId);
+            snapshot.setAppId(app.getAppId());
+            snapshot.setDirectory("root");
+            snapshot.setTitle(StringUtils.hasText(title) ? title : "自动系统快照");
+            snapshot.setDescribe("由实时监控自动生成");
+            snapshot.setLabels(new String[]{"自动保存", "系统快照"});
+            snapshot.setPrincipals(new String[]{user.getId()});
+            if (rootNode instanceof HttpTraceNode) {
+                snapshot.setSubTitle(((HttpTraceNode) rootNode).getRequestUrl());
+            }
+            systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
+            return new ResultNotified<>(true, "已自动保存系统快照");
         } catch (Exception e) {
             ResultNotified<String> result = new ResultNotified<>(false, "系统快照保存失败");
             result.setErrorMessage(e.getMessage());

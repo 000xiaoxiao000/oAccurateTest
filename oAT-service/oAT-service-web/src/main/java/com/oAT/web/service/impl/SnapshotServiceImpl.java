@@ -61,6 +61,19 @@ public class SnapshotServiceImpl implements SnapshotService{
         return convert(index);
     }
 
+    public boolean existsByProjectUserAndTraceId(String projectId, String userId, String traceId) {
+        if (!StringUtils.hasText(projectId) || !StringUtils.hasText(userId) || !StringUtils.hasText(traceId)) {
+            return false;
+        }
+        List<CaseCenterIndex> exists = centerRepository.findBySnapshot_ProjectIdAndSnapshot_CreateUserAndSnapshot_TraceId(
+                projectId,
+                userId,
+                traceId,
+                PageRequest.of(0, 1)
+        );
+        return exists != null && !exists.isEmpty();
+    }
+
     @Override
     public List<SnapshotVo> findSnapshot(String projectId, String userId, String sort, String keyword) {
         if ("name".equals(sort)) {
