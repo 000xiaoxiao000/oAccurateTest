@@ -28,7 +28,6 @@ public class CompactDataInput {
         public final int cyclomaticComplexityMap;
         public final boolean recursiveMap;
         public final boolean asyncMethodMap;
-        public final String methodUri;
 
         public MethodStaticInfo(String mergeKey,
                                 String methodName,
@@ -38,8 +37,7 @@ public class CompactDataInput {
                                 Set<Integer> branchLineNumberSet,
                                 int cyclomaticComplexity,
                                 boolean recursive,
-                                boolean async,
-                                String methodUri) {
+                                boolean async) {
             this.mergeKey = mergeKey;
             this.methodName = methodName;
             this.methodDesc = methodDesc;
@@ -54,7 +52,6 @@ public class CompactDataInput {
             this.cyclomaticComplexityMap = cyclomaticComplexity;
             this.recursiveMap = recursive;
             this.asyncMethodMap = async;
-            this.methodUri = methodUri;
         }
         private static Set<Integer> filterLines(Set<Integer> src) {
             Set<Integer> r = new HashSet<>();
@@ -118,7 +115,6 @@ public class CompactDataInput {
             m.put("cyclomaticComplexityMap", cyclomaticComplexityMap);
             m.put("recursiveMap", recursiveMap);
             m.put("asyncMethodMap", asyncMethodMap);
-            m.put("methodUri", methodUri);
             return m;
         }
         public MethodStaticInfo merge(MethodStaticInfo other) {
@@ -136,8 +132,7 @@ public class CompactDataInput {
             int complexity = Math.max(cyclomaticComplexityMap, other.cyclomaticComplexityMap);
             boolean recursive = recursiveMap || other.recursiveMap;
             boolean async = asyncMethodMap || other.asyncMethodMap;
-            String uri = (methodUri != null && !methodUri.isEmpty()) ? methodUri : other.methodUri;
-            return new MethodStaticInfo(mergeKey, methodName, methodDesc, mergedLines, mergedBranch, mergedBranchLines, complexity, recursive, async, uri);
+            return new MethodStaticInfo(mergeKey, methodName, methodDesc, mergedLines, mergedBranch, mergedBranchLines, complexity, recursive, async);
         }
     }
 
@@ -189,7 +184,6 @@ public class CompactDataInput {
         Map<String, Integer> cycloMap = info.getCyclomaticComplexityMap();
         Map<String, Boolean> recursiveMap = info.getRecursiveMap();
         Map<String, Boolean> asyncMap = info.getAsyncMethodMap();
-        Map<String, String> uriMap = info.getMethodUriMap();
 
         for (Map.Entry<String, Set<Integer>> entry : methodLineNumberMap.entrySet()) {
             String fullKey = entry.getKey();
@@ -212,7 +206,6 @@ public class CompactDataInput {
             int cyclo = cycloMap.getOrDefault(shortMethodKey, 1);
             boolean recursive = recursiveMap.getOrDefault(fullKey, false);
             boolean async = asyncMap.getOrDefault(fullKey, false);
-            String uri = uriMap.getOrDefault(fullKey, "");
 
             String displayMethodName = javaNames.getMethodName(originClassName, methodName, methodDesc, null);
             if (CoverageNamingSupport.shouldIgnoreMethod(methodName, displayMethodName)) {
@@ -229,7 +222,7 @@ public class CompactDataInput {
 
             String mergeKey = CoverageNamingSupport.buildMethodMergeKey(originClassName, methodName, methodDesc);
             MethodStaticInfo mInfo = new MethodStaticInfo(mergeKey, displayMethodName, methodDesc, lineNums,
-                    methodBranchTargets, methodBranchLines, cyclo, recursive, async, uri);
+                    methodBranchTargets, methodBranchLines, cyclo, recursive, async);
             cInfo.addOrMergeMethod(mInfo);
         }
     }

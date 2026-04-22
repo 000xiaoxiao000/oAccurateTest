@@ -24,7 +24,6 @@ public class StaticSourceMethodInfo implements Serializable {
     private Integer cyclomaticComplexityMap;
     private Boolean recursiveMap;
     private Boolean asyncMethodMap;
-    private String methodUri;
 
     public String getMethodName() {
         return methodName;
@@ -108,14 +107,6 @@ public class StaticSourceMethodInfo implements Serializable {
 
     public void setAsyncMethodMap(Boolean asyncMethodMap) {
         this.asyncMethodMap = asyncMethodMap;
-    }
-
-    public String getMethodUri() {
-        return methodUri;
-    }
-
-    public void setMethodUri(String methodUri) {
-        this.methodUri = methodUri;
     }
 
     private Map<String, List<Integer>> normalizeIntegerMap(JsonNode node) {
