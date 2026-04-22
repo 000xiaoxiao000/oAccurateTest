@@ -2,6 +2,7 @@ package com.oAT.web.common;
 
 import org.springframework.util.Assert;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 public class EncryptUtil {
@@ -9,7 +10,7 @@ public class EncryptUtil {
     public static String MD5(String s) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] bytes = md.digest(s.getBytes("utf-8"));
+            byte[] bytes = md.digest(s.getBytes(StandardCharsets.UTF_8));
             return toHex(bytes);
         } catch (Exception e) {
             throw new RuntimeException(e);
