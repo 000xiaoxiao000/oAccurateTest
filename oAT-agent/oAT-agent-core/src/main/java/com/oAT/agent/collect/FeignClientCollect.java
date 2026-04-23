@@ -79,6 +79,7 @@ public class FeignClientCollect extends AbstractByteTransformCollect implements 
         try {
             Map<String, Collection<String>> map = new HashMap<>();
             map.put("parentTraceId", Collections.singletonList(node.getTraceId() + "_" + node.getTraceNodeId()));
+            map.put("parentTraceNodeId", Collections.singletonList(node.getTraceNodeId()));
             String userHeader = traceContext.getTraceSession().getTraceRequest().getUserHeader();
             if (StringUtils.hasText(userHeader)) {
                 map.put("userheader", Collections.singletonList(userHeader));
@@ -136,7 +137,8 @@ public class FeignClientCollect extends AbstractByteTransformCollect implements 
     }
 
     @Override
-    public byte[] transform(ClassLoader loader, String className, ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+    public byte[] transform(ClassLoader loader, String className, ProtectionDomain protectionDomain,
+                            byte[] classfileBuffer) {
         if (!this.feignDrivers.contains(className)) {
             return null;
         }
