@@ -177,12 +177,31 @@ a:hover {
     position: sticky;
     top: 0;
     z-index: 900;
-    margin: 0 0 14px 0;
+    margin: 0;
     padding: 8px 0;
     background: rgba(255, 255, 255, .92);
     border-bottom: 1px solid rgba(15, 23, 42, .08);
     box-shadow: 0 6px 20px rgba(15, 23, 42, .05);
     backdrop-filter: blur(14px);
+}
+
+.app-main,
+.app-page-shell,
+.my-projects-page,
+.app-unified-page,
+.project-home-page {
+    margin-top: 16px !important;
+    margin-bottom: 36px;
+}
+
+@media only screen and (max-width: 767px) {
+    .app-main,
+    .app-page-shell,
+    .my-projects-page,
+    .app-unified-page,
+    .project-home-page {
+        margin-top: 12px !important;
+    }
 }
 
 .app-header .ui.secondary.menu {
@@ -338,8 +357,6 @@ a:hover {
 .app-unified-page {
     position: relative;
     z-index: 1;
-    margin-top: 14px;
-    margin-bottom: 36px;
 }
 
 .app-unified-breadcrumb {
