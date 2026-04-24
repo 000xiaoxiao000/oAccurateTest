@@ -1,11 +1,5 @@
 <!-- 头部导航菜单 -->
 <style>
-    .ui.secondary.menu .active-m.item {
-        border-color: #00b5ad !important;
-        color: #00b5ad !important;
-        background: rgba(0, 0, 0, .05);
-    }
-
     .subMenu {
         display: none;
         position: absolute;
@@ -19,16 +13,12 @@
         padding-right: 120px !important;
         white-space: nowrap;
     }
-
-    .subMenu a {
-        /*color: black;*/
-    }
 </style>
-<div id="headerNavigation" class="top ui segment" style="margin: 0px -2px 10px -2px;padding: 5px">
+<div id="headerNavigation" class="app-header top ui segment">
     <div class="ui secondary menu">
         <div class="ui container">
-            <a class="item" href="/p/${project.id}/home" style="padding: 0px">
-                <img class="ui small image" src="/images/logo.png" style="width: 120px;">
+            <a class="app-logo-link item" href="/p/${project.id}/home">
+                <img class="app-logo-image ui small image" src="/images/logo.png">
             </a>
             <#--<a class="${searchItemActive!} teal item" href="/p/${project.id}/search">
                 <i class="search link icon"></i>
@@ -135,16 +125,14 @@
 </div>
 <#assign msg = message!RequestParameters['message']!>
 <#if msg?? && msg != "">
-    <div class="ui success message close 3s"
-         style="position: fixed;top: 30px;left: calc(80vw/2);min-width: 200px;margin: 5px;padding: 12px">
+    <div class="ui success message close 3s app-toast">
         <span><i class="check circle icon "></i>${msg}</span>
     </div>
 </#if>
 
 <#assign errMsg = errorMessage!RequestParameters['errorMessage']!>
 <#if errMsg?? && errMsg != "">
-    <div class="ui negative message close 3s"
-         style="position: fixed;top: 30px;left: calc(80vw/2);min-width: 200px;margin: 5px;padding: 12px">
+    <div class="ui negative message close 3s app-toast">
         <p><i class="warning circle icon "></i> ${errMsg}</p>
     </div>
 </#if>

@@ -6,6 +6,7 @@
 <script src="/js/jquery.form.min.js"></script>
 <script src="/js/common.js?version=1"></script>
 <link href="/css/common.css?version=1" rel="stylesheet">
+<link href="/css/theme.css?version=1" rel="stylesheet">
 <style>
     .compare-empty-state {
         min-height: 180px;

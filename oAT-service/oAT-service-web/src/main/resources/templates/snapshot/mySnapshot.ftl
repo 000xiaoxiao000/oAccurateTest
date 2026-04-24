@@ -427,7 +427,7 @@
                                 <td class="snapshot-name-cell" title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
-                                <td class="api-coverage-cell" title="接口覆盖率（已覆盖数 / 总数）">
+                                <td class="api-coverage-cell" title="接口覆盖（已覆盖数 / 总数）">
                                     ${snap.apiCoverageText!'0 / 0'}
                                 </td>
                                 <td class="right aligned meta-text">

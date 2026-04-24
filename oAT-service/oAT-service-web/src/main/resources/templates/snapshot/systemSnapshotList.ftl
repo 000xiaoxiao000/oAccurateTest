@@ -11,153 +11,125 @@
 <#assign appCenterActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui small breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
-    <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
-    <span class="divider">/</span>
-    <div class="active section">系统快照</div>
-</div>
-<!--过滤条件-->
-<div class="ui container">
+<div class="ui container app-unified-page">
+    <div class="ui small breadcrumb app-unified-breadcrumb">
+        <a class="section" href="/p/${project.id}/home">${project.name}</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
+        <span class="divider">/</span>
+        <div class="active section">系统快照</div>
+    </div>
     <#if (missingSnapshotId!'')?has_content>
         <div class="ui warning message">
             <div class="header">系统快照不存在或已被删除</div>
             <p>未找到系统快照 ID：${missingSnapshotId}</p>
         </div>
     </#if>
-    <div class="ui grid">
-        <div class="four wide column"></div>
-        <div class="ui twelve wide column" style="padding-bottom: 0px">
-            <style>
-                .system-snapshot-toolbar {
-                    display: flex;
-                    flex-wrap: wrap;
-                    justify-content: flex-end;
-                    gap: 8px 10px;
-                    margin: auto;
-                }
 
-                .system-snapshot-toolbar__line {
-                    display: flex;
-                    flex-wrap: wrap;
-                    justify-content: flex-end;
-                    align-items: center;
-                    gap: 8px;
-                    width: 100%;
-                }
+    <style>
+        .system-snapshot-toolbar__selection {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: #f8f9fb;
+            border: 1px solid #dfe3ea;
+            color: #4a5568;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: nowrap;
+        }
 
-                .system-snapshot-toolbar__line--secondary {
-                    margin-top: 4px;
-                    padding-top: 8px;
-                    border-top: 1px solid rgba(34, 36, 38, 0.08);
-                }
+        .system-snapshot-toolbar__selection strong {
+            color: #2185d0;
+            margin: 0 4px;
+            font-size: 13px;
+        }
 
-                .system-snapshot-toolbar .ui.icon.input {
-                    margin-right: 0 !important;
-                }
+        .system-snapshot-batch-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+    </style>
 
-                .system-snapshot-toolbar__selection {
-                    display: inline-flex;
-                    align-items: center;
-                    padding: 4px 10px;
-                    border-radius: 999px;
-                    background: #f8f9fb;
-                    border: 1px solid #dfe3ea;
-                    color: #4a5568;
-                    font-size: 12px;
-                    line-height: 1.4;
-                    white-space: nowrap;
-                }
-
-                .system-snapshot-toolbar__selection strong {
-                    color: #2185d0;
-                    margin: 0 4px;
-                    font-size: 13px;
-                }
-            </style>
-            <table class="ui basic compact table" style="border: none">
-                <tbody>
-                <tr>
-                    <td>
-                        <a href="list?directoryId=root&sort=${sort!'updateTime'}<#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>">/ROOT</a>
-                        <#list dirTiers as tie>
-                            /
-                            <#if tie_index ==(dirTiers?size)-1>
-                                ${tie.name}
-                            <#else >
-                                <a href="list?directoryId=${tie.id}&sort=${sort!'updateTime'}<#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>"> ${tie.name} </a>
-                            </#if>
-                        </#list>
-                    </td>
-                    <td>
-                        <form id="filterForm" class="ui form" action="list">
-                            <input type="hidden" name="directoryId" value="${currentDir}">
-                            <div class="system-snapshot-toolbar">
-                                <div class="system-snapshot-toolbar__line">
-                                    <div class="dropdown item">
-                                        <i class="icon refresh"> </i>
-                                        <a href="javascript:location.reload()">刷新</a>
-                                    </div>
-                                    <div class="ui icon input" style="display: inline-flex; align-items: center; gap: 6px;">
-                                        <input type="text" name="keyword" value="${keyword!}" placeholder="搜索快照名称..." style="min-width: 180px;">
-                                        <i class="search icon"></i>
-                                        <#if (keyword!'')?has_content>
-                                            <a class="ui basic mini button" href="list?directoryId=${currentDir}&sort=${sort!'updateTime'}">清空</a>
-                                        </#if>
-                                    </div>
-                                    <div class="ui filter dropdown item" tabindex="2">
-                                        <input id="filterSort" type="hidden" name="sort" value="${sort!'updateTime'}">
-                                        <i class="ui sort numeric ascending link icon"> </i>
-                                        <span class="text"><#if (sort=='name')??>快照名称<#else >更新时间</#if></span>
-                                        <div class="left menu transition hidden" tabindex="-1">
-                                            <div class="item active selected" data-value="updateTime">更新时间</div>
-                                            <div class="item" data-value="name">快照名称</div>
-                                        </div>
-                                    </div>
-                                    <#if loginNameRole != "visitor">
-                                        <div class="dropdown item" onclick="openDirectoryDialog();">
-                                            <i class="folder icon"></i>
-                                            新建目录
-                                        </div>
-                                    </#if>
-                                </div>
-                                <#if loginNameRole != "visitor">
-                                    <div class="system-snapshot-toolbar__line system-snapshot-toolbar__line--secondary">
-                                        <button type="button" class="ui primary mini button" id="systemSnapshotBatchBindTrigger">
-                                            <i class="linkify icon"></i>
-                                            批量关联用例
-                                        </button>
-                                        <div class="ui mini basic buttons">
-                                            <button type="button" class="ui button" id="systemSnapshotSelectAllTrigger">全选</button>
-                                            <button type="button" class="ui button" id="systemSnapshotClearSelectionTrigger">清空选择</button>
-                                        </div>
-                                        <div class="system-snapshot-toolbar__selection">
-                                            已选 <strong id="systemSnapshotSelectedCount">0</strong> 项
-                                        </div>
-                                    </div>
-                                </#if>
-                            </div>
-                        </form>
-                    </td>
-                </tr>
-                </tbody>
-            </table>
+    <div class="app-toolbar-card">
+        <div class="app-toolbar-path">
+            <a href="list?directoryId=root&sort=${sort!'updateTime'}<#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>">/ROOT</a>
+            <#list dirTiers as tie>
+                <span>/</span>
+                <#if tie_index ==(dirTiers?size)-1>
+                    <span>${tie.name}</span>
+                <#else>
+                    <a href="list?directoryId=${tie.id}&sort=${sort!'updateTime'}<#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>">${tie.name}</a>
+                </#if>
+            </#list>
         </div>
+        <form id="filterForm" class="ui form app-toolbar-actions" action="list">
+            <input type="hidden" name="directoryId" value="${currentDir}">
+            <a class="ui basic mini button" href="javascript:location.reload()">
+                <i class="refresh icon"></i>刷新
+            </a>
+            <div class="ui icon input">
+                <input type="text" name="keyword" value="${keyword!}" placeholder="搜索快照名称...">
+                <i class="search icon"></i>
+            </div>
+            <#if (keyword!'')?has_content>
+                <a class="ui basic mini button" href="list?directoryId=${currentDir}&sort=${sort!'updateTime'}">清空</a>
+            </#if>
+            <div class="ui filter dropdown item" tabindex="2">
+                <input id="filterSort" type="hidden" name="sort" value="${sort!'updateTime'}">
+                <i class="ui sort numeric ascending link icon"></i>
+                <span class="text"><#if (sort=='name')??>快照名称<#else>更新时间</#if></span>
+                <div class="left menu transition hidden" tabindex="-1">
+                    <div class="item active selected" data-value="updateTime">更新时间</div>
+                    <div class="item" data-value="name">快照名称</div>
+                </div>
+            </div>
+            <#if loginNameRole != "visitor">
+                <button type="button" class="ui basic mini button" onclick="openDirectoryDialog();">
+                    <i class="folder icon"></i>新建目录
+                </button>
+            </#if>
+        </form>
+        <#if loginNameRole != "visitor">
+            <div class="system-snapshot-batch-actions">
+                <button type="button" class="ui primary mini button" id="systemSnapshotBatchBindTrigger">
+                    <i class="linkify icon"></i>
+                    批量关联用例
+                </button>
+                <div class="ui mini basic buttons">
+                    <button type="button" class="ui button" id="systemSnapshotSelectAllTrigger">全选</button>
+                    <button type="button" class="ui button" id="systemSnapshotClearSelectionTrigger">清空选择</button>
+                </div>
+                <div class="system-snapshot-toolbar__selection">
+                    已选 <strong id="systemSnapshotSelectedCount">0</strong> 项
+                </div>
+            </div>
+        </#if>
     </div>
-</div>
-<!--内容主体-->
-<div class="ui grid attached container">
-    <!-- 左边导航菜单 -->
-    <div class="ui four wide column">
-        <#assign snapshotGroupName=app.name/>
-        <#assign snapshotListHref="/p/${project.id}/${app.id}/snapshot/list"/>
-        <#assign settingsHref="/p/${project.id}/app/${app.id}/settings"/>
-        <#assign systemSnapshotListActive="active"/>
-        <#include "LeftNavigationMenu.ftl">
-    </div>
-    <!-- 中间内容 -->
-    <div class="ui twelve wide column">
+
+    <div class="app-unified-layout">
+        <div class="app-unified-side">
+            <#assign snapshotGroupName=app.name/>
+            <#assign snapshotListHref="/p/${project.id}/${app.id}/snapshot/list"/>
+            <#assign settingsHref="/p/${project.id}/app/${app.id}/settings"/>
+            <#assign systemSnapshotListActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
+        </div>
+        <div class="app-unified-main">
+            <div class="app-unified-header">
+                <div>
+                    <div class="app-unified-kicker">
+                        <i class="camera retro icon"></i>
+                        系统快照
+                    </div>
+                    <h1 class="app-unified-title">${app.name} 快照列表</h1>
+                    <p class="app-unified-desc">集中管理应用系统快照、目录和接口覆盖情况。</p>
+                </div>
+            </div>
+            <div class="app-unified-content">
         <style>
             #systemSnapshotListTable thead th,
             #systemSnapshotListTable tbody td {
@@ -167,7 +139,14 @@
             }
 
             #systemSnapshotListTable tbody td {
-                overflow: hidden;
+                overflow: visible;
+            }
+
+            #systemSnapshotListTable .quickMenu {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-width: 24px;
             }
 
             #systemSnapshotListTable .snapshot-title,
@@ -234,12 +213,13 @@
                 text-align: center;
             }
         </style>
-        <table id="systemSnapshotListTable" class="ui selectable compact very basic table" style="table-layout: fixed;">
+        <div class="app-unified-table-wrap">
+            <table id="systemSnapshotListTable" class="ui selectable compact very basic table unified-list-table" style="table-layout: fixed;">
             <thead>
             <tr>
                 <th style="width: 30px;"></th>
                 <th>快照名称</th>
-                <th style="width: 86px; text-align: center;">接口覆盖率</th>
+                <th style="width: 86px; text-align: center;">接口覆盖</th>
                 <th style="width: 82px; text-align: right;">更新时间</th>
                 <th style="width: 44px; text-align: center;">操作</th>
             </tr>
@@ -291,7 +271,7 @@
                             <span>${snapshot.title}</span>
                         </a>
                     </td>
-                    <td class="api-coverage-cell" title="接口覆盖率（已覆盖数 / 总数）">${(snapshotApiCoverageTextMap[snapshot.id])!'0 / 0'}</td>
+                    <td class="api-coverage-cell" title="接口覆盖（已覆盖数 / 总数）">${(snapshotApiCoverageTextMap[snapshot.id])!'0 / 0'}</td>
                     <td class="meta-text"><span title="${(snapshotTimeTextMap[snapshot.id])!'-'}">${(snapshotRelativeTimeTextMap[snapshot.id])!'-'}</span></td>
                     <td>
                         <#if loginNameRole != "visitor">
@@ -315,7 +295,10 @@
                 </tr>
             </#if>
             </tbody>
-        </table>
+            </table>
+        </div>
+            </div>
+        </div>
     </div>
 </div>
 

@@ -687,4 +687,364 @@ body {
     background-color: #ffffff; /* explicit white to contrast */
 }
 
+/* Unified application page layout */
+.app-unified-page {
+    margin-top: 10px !important;
+    margin-bottom: 32px !important;
+}
+
+.app-unified-breadcrumb,
+.ui.breadcrumb.app-unified-breadcrumb {
+    margin: 6px auto 10px !important;
+    color: #6b7785;
+}
+
+.app-unified-layout {
+    display: grid !important;
+    grid-template-columns: 240px minmax(0, 1fr) !important;
+    gap: 14px !important;
+    align-items: start !important;
+}
+
+.app-unified-side,
+.app-unified-main,
+.app-unified-card {
+    background: #fff;
+    border: 1px solid #e7edf5;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.app-unified-side {
+    padding: 12px !important;
+}
+
+.app-unified-main {
+    min-width: 0;
+    overflow: visible;
+}
+
+.app-unified-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 18px;
+    background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 55%, #f9fbfd 100%);
+    border-bottom: 1px solid #e6eef7;
+    border-radius: 14px 14px 0 0;
+}
+
+.app-unified-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(33, 133, 208, 0.08);
+    color: #1d6fa5;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 7px;
+}
+
+.app-unified-title {
+    margin: 0 !important;
+    color: #1f2937;
+    font-size: 22px !important;
+    line-height: 1.25 !important;
+    font-weight: 700 !important;
+}
+
+.app-unified-desc {
+    margin: 5px 0 0;
+    color: #617080;
+    line-height: 1.55;
+    font-size: 13px;
+}
+
+.app-unified-actions {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-unified-content {
+    padding: 16px 18px 18px;
+}
+
+.app-unified-section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 14px;
+}
+
+.app-unified-section-title {
+    margin: 0 0 4px;
+    color: #1f2937;
+    font-size: 19px;
+    line-height: 1.3;
+    font-weight: 700;
+}
+
+.app-unified-section-desc {
+    margin: 0;
+    color: #6b7785;
+    line-height: 1.55;
+    font-size: 13px;
+}
+
+.app-unified-form .field > label,
+.app-unified-content .ui.form .field > label {
+    color: #334155;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.app-unified-form .ui.input input,
+.app-unified-form input,
+.app-unified-form textarea,
+.app-unified-form .ui.selection.dropdown,
+.app-unified-content .ui.form input,
+.app-unified-content .ui.form textarea,
+.app-unified-content .ui.selection.dropdown {
+    border-radius: 10px !important;
+    border-color: #d9e3ef !important;
+}
+
+.app-unified-form textarea,
+.app-unified-content .ui.form textarea {
+    min-height: 96px;
+    resize: vertical;
+}
+
+.app-unified-form-actions,
+.app-unified-content .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.app-unified-table-wrap {
+    border: 1px solid #e7edf5;
+    border-radius: 14px;
+    overflow: visible;
+    background: #fff;
+}
+
+.app-unified-table-wrap .ui.table {
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 14px !important;
+}
+
+.app-unified-table-wrap .ui.table thead th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 700;
+    border-bottom: 1px solid #e7edf5;
+}
+
+.app-unified-table-wrap .ui.table td,
+.app-unified-table-wrap .ui.table th {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    vertical-align: middle;
+}
+
+.app-unified-table-wrap .ui.table tbody tr:hover {
+    background: #fbfdff;
+}
+
+.app-toolbar-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #e7edf5;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.app-toolbar-path {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: #64748b;
+    line-height: 1.6;
+}
+
+.app-toolbar-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.app-toolbar-actions .ui.icon.input input {
+    min-width: 190px;
+    border-radius: 10px !important;
+    border-color: #d9e3ef !important;
+}
+
+.app-toolbar-actions .ui.button,
+.app-toolbar-actions .ui.dropdown,
+.app-toolbar-actions .dropdown.item {
+    border-radius: 10px !important;
+}
+
+.unified-list-table .row-title,
+.unified-list-table .dir-title,
+.unified-list-table .snapshot-title,
+.unified-list-table .usecase-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    line-height: 1.25;
+    max-width: 100%;
+    min-width: 0;
+    color: #1d6fa5;
+}
+
+.unified-list-table .row-title span,
+.unified-list-table .dir-title span,
+.unified-list-table .snapshot-title span,
+.unified-list-table .usecase-title span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.unified-list-table .meta-text,
+.unified-list-table .row-meta {
+    font-size: 0.88em;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.unified-list-table .quickMenu {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 24px;
+}
+
+.unified-list-table .quickMenu > .icon {
+    margin: 0;
+    color: #64748b;
+}
+
+.unified-list-table .empty-state-row td {
+    color: #94a3b8;
+    padding: 34px 0 !important;
+    text-align: center;
+}
+
+.danger-zone {
+    overflow: hidden;
+    border: 1px solid #f1c5c5;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(127, 29, 29, 0.05);
+}
+
+.danger-zone + .danger-zone,
+.app-unified-content + .danger-zone,
+.danger-zone-spaced {
+    margin-top: 18px;
+}
+
+.danger-zone-header {
+    padding: 14px 18px;
+    background: linear-gradient(135deg, #fff7f7 0%, #fff1f1 100%);
+    border-bottom: 1px solid #f1c5c5;
+}
+
+.danger-zone-title {
+    margin: 0 0 4px;
+    color: #b42318;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.danger-zone-desc {
+    margin: 0;
+    color: #c2413a;
+    line-height: 1.6;
+    font-size: 13px;
+}
+
+.danger-zone-body {
+    padding: 16px 18px 18px;
+}
+
+.danger-zone-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    border: 1px solid #f1c5c5;
+    border-radius: 12px;
+    background: #fffafa;
+    color: #9f3a38;
+    line-height: 1.6;
+}
+
+.danger-zone-warning .icon {
+    margin-top: 2px;
+    color: #db2828;
+}
+
+.danger-zone .ui.red.button,
+.danger-zone .ui.negative.button {
+    border-radius: 10px;
+}
+
+@media only screen and (max-width: 960px) {
+    .app-unified-layout {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+@media only screen and (max-width: 767px) {
+    .app-unified-header,
+    .app-unified-section-head,
+    .app-toolbar-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .app-unified-content,
+    .app-unified-side,
+    .danger-zone-body,
+    .danger-zone-header {
+        padding: 14px !important;
+    }
+
+    .app-unified-actions,
+    .app-unified-actions .ui.button,
+    .app-toolbar-actions,
+    .app-toolbar-actions .ui.button,
+    .app-toolbar-actions .ui.icon.input,
+    .app-toolbar-actions .ui.icon.input input,
+    .app-unified-form-actions .ui.button {
+        width: 100%;
+    }
+}
+
 /*流程图dagre-d3 样式 ============end*/
