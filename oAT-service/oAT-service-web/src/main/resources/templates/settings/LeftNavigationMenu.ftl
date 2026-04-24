@@ -1,8 +1,10 @@
 <style>
     .settings-nav.ui.vertical.menu {
-        border-radius: 12px;
+        border-radius: 16px;
         overflow: hidden;
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+        box-shadow: none;
+        border: none;
+        width: 100%;
     }
 
     .settings-nav .section-title.item {
@@ -10,16 +12,29 @@
         color: #0f172a;
         font-weight: 700;
         letter-spacing: 0.02em;
+        padding-top: 14px;
+        padding-bottom: 14px;
     }
 
     .settings-nav .top-level.item {
         font-weight: 600;
+        border-radius: 10px;
+        margin: 4px 10px;
+        width: calc(100% - 20px);
+        color: #334155;
+    }
+
+    .settings-nav .top-level.item:hover {
+        background: #f8fbfd;
     }
 
     .settings-nav .subnav-group.item {
         padding-top: 12px;
         padding-bottom: 12px;
         background: #fcfefe;
+        margin: 6px 10px 10px;
+        border-radius: 14px;
+        width: calc(100% - 20px);
     }
 
     .settings-nav .subnav-label {
@@ -37,18 +52,29 @@
     }
 
     .settings-nav .subnav-item {
-        margin-left: 10px;
-        padding: 9px 12px !important;
+        margin-left: 0;
+        padding: 10px 12px !important;
         border-left: 3px solid transparent;
-        border-radius: 8px;
+        border-radius: 10px;
         color: #475569;
     }
 
-    .settings-nav .subnav-item.active {
+    .settings-nav .subnav-item:hover {
+        background: #f8fbfd;
+    }
+
+    .settings-nav .subnav-item.active,
+    .settings-nav .top-level.item.active {
         background: rgba(0, 181, 173, 0.1);
         border-left-color: #00b5ad;
         color: #007a74;
         font-weight: 700;
+    }
+
+    .settings-nav .subnav-item.red.active {
+        background: rgba(219, 40, 40, 0.08);
+        border-left-color: #db2828;
+        color: #b42318;
     }
 </style>
 

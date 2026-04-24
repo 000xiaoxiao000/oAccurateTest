@@ -14,6 +14,7 @@ public interface CaseCenterRepository extends ElasticsearchRepository<CaseCenter
      * @return
      */
     List<CaseCenterIndex> findBySnapshot_ProjectIdAndSnapshot_CreateUser(String projectId, String userId, Pageable pageable);
+    List<CaseCenterIndex> findBySnapshot_AppId(String appId);
     List<CaseCenterIndex> findBySnapshot_ProjectIdAndSnapshot_CreateUserAndSnapshot_TraceId(String projectId, String userId, String traceId, Pageable pageable);
     List<CaseCenterIndex> findByUsecase_ProjectIdAndAndUsecase_Directory(String projectId, String directory, Pageable pageable);
     List<CaseCenterIndex> findByUsecase_ProjectId(String projectId);

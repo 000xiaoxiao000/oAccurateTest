@@ -18,13 +18,9 @@
 <#include "../common.ftl">
 
     <style type="text/css">
-        .ui.right {
-            float: right
-        }
-
-        /*自动调整编辑器高度*/
         .CodeMirror {
-            border: 1px solid #eee;
+            border: 1px solid #d9e3ef;
+            border-radius: 12px;
             height: auto;
         }
 
@@ -33,30 +29,198 @@
             overflow-x: auto;
         }
 
+        .project-settings-page {
+            margin-top: 18px;
+            margin-bottom: 42px;
+        }
+
+        .project-settings-breadcrumb {
+            margin: 6px auto 18px !important;
+            color: #6b7785;
+        }
+
+        .project-settings-layout {
+            display: grid;
+            grid-template-columns: 280px minmax(0, 1fr);
+            gap: 20px;
+            align-items: start;
+        }
+
+        .project-settings-side,
+        .project-settings-main {
+            background: #fff;
+            border: 1px solid #e7edf5;
+            border-radius: 16px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        }
+
+        .project-settings-side {
+            padding: 18px;
+        }
+
+        .project-settings-main {
+            overflow: hidden;
+        }
+
+        .project-settings-hero {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 26px 28px;
+            background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 55%, #f9fbfd 100%);
+            border-bottom: 1px solid #e6eef7;
+        }
+
+        .project-settings-hero-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(33, 133, 208, 0.08);
+            color: #1d6fa5;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            margin-bottom: 14px;
+        }
+
+        .project-settings-hero-title {
+            margin: 0 0 8px;
+            color: #1f2937;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .project-settings-hero-desc {
+            margin: 0;
+            color: #617080;
+            line-height: 1.8;
+            max-width: 780px;
+        }
+
+        .project-settings-hero-actions {
+            flex-shrink: 0;
+        }
+
+        .project-settings-hero-actions .ui.button,
+        .project-settings-actions .ui.button {
+            border-radius: 10px;
+        }
+
+        .project-settings-form-wrap {
+            padding: 28px;
+        }
+
+        .project-settings-form .field > label {
+            margin-bottom: 8px;
+            color: #334155;
+            font-weight: 600;
+        }
+
+        .project-settings-form .ui.input input,
+        .project-settings-form input,
+        .project-settings-form textarea {
+            border-radius: 12px !important;
+            border-color: #d9e3ef !important;
+            padding: 13px 14px !important;
+            font-size: 14px;
+        }
+
+        .project-settings-form textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        .project-settings-form .inline.fields {
+            align-items: center;
+        }
+
+        .project-settings-form .three.fields > .field {
+            min-width: 0;
+        }
+
+        .project-settings-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 28px;
+        }
+
+        @media only screen and (max-width: 960px) {
+            .project-settings-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media only screen and (max-width: 767px) {
+            .project-settings-form-wrap,
+            .project-settings-hero,
+            .project-settings-side {
+                padding: 22px 20px !important;
+            }
+
+            .project-settings-hero {
+                flex-direction: column;
+            }
+
+            .project-settings-actions {
+                flex-direction: column-reverse;
+            }
+
+            .project-settings-actions .ui.button,
+            .project-settings-hero-actions .ui.button {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
 <#assign settingItemActive="active">
 <#assign settingsAppActive="active"/>
+<#assign loginRole=loginNameRole!'visitor' />
 <#include "../projectHeader.ftl">
-<!-- 面包屑导航 -->
-<div class="ui small breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
-    <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
-    <span class="divider">/</span>
-    <div class="active section">设置</div>
-</div>
 
+<div class="ui container project-settings-page">
+    <div class="ui small breadcrumb project-settings-breadcrumb">
+        <a class="section" href="/p/${project.id}/home">${project.name}</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/edit">项目设置</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/app/list">应用列表</a>
+        <span class="divider">/</span>
+        <div class="active section">新增应用</div>
+    </div>
 
-<div class="ui text container " style="margin: 20px">
-    <h3 class="ui top  attached block center aligned  header">
-    ${project.name}-新增应用
-    </h3>
-    <div class="ui attached segment">
-        <form class="ui form">
-            <input value="${project.id}" type="hidden" name="createProjectId">
-            <div class="field required">
+    <div class="project-settings-layout">
+        <div class="project-settings-side">
+            <#include "LeftNavigationMenu.ftl">
+        </div>
+
+        <div class="project-settings-main">
+            <div class="project-settings-hero">
+                <div>
+                    <div class="project-settings-hero-label">
+                        <i class="plus square outline icon"></i>
+                        应用资产管理
+                    </div>
+                    <h1 class="project-settings-hero-title">新增应用</h1>
+                    <p class="project-settings-hero-desc">
+                        为当前项目登记新的应用资产，补充工程名称、版本信息与属性配置，便于后续快照、版本和在线实例管理。
+                    </p>
+                </div>
+                <div class="project-settings-hero-actions">
+                    <a class="ui button" href="/p/${project.id}/app/list">
+                        <i class="left arrow icon"></i>
+                        返回应用列表
+                    </a>
+                </div>
+            </div>
+
+            <div class="project-settings-form-wrap">
+                <form class="ui form project-settings-form">
+                    <input value="${project.id}" type="hidden" name="createProjectId">
+                    <div class="field required">
                 <label>应用名称：</label>
                 <input type="text" name="name" placeholder="输入简短的应用名称">
             </div>
@@ -107,15 +271,18 @@
                           name="properties"><#include "appInitConfig.properties"></textarea>
             </div>
 
-            <div class="ui right">
-                <button class="ui button positive" type="button" onclick="submitCreateApp()">创建应用</button>
+            <div class="project-settings-actions">
+                <a class="ui button" href="/p/${project.id}/app/list">取消并返回</a>
                 <button class="ui button" type="reset">重置</button>
+                <button class="ui primary button" type="button" onclick="submitCreateApp()">
+                    <i class="save outline icon"></i>
+                    创建应用
+                </button>
             </div>
-            <br>
-            <br>
         </form>
+            </div>
+        </div>
     </div>
-
 </div>
 
 <script>
