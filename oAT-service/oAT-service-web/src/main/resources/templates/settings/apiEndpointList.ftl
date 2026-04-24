@@ -177,16 +177,19 @@
 
 <div class="ui container project-settings-page">
     <div class="ui small breadcrumb project-settings-breadcrumb">
-        <a class="section" href="/p/${project.id}/home">${project.name}</a>
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${app.id}/version/list">${app.name}</a>
         <span class="divider">/</span>
         <div class="active section">接口扫描与覆盖</div>
     </div>
 
     <div class="project-settings-layout">
         <div class="project-settings-side">
-            <#assign settingsManageCodeActive="active"/>
-            <#assign loginRole=loginNameRole />
-            <#include "LeftNavigationMenu.ftl">
+            <#assign appId=app.id/>
+            <#assign appName=app.name/>
+            <#assign apiEndpointActive="active"/>
+            <#include "../version/LeftNavigationMenu.ftl">
         </div>
         <div class="project-settings-main">
             <div class="project-settings-hero">

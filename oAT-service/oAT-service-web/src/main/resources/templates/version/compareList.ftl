@@ -304,24 +304,38 @@
 <#assign versionItemActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui breadcrumb report-breadcrumb">
-    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
-    <span class="divider">/</span>
-    <a class=" section" href="/p/${project.id}/${appId}/version/list">${appInfo.name}</a>
-    <span class="divider">/</span>
-    <div class="active section">报告列表</div>
+<div class="ui container">
+    <div class="ui small breadcrumb report-breadcrumb">
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${appId}/version/list">${appInfo.name}</a>
+        <span class="divider">/</span>
+        <div class="active section">报告列表</div>
+    </div>
 </div>
 
 <!--内容主体-->
-<div class="ui grid attached container report-content-grid">
-    <!-- 左边导航菜单 -->
-    <div class="ui four wide column">
-        <#assign appName=appInfo.name/>
-        <#assign reportListActive="active"/>
-        <#include "LeftNavigationMenu.ftl">
-    </div>
-    <!-- 中间内容 -->
-    <div class="ui twelve wide column">
+<div class="ui container version-center-page">
+    <div class="version-page-layout">
+        <!-- 左边导航菜单 -->
+        <div class="version-page-side">
+            <#assign appName=appInfo.name/>
+            <#assign reportListActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
+        </div>
+        <!-- 中间内容 -->
+        <div class="version-page-main">
+            <div class="version-page-header">
+                <div>
+                    <div class="version-page-kicker">
+                        <i class="chart area icon"></i>
+                        版本中心
+                    </div>
+                    <h1 class="version-page-title">报告列表</h1>
+                    <p class="version-page-desc">集中查看版本覆盖率报告、即时链路覆盖率和代码比对记录。</p>
+                </div>
+            </div>
+            <div class="version-page-body">
         <div class="ui top attached tabular menu">
             <a class="item <#if tab == 'coverage'>active</#if>"
                href="/p/${project.id}/${appId}/version/report/list?tab=coverage">覆盖率</a>

@@ -13,6 +13,9 @@ public class SnapshotVo extends Snapshot implements Serializable {
     private String updateTimeText;
     private String updateTimeRelativeText;
     private Boolean disable;
+    private Integer apiCoveredCount;
+    private Integer apiTotalCount;
+    private String apiCoverageText;
 
     public SnapshotVo() {
     }
@@ -75,5 +78,29 @@ public class SnapshotVo extends Snapshot implements Serializable {
 
     public void setDisable(Boolean disable) {
         this.disable = disable;
+    }
+
+    public Integer getApiCoveredCount() {
+        return apiCoveredCount;
+    }
+
+    public void setApiCoveredCount(Integer apiCoveredCount) {
+        this.apiCoveredCount = apiCoveredCount;
+    }
+
+    public Integer getApiTotalCount() {
+        return apiTotalCount;
+    }
+
+    public void setApiTotalCount(Integer apiTotalCount) {
+        this.apiTotalCount = apiTotalCount;
+    }
+
+    public String getApiCoverageText() {
+        return apiCoverageText;
+    }
+
+    public void setApiCoverageText(String apiCoverageText) {
+        this.apiCoverageText = apiCoverageText;
     }
 }

@@ -122,19 +122,34 @@
         .my-projects-filter-group {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             flex-wrap: wrap;
         }
 
         .my-projects-sort {
-            min-width: 170px;
+            min-width: 160px;
+        }
+
+        .my-projects-page-size {
+            min-width: 120px;
+        }
+
+        .my-projects-view-toggle.ui.buttons .button {
+            padding-left: 12px;
+            padding-right: 12px;
         }
 
         .my-projects-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-            gap: 22px;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
             align-items: stretch;
+        }
+
+        .my-projects-grid.is-list-view {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .my-project-card.is-recent {
@@ -153,10 +168,10 @@
         .my-project-card {
             display: flex;
             flex-direction: column;
-            min-height: 300px;
-            border-radius: 20px !important;
+            min-height: 226px;
+            border-radius: 16px !important;
             border: 1px solid #e5edf7 !important;
-            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06) !important;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055) !important;
             transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
             overflow: hidden;
             background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
@@ -177,12 +192,12 @@
             display: flex;
             flex-direction: column;
             flex: 1;
-            padding: 22px 22px 16px;
+            padding: 16px 18px 12px;
         }
 
         .my-project-card-header {
-            margin: -22px -22px 18px;
-            padding: 18px 22px 16px;
+            margin: -16px -18px 12px;
+            padding: 14px 18px 12px;
             background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
             border-bottom: 1px solid #e6eef8;
         }
@@ -191,8 +206,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 14px;
+            gap: 8px;
+            margin-bottom: 10px;
         }
 
         .my-project-card-top {
@@ -209,9 +224,9 @@
 
         .my-project-card-title {
             display: block;
-            font-size: 22px;
+            font-size: 19px;
             font-weight: 800;
-            line-height: 1.32;
+            line-height: 1.28;
             color: #172033;
             word-break: break-word;
             overflow-wrap: anywhere;
@@ -221,7 +236,7 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            margin-top: 8px;
+            margin-top: 6px;
             color: #748294;
             font-size: 12px;
             font-weight: 600;
@@ -254,9 +269,9 @@
 
         .my-project-card-description {
             color: #5f6f82;
-            line-height: 1.72;
-            min-height: 50px;
-            margin-bottom: 18px;
+            line-height: 1.55;
+            min-height: 42px;
+            margin-bottom: 12px;
             overflow: hidden;
             display: -webkit-box;
             -webkit-line-clamp: 2;
@@ -271,15 +286,15 @@
         .my-project-card-meta {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
+            gap: 8px;
             margin-top: auto;
         }
 
         .my-project-meta-item {
             min-width: 0;
-            padding: 12px 13px;
+            padding: 9px 11px;
             background: #f8fafc;
-            border-radius: 12px;
+            border-radius: 10px;
             border: 1px solid #edf2f7;
         }
 
@@ -301,8 +316,8 @@
         }
 
         .my-project-progress {
-            height: 6px;
-            margin-top: 10px;
+            height: 5px;
+            margin-top: 8px;
             border-radius: 999px;
             overflow: hidden;
             background: #e7edf5;
@@ -341,7 +356,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 14px 22px 18px;
+            padding: 12px 18px 14px;
             border-top: 1px solid #edf2f7;
             background: #fcfdff;
         }
@@ -374,8 +389,89 @@
 
         .my-project-enter-btn.ui.button {
             border-radius: 9px;
-            padding-left: 16px;
-            padding-right: 16px;
+            padding: 10px 14px;
+        }
+
+        .my-projects-pagination-wrap {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+            padding: 12px 0;
+        }
+
+        .my-projects-pagination-info {
+            color: #7b8794;
+            font-size: 13px;
+        }
+
+        .my-projects-pagination.ui.pagination.menu {
+            margin: 0;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+        }
+
+        .my-projects-grid.is-list-view .my-project-card {
+            width: 100% !important;
+            min-height: 0;
+            flex-direction: row;
+            align-items: stretch;
+        }
+
+        .my-projects-grid.is-list-view .my-project-card-content {
+            min-width: 0;
+            padding: 14px 16px;
+        }
+
+        .my-projects-grid.is-list-view .my-project-card-header {
+            margin: 0 0 10px;
+            padding: 0;
+            background: transparent !important;
+            border-bottom: 0;
+        }
+
+        .my-projects-grid.is-list-view .my-project-card-badges {
+            margin-bottom: 8px;
+        }
+
+        .my-projects-grid.is-list-view .my-project-card-description {
+            min-height: 0;
+            margin-bottom: 10px;
+            -webkit-line-clamp: 1;
+        }
+
+        .my-projects-grid.is-list-view .my-project-card-meta {
+            grid-template-columns: repeat(5, minmax(110px, 1fr));
+            align-items: stretch;
+        }
+
+        .my-projects-grid.is-list-view .my-project-meta-item--wide {
+            grid-column: span 1;
+        }
+
+        .my-projects-grid.is-list-view .my-project-meta-item--hide-on-card {
+            display: block;
+        }
+
+        .my-projects-grid.is-list-view .my-project-meta-item {
+            padding: 8px 10px;
+        }
+
+        .my-projects-grid.is-list-view .my-project-card-actions {
+            width: 148px;
+            flex-shrink: 0;
+            flex-direction: column;
+            justify-content: center;
+            gap: 12px;
+            border-top: 0;
+            border-left: 1px solid #edf2f7;
+        }
+
+        .my-projects-grid.is-list-view .my-project-card-actions .ui.button,
+        .my-projects-grid.is-list-view .my-project-card-actions .my-project-card-settings {
+            width: 100%;
+            text-align: center;
         }
 
         .my-project-create-card {
@@ -464,8 +560,48 @@
                 width: 100%;
             }
 
+            .my-projects-page-size {
+                width: 100%;
+            }
+
+            .my-projects-view-toggle.ui.buttons {
+                width: 100%;
+            }
+
+            .my-projects-view-toggle.ui.buttons .button {
+                flex: 1;
+            }
+
             .my-projects-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .my-projects-grid.is-list-view .my-project-card {
+                flex-direction: column;
+            }
+
+            .my-projects-grid.is-list-view .my-project-card-actions {
+                width: auto;
+                flex-direction: column;
+                border-left: 0;
+                border-top: 1px solid #edf2f7;
+            }
+
+            .my-projects-grid.is-list-view .my-project-card-meta {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .my-projects-grid.is-list-view .my-project-meta-item--wide {
+                grid-column: span 2;
+            }
+
+            .my-projects-pagination-wrap {
+                justify-content: center;
+            }
+
+            .my-projects-pagination-info {
+                width: 100%;
+                text-align: center;
             }
 
             .my-project-card-meta {
@@ -575,6 +711,21 @@
                 <option value="created">最近创建优先</option>
                 <option value="name">按名称排序</option>
             </select>
+            <select class="ui dropdown my-projects-page-size" id="projectPageSize">
+                <option value="6">每页 6 个</option>
+                <option value="9">每页 9 个</option>
+                <option value="12">每页 12 个</option>
+            </select>
+            <div class="ui basic buttons my-projects-view-toggle" id="projectViewToggle">
+                <button class="ui active button" type="button" data-view="card">
+                    <i class="th large icon"></i>
+                    卡片
+                </button>
+                <button class="ui button" type="button" data-view="list">
+                    <i class="list icon"></i>
+                    列表
+                </button>
+            </div>
         </div>
     </div>
 
@@ -672,6 +823,11 @@
             </#list>
         </div>
 
+        <div class="my-projects-pagination-wrap" id="projectPaginationWrap" style="display: none;">
+            <div class="my-projects-pagination-info" id="projectPaginationInfo"></div>
+            <div class="ui pagination menu my-projects-pagination" id="projectPagination"></div>
+        </div>
+
         <div class="ui center aligned basic segment" id="projectEmptySearch" style="display: none; margin-top: 18px;">
             <div class="ui icon header" style="color: #7b8794;">
                 <i class="search icon"></i>
@@ -745,27 +901,10 @@
         return Math.floor(diff / (24 * 60 * 60 * 1000)) + ' 天前访问';
     }
 
-    function applyProjectFilters() {
-        var keyword = $.trim($('#projectSearch').val()).toLowerCase();
-        var visibleCount = 0;
+    var projectCurrentPage = 1;
+    var projectViewMode = 'card';
 
-        $('.project-item').each(function () {
-            var $item = $(this);
-            var name = ($item.data('project-name') || '').toString();
-            var desc = ($item.data('project-desc') || '').toString();
-            var matched = !keyword || name.indexOf(keyword) !== -1 || desc.indexOf(keyword) !== -1;
-            $item.toggle(matched);
-            if (matched) {
-                visibleCount++;
-            }
-        });
-
-        $('#projectEmptySearch').toggle(visibleCount === 0);
-    }
-
-    function sortProjectCards(sortType) {
-        var $grid = $('#projectGrid');
-        var $cards = $grid.find('.project-item').get();
+    function getRecentProjectsMap() {
         var recentProjects = {};
 
         try {
@@ -777,6 +916,14 @@
         } catch (e) {
             recentProjects = {};
         }
+
+        return recentProjects;
+    }
+
+    function getProjectCardsSorted(sortType) {
+        var $grid = $('#projectGrid');
+        var $cards = $grid.find('.project-item').get();
+        var recentProjects = getRecentProjectsMap();
 
         $cards.sort(function (a, b) {
             var $a = $(a);
@@ -814,9 +961,14 @@
         });
 
         $.each($cards, function (_, card) {
-            $grid.prepend(card);
+            $grid.append(card);
         });
 
+        return $cards;
+    }
+
+    function updateHighlightedProject($items) {
+        var $grid = $('#projectGrid');
         $grid.find('.project-item').removeClass('is-highlighted').find('.my-project-quick-note').remove();
         $grid.find('.project-item .my-project-card-badges').each(function () {
             var $badges = $(this);
@@ -824,13 +976,110 @@
                 $badges.prepend('<div class="my-project-quick-note-placeholder"></div>');
             }
         });
-        var $firstCard = $grid.find('.project-item:visible').first();
+
+        var $firstCard = $items.first();
         if ($firstCard.length) {
             $firstCard.addClass('is-highlighted');
             $firstCard.find('.my-project-quick-note-placeholder').first().replaceWith(
                 $('<div class="my-project-quick-note"><i class="lightning icon"></i>推荐优先查看</div>')
             );
         }
+    }
+
+    function renderProjectPagination(totalCount, pageSize) {
+        var totalPages = Math.ceil(totalCount / pageSize);
+        var $wrap = $('#projectPaginationWrap');
+        var $pagination = $('#projectPagination');
+        var start = totalCount === 0 ? 0 : (projectCurrentPage - 1) * pageSize + 1;
+        var end = Math.min(projectCurrentPage * pageSize, totalCount);
+
+        $('#projectPaginationInfo').text(totalCount === 0 ? '暂无匹配项目' : '显示第 ' + start + ' - ' + end + ' 个，共 ' + totalCount + ' 个项目');
+        $pagination.empty();
+
+        if (totalPages <= 1) {
+            $wrap.toggle(totalCount > 0);
+            return;
+        }
+
+        $wrap.show();
+        $('<a class="icon item" href="javascript:void(0)"><i class="left chevron icon"></i></a>')
+            .toggleClass('disabled', projectCurrentPage === 1)
+            .attr('data-page', Math.max(1, projectCurrentPage - 1))
+            .appendTo($pagination);
+
+        var from = Math.max(1, projectCurrentPage - 2);
+        var to = Math.min(totalPages, projectCurrentPage + 2);
+        if (from > 1) {
+            $('<a class="item" href="javascript:void(0)" data-page="1">1</a>').appendTo($pagination);
+            if (from > 2) {
+                $('<div class="disabled item">...</div>').appendTo($pagination);
+            }
+        }
+
+        for (var i = from; i <= to; i++) {
+            $('<a class="item" href="javascript:void(0)"></a>')
+                .text(i)
+                .attr('data-page', i)
+                .toggleClass('active', i === projectCurrentPage)
+                .appendTo($pagination);
+        }
+
+        if (to < totalPages) {
+            if (to < totalPages - 1) {
+                $('<div class="disabled item">...</div>').appendTo($pagination);
+            }
+            $('<a class="item" href="javascript:void(0)"></a>')
+                .text(totalPages)
+                .attr('data-page', totalPages)
+                .appendTo($pagination);
+        }
+
+        $('<a class="icon item" href="javascript:void(0)"><i class="right chevron icon"></i></a>')
+            .toggleClass('disabled', projectCurrentPage === totalPages)
+            .attr('data-page', Math.min(totalPages, projectCurrentPage + 1))
+            .appendTo($pagination);
+    }
+
+    function refreshProjectList(resetPage) {
+        if (!$('#projectGrid').length) {
+            return;
+        }
+
+        if (resetPage) {
+            projectCurrentPage = 1;
+        }
+
+        var keyword = $.trim($('#projectSearch').val()).toLowerCase();
+        var pageSize = parseInt($('#projectPageSize').val(), 10) || 6;
+        var sortedCards = getProjectCardsSorted($('#projectSort').val());
+        var matchedCards = [];
+
+        $.each(sortedCards, function (_, card) {
+            var $item = $(card);
+            var name = ($item.data('project-name') || '').toString();
+            var desc = ($item.data('project-desc') || '').toString();
+            var matched = !keyword || name.indexOf(keyword) !== -1 || desc.indexOf(keyword) !== -1;
+            $item.data('matched', matched);
+            if (matched) {
+                matchedCards.push(card);
+            }
+        });
+
+        var totalCount = matchedCards.length;
+        var totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+        if (projectCurrentPage > totalPages) {
+            projectCurrentPage = totalPages;
+        }
+
+        var startIndex = (projectCurrentPage - 1) * pageSize;
+        var endIndex = startIndex + pageSize;
+        $('.project-item').hide();
+        $(matchedCards.slice(startIndex, endIndex)).show();
+
+        $('#projectGrid').toggleClass('is-list-view', projectViewMode === 'list');
+        $('#projectEmptySearch').toggle(totalCount === 0);
+        renderProjectPagination(totalCount, pageSize);
+        updateHighlightedProject($(matchedCards.slice(startIndex, endIndex)));
     }
 
     $('.ui.dropdown').dropdown({
@@ -878,17 +1127,35 @@
         });
 
         $('#projectSearch').on('input', function () {
-            applyProjectFilters();
-            sortProjectCards($('#projectSort').val());
+            refreshProjectList(true);
         });
 
         $('#projectSort').on('change', function () {
-            sortProjectCards($(this).val());
-            applyProjectFilters();
+            refreshProjectList(true);
         });
 
-        sortProjectCards($('#projectSort').val());
-        applyProjectFilters();
+        $('#projectPageSize').on('change', function () {
+            refreshProjectList(true);
+        });
+
+        $('#projectViewToggle .button').on('click', function () {
+            var $button = $(this);
+            projectViewMode = $button.data('view') || 'card';
+            $('#projectViewToggle .button').removeClass('active');
+            $button.addClass('active');
+            refreshProjectList(false);
+        });
+
+        $('#projectPagination').on('click', '.item:not(.disabled):not(.active)', function () {
+            var nextPage = parseInt($(this).data('page'), 10);
+            if (nextPage) {
+                projectCurrentPage = nextPage;
+                refreshProjectList(false);
+                $('html, body').animate({ scrollTop: $('.my-projects-toolbar').offset().top - 12 }, 180);
+            }
+        });
+
+        refreshProjectList(true);
     });
 </script>
 </body>

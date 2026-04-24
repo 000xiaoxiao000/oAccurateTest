@@ -24,6 +24,7 @@ import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.esDao.entity.TraceNodeIndex;
 import com.oAT.web.service.ApiEndpointAnalysisService;
+import com.oAT.web.service.entity.ApiEndpointCoverageVo;
 import com.oAT.web.service.entity.ApiEndpointViewVo;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
@@ -110,6 +111,22 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
         refreshCoverage(appId);
         return apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(appId)
                 .stream().map(this::toViewVo).collect(Collectors.toList());
+    }
+
+    @Override
+    public ApiEndpointCoverageVo calculateCoverage(String appId, String traceId) {
+        List<ApiEndpointIndex> endpoints = apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(appId);
+        if (endpoints == null || endpoints.isEmpty()) {
+            return new ApiEndpointCoverageVo(0, 0);
+        }
+        Map<String, Integer> hitMap = buildCoverageMap(appId, traceId);
+        int coveredCount = 0;
+        for (ApiEndpointIndex endpoint : endpoints) {
+            if (resolveHitCount(hitMap, endpoint.getEndpointType(), endpoint.getHttpMethod(), endpoint.getUrl()) > 0) {
+                coveredCount++;
+            }
+        }
+        return new ApiEndpointCoverageVo(coveredCount, endpoints.size());
     }
 
     private File toTempArtifact(MultipartFile file) throws IOException {
@@ -397,6 +414,18 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
         for (String traceId : findSnapshotTraceIds(appId)) {
             addTraceIndexes(traceMap, traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 10000)), appId);
         }
+        return buildCoverageMap(traceMap);
+    }
+
+    private Map<String, Integer> buildCoverageMap(String appId, String traceId) {
+        Map<String, TraceNodeIndex> traceMap = new LinkedHashMap<>();
+        if (StringUtils.hasText(traceId)) {
+            addTraceIndexes(traceMap, traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 10000)), appId);
+        }
+        return buildCoverageMap(traceMap);
+    }
+
+    private Map<String, Integer> buildCoverageMap(Map<String, TraceNodeIndex> traceMap) {
         Map<String, Integer> hitMap = new HashMap<>();
         for (TraceNodeIndex item : traceMap.values()) {
             TraceNode node;

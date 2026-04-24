@@ -163,18 +163,32 @@
             #systemSnapshotListTable tbody td {
                 padding-top: 0.56em;
                 padding-bottom: 0.56em;
+                vertical-align: middle;
+            }
+
+            #systemSnapshotListTable tbody td {
+                overflow: hidden;
             }
 
             #systemSnapshotListTable .snapshot-title,
             #systemSnapshotListTable .dir-title {
-                display: inline-flex;
+                display: flex;
                 align-items: center;
                 gap: 0.35em;
-                max-width: 100%;
+                width: 100%;
+                min-width: 0;
+            }
+
+            #systemSnapshotListTable .snapshot-title .icon,
+            #systemSnapshotListTable .dir-title .icon {
+                flex: 0 0 auto;
+                margin-right: 0;
             }
 
             #systemSnapshotListTable .snapshot-title span,
             #systemSnapshotListTable .dir-title span {
+                display: block;
+                min-width: 0;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
@@ -183,6 +197,14 @@
             #systemSnapshotListTable .meta-text {
                 font-size: 0.88em;
                 color: #666;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+            #systemSnapshotListTable .api-coverage-cell {
+                color: #4a5568;
+                font-size: 0.88em;
+                text-align: center;
                 white-space: nowrap;
             }
 
@@ -191,12 +213,19 @@
             }
 
             #systemSnapshotListTable .snapshot-select-cell {
-                width: 42px;
-                text-align: center;
+                width: 30px;
+                text-align: left;
+                padding-left: 0.28em;
+                padding-right: 0.28em;
             }
 
             #systemSnapshotListTable .snapshot-select-cell .ui.checkbox {
                 margin: 0;
+                min-height: 17px;
+            }
+
+            #systemSnapshotListTable .snapshot-select-cell .ui.checkbox label {
+                padding-left: 17px;
             }
 
             #systemSnapshotListTable .empty-state-row td {
@@ -208,10 +237,11 @@
         <table id="systemSnapshotListTable" class="ui selectable compact very basic table" style="table-layout: fixed;">
             <thead>
             <tr>
-                <th style="width: 42px;"></th>
+                <th style="width: 30px;"></th>
                 <th>快照名称</th>
-                <th style="width: 110px;">更新时间</th>
-                <th style="width: 56px;">操作</th>
+                <th style="width: 86px; text-align: center;">接口覆盖率</th>
+                <th style="width: 82px; text-align: right;">更新时间</th>
+                <th style="width: 44px; text-align: center;">操作</th>
             </tr>
             </thead>
             <tbody id="systemSnapshotTableBody">
@@ -219,10 +249,11 @@
             <#list dirs as dir>
                 <tr data-directory-id="${dir.id}">
                     <td class="snapshot-select-cell"></td>
-                    <td>
+                    <td style="min-width: 0;">
                         <a class="dir-title" href="list?directoryId=${dir.id}&sort=${sort!'updateTime'}<#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>"><i class="folder icon"></i><span>${dir.name}</span>
                         </a>
                     </td>
+                    <td class="api-coverage-cell">-</td>
                     <td class="meta-text">-</td>
                     <td>
                         <#if loginNameRole != "visitor">
@@ -254,12 +285,13 @@
                             <label></label>
                         </div>
                     </td>
-                    <td>
+                    <td style="min-width: 0;">
                         <a class="snapshot-title" href="detail/${snapshot.id}">
                             <i class="file outline icon"></i>
                             <span>${snapshot.title}</span>
                         </a>
                     </td>
+                    <td class="api-coverage-cell" title="接口覆盖率（已覆盖数 / 总数）">${(snapshotApiCoverageTextMap[snapshot.id])!'0 / 0'}</td>
                     <td class="meta-text"><span title="${(snapshotTimeTextMap[snapshot.id])!'-'}">${(snapshotRelativeTimeTextMap[snapshot.id])!'-'}</span></td>
                     <td>
                         <#if loginNameRole != "visitor">
@@ -279,7 +311,7 @@
             </#list>
             <#if dirs?size == 0 && snapshots?size == 0>
                 <tr id="systemSnapshotEmptyRow" class="empty-state-row">
-                    <td colspan="4">暂无数据</td>
+                    <td colspan="5">暂无数据</td>
                 </tr>
             </#if>
             </tbody>

@@ -15,28 +15,43 @@
 <#include "../projectHeader.ftl">
 
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
-    <span class="divider">/</span>
-    <a class=" section" href="/p/${project.id}/${appId}/version/list">${app.name}</a>
-    <span class="divider">/</span>
-    <div class="active section">新增版本</div>
+<div class="ui container">
+    <div class="ui small breadcrumb version-breadcrumb">
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${appId}/version/list">${app.name}</a>
+        <span class="divider">/</span>
+        <div class="active section">新增版本</div>
+    </div>
 </div>
 
 <!--内容主体-->
-<div class="ui grid attached container" style="margin-top: 14px">
-    <!-- 左边导航菜单 -->
-    <div class="ui four wide column">
-        <#assign appName=app.name/>
-        <#assign versionListActive="active"/>
-        <#include "LeftNavigationMenu.ftl">
-    </div>
-    <!-- 中间内容 -->
-    <div class="ui twelve wide column">
-        <h3 class="ui header center aligned top attached block">
-            新增版本
-        </h3>
-        <div class="ui attached segment">
+<div class="ui container version-center-page">
+    <div class="version-page-layout">
+        <!-- 左边导航菜单 -->
+        <div class="version-page-side">
+            <#assign appName=app.name/>
+            <#assign versionListActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
+        </div>
+        <!-- 中间内容 -->
+        <div class="version-page-main">
+            <div class="version-page-header">
+                <div>
+                    <div class="version-page-kicker">
+                        <i class="code branch icon"></i>
+                        版本中心
+                    </div>
+                    <h1 class="version-page-title">新增版本</h1>
+                    <p class="version-page-desc">从 Git 拉取代码或上传制品包，创建应用版本并用于后续覆盖率和比对分析。</p>
+                </div>
+                <div class="version-page-actions">
+                    <a class="ui button" href="/p/${project.id}/${appId}/version/list">
+                        <i class="left arrow icon"></i>返回版本列表
+                    </a>
+                </div>
+            </div>
+            <div class="version-page-body">
             <div class="ui pointing secondary menu">
                 <a class="item active" data-tab="git">从Git拉取</a>
                 <a class="item" data-tab="upload">上传文件</a>
@@ -121,15 +136,14 @@
                         <label>设为当前版本</label>
                     </div>
                 </div>
-                <div class="ui" style="float: right">
+                <div class="version-form-actions">
                     <button class="ui button positive" type="submit">创建新的版本</button>
                     <button class="ui button" type="reset">重置</button>
                 </div>
-                <br>
-                <br>
                 <div class="ui error message"></div>
             </form>
 
+            </div>
         </div>
     </div>
 </div>

@@ -1,5 +1,6 @@
 package com.oAT.web.service;
 
+import com.oAT.web.service.entity.ApiEndpointCoverageVo;
 import com.oAT.web.service.entity.ApiEndpointViewVo;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -13,4 +14,6 @@ public interface ApiEndpointAnalysisService {
     void analyzeArtifactFile(String appId, File file) throws IOException;
 
     List<ApiEndpointViewVo> listByAppId(String appId);
+
+    ApiEndpointCoverageVo calculateCoverage(String appId, String traceId);
 }

@@ -31,30 +31,45 @@
 <#include "../projectHeader.ftl">
 
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
-    <span class="divider">/</span>
-    <a class=" section" href="/p/${project.id}/${app.id}/version/list">${app.name}</a>
-    <span class="divider">/</span>
-    <div class="active section">比对报告</div>
+<div class="ui container">
+    <div class="ui small breadcrumb version-breadcrumb">
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${app.id}/version/list">${app.name}</a>
+        <span class="divider">/</span>
+        <div class="active section">比对报告</div>
+    </div>
 </div>
 
 <!--内容主体-->
-<div class="ui text container" style="margin-top: 14px; margin-bottom: 10px;">
-    <a class="ui basic small button" href="/p/${project.id}/${app.id}/version/compare">
-        <i class="left arrow icon"></i>
-        返回版本比对页
-    </a>
-</div>
-
-<div class="ui text container segment " style="margin-top: 14px">
-    <!-- 中间内容 -->
-    <h1 class="ui dividing  header oat-wrap-word">${report.jobName}
-        <br>
-        <div class="ui right aligned sub header  " style="margin-top: -15px;font-size: 13px">
-            <span>${report.createTime?string('yyyy-MM-dd HH:mm:ss')}</span>
+<div class="ui container version-center-page">
+    <div class="version-page-layout">
+        <div class="version-page-side">
+            <#assign appId=app.id/>
+            <#assign appName=app.name/>
+            <#assign versionCompareActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
         </div>
-    </h1>
+        <div class="version-page-main">
+            <div class="version-page-header">
+                <div>
+                    <div class="version-page-kicker">
+                        <i class="file alternate outline icon"></i>
+                        版本中心
+                    </div>
+                    <h1 class="version-page-title oat-wrap-word">${report.jobName}</h1>
+                    <p class="version-page-desc">${report.createTime?string('yyyy-MM-dd HH:mm:ss')} 生成的版本比对结果与影响用例分析。</p>
+                </div>
+                <div class="version-page-actions">
+                    <a class="ui button" href="/p/${project.id}/${app.id}/version/compare">
+                        <i class="left arrow icon"></i>返回版本比对
+                    </a>
+                    <a class="ui primary button" href="/p/${project.id}/${app.id}/version/report/list?tab=compare">
+                        <i class="list icon"></i>报告列表
+                    </a>
+                </div>
+            </div>
+            <div class="version-page-body">
     <#-- Git 元信息 -->
     <#if report.gitBranch?has_content || report.gitOldCommit?has_content || report.gitNewCommit?has_content>
         <div class="ui small grey oat-wrap-word">
@@ -250,6 +265,9 @@
         <p>
         ${report.jobLog?replace("\n","</br>")}
         </p>
+    </div>
+            </div>
+        </div>
     </div>
 </div>
 

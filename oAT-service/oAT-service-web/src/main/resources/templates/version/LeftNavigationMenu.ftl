@@ -60,6 +60,7 @@
             <a class="item subnav-item ${versionListActive!}" href="/p/${project.id}/${appId}/version/list">版本列表</a>
             <a class="item subnav-item ${reportListActive!}" href="/p/${project.id}/${appId}/version/report/list">报告列表</a>
             <a class="item subnav-item ${versionCompareActive!}" href="/p/${project.id}/${appId}/version/compare">版本比对</a>
+            <a class="item subnav-item ${apiEndpointActive!}" href="/p/${project.id}/app/${appId}/api-endpoints">接口扫描与覆盖</a>
         </div>
     </div>
 </div>

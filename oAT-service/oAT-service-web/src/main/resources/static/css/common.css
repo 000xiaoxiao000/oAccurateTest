@@ -257,6 +257,210 @@ body {
     padding-bottom: 10px !important;
 }
 
+/* Unified version center layout */
+.version-center-page,
+.version-apps-page {
+    margin-top: 10px !important;
+    margin-bottom: 32px !important;
+}
+
+.version-breadcrumb,
+.report-breadcrumb {
+    margin: 6px auto 10px !important;
+    color: #6b7785;
+}
+
+.version-page-layout {
+    display: grid !important;
+    grid-template-columns: 240px minmax(0, 1fr) !important;
+    gap: 14px !important;
+    align-items: start !important;
+}
+
+.version-page-side,
+.version-page-main,
+.version-content-card,
+.version-apps-card {
+    background: #fff;
+    border: 1px solid #e7edf5;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+}
+
+.version-page-side {
+    padding: 12px !important;
+}
+
+.version-page-main {
+    min-width: 0;
+    overflow: visible;
+}
+
+.version-page-header,
+.version-apps-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px 18px;
+    background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 55%, #f9fbfd 100%);
+    border-bottom: 1px solid #e6eef7;
+    border-radius: 14px 14px 0 0;
+}
+
+.version-page-kicker,
+.version-apps-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(33, 133, 208, 0.08);
+    color: #1d6fa5;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 7px;
+}
+
+.version-page-title,
+.version-apps-title {
+    margin: 0 !important;
+    color: #1f2937;
+    font-size: 22px !important;
+    line-height: 1.25 !important;
+    font-weight: 700 !important;
+}
+
+.version-page-desc,
+.version-apps-desc {
+    margin: 5px 0 0;
+    color: #617080;
+    line-height: 1.55;
+    font-size: 13px;
+}
+
+.version-page-actions,
+.version-apps-actions {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.version-page-body,
+.version-apps-body {
+    padding: 16px 18px 18px;
+}
+
+.version-page-body > .ui.attached.segment,
+.version-page-body > .ui.bottom.attached.segment,
+.version-page-body > .ui.segment {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.version-page-body .ui.pointing.secondary.menu,
+.version-page-body .ui.tabular.menu {
+    margin-bottom: 14px !important;
+}
+
+.version-page-body .ui.form .field > label {
+    color: #334155;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+
+.version-page-body .ui.form input,
+.version-page-body .ui.form textarea,
+.version-page-body .ui.selection.dropdown {
+    border-radius: 10px !important;
+    border-color: #d9e3ef !important;
+}
+
+.version-page-body .ui.form textarea {
+    min-height: 96px;
+}
+
+.version-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.version-table-wrap {
+    border: 1px solid #e7edf5;
+    border-radius: 14px;
+    overflow: visible;
+    background: #fff;
+}
+
+.version-table-wrap .ui.table {
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 14px !important;
+}
+
+.version-table-wrap .ui.table thead th {
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 700;
+    border-bottom: 1px solid #e7edf5;
+}
+
+.version-table-wrap .ui.table td,
+.version-table-wrap .ui.table th {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    vertical-align: middle;
+}
+
+.version-apps-card {
+    overflow: hidden;
+}
+
+.version-apps-tip {
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+}
+
+.version-app-row-title {
+    font-weight: 700;
+    color: #1f2937;
+}
+
+@media only screen and (max-width: 960px) {
+    .version-page-layout {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+@media only screen and (max-width: 767px) {
+    .version-page-header,
+    .version-apps-header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 14px !important;
+    }
+
+    .version-page-body,
+    .version-apps-body,
+    .version-page-side {
+        padding: 14px !important;
+    }
+
+    .version-page-actions,
+    .version-apps-actions,
+    .version-page-actions .ui.button,
+    .version-apps-actions .ui.button {
+        width: 100%;
+    }
+}
+
 .page-split-layout {
     display: flex;
     align-items: stretch;
