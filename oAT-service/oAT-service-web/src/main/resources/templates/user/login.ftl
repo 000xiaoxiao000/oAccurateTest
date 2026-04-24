@@ -1,126 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>用户登录</title>
     <#include "../common.ftl">
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: #f4f7f6;
-        }
-
-        #login-canvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-        }
-
-        .login-container {
-            background: rgba(255, 255, 255, 0.9) !important;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            padding: 2em;
-        }
-
-        /* 抖动动画 */
-        .shake-animation {
-            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
-            transform: translate3d(0, 0, 0);
-            backface-visibility: hidden;
-            perspective: 1000px;
-        }
-
-        @keyframes shake {
-            10%, 90% { transform: translate3d(-1px, 0, 0); }
-            20%, 80% { transform: translate3d(2px, 0, 0); }
-            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
-            40%, 60% { transform: translate3d(4px, 0, 0); }
-        }
-    </style>
 </head>
-<body>
+<body class="auth-page">
 
-<canvas id="login-canvas"></canvas>
+<canvas id="login-canvas" class="auth-canvas"></canvas>
 
-<div class="ui middle aligned center aligned grid" style="width: 100%;height: 100%; position: relative; z-index: 1;">
-    <div class="column" style="width: 500px">
-        <div id="login-box" class="login-container">
-            <h1 class="ui teal image header" style="display: flex; align-items: center; justify-content: center;">
-                <canvas id="logo-canvas" width="60" height="60" style="margin-right: 0.5em;"></canvas>
-                <div class="content">
-                    账号登录
-                </div>
-            </h1>
-            <#if newUser??>
-                <div id="succeed-msg" class="ui success message">
-                    <i class="close icon" onclick="$('#succeed-msg').hide()"></i>
-                    <div class="header">
-                        注册成功！
-                    </div>
-                    <p>现在，你可以登录你的用户名。</p>
-                </div>
-            </#if>
-
-            <#if errorMessage??>
-                <div id="succeed-msg" class="ui error message">
-                    <p>${errorMessage}</p>
-                </div>
-            </#if>
-
-            <form class="ui large form" action="/doLogin" method="post">
-                <div class="ui segment">
-                    <input type="hidden" name="redirect" value="${redirect!''}">
-                    <div class="field">
-                        <div class="ui left icon input">
-                            <i class="user icon"></i>
-                            <input type="text" name="nameOrEmail" placeholder="用户名/邮箱地址" value="${(newUser.name)!''}">
-                        </div>
-                    </div>
-                    <div class="field">
-                        <div class="ui left icon input">
-                            <i class="lock icon"></i>
-                            <input type="password" name="password" id="password" placeholder="密码">
-                            <i class="eye slash icon link" id="toggle-password" style="position: absolute; right: 10px;
-                            cursor: pointer; pointer-events: auto;"></i>
-                        </div>
-                    </div>
-                    <input class="ui fluid large teal submit button" type="submit" value="登录">
-                </div>
-            </form>
+<div class="auth-shell">
+    <div id="login-box" class="auth-card">
+        <div class="auth-brand">
+            <canvas id="logo-canvas" width="60" height="60"></canvas>
+            <div>
+                <h1 class="auth-title">账号登录</h1>
+                <p class="auth-subtitle">欢迎回来，继续管理你的测试资产</p>
+            </div>
         </div>
 
-<#--        <div class="ui message">-->
-<#--            新用户？ <a href="register">注册</a>-->
-<#--        </div>-->
+        <#if newUser??>
+            <div id="succeed-msg" class="ui success message">
+                <i class="close icon" onclick="$('#succeed-msg').hide()"></i>
+                <div class="header">注册成功！</div>
+                <p>现在，你可以登录你的用户名。</p>
+            </div>
+        </#if>
+
+        <#if errorMessage??>
+            <div id="login-error-msg" class="ui error message">
+                <p><i class="warning circle icon"></i>${errorMessage}</p>
+            </div>
+        </#if>
+
+        <form class="ui large form auth-form" action="/doLogin" method="post">
+            <div class="ui segment">
+                <input type="hidden" name="redirect" value="${redirect!''}">
+                <div class="field required">
+                    <label>用户名或邮箱</label>
+                    <div class="ui left icon input">
+                        <i class="user icon"></i>
+                        <input type="text" name="nameOrEmail" placeholder="请输入用户名或邮箱地址" value="${(newUser.name)!''}" autocomplete="username" required>
+                    </div>
+                </div>
+                <div class="field required">
+                    <label>密码</label>
+                    <div class="ui left icon input">
+                        <i class="lock icon"></i>
+                        <input type="password" name="password" id="password" placeholder="请输入密码" autocomplete="current-password" required>
+                        <i class="eye slash icon link auth-password-toggle" id="toggle-password" tabindex="0" role="button" aria-label="显示或隐藏密码"></i>
+                    </div>
+                </div>
+                <input class="ui fluid large teal submit button" type="submit" value="登录">
+            </div>
+        </form>
+
+        <div class="auth-link-row">
+            <span>还没有账号？</span>
+            <a href="/register">立即注册</a>
+        </div>
     </div>
 </div>
 
 <script src="/js/login-animation.js"></script>
 <script>
     $(document).ready(function() {
-        // 切换密码显示/隐藏
-        $('#toggle-password').on('click', function() {
+        function togglePassword() {
             const passwordField = $('#password');
             const isPassword = passwordField.attr('type') === 'password';
             passwordField.attr('type', isPassword ? 'text' : 'password');
+            $('#toggle-password').toggleClass('eye slash', !isPassword).toggleClass('eye', isPassword);
+        }
 
-            // 切换图标：如果是密码状态则显示眼，如果是明文状态则显示划掉的眼
-            if (isPassword) {
-                $(this).removeClass('eye slash').addClass('eye');
-            } else {
-                $(this).removeClass('eye').addClass('eye slash');
+        $('#toggle-password').on('click', togglePassword);
+        $('#toggle-password').on('keydown', function(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                togglePassword();
             }
         });
 
         <#if errorMessage??>
-            // 触发抖动
             $('#login-box').addClass('shake-animation');
-            // 触发小人表情
             if (window.setLoginError) {
                 window.setLoginError();
             }

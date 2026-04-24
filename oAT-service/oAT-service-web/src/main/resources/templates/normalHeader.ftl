@@ -1,9 +1,9 @@
 <!--头部菜单引入-->
-<div class="top ui segment" style="margin: 0px -2px 10px -2px;padding: 5px">
+<div class="app-header top ui segment">
     <div class="ui secondary menu">
         <div class="ui container">
-            <a class="item" href="#" style="padding: 0px">
-                <img class="ui small image" src="/images/logo.png">
+            <a class="app-logo-link item" href="#">
+                <img class="app-logo-image ui small image" src="/images/logo.png">
             </a>
             <div class="right menu">
                 <a class="ui dropdown item" href="/myProjects">
@@ -26,14 +26,14 @@
 </div>
 <#assign msg = message!RequestParameters['message']!>
 <#if msg?? && msg != "">
-<div class="ui success message close 3s" style="position: fixed;top: 60px;left: calc(80vw/2);min-width: 200px">
+<div class="ui success message close 3s app-toast">
     <p><i class="check circle icon "></i>${msg}</p>
 </div>
 </#if>
 
 <#assign errMsg = errorMessage!RequestParameters['errorMessage']!>
 <#if errMsg?? && errMsg != "">
-<div class="ui negative message close 3s" style="position: fixed;top: 40px;left: calc(80vw/2);min-width: 200px">
+<div class="ui negative message close 3s app-toast">
     <p><i class="warning circle icon "></i> ${errMsg}</p>
 </div>
 </#if>

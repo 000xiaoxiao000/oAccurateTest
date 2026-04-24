@@ -43,7 +43,7 @@
         top: 0px;
         bottom: 5px;
         margin: 0px;
-        z-index: 2;
+        z-index: 20;
         max-width: 25em;
         min-width: 20em;
         overflow-y: auto;
@@ -128,8 +128,77 @@
 
     .ui.text.container {
         background: #ffffff;
-        min-width: 800px;
-        padding: 20px;
+        min-width: 0;
+        padding: 0;
+    }
+
+    .snapshot-detail-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 170px;
+        gap: 14px;
+        align-items: start;
+    }
+
+    .snapshot-detail-tabs {
+        margin: 0 0 14px !important;
+        border-radius: 12px;
+        background: #fff;
+    }
+
+    .snapshot-detail-side-card {
+        position: sticky;
+        top: 78px;
+        padding: 14px;
+        border: 1px solid #e7edf5;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        z-index: 1;
+    }
+
+    .snapshot-detail-side-card .ui.form .field {
+        margin-bottom: 0.8em;
+    }
+
+    .snapshot-detail-side-card .description {
+        color: #334155;
+        font-weight: 600;
+        word-break: break-word;
+    }
+
+    .snapshot-detail-title-card {
+        padding: 14px 16px;
+        border: 1px solid #e7edf5;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .snapshot-detail-title-card + .ui.tab.segment,
+    .snapshot-detail-main > .ui.tab.segment {
+        margin-top: 14px !important;
+        border-radius: 14px !important;
+        border-color: #e7edf5 !important;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05) !important;
+    }
+
+    .snapshot-detail-main > .ui.tab[data-tab="flow"] {
+        margin-top: 14px;
+        border: 1px solid #e7edf5;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        overflow: hidden;
+    }
+
+    @media only screen and (max-width: 1100px) {
+        .snapshot-detail-shell {
+            grid-template-columns: 1fr;
+        }
+
+        .snapshot-detail-side-card {
+            position: static;
+        }
     }
 
     /* 让容器内的 Semantic UI 菜单在宽度不足时自动换行，防止超出白色背景 */
@@ -149,47 +218,64 @@
 <#assign snapshotDetailHref='/p/' + project.id + '/' + app.id + '/snapshot/detail/' + snapshot.id/>
 
 <!--面包屑导航-->
-<div class="ui small breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
-    <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
-    <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/${app.id}/snapshot/list">系统快照</a>
-    <span class="divider">/</span>
-    <div class="active section">快照详情</div>
-</div>
-<!--过滤条件-->
-<div class="ui grid attached container" style="margin-top: 14px">
-    <div class="ui four wide column">
-        <#assign snapshotGroupName=app.name/>
-        <#assign snapshotDetailActive="active"/>
-        <#include "LeftNavigationMenu.ftl">
+<div class="ui container app-unified-page">
+    <div class="ui small breadcrumb app-unified-breadcrumb">
+        <a class="section" href="/p/${project.id}/home">${project.name}</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${app.id}/snapshot/list">系统快照</a>
+        <span class="divider">/</span>
+        <div class="active section">快照详情</div>
     </div>
-    <div class="ui twelve wide column">
-        <div class="ui text container" style="margin: 0; width: 100%;">
-    <div class="text">
-        <a href="javascript:window.history.go(-1)"><i class="icon arrow left"></i>返回</a>
-    </div>
-    <div class="ui secondary pointing four item stackable menu big">
-        <a class="item active " data-tab="definition">基本信息</a>
-        <a class="item" data-tab="flow">流程图</a>
-        <a class="item" data-tab="usage">堆栈列表</a>
-        <a class="item" data-tab="coverage">覆盖率报告</a>
-    </div>
-</div>
-<div class="ui tab active text container segment" data-tab="definition">
-    <form class="ui auto form" action="/p/${project.id}/${app.id}/snapshot/update">
-        <input type="hidden" name="id" value="${snapshot.id}">
-        <div class="field edit">
-            <h3 class="ui header">
-                <input type="text" name="title" value="${snapshot.title}">
-                <div class="sub header">  ${snapshot.subTitle!}</div>
-            </h3>
+
+    <div class="app-unified-layout">
+        <div class="app-unified-side">
+            <#assign snapshotGroupName=app.name/>
+            <#assign snapshotDetailActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
         </div>
-        <div class="field edit">
-            <textarea rows="2" name="describe" value="${snapshot.describe!}">${snapshot.describe!}</textarea>
-        </div>
-    </form>
+        <div class="app-unified-main">
+            <div class="app-unified-header">
+                <div>
+                    <div class="app-unified-kicker">
+                        <i class="file outline icon"></i>
+                        快照详情
+                    </div>
+                    <h1 class="app-unified-title">${snapshot.title}</h1>
+                    <p class="app-unified-desc">查看并维护系统快照基本信息、调用流程、堆栈明细和覆盖率报告。</p>
+                </div>
+                <div class="app-unified-actions">
+                    <a class="ui basic button" href="javascript:window.history.go(-1)">
+                        <i class="arrow left icon"></i>返回
+                    </a>
+                </div>
+            </div>
+
+            <div class="app-unified-content">
+                <div class="ui secondary pointing four item stackable menu big snapshot-detail-tabs">
+                    <a class="item active" data-tab="definition">基本信息</a>
+                    <a class="item" data-tab="flow">流程图</a>
+                    <a class="item" data-tab="usage">堆栈列表</a>
+                    <a class="item" data-tab="coverage">覆盖率报告</a>
+                </div>
+                <div class="snapshot-detail-shell">
+                    <div class="snapshot-detail-main">
+<div class="ui tab active segment" data-tab="definition">
+    <div class="snapshot-detail-title-card">
+        <form class="ui auto form" action="/p/${project.id}/${app.id}/snapshot/update">
+            <input type="hidden" name="id" value="${snapshot.id}">
+            <div class="field edit">
+                <h3 class="ui header">
+                    <input type="text" name="title" value="${snapshot.title}">
+                    <div class="sub header">${snapshot.subTitle!}</div>
+                </h3>
+            </div>
+            <div class="field edit">
+                <textarea rows="2" name="describe" value="${snapshot.describe!}">${snapshot.describe!}</textarea>
+            </div>
+        </form>
+    </div>
 
     <div class="ui segment" style="margin-top: 20px;">
         <div class="ui stackable grid">
@@ -333,14 +419,14 @@
         </form>
     </div>
 </div>
-<div class="ui tab " data-tab="flow"
-     style="width: 100%;height: calc(100vh - 150px);">
+<div class="ui tab" data-tab="flow"
+     style="width: 100%;height: calc(100vh - 210px);">
     <svg id="svg-canvas" style="width: 100%;height: 100%">
     </svg>
 </div>
 
 <!--堆栈列表-->
-<div class="ui tab text container segment" data-tab="usage">
+<div class="ui tab segment" data-tab="usage">
     <table class="ui compact single line selectable tree table">
         <thead>
         <tr style=" font-size: 0.8em; color: rgba(0,0,0,0.4);">
@@ -393,7 +479,7 @@
     </div>
 </div>
 <!--覆盖率报告-->
-<div class="ui tab text container segment" data-tab="coverage">
+<div class="ui tab segment" data-tab="coverage">
     <div id="coverageReportStatus" class="ui segment basic center aligned">
         <#if snapshot.reportStatus == 0>
             <div class="ui placeholder segment">

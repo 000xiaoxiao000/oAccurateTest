@@ -9,111 +9,102 @@
 <#assign usecaseItemActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui small breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
-    <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
-    <span class="divider">/</span>
-    <div class="active section">用例列表</div>
-</div>
-
-<!--过滤条件-->
-<div class="ui container">
-    <div class="ui grid">
-        <div class="four wide column"></div>
-        <div class="ui twelve wide column" style="padding-bottom: 0px">
-
-
-            <table class="ui basic compact table" style="border: none">
-                <tr>
-                    <td>
-                        <a class="ui tiny teal basic button" href="/p/${project.id}/usecase/list">
-                            <i class="home icon"></i>用例中心
-                        </a>
-                        &nbsp;&nbsp;
-                        <a href="/p/${project.id}/usecase/list">/ROOT</a>
-                        <#if dirTiers??>
-                            <#list dirTiers as tie>
-                                <#if tie_index ==(dirTiers?size)-1>
-                                    ${tie.name}
-                                <#else>
-                                    <a href="/p/${project.id}/usecase/list?directory=${tie.id}"> ${tie.name} </a>
-                                </#if>
-                            </#list>
-                        </#if>
-                    </td>
-                    <td>
-                        <form id="filterForm" class="ui form" action="list">
-                            <input type="hidden" name="directory" value="${directory!'root'}">
-                            <div class="ui text menu" style="margin: auto;float: right">
-                                <div class="ui icon input" style="margin-right: 8px; display: inline-flex; align-items: center; gap: 6px;">
-                                    <input type="text" name="keyword" value="${keyword!}" placeholder="搜索名称..." style="min-width: 180px;">
-                                    <i class="search icon"></i>
-                                    <#if (keyword!'')?has_content>
-                                        <a class="ui basic mini button" href="/p/${project.id}/usecase/list?directory=${directory!}<#if sort?? && sort?has_content>&sort=${sort}</#if>">清空</a>
-                                    </#if>
-                                </div>
-                                <div class="ui filter dropdown item" tabindex="2">
-                                    <input id="filterSort" type="hidden" name="sort" value="${sort!}">
-                                    <i class="ui sort numeric ascending link icon"> </i>
-                                    <span class="text">排序</span>
-                                    <div class="left menu transition hidden" tabindex="-1">
-                                        <div class="item" data-value="updateTime">更新时间</div>
-                                        <div class="item" data-value="name">快照名称</div>
-                                    </div>
-                                </div>
-                                <div id="newAction" class="ui pointing dropdown item" tabindex="-1">
-                                    <div class="ui primary button">&nbsp新建&nbsp</div>
-                                    <div class="menu" tabindex="1">
-                                        <div class="item" onclick="openAddFolderDialog()"><i class="folder icon"></i>新建目录
-                                        </div>
-                                        <a class="item" href="/p/${project.id}/usecase/new?directory=${currentDir}"><i
-                                                    class="file icon"></i>新建用例</a>
-                                    </div>
-                                </div>
-                            </div>
-                        </form>
-                    </td>
-                </tr>
-            </table>
-        </div>
+<div class="ui container app-unified-page">
+    <div class="ui small breadcrumb app-unified-breadcrumb">
+        <a class="section" href="/p/${project.id}/home">${project.name}</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
+        <span class="divider">/</span>
+        <div class="active section">用例列表</div>
     </div>
-</div>
-<!--内容主体-->
-<div class="ui grid attached  container">
+
     <#if missingUsecaseMessage?? && missingUsecaseMessage?has_content>
-        <div class="sixteen wide column" style="padding-bottom: 0;">
-            <div class="ui warning message">
-                <div class="header">用例不可访问</div>
-                <p>${missingUsecaseMessage}</p>
-            </div>
+        <div class="ui warning message">
+            <div class="header">用例不可访问</div>
+            <p>${missingUsecaseMessage}</p>
         </div>
     </#if>
-    <!-- 左边导航菜单 -->
-    <div class="ui four wide column">
-        <div class="ui vertical menu">
-            <div class="header item">用例中心</div>
-            <a class="active item" href="/p/${project.id}/usecase/list">
-                用例中心
+
+    <div class="app-toolbar-card">
+        <div class="app-toolbar-path">
+            <a class="ui tiny teal basic button" href="/p/${project.id}/usecase/list">
+                <i class="home icon"></i>用例中心
             </a>
-            <#if app??>
-                <a class="item" href="/p/${project.id}/${app.id}/snapshot/list">
-                    系统快照
-                </a>
-                <a class="ui item" href="/p/${project.id}/app/${app.id}/settings">
-                    设置
-                </a>
-            <#else>
-                <a class="ui item" href="/p/${project.id}/edit">
-                    设置
-                </a>
+            <a href="/p/${project.id}/usecase/list">/ROOT</a>
+            <#if dirTiers??>
+                <#list dirTiers as tie>
+                    <span>/</span>
+                    <#if tie_index ==(dirTiers?size)-1>
+                        <span>${tie.name}</span>
+                    <#else>
+                        <a href="/p/${project.id}/usecase/list?directory=${tie.id}">${tie.name}</a>
+                    </#if>
+                </#list>
             </#if>
         </div>
+        <form id="filterForm" class="ui form app-toolbar-actions" action="list">
+            <input type="hidden" name="directory" value="${directory!'root'}">
+            <div class="ui icon input">
+                <input type="text" name="keyword" value="${keyword!}" placeholder="搜索名称...">
+                <i class="search icon"></i>
+            </div>
+            <#if (keyword!'')?has_content>
+                <a class="ui basic mini button" href="/p/${project.id}/usecase/list?directory=${directory!}<#if sort?? && sort?has_content>&sort=${sort}</#if>">清空</a>
+            </#if>
+            <div class="ui filter dropdown item" tabindex="2">
+                <input id="filterSort" type="hidden" name="sort" value="${sort!}">
+                <i class="ui sort numeric ascending link icon"></i>
+                <span class="text">排序</span>
+                <div class="left menu transition hidden" tabindex="-1">
+                    <div class="item" data-value="updateTime">更新时间</div>
+                    <div class="item" data-value="name">名称</div>
+                </div>
+            </div>
+            <div id="newAction" class="ui pointing dropdown item" tabindex="-1">
+                <div class="ui primary button">新建</div>
+                <div class="menu" tabindex="1">
+                    <div class="item" onclick="openAddFolderDialog()"><i class="folder icon"></i>新建目录</div>
+                    <a class="item" href="/p/${project.id}/usecase/new?directory=${currentDir}"><i class="file icon"></i>新建用例</a>
+                </div>
+            </div>
+        </form>
     </div>
-    <!-- 中间内容 -->
-    <div class="ui twelve wide column">
 
-        <style>
+    <div class="app-unified-layout">
+        <div class="app-unified-side">
+            <div class="ui vertical menu settings-nav">
+                <div class="section-title item">用例中心</div>
+                <a class="top-level item active" href="/p/${project.id}/usecase/list">
+                    用例中心
+                </a>
+                <#if app??>
+                    <a class="top-level item" href="/p/${project.id}/${app.id}/snapshot/list">
+                        系统快照
+                    </a>
+                    <a class="top-level item" href="/p/${project.id}/app/${app.id}/settings">
+                        设置
+                    </a>
+                <#else>
+                    <a class="top-level item" href="/p/${project.id}/edit">
+                        设置
+                    </a>
+                </#if>
+            </div>
+        </div>
+        <div class="app-unified-main">
+            <div class="app-unified-header">
+                <div>
+                    <div class="app-unified-kicker">
+                        <i class="tasks icon"></i>
+                        用例中心
+                    </div>
+                    <h1 class="app-unified-title">用例列表</h1>
+                    <p class="app-unified-desc">按目录管理项目用例，快速查看关联快照、缺陷和需求覆盖情况。</p>
+                </div>
+            </div>
+
+            <div class="app-unified-content">
+                <style>
             #usecaseListTable thead th,
             #usecaseListTable tbody td {
                 padding-top: 0.56em;
@@ -172,7 +163,8 @@
             }
         </style>
 
-        <table id="usecaseListTable" class="ui selectable compact very basic table" style="table-layout: fixed; border: 1px solid rgba(34,36,38,.08);">
+        <div class="app-unified-table-wrap">
+            <table id="usecaseListTable" class="ui selectable compact very basic table unified-list-table" style="table-layout: fixed;">
             <thead>
             <tr>
                 <th>文件名</th>
@@ -251,7 +243,10 @@
                 </tr>
             </#if>
             </tbody>
-        </table>
+            </table>
+        </div>
+            </div>
+        </div>
     </div>
 </div>
 
