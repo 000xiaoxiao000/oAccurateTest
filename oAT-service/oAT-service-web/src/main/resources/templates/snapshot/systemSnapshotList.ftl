@@ -46,6 +46,25 @@
             font-size: 13px;
         }
 
+        .system-snapshot-toolbar__coverage {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(33, 133, 208, 0.1);
+            border: 1px solid rgba(33, 133, 208, 0.22);
+            color: #1f2937;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: nowrap;
+        }
+
+        .system-snapshot-toolbar__coverage strong {
+            color: #2185d0;
+            margin-left: 4px;
+            font-size: 13px;
+        }
+
         .system-snapshot-batch-actions {
             display: inline-flex;
             align-items: center;
@@ -102,6 +121,9 @@
                 <div class="ui mini basic buttons">
                     <button type="button" class="ui button" id="systemSnapshotSelectAllTrigger">全选</button>
                     <button type="button" class="ui button" id="systemSnapshotClearSelectionTrigger">清空选择</button>
+                </div>
+                <div class="system-snapshot-toolbar__coverage" title="当前列表快照覆盖接口并集 / 应用总接口数">
+                    接口覆盖 <strong>${apiCoverageSummaryText!'0 / 0'}</strong>
                 </div>
                 <div class="system-snapshot-toolbar__selection">
                     已选 <strong id="systemSnapshotSelectedCount">0</strong> 项
@@ -180,13 +202,6 @@
                 white-space: nowrap;
             }
 
-            #systemSnapshotListTable .api-coverage-cell {
-                color: #4a5568;
-                font-size: 0.88em;
-                text-align: center;
-                white-space: nowrap;
-            }
-
             #systemSnapshotListTable .quickMenu > .icon {
                 margin: 0;
             }
@@ -219,7 +234,6 @@
             <tr>
                 <th style="width: 30px;"></th>
                 <th>快照名称</th>
-                <th style="width: 86px; text-align: center;">接口覆盖</th>
                 <th style="width: 82px; text-align: right;">更新时间</th>
                 <th style="width: 44px; text-align: center;">操作</th>
             </tr>
@@ -233,7 +247,6 @@
                         <a class="dir-title" href="list?directoryId=${dir.id}&sort=${sort!'updateTime'}<#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>"><i class="folder icon"></i><span>${dir.name}</span>
                         </a>
                     </td>
-                    <td class="api-coverage-cell">-</td>
                     <td class="meta-text">-</td>
                     <td>
                         <#if loginNameRole != "visitor">
@@ -271,7 +284,6 @@
                             <span>${snapshot.title}</span>
                         </a>
                     </td>
-                    <td class="api-coverage-cell" title="接口覆盖（已覆盖数 / 总数）">${(snapshotApiCoverageTextMap[snapshot.id])!'0 / 0'}</td>
                     <td class="meta-text"><span title="${(snapshotTimeTextMap[snapshot.id])!'-'}">${(snapshotRelativeTimeTextMap[snapshot.id])!'-'}</span></td>
                     <td>
                         <#if loginNameRole != "visitor">
@@ -291,7 +303,7 @@
             </#list>
             <#if dirs?size == 0 && snapshots?size == 0>
                 <tr id="systemSnapshotEmptyRow" class="empty-state-row">
-                    <td colspan="5">暂无数据</td>
+                    <td colspan="4">暂无数据</td>
                 </tr>
             </#if>
             </tbody>

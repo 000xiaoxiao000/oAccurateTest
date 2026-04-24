@@ -72,6 +72,9 @@ public class SnapshotControl {
     @Autowired
     private UsecaseService usecaseService;
 
+    @Autowired
+    private ApiEndpointAnalysisService apiEndpointAnalysisService;
+
     @PostMapping("/save")
     @ResponseBody
     public ResultNotified<SnapshotVo> doSave(@PathVariable String projectId, @SessionAttribute UserVo user, HttpSession session, Snapshot snapshot,
@@ -186,8 +189,27 @@ public class SnapshotControl {
         model.addAttribute("snapshotId", snapshotId);
         model.addAttribute("missingSnapshotId", missingSnapshotId);
         model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
+        model.addAttribute("apiCoverageSummaryText", buildSnapshotApiCoverageSummaryText(snapshots));
 
         return "/snapshot/mySnapshot";
+    }
+
+    private String buildSnapshotApiCoverageSummaryText(List<SnapshotVo> snapshots) {
+        String appId = snapshots.stream()
+                .map(SnapshotVo::getAppId)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
+        if (!StringUtils.hasText(appId)) {
+            return "0 / 0";
+        }
+        List<String> traceIds = snapshots.stream()
+                .map(SnapshotVo::getTraceId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(appId, traceIds);
+        return coverage.getDisplayText();
     }
 
     private boolean in(String[] source, String[] target) {

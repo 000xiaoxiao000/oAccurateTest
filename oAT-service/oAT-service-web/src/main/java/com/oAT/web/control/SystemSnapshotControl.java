@@ -109,7 +109,7 @@ public class SystemSnapshotControl {
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("snapshotTimeTextMap", buildSnapshotTimeTextMap(snapshots));
         model.addAttribute("snapshotRelativeTimeTextMap", buildSnapshotRelativeTimeTextMap(snapshots));
-        model.addAttribute("snapshotApiCoverageTextMap", buildSnapshotApiCoverageTextMap(snapshots));
+        model.addAttribute("apiCoverageSummaryText", buildSnapshotApiCoverageSummaryText(appId, snapshots));
         model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
         model.addAttribute("currentDir", directoryId);
         model.addAttribute("dirTiers", appService.getDirectoryTiers(appId, directoryId));
@@ -369,17 +369,18 @@ public class SystemSnapshotControl {
         return result;
     }
 
-    private Map<String, String> buildSnapshotApiCoverageTextMap(List<SystemSnapshot> snapshots) {
-        Map<String, String> result = new HashMap<>();
-        for (SystemSnapshot snapshot : snapshots) {
-            if (snapshot == null || !StringUtils.hasText(snapshot.getAppId()) || !StringUtils.hasText(snapshot.getTraceId())) {
-                result.put(snapshot == null ? "" : snapshot.getId(), "0 / 0");
-                continue;
-            }
-            com.oAT.web.service.entity.ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(snapshot.getAppId(), snapshot.getTraceId());
-            result.put(snapshot.getId(), coverage.getDisplayText());
+    private String buildSnapshotApiCoverageSummaryText(String appId, List<SystemSnapshot> snapshots) {
+        if (!StringUtils.hasText(appId)) {
+            return "0 / 0";
         }
-        return result;
+        List<String> traceIds = snapshots.stream()
+                .filter(Objects::nonNull)
+                .map(SystemSnapshot::getTraceId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        com.oAT.web.service.entity.ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(appId, traceIds);
+        return coverage.getDisplayText();
     }
 
     private String formatDateTime(Date date) {
