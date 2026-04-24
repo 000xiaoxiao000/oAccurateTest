@@ -521,6 +521,10 @@
     </div>
     </div>
 </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- 删除快照弹出框-->
 <div id="delDescribeDialog" class="ui small modal">
