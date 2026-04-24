@@ -87,6 +87,38 @@
 </div>
 
 <script>
+    (function () {
+        if (!window.localStorage) {
+            return;
+        }
+        localStorage.setItem('oat_current_project', JSON.stringify({
+            id: '${project.id}',
+            name: '${project.name?js_string}',
+            visitedAt: Date.now()
+        }));
+
+        var storageKey = 'oat_recent_projects';
+        var list = [];
+        try {
+            list = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            if (!Array.isArray(list)) {
+                list = [];
+            }
+        } catch (e) {
+            list = [];
+        }
+
+        list = $.grep(list, function (item) {
+            return item && item.id !== '${project.id}';
+        });
+        list.unshift({
+            id: '${project.id}',
+            name: '${project.name?js_string}',
+            visitedAt: Date.now()
+        });
+        localStorage.setItem(storageKey, JSON.stringify(list.slice(0, 8)));
+    })();
+
     /*$('.ui.dropdown').dropdown({
         on: 'hover'
     });

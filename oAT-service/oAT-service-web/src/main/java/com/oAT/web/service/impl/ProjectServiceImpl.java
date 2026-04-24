@@ -50,6 +50,7 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectVo pv = new ProjectVo();
         BeanUtils.copyProperties(projectIndex, pv);
         BeanUtils.copyProperties(projectIndex.getProject(), pv);
+        fillProjectCreatorDisplayName(pv);
         return pv;
     }
 
@@ -298,14 +299,34 @@ public class ProjectServiceImpl implements ProjectService {
      * @param entity
      * @return
      */
-    private static ProjectVo convertProject(SystemIndex entity) {
+    private ProjectVo convertProject(SystemIndex entity) {
         Assert.isTrue(entity.getType().equals("project"),
                 "convert Project fail type must be 'project' ");
 
         ProjectVo projectVo = new ProjectVo();
         BeanUtils.copyProperties(entity, projectVo);
         BeanUtils.copyProperties(entity.getProject(), projectVo);
+        fillProjectCreatorDisplayName(projectVo);
         return projectVo;
+    }
+
+    private void fillProjectCreatorDisplayName(ProjectVo projectVo) {
+        if (projectVo == null || projectVo.getCreate() == null) {
+            return;
+        }
+
+        Optional<SystemIndex> creatorIndex = systemRepository.findById(projectVo.getCreate());
+        if (!creatorIndex.isPresent() || creatorIndex.get().getUser() == null) {
+            return;
+        }
+
+        String nickName = creatorIndex.get().getUser().getNickName();
+        String name = creatorIndex.get().getUser().getName();
+        if (nickName != null && !nickName.trim().isEmpty()) {
+            projectVo.setCreateDisplayName(nickName);
+        } else if (name != null && !name.trim().isEmpty()) {
+            projectVo.setCreateDisplayName(name);
+        }
     }
 
 }
