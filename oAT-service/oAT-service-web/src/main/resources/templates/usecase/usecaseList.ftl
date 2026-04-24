@@ -232,8 +232,22 @@
                         <div class="ui dropdown quickMenu">
                             <i class="list link setting icon"></i>
                             <div class="left menu">
-                                <div class="item share-usecase-item" data-id="${cas.id}" data-title="${cas.title?html}"><i class="share alternate icon"></i>共享 <span
-                                            class="description">生成链接</span></div>
+                                <div class="ui dropdown item">
+                                    <i class="share alternate icon"></i>
+                                    <i class="dropdown icon"></i>
+                                    共享设置
+                                    <div class="menu">
+                                        <div class="header">
+                                            <div class="ui toggle checkbox usecase-share-switch" data-id="${cas.id}">
+                                                <input type="checkbox" <#if cas.share??&&cas.share==true>checked="checked"</#if>>
+                                            </div>
+                                        </div>
+                                        <a class="item share-usecase-url <#if cas.share??&&cas.share==true><#else>disabled</#if>" data-id="${cas.id}" href="/share/usecase/${cas.id}" target="_blank">
+                                            <i class="ui linkify icon"></i>
+                                            访问共享页
+                                        </a>
+                                    </div>
+                                </div>
                                 <div class="divider"></div>
                                 <a class="item" href="/p/${project.id}/usecase/edit?id=${cas.id}"><i class="edit icon"></i>编辑</a>
                                 <div class="divider"></div>
@@ -324,23 +338,6 @@
     </div>
 </div>
 
-<!-- 共享用例链接弹出框 -->
-<div id="shareUsecaseDialog" class="ui small modal">
-    <div class="header">共享用例</div>
-    <div class="content">
-        <p id="shareUsecaseTitle" class="ui small header"></p>
-        <div class="ui action fluid input">
-            <input id="shareUsecaseUrl" type="text" readonly onfocus="this.select();">
-            <button id="copyShareUsecaseUrl" type="button" class="ui teal button">复制链接</button>
-        </div>
-        <p class="ui mini grey text" style="margin-top: 10px; color: #888;">复制后可发送给其他用户，通过共享地址查看该用例详情。</p>
-    </div>
-    <div class="actions">
-        <a id="openShareUsecaseUrl" class="ui basic button" target="_blank" rel="noopener noreferrer">打开链接</a>
-        <div class="ui cancel button">关闭</div>
-    </div>
-</div>
-
 <script>
     $('.ui.dropdown.quickMenu').dropdown({
         on: 'hover'
@@ -356,46 +353,27 @@
         return resultInform?.errorMessage || resultInform?.message || fallbackMessage;
     }
 
-    function buildUsecaseShareUrl(id) {
-        return window.location.origin + '/share/usecase/' + encodeURIComponent(id);
-    }
-
-    function copyTextToClipboard(text, successMessage) {
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(text).then(function () {
-                showToast(successMessage, 'success');
-            }, function () {
-                fallbackCopyTextToClipboard(text, successMessage);
+    $('.usecase-share-switch').checkbox({
+        onChecked: function () {
+            var id = $(this).closest('.usecase-share-switch').data('id');
+            $.getJSON('/p/${project.id}/usecase/openShare/' + encodeURIComponent(id), function (resultInform) {
+                if (resultInform && resultInform.result) {
+                    $('.share-usecase-url[data-id="' + id + '"]').removeClass('disabled');
+                    return;
+                }
+                showToast(getResultMessage(resultInform, '用例共享开启失败'), 'error');
             });
-            return;
+        },
+        onUnchecked: function () {
+            var id = $(this).closest('.usecase-share-switch').data('id');
+            $.getJSON('/p/${project.id}/usecase/closeShare/' + encodeURIComponent(id), function (resultInform) {
+                if (resultInform && resultInform.result) {
+                    $('.share-usecase-url[data-id="' + id + '"]').addClass('disabled');
+                    return;
+                }
+                showToast(getResultMessage(resultInform, '用例共享关闭失败'), 'error');
+            });
         }
-        fallbackCopyTextToClipboard(text, successMessage);
-    }
-
-    function fallbackCopyTextToClipboard(text, successMessage) {
-        var input = $('#shareUsecaseUrl');
-        input.val(text);
-        input.trigger('focus');
-        input[0].select();
-        var copied = document.execCommand('copy');
-        showToast(copied ? successMessage : '请手动复制链接', copied ? 'success' : 'info');
-    }
-
-    function openShareUsecaseDialog(id, title) {
-        var shareUrl = buildUsecaseShareUrl(id);
-        $('#shareUsecaseTitle').text(title || '用例共享链接');
-        $('#shareUsecaseUrl').val(shareUrl);
-        $('#openShareUsecaseUrl').attr('href', shareUrl);
-        $('#copyShareUsecaseUrl').off('click').on('click', function () {
-            copyTextToClipboard(shareUrl, '共享链接已复制');
-        });
-        $('#shareUsecaseDialog').modal('show');
-    }
-
-    $('#usecaseTableBody').on('click', '.share-usecase-item', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
-        openShareUsecaseDialog($(this).data('id'), $(this).data('title'));
     });
 
     function ensureUsecaseEmptyState() {

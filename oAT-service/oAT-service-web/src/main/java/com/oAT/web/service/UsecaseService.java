@@ -63,6 +63,8 @@ public interface UsecaseService {
      */
     void doUpdate(String author, UsecaseVo usecase);
 
+    void setShareState(String projectId, String operator, String usecaseId, Boolean share);
+
     /**
      * 基于ID删除指定用例
      *

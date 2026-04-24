@@ -515,7 +515,7 @@ public class UsecaseServiceImpl implements UsecaseService {
         }
 
         // 复制属性
-        BeanUtils.copyProperties(usecaseParam, index.getUsecase(), "authors", "projectId", "id");
+        BeanUtils.copyProperties(usecaseParam, index.getUsecase(), "authors", "projectId", "id", "share");
         // 添加作者
         List<String> authorList = new ArrayList<>(Arrays.asList(Optional.ofNullable(index.getUsecase().getAuthors()).orElse(new String[0])));
         if (!authorList.contains(author)) {
@@ -526,6 +526,32 @@ public class UsecaseServiceImpl implements UsecaseService {
         // 更新修改时间
         index.setUpdateTime(new java.util.Date());
         centerRepository.save(index);
+    }
+
+    @Override
+    public void setShareState(String projectId, String operator, String usecaseId, Boolean share) {
+        Assert.hasText(projectId, "projectId不能为空");
+        Assert.hasText(usecaseId, "用例ID不能为空");
+        Optional<CaseCenterIndex> op = centerRepository.findById(usecaseId);
+        Assert.isTrue(op.isPresent(), "找不到指定用例 id=" + usecaseId);
+        CaseCenterIndex index = op.get();
+        Assert.notNull(index.getUsecase(), "找不到指定用例 id=" + usecaseId);
+        Usecase usecase = index.getUsecase();
+        Assert.isTrue(projectId.equals(usecase.getProjectId()), "the usecase not belong to project Id=" + projectId);
+        Boolean nextShare = Boolean.TRUE.equals(share);
+        if (!nextShare.equals(usecase.getShare())) {
+            usecase.setShare(nextShare);
+            if (StringUtils.hasText(operator)) {
+                usecase.setLastUpdateAuthor(operator);
+                List<String> authorList = new ArrayList<>(Arrays.asList(Optional.ofNullable(usecase.getAuthors()).orElse(new String[0])));
+                if (!authorList.contains(operator)) {
+                    authorList.add(operator);
+                }
+                usecase.setAuthors(authorList.toArray(new String[0]));
+            }
+            index.setUpdateTime(new Date());
+            centerRepository.save(index);
+        }
     }
 
     /**

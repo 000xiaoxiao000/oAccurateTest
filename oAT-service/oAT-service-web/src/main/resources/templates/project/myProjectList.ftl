@@ -6,149 +6,166 @@
    <#include "../common.ftl">
     <style>
         .my-projects-page {
-            margin-bottom: 40px;
+            margin-bottom: 36px;
         }
 
         .my-projects-hero {
-            padding: 18px 24px !important;
-            border-radius: 14px !important;
-            background: linear-gradient(135deg, #f7fbff 0%, #eef5ff 45%, #f6f9fc 100%) !important;
-            border: 1px solid #dce7f5 !important;
-            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05) !important;
-            margin-bottom: 14px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            gap: 16px !important;
+            padding: 10px 16px !important;
+            border-radius: 12px !important;
+            background: linear-gradient(135deg, #f8fbff 0%, #f2f7fd 100%) !important;
+            border: 1px solid #e1eaf5 !important;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035) !important;
+            margin-bottom: 8px !important;
+        }
+
+        .my-projects-hero .column {
+            width: auto !important;
+            padding: 0 !important;
         }
 
         .my-projects-hero-label {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(33, 133, 208, 0.08);
+            gap: 5px;
+            padding: 0;
+            border-radius: 0;
+            background: transparent;
             color: #1d6fa5;
             font-size: 12px;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-            margin-bottom: 8px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            margin: 0 0 2px;
         }
 
         .my-projects-hero-title {
-            margin: 0 0 6px !important;
-            font-size: 1.65rem !important;
-            font-weight: 700 !important;
+            margin: 0 !important;
+            font-size: 1.35rem !important;
+            font-weight: 800 !important;
             color: #1f2937;
         }
 
         .my-projects-hero-desc {
-            margin: 0;
-            max-width: 720px;
-            font-size: 13px;
-            line-height: 1.55;
-            color: #5b6675;
+            display: none;
         }
 
         .my-projects-hero-actions {
             display: flex;
             justify-content: flex-end;
             align-items: center;
-            height: 100%;
+            height: auto;
         }
 
         .my-projects-primary-btn.ui.button {
-            border-radius: 9px;
-            padding: 10px 18px;
-            box-shadow: 0 6px 16px rgba(33, 133, 208, 0.16);
+            border-radius: 8px;
+            padding: 8px 14px;
+            box-shadow: 0 4px 12px rgba(33, 133, 208, 0.14);
         }
 
         .my-projects-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 10px;
-            margin-bottom: 16px;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 8px;
         }
 
         .my-projects-stat-card {
-            background: #fff;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: baseline;
+            column-gap: 8px;
+            background: rgba(255, 255, 255, 0.86);
             border: 1px solid #e8edf4;
-            border-radius: 12px;
-            padding: 12px 14px;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035);
+            border-radius: 10px;
+            padding: 8px 10px;
+            box-shadow: none;
         }
 
         .my-projects-stat-label {
             color: #7b8794;
             font-size: 12px;
-            margin-bottom: 6px;
+            margin-bottom: 0;
+            grid-column: 2;
+            grid-row: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .my-projects-stat-value {
             color: #1f2937;
-            font-size: 24px;
-            font-weight: 700;
+            font-size: 20px;
+            font-weight: 800;
             line-height: 1;
-            margin-bottom: 5px;
+            margin-bottom: 0;
+            grid-column: 1;
+            grid-row: 1;
         }
 
         .my-projects-stat-extra {
-            color: #8d99a6;
-            font-size: 12px;
-            line-height: 1.25;
+            display: none;
         }
 
         .my-projects-toolbar {
             display: flex;
             justify-content: space-between;
-            align-items: flex-end;
+            align-items: center;
             flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 12px;
-            padding: 12px 14px;
-            border: 1px solid #e8edf4;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding: 8px 10px;
+            border: 1px solid #dfeaf6;
             border-radius: 12px;
-            background: rgba(255, 255, 255, 0.78);
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035);
+            background: #ffffff;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.045);
         }
 
         .my-projects-toolbar-title {
             margin: 0 !important;
             color: #1f2937;
-            font-size: 1.2rem !important;
+            font-size: 1.12rem !important;
         }
 
         .my-projects-toolbar-meta {
-            color: #7b8794;
-            font-size: 12px;
-            margin-top: 3px;
+            display: none;
         }
 
         .my-projects-filter {
-            min-width: 240px;
+            min-width: 230px;
         }
 
         .my-projects-filter-group {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             flex-wrap: wrap;
         }
 
+        .my-projects-filter.ui.input > input,
+        .my-projects-sort.ui.dropdown,
+        .my-projects-page-size.ui.dropdown {
+            min-height: 34px;
+        }
+
         .my-projects-sort {
-            min-width: 160px;
+            min-width: 145px;
         }
 
         .my-projects-page-size {
-            min-width: 120px;
+            min-width: 108px;
         }
 
         .my-projects-view-toggle.ui.buttons .button {
-            padding-left: 12px;
-            padding-right: 12px;
+            padding: 8px 10px;
         }
 
         .my-projects-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 14px;
+            gap: 12px;
             align-items: stretch;
         }
 
@@ -538,21 +555,29 @@
 
         @media only screen and (max-width: 767px) {
             .my-projects-hero {
-                padding: 16px 18px !important;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 8px !important;
+                padding: 10px 12px !important;
             }
 
             .my-projects-hero-actions {
                 justify-content: flex-start;
-                margin-top: 10px;
+                margin-top: 0;
             }
 
             .my-projects-stats {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 6px;
+            }
+
+            .my-projects-stat-card {
+                padding: 7px 8px;
             }
 
             .my-projects-toolbar {
                 align-items: stretch;
-                padding: 12px;
+                padding: 10px;
             }
 
             .my-projects-filter {
