@@ -72,6 +72,16 @@
             color: var(--page-accent);
         }
 
+        .snapshot-coverage-summary {
+            background: rgba(33, 133, 208, 0.1);
+            color: #1f2937;
+            border-color: rgba(33, 133, 208, 0.22);
+        }
+
+        .snapshot-coverage-summary .count {
+            color: var(--page-accent);
+        }
+
         .snapshot-report-entry {
             margin-left: 2px;
         }
@@ -190,14 +200,6 @@
             color: #666;
             text-align: right;
             white-space: nowrap;
-        }
-
-        #mySnapshotListTable .api-coverage-cell {
-            width: 58px;
-            text-align: center;
-            color: #4a5568;
-            white-space: nowrap;
-            font-size: 0.88em;
         }
 
         #mySnapshotListTable .hover.dropdown > .icon {
@@ -382,6 +384,9 @@
                     <button type="button" class="ui button" id="snapshotSelectAllTrigger">全选</button>
                     <button type="button" class="ui button" id="snapshotClearSelectionTrigger">清空选择</button>
                 </div>
+                <div class="snapshot-selected-badge snapshot-coverage-summary" title="当前列表快照覆盖接口并集 / 应用总接口数">
+                    接口覆盖 <span class="count">${apiCoverageSummaryText!'0 / 0'}</span>
+                </div>
                 <div class="snapshot-selected-badge" title="当前已选中的快照数量">
                     已选 <span class="count" id="snapshotSelectedCount">0</span> 项
                 </div>
@@ -420,7 +425,6 @@
                         <colgroup>
                             <col style="width: 30px;">
                             <col>
-                            <col style="width: 58px;">
                             <col style="width: 68px;">
                             <col style="width: 34px;">
                         </colgroup>
@@ -435,9 +439,6 @@
                                 </td>
                                 <td class="snapshot-name-cell" title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
-                                </td>
-                                <td class="api-coverage-cell" title="接口覆盖（已覆盖数 / 总数）">
-                                    ${snap.apiCoverageText!'0 / 0'}
                                 </td>
                                 <td class="right aligned meta-text">
                                     <span title="${snap.updateTimeText!'-'}">${snap.updateTimeRelativeText!'-'}</span>
@@ -480,7 +481,7 @@
                         </#list>
                         <#if snapshots?size == 0>
                             <tr id="mySnapshotEmptyRow" class="empty-state-row">
-                                <td colspan="5">暂无数据</td>
+                                <td colspan="4">暂无数据</td>
                             </tr>
                         </#if>
                         </tbody>
@@ -606,7 +607,7 @@
             function ensureMySnapshotEmptyState() {
                 var hasDataRow = $('#mySnapshotTableBody tr[data-snapshot-id]').length > 0;
                 if (!hasDataRow && $('#mySnapshotEmptyRow').length === 0) {
-                    $('#mySnapshotTableBody').append('<tr id="mySnapshotEmptyRow" class="empty-state-row"><td colspan="5">暂无数据</td></tr>');
+                    $('#mySnapshotTableBody').append('<tr id="mySnapshotEmptyRow" class="empty-state-row"><td colspan="4">暂无数据</td></tr>');
                 }
                 if (hasDataRow) {
                     $('#mySnapshotEmptyRow').remove();

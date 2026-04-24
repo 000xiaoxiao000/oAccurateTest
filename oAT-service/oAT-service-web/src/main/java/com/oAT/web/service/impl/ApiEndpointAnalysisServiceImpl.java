@@ -49,20 +49,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.UUID;
+import java.util.*;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -115,11 +102,16 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
 
     @Override
     public ApiEndpointCoverageVo calculateCoverage(String appId, String traceId) {
+        return calculateCoverage(appId, StringUtils.hasText(traceId) ? Collections.singletonList(traceId) : Collections.emptyList());
+    }
+
+    @Override
+    public ApiEndpointCoverageVo calculateCoverage(String appId, java.util.Collection<String> traceIds) {
         List<ApiEndpointIndex> endpoints = apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(appId);
         if (endpoints == null || endpoints.isEmpty()) {
             return new ApiEndpointCoverageVo(0, 0);
         }
-        Map<String, Integer> hitMap = buildCoverageMap(appId, traceId);
+        Map<String, Integer> hitMap = buildCoverageMap(appId, traceIds);
         int coveredCount = 0;
         for (ApiEndpointIndex endpoint : endpoints) {
             if (resolveHitCount(hitMap, endpoint.getEndpointType(), endpoint.getHttpMethod(), endpoint.getUrl()) > 0) {
@@ -418,9 +410,17 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
     }
 
     private Map<String, Integer> buildCoverageMap(String appId, String traceId) {
+        return buildCoverageMap(appId, StringUtils.hasText(traceId) ? Collections.singletonList(traceId) : Collections.emptyList());
+    }
+
+    private Map<String, Integer> buildCoverageMap(String appId, java.util.Collection<String> traceIds) {
         Map<String, TraceNodeIndex> traceMap = new LinkedHashMap<>();
-        if (StringUtils.hasText(traceId)) {
-            addTraceIndexes(traceMap, traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 10000)), appId);
+        if (traceIds != null) {
+            for (String traceId : traceIds) {
+                if (StringUtils.hasText(traceId)) {
+                    addTraceIndexes(traceMap, traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 10000)), appId);
+                }
+            }
         }
         return buildCoverageMap(traceMap);
     }
