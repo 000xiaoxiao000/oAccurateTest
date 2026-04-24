@@ -64,6 +64,12 @@ public class Usecase implements Serializable, StandardDate{
      */
     @Field(type = FieldType.Keyword)
     private String lastUpdateAuthor;
+    /**
+     * 是否开放共享访问
+     */
+    @Field(type = FieldType.Boolean)
+    private Boolean share;
+
     // 该字段值有可能为超出256 keyword 的限制
     // 执行的源代码堆栈 格式：类名 方法名 方法签名 示例如下：
     //org/eclipse/jetty/servlet/DefaultServlet doGet (Ljavax/servlet/http/HttpServletRequest;Ljavax/servlet/http/HttpServletResponse;)V
@@ -164,6 +170,14 @@ public class Usecase implements Serializable, StandardDate{
 
     public void setLastUpdateAuthor(String lastUpdateAuthor) {
         this.lastUpdateAuthor = lastUpdateAuthor;
+    }
+
+    public Boolean getShare() {
+        return share;
+    }
+
+    public void setShare(Boolean share) {
+        this.share = share;
     }
 
     public String[] getSrcStack() {

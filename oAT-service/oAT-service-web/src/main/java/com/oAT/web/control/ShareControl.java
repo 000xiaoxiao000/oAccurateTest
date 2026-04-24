@@ -60,6 +60,10 @@ public class ShareControl {
             model.addAttribute("errorMessage", "找不到指定用例");
             return "forward:/error/404";
         }
+        if (!BooleanUtils.isTrue(index.getUsecase().getShare())) {
+            model.addAttribute("errorMessage", "当前用例未开放共享");
+            return "forward:/error/404";
+        }
         String projectId = index.getUsecase().getProjectId();
         ProjectVo project = projectService.getProject(projectId);
         if (project == null) {

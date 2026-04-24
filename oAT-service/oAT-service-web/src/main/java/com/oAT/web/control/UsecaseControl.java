@@ -334,6 +334,20 @@ public class UsecaseControl {
         return new ResultNotified<>(true, "用例删除成功");
     }
 
+    @RequestMapping("/openShare/{id}")
+    @ResponseBody
+    public ResultNotified<String> openShareUsecase(@PathVariable String projectId, @SessionAttribute UserVo user, @PathVariable String id) {
+        usecaseService.setShareState(projectId, user.getId(), id, true);
+        return new ResultNotified<>(true, "用例共享已开启");
+    }
+
+    @RequestMapping("/closeShare/{id}")
+    @ResponseBody
+    public ResultNotified<String> closeShareUsecase(@PathVariable String projectId, @SessionAttribute UserVo user, @PathVariable String id) {
+        usecaseService.setShareState(projectId, user.getId(), id, false);
+        return new ResultNotified<>(true, "用例共享已关闭");
+    }
+
     @RequestMapping("/template/download")
     public void downloadTemplate(HttpServletResponse response) throws IOException {
         usecaseFileService.downloadTemplate(response);
