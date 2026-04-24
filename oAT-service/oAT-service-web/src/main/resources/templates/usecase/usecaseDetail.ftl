@@ -12,14 +12,13 @@
 
     <style>
         body {
-            background: #f6f8fb;
+            background: var(--oat-bg);
             scroll-behavior: smooth;
         }
 
         .usecase-page {
-            max-width: 1320px;
-            margin: 0 auto 40px;
-            padding: 0 20px;
+            width: min(1180px, calc(100vw - 32px));
+            margin: 0 auto 32px;
         }
 
         .usecase-toolbar {
@@ -27,7 +26,7 @@
             justify-content: space-between;
             align-items: center;
             gap: 12px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         .usecase-quick-meta {
@@ -40,13 +39,15 @@
         .usecase-chip {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 7px 12px;
+            gap: 4px;
+            padding: 3px 9px;
+            border: 1px solid rgba(33, 133, 208, .24);
             border-radius: 999px;
-            background: rgba(0, 181, 173, 0.08);
-            color: #008b87;
+            background: rgba(33, 133, 208, .08);
+            color: var(--oat-accent);
             font-size: 12px;
             font-weight: 600;
+            line-height: 1.4;
         }
 
         .usecase-layout {
@@ -64,10 +65,10 @@
         .usecase-side-card,
         .usecase-main-card,
         .usecase-section {
-            background: #ffffff;
-            border: 1px solid #e8edf4;
-            border-radius: 14px;
-            box-shadow: 0 10px 28px rgba(31, 45, 61, 0.05);
+            background: var(--oat-surface);
+            border: 1px solid rgba(15, 23, 42, .08);
+            border-radius: var(--oat-radius-lg);
+            box-shadow: var(--oat-shadow-sm);
         }
 
         .usecase-side-card {
@@ -143,21 +144,23 @@
         .usecase-main {
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 18px;
         }
 
         .usecase-main-card {
             position: relative;
             overflow: hidden;
-            padding: 28px 32px;
+            padding: 22px 26px;
         }
 
         .usecase-main-card:before {
             content: '';
             position: absolute;
             inset: 0 0 auto 0;
-            height: 140px;
-            background: linear-gradient(135deg, rgba(0, 181, 173, 0.1) 0%, rgba(0, 181, 173, 0) 62%);
+            height: 112px;
+            background:
+                radial-gradient(circle at 96% 16%, rgba(0, 181, 173, .12), transparent 24%),
+                linear-gradient(135deg, #fff 0%, #f7fbff 100%);
             pointer-events: none;
         }
 
@@ -176,9 +179,9 @@
 
         .usecase-title {
             margin: 0;
-            font-size: 34px;
-            line-height: 1.25;
-            color: #1f2d3d;
+            font-size: 28px;
+            line-height: 1.28;
+            color: var(--oat-text);
             word-break: break-word;
         }
 
@@ -199,55 +202,50 @@
             z-index: 1;
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-            margin-top: 24px;
+            gap: 10px;
+            margin-top: 18px;
         }
 
         .usecase-header-divider {
             position: relative;
             z-index: 1;
-            margin-top: 22px;
-            padding-top: 18px;
-            border-top: 1px dashed #dce5ee;
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px dashed var(--oat-border-strong);
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            color: #6f7e8c;
-            font-size: 13px;
+            color: var(--oat-text-muted);
+            font-size: 12px;
         }
 
         .summary-item {
             position: relative;
             overflow: hidden;
-            padding: 16px 18px;
-            border-radius: 12px;
-            background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
-            border: 1px solid #edf2f7;
+            min-height: 58px;
+            padding: 10px 12px;
+            border-radius: var(--oat-radius-md);
+            background: var(--oat-bg-soft);
+            border: 1px solid var(--oat-border);
         }
 
         .summary-item:after {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 72px;
-            height: 72px;
-            background: radial-gradient(circle, rgba(0, 181, 173, 0.14) 0%, rgba(0, 181, 173, 0) 72%);
-            transform: translate(22px, -22px);
+            display: none;
         }
 
         .summary-label {
             font-size: 12px;
-            color: #7f8c98;
-            letter-spacing: 0.08em;
+            color: var(--oat-text-muted);
+            letter-spacing: 0;
         }
 
         .summary-value {
-            margin-top: 8px;
-            font-size: 26px;
+            margin-top: 4px;
+            font-size: 18px;
+            line-height: 1.2;
             font-weight: 700;
-            color: #22313f;
+            color: var(--oat-text);
         }
 
         .usecase-cover {
@@ -283,7 +281,7 @@
 
         .usecase-section {
             position: relative;
-            padding: 24px 28px;
+            padding: 20px 22px;
             scroll-margin-top: 100px;
         }
 
@@ -695,12 +693,14 @@
 <#assign usecaseItemActive="active">
 <#include "../projectHeader.ftl">
 
-<div class="ui small breadcrumb" style="margin: 5px">
+<div class="ui container app-unified-page">
+    <div class="ui small breadcrumb app-unified-breadcrumb">
     <a class="section" href="/p/${project.id}/home">${project.name}</a>
     <span class="divider">/</span>
     <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
     <span class="divider">/</span>
     <div class="active section">用例详情</div>
+    </div>
 </div>
 <div class="usecase-page">
     <div class="usecase-toolbar">

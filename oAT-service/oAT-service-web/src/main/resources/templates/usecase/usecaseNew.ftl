@@ -17,13 +17,12 @@
 
     <style>
         body {
-            background: #f6f8fb;
+            background: var(--oat-bg);
         }
 
         .usecase-edit-page {
-            max-width: 1380px;
-            margin: 0 auto 36px;
-            padding: 0 20px;
+            width: min(1180px, calc(100vw - 32px));
+            margin: 0 auto 32px;
         }
 
         .usecase-edit-toolbar {
@@ -31,7 +30,7 @@
             justify-content: space-between;
             align-items: center;
             gap: 12px;
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
 
         .usecase-edit-meta {
@@ -44,43 +43,45 @@
         .usecase-meta-chip {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            padding: 7px 12px;
+            gap: 4px;
+            padding: 3px 9px;
+            border: 1px solid rgba(33, 133, 208, .24);
             border-radius: 999px;
-            background: rgba(0, 181, 173, 0.08);
-            color: #008b87;
+            background: rgba(33, 133, 208, .08);
+            color: var(--oat-accent);
             font-size: 12px;
             font-weight: 600;
+            line-height: 1.4;
         }
 
         .usecase-edit-shell {
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 18px;
         }
 
         .usecase-edit-hero,
         .usecase-edit-card,
         .usecase-editor-card {
-            background: #ffffff;
-            border: 1px solid #e8edf4;
-            border-radius: 16px;
-            box-shadow: 0 12px 30px rgba(31, 45, 61, 0.05);
+            background: var(--oat-surface);
+            border: 1px solid rgba(15, 23, 42, .08);
+            border-radius: var(--oat-radius-lg);
+            box-shadow: var(--oat-shadow-sm);
         }
 
         .usecase-edit-hero {
             position: relative;
             overflow: hidden;
-            padding: 28px 32px;
+            padding: 22px 26px;
         }
 
         .usecase-edit-hero:before {
             content: '';
             position: absolute;
-            inset: 0 auto auto 0;
-            width: 320px;
-            height: 180px;
-            background: radial-gradient(circle at top left, rgba(0, 181, 173, 0.14) 0%, rgba(0, 181, 173, 0) 72%);
+            inset: 0;
+            background:
+                radial-gradient(circle at 96% 16%, rgba(0, 181, 173, .12), transparent 24%),
+                linear-gradient(135deg, #fff 0%, #f7fbff 100%);
             pointer-events: none;
         }
 
@@ -121,10 +122,10 @@
             box-shadow: none !important;
             background: transparent !important;
             padding: 0 !important;
-            font-size: 34px !important;
-            line-height: 1.25 !important;
+            font-size: 28px !important;
+            line-height: 1.28 !important;
             font-weight: 700 !important;
-            color: #1f2d3d !important;
+            color: var(--oat-text) !important;
         }
 
         .usecase-edit-title-field input::placeholder {
@@ -144,45 +145,50 @@
             z-index: 1;
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-            margin-top: 24px;
+            gap: 10px;
+            margin-top: 18px;
         }
 
         .summary-box {
-            padding: 16px 18px;
-            border-radius: 12px;
-            background: linear-gradient(180deg, #fbfdff 0%, #f4f8fc 100%);
-            border: 1px solid #edf2f7;
+            min-height: 58px;
+            padding: 10px 12px;
+            border-radius: var(--oat-radius-md);
+            background: var(--oat-bg-soft);
+            border: 1px solid var(--oat-border);
         }
 
         .summary-box-label {
             font-size: 12px;
-            color: #7f8c98;
-            letter-spacing: 0.08em;
+            color: var(--oat-text-muted);
+            letter-spacing: 0;
         }
 
         .summary-box-value {
-            margin-top: 8px;
-            font-size: 24px;
+            margin-top: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 18px;
+            line-height: 1.2;
             font-weight: 700;
-            color: #22313f;
+            color: var(--oat-text);
         }
 
         .usecase-edit-layout {
             display: grid;
-            grid-template-columns: 380px minmax(0, 1fr);
-            gap: 24px;
+            grid-template-columns: 320px minmax(0, 1fr);
+            gap: 18px;
             align-items: start;
         }
 
         .usecase-edit-sidebar {
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 18px;
         }
 
         .usecase-edit-card {
-            padding: 22px 22px 24px;
+            padding: 20px;
         }
 
         .card-title {
@@ -407,12 +413,14 @@
 <#assign usecaseItemActive="active">
 <#include "../projectHeader.ftl">
 
-<div class="ui small breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
-    <span class="divider">/</span>
-    <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
-    <span class="divider">/</span>
-    <div class="active section">新增用例</div>
+<div class="ui container app-unified-page">
+    <div class="ui small breadcrumb app-unified-breadcrumb">
+        <a class="section" href="/p/${project.id}/home">${project.name}</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/usecase/list">用例中心</a>
+        <span class="divider">/</span>
+        <div class="active section">新增用例</div>
+    </div>
 </div>
 
 <div class="usecase-edit-page">

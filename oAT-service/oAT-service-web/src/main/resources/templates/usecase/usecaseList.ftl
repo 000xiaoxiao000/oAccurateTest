@@ -60,6 +60,15 @@
                     <div class="item" data-value="name">名称</div>
                 </div>
             </div>
+            <a class="ui basic mini button" href="/p/${project.id}/usecase/template/download">
+                <i class="download icon"></i>下载模板
+            </a>
+            <button type="button" class="ui basic mini button" onclick="selectUsecaseImportFile()">
+                <i class="upload icon"></i>上传用例
+            </button>
+            <a class="ui basic mini button" href="/p/${project.id}/usecase/export?directory=${currentDir}<#if sort?? && sort?has_content>&sort=${sort}</#if><#if keyword?? && keyword?has_content>&keyword=${keyword?url}</#if>">
+                <i class="file excel outline icon"></i>导出
+            </a>
             <div id="newAction" class="ui pointing dropdown item" tabindex="-1">
                 <div class="ui primary button">新建</div>
                 <div class="menu" tabindex="1">
@@ -300,6 +309,7 @@
 </div>
 
 <!-- 删除用例弹出框-->
+<input id="usecaseImportFile" type="file" accept=".xlsx,.xls" style="display: none;">
 <div id="deleteUsecaseDialog" class="ui small modal">
     <div class="header">删除用例</div>
     <div class="ui negative message">
@@ -459,6 +469,39 @@
         });
         $("#deleteUsecaseDialog").modal('show');
     }
+
+    function selectUsecaseImportFile() {
+        $('#usecaseImportFile').val('');
+        $('#usecaseImportFile').trigger('click');
+    }
+
+    $('#usecaseImportFile').on('change', function () {
+        var file = this.files && this.files.length > 0 ? this.files[0] : null;
+        if (!file) {
+            return;
+        }
+        var formData = new FormData();
+        formData.append('file', file);
+        formData.append('directory', '${currentDir}');
+        $.ajax({
+            url: '/p/${project.id}/usecase/upload',
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function (resultInform) {
+                if (resultInform && resultInform.result) {
+                    showToast(getResultMessage(resultInform, '用例上传成功'), 'success');
+                    reloadUsecaseList();
+                    return;
+                }
+                showToast(getResultMessage(resultInform, '用例上传失败'), 'error');
+            },
+            error: function () {
+                showToast('用例上传失败', 'error');
+            }
+        });
+    });
 
     function doCreateFolder() {
         var resultInform = $.ajax({
