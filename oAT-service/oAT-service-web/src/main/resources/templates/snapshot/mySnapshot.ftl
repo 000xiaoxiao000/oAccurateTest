@@ -116,6 +116,15 @@
             vertical-align: middle;
         }
 
+        #mySnapshotListTable tbody td.snapshot-action-cell {
+            overflow: visible;
+            position: relative;
+        }
+
+        #mySnapshotListTable .snapshot-action-cell .ui.dropdown .menu {
+            z-index: 1000;
+        }
+
         #mySnapshotListTable tbody tr.focus .snapshot-title,
         #mySnapshotListTable tbody tr.selected .snapshot-title {
             color: var(--page-accent);
@@ -433,7 +442,7 @@
                                 <td class="right aligned meta-text">
                                     <span title="${snap.updateTimeText!'-'}">${snap.updateTimeRelativeText!'-'}</span>
                                 </td>
-                                <td style="width: 34px; text-align: center; padding-left: 0.28em; padding-right: 0.28em;">
+                                <td class="snapshot-action-cell" style="width: 34px; text-align: center; padding-left: 0.28em; padding-right: 0.28em;">
                                     <div class="ui hover dropdown">
                                         <i class="setting link icon"></i>
                                         <div class="ui left menu">
