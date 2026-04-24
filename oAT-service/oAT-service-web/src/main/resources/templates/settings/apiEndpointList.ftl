@@ -199,7 +199,7 @@
                 </div>
                 <h1 class="project-settings-hero-title">接口扫描与覆盖</h1>
                 <p class="project-settings-hero-desc">
-                    支持优先使用系统中已通过 Git 拉取并缓存的源码 zip，也可手动上传源码 zip 或制品包 jar/war。系统会基于 AST 和 ASM 扫描 HTTP、HTTP Client、Feign、RPC 接口并建立索引。
+                    支持优先使用系统中已通过 Git 拉取并缓存的源码 zip，也可手动上传源码 zip 或制品包 jar/war。系统会扫描 HTTP、HTTP Client、Feign、RPC 接口并建立索引。
                 </p>
                 <div class="project-settings-meta">
                     <div class="project-settings-meta-card">
