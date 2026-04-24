@@ -14,7 +14,7 @@
 </div>
 
 <!--内容主体-->
-<div class="ui grid container" style="margin-top: 50px">
+<div class="ui grid container project-home-page">
     <!-- 项目动态 -->
     <div class="ui ten wide column">
         <h3 class="ui header dividing">项目动态</h3>

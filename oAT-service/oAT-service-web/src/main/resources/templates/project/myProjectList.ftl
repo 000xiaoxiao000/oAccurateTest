@@ -6,7 +6,6 @@
    <#include "../common.ftl">
     <style>
         .my-projects-page {
-            margin-top: 42px;
             margin-bottom: 48px;
         }
 
@@ -531,10 +530,6 @@
         }
 
         @media only screen and (max-width: 767px) {
-            .my-projects-page {
-                margin-top: 24px;
-            }
-
             .my-projects-hero {
                 padding: 22px 20px !important;
             }
