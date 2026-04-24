@@ -16,6 +16,7 @@ import java.lang.instrument.Instrumentation;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.ProtectionDomain;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,7 +34,8 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
 
     private static final String TARGET_CLASS = "io.lettuce.core.protocol.DefaultEndpoint";
     private static final String TARGET_METHOD = "write";
-    private static final String TARGET_METHOD_DESC = "(Lio/lettuce/core/protocol/RedisCommand;)Lio/lettuce/core/protocol/RedisCommand;";
+    private static final String TARGET_METHOD_DESC = "(Lio/lettuce/core/protocol/RedisCommand;)" +
+            "Lio/lettuce/core/protocol/RedisCommand;";
 
     private static final String BEGIN_SRC;
     private static final String END_SRC;
@@ -60,13 +62,15 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
 
         END_SRC = RedisCollects.class.getName() + " instance = " +
                 RedisCollects.class.getName() + ".INSTANCE;\r\n" +
-                "if (instance.getCurrentRedisInfo() != null && instance.getTraceContext().getTraceSession() != null) {\r\n" +
+                "if (instance.getCurrentRedisInfo() != null && instance.getTraceContext().getTraceSession() != null) " +
+                "{\r\n" +
                 "    instance.end($1.getType().toString(), $1.getArgs().toCommandString());\r\n" +
                 "}";
 
         ERROR_SRC = RedisCollects.class.getName() + " instance = " +
                 RedisCollects.class.getName() + ".INSTANCE;\r\n" +
-                "if (instance.getCurrentRedisInfo() != null && instance.getTraceContext().getTraceSession() != null) {\r\n" +
+                "if (instance.getCurrentRedisInfo() != null && instance.getTraceContext().getTraceSession() != null) " +
+                "{\r\n" +
                 "    instance.error(e);\r\n" +
                 "}";
     }
@@ -89,19 +93,26 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
 
     public void begin(String host, String port) {
         if (host == null || port == null) {
-            logger.warn("[Agent-begin] host or port is null");
+            logger.warn("[Agent-begin]host: " + host + " or port: " + port + "is null");
             return;
         }
-        RedisTraceNode info = new RedisTraceNode();
-        info.setHost(host);
-        info.setPort(port);
-        info.setBeginTime(System.currentTimeMillis());
-        this.currentRedisInfo = info;
+        if (traceContext == null || traceContext.getTraceSession() == null) {
+            logger.warn("[Agent-begin]traceContext or traceContext TraceSession is null");
+            return;
+        }
+        TraceSession session = traceContext.getTraceSession();
+        RedisTraceNode redisTraceNode = new RedisTraceNode();
+        redisTraceNode.setHost(host);
+        redisTraceNode.setPort(port);
+        redisTraceNode.setBeginTime(Instant.now().toEpochMilli());
+        redisTraceNode.setTraceId(session.getTraceId());
+        redisTraceNode.setTraceNodeId(session.getNextNodeId());
+        this.currentRedisInfo = redisTraceNode;
     }
 
     public void end(String type, String cmd) {
         try {
-            RedisTraceNode currentInfo = this.currentRedisInfo;
+            RedisTraceNode currentInfo = getCurrentRedisInfo();
             if (currentInfo == null) {
                 logger.debug("[Agent-debug] currentInfo is null, skip end.");
                 return;
@@ -126,8 +137,6 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
             if (currentInfo.getTraceNodeId() != null
                     && currentInfo.getTraceId() != null
                     && !currentInfo.getTraceId().isEmpty()) {
-                currentInfo.setTraceId(session.getTraceId());
-                currentInfo.setTraceNodeId(session.getNextNodeId());
                 session.saveNode(currentInfo);
 
                 updateCommandStats(type, useTime);
@@ -194,7 +203,8 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
     }
 
     @Override
-    public byte[] transform(ClassLoader loader, String className, ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+    public byte[] transform(ClassLoader loader, String className, ProtectionDomain protectionDomain,
+                            byte[] classfileBuffer) {
         if (!redisClient.contains(className)) {
             return null;
         }
@@ -229,7 +239,8 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
                     if (ctClass != null) {
                         try {
                             ctClass.detach();
-                        } catch (Throwable ignore) {}
+                        } catch (Throwable ignore) {
+                        }
                     }
                 }
             }
