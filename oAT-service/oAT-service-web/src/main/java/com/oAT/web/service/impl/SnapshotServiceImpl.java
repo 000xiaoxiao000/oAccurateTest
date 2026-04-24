@@ -31,6 +31,8 @@ public class SnapshotServiceImpl implements SnapshotService{
     TraceNodeRepository traceNodeRepository;
     @Autowired
     private UsecaseService usecaseService;
+    @Autowired
+    private com.oAT.web.service.ApiEndpointAnalysisService apiEndpointAnalysisService;
 
     @Override
     public SnapshotVo addSnapshot(Snapshot snapshot, Collection<TraceNode> nodes) {
@@ -200,7 +202,21 @@ public class SnapshotServiceImpl implements SnapshotService{
         }
         vo.setUpdateTimeText(formatDateTime(vo.getUpdateTime()));
         vo.setUpdateTimeRelativeText(formatRelativeTime(vo.getUpdateTime()));
+        fillApiCoverage(vo);
         return vo;
+    }
+
+    private void fillApiCoverage(SnapshotVo vo) {
+        if (!StringUtils.hasText(vo.getAppId()) || !StringUtils.hasText(vo.getTraceId())) {
+            vo.setApiCoveredCount(0);
+            vo.setApiTotalCount(0);
+            vo.setApiCoverageText("0 / 0");
+            return;
+        }
+        com.oAT.web.service.entity.ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(vo.getAppId(), vo.getTraceId());
+        vo.setApiCoveredCount(coverage.getCoveredCount());
+        vo.setApiTotalCount(coverage.getTotalCount());
+        vo.setApiCoverageText(coverage.getDisplayText());
     }
 
     private String formatDateTime(Date date) {

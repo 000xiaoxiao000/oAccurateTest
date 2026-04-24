@@ -12,30 +12,44 @@
 <#include "../projectHeader.ftl">
 
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
-    <span class="divider">/</span>
-    <a class=" section" href="/p/${project.id}/${appId}/version/list">${appInfo.name}</a>
-    <span class="divider">/</span>
-    <div class="active section">版本列表</div>
+<div class="ui container">
+    <div class="ui small breadcrumb version-breadcrumb">
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${appId}/version/list">${appInfo.name}</a>
+        <span class="divider">/</span>
+        <div class="active section">版本列表</div>
+    </div>
 </div>
 
 <!--内容主体-->
-<div class="ui grid attached  container" style="margin-top: 14px">
-    <!-- 左边导航菜单 -->
-    <div class="ui four wide column">
-        <#assign appName=appInfo.name/>
-        <#assign versionListActive="active"/>
-        <#include "LeftNavigationMenu.ftl">
-    </div>
-    <!-- 中间内容 -->
-    <div class="ui twelve wide column">
-        <h4 class="ui header top attached block">
-             ${appInfo.name}-版本列表
-            <a style="float: right;color: green" href="/p/${project.id}/${appId}/version/new"><i
-                    class="ui add icon"></i>新增版本</a>
-        </h4>
-        <div class="ui attached segment">
+<div class="ui container version-center-page">
+    <div class="version-page-layout">
+        <!-- 左边导航菜单 -->
+        <div class="version-page-side">
+            <#assign appName=appInfo.name/>
+            <#assign versionListActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
+        </div>
+        <!-- 中间内容 -->
+        <div class="version-page-main">
+            <div class="version-page-header">
+                <div>
+                    <div class="version-page-kicker">
+                        <i class="list icon"></i>
+                        版本中心
+                    </div>
+                    <h1 class="version-page-title">${appInfo.name}-版本列表</h1>
+                    <p class="version-page-desc">查看应用版本、代码环境和覆盖率状态，快速设置当前版本或进入报告。</p>
+                </div>
+                <div class="version-page-actions">
+                    <a class="ui primary button" href="/p/${project.id}/${appId}/version/new">
+                        <i class="plus icon"></i>新增版本
+                    </a>
+                </div>
+            </div>
+            <div class="version-page-body">
+                <div class="version-table-wrap">
             <table class="ui celled table">
                 <thead>
                 <tr>
@@ -122,6 +136,8 @@
                 </tr>
                 </tfoot>
             </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>

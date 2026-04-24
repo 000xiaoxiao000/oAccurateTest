@@ -12,39 +12,51 @@
 <#include "../projectHeader.ftl">
 
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 20px 0px">
-    <a class="section" href="/p/${project.id}/home">${project.name}</a>
-    <i class="right angle icon divider"></i>
-    <div class="active section">版本中心</div>
+<div class="ui container">
+    <div class="ui small breadcrumb version-breadcrumb">
+        <a class="section" href="/p/${project.id}/home">${project.name}</a>
+        <i class="right angle icon divider"></i>
+        <div class="active section">版本中心</div>
+    </div>
 </div>
 
 <!--内容主体-->
-<div class="ui text container  " style="margin-top: 50px">
-    <!-- 中间内容 -->
-    <div class="ui message">
-        <i class="close icon"></i>
-        <div class="header">
-            操作提示
+<div class="ui container version-apps-page">
+    <div class="version-apps-card">
+        <div class="version-apps-header">
+            <div>
+                <div class="version-apps-kicker">
+                    <i class="tags icon"></i>
+                    版本中心
+                </div>
+                <h1 class="version-apps-title">应用列表</h1>
+                <p class="version-apps-desc">选择应用进入版本管理，可新增版本、生成报告或执行版本比对。</p>
+            </div>
         </div>
-        <p>请在列表中选择你要进行版本管理的应用</p>
-    </div>
-    <h3 class="ui top attached block header">应用列表</h3>
-    <div class="ui attached segment" style="padding: 0px">
-        <table class="ui selectable   table" style="margin: -1px -1px -1px -1px">
-            <tbody>
-            <#list  apps as app>
-            <tr>
-                <td class=""><a href="/p/${project.id}/${app.id}/version/list">${app.name}</td>
-                <td class="right aligned">
-                    <a class="ui small button " href="/p/${project.id}/${app.id}/version/new">新增版本</a>
-                    <a class="ui small button primary" href="/p/${project.id}/${app.id}/version/compare">比对版本</a>
-                </td>
-            </tr>
-            </#list>
-
-            </tbody>
-        </table>
-
+        <div class="version-apps-body">
+            <div class="ui info message version-apps-tip">
+                <i class="close icon"></i>
+                <div class="header">
+                    操作提示
+                </div>
+                <p>请在列表中选择你要进行版本管理的应用</p>
+            </div>
+            <div class="version-table-wrap">
+                <table class="ui selectable table">
+                    <tbody>
+                    <#list  apps as app>
+                    <tr>
+                        <td><a class="version-app-row-title" href="/p/${project.id}/${app.id}/version/list">${app.name}</a></td>
+                        <td class="right aligned">
+                            <a class="ui small button" href="/p/${project.id}/${app.id}/version/new">新增版本</a>
+                            <a class="ui small button primary" href="/p/${project.id}/${app.id}/version/compare">比对版本</a>
+                        </td>
+                    </tr>
+                    </#list>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
 

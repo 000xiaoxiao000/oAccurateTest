@@ -63,6 +63,9 @@ public class SystemSnapshotControl {
     @Autowired
     UsecaseService usecaseService;
 
+    @Autowired
+    private ApiEndpointAnalysisService apiEndpointAnalysisService;
+
     // 打开系统快照列表
     @RequestMapping("/list")
     public String openList(@PathVariable String projectId, @PathVariable String appId, String directoryId, String sort,
@@ -106,6 +109,7 @@ public class SystemSnapshotControl {
         model.addAttribute("snapshots", snapshots);
         model.addAttribute("snapshotTimeTextMap", buildSnapshotTimeTextMap(snapshots));
         model.addAttribute("snapshotRelativeTimeTextMap", buildSnapshotRelativeTimeTextMap(snapshots));
+        model.addAttribute("snapshotApiCoverageTextMap", buildSnapshotApiCoverageTextMap(snapshots));
         model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
         model.addAttribute("currentDir", directoryId);
         model.addAttribute("dirTiers", appService.getDirectoryTiers(appId, directoryId));
@@ -361,6 +365,19 @@ public class SystemSnapshotControl {
         Map<String, String> result = new HashMap<>();
         for (SystemSnapshot snapshot : snapshots) {
             result.put(snapshot.getId(), formatRelativeTime(snapshot.getVersionLastUpdate()));
+        }
+        return result;
+    }
+
+    private Map<String, String> buildSnapshotApiCoverageTextMap(List<SystemSnapshot> snapshots) {
+        Map<String, String> result = new HashMap<>();
+        for (SystemSnapshot snapshot : snapshots) {
+            if (snapshot == null || !StringUtils.hasText(snapshot.getAppId()) || !StringUtils.hasText(snapshot.getTraceId())) {
+                result.put(snapshot == null ? "" : snapshot.getId(), "0 / 0");
+                continue;
+            }
+            com.oAT.web.service.entity.ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(snapshot.getAppId(), snapshot.getTraceId());
+            result.put(snapshot.getId(), coverage.getDisplayText());
         }
         return result;
     }

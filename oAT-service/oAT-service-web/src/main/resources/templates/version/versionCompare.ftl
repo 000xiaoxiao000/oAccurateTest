@@ -479,32 +479,39 @@
 <#assign versionItemActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
-    <span class="divider">/</span>
-    <a class=" section" href="/p/${project.id}/${app.id}/version/list">${app.name}</a>
-    <span class="divider">/</span>
-    <div class="active section">版本比对</div>
+<div class="ui container">
+    <div class="ui small breadcrumb version-breadcrumb">
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${app.id}/version/list">${app.name}</a>
+        <span class="divider">/</span>
+        <div class="active section">版本比对</div>
+    </div>
 </div>
 
 <!--内容主体-->
-<div class="ui grid attached container" style="margin-top: 14px">
-    <!-- 左边导航菜单 -->
-    <div class="ui four wide column">
-        <#assign appId=app.id/>
-        <#assign appName=app.name/>
-        <#assign versionCompareActive="active"/>
-        <#include "LeftNavigationMenu.ftl">
-    </div>
-    <!-- 中间内容 -->
-    <div class="ui twelve wide column">
-
-        <div class="ui attached positive message">
-            <div class="header">
-                开始比对版本
-            </div>
-            <p>基于 Git 或 制品包（JAR 包或 WAR 包）比对其内部文件差异，并根据差异分析出对系统的功能影响范围</p>
+<div class="ui container version-center-page">
+    <div class="version-page-layout">
+        <!-- 左边导航菜单 -->
+        <div class="version-page-side">
+            <#assign appId=app.id/>
+            <#assign appName=app.name/>
+            <#assign versionCompareActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
         </div>
+        <!-- 中间内容 -->
+        <div class="version-page-main">
+            <div class="version-page-header">
+                <div>
+                    <div class="version-page-kicker">
+                        <i class="exchange icon"></i>
+                        版本中心
+                    </div>
+                    <h1 class="version-page-title">版本比对</h1>
+                    <p class="version-page-desc">基于 Git 或制品包比对内部文件差异，并分析差异影响范围。</p>
+                </div>
+            </div>
+            <div class="version-page-body">
 
         <div class="ui attached segment git-compare-panel" style="min-height: 200px">
             <div class="ui top attached tabular menu">
@@ -749,6 +756,8 @@
                     </div>
                 </div>
             </#if>
+        </div>
+            </div>
         </div>
     </div>
 </div>

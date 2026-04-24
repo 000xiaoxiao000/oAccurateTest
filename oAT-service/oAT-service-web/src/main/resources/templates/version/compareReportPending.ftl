@@ -82,6 +82,37 @@
 <#assign versionItemActive="active">
 <#assign appId = appId!"">
 <#include "../projectHeader.ftl">
+<div class="ui container">
+    <div class="ui small breadcrumb version-breadcrumb">
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <#if appId?has_content>
+            <a class="section" href="/p/${project.id}/${appId}/version/report/list?tab=compare">报告列表</a>
+            <span class="divider">/</span>
+        </#if>
+        <div class="active section">比对报告生成中</div>
+    </div>
+</div>
+<div class="ui container version-center-page">
+    <div class="version-content-card">
+        <div class="version-page-header">
+            <div>
+                <div class="version-page-kicker">
+                    <i class="spinner loading icon"></i>
+                    版本中心
+                </div>
+                <h1 class="version-page-title">比对报告生成中</h1>
+                <p class="version-page-desc">报告正在生成或等待索引刷新，页面会自动重试并在可用后打开。</p>
+            </div>
+            <div class="version-page-actions">
+                <#if appId?has_content>
+                    <a class="ui button" href="/p/${project.id}/${appId}/version/report/list?tab=compare&highlightReportId=${reportId}">
+                        <i class="left arrow icon"></i>返回报告列表
+                    </a>
+                </#if>
+            </div>
+        </div>
+        <div class="version-page-body">
 <div class="compare-report-pending-wrap">
     <div class="compare-report-pending-card">
         <div class="compare-report-pending-dot"></div>
@@ -92,6 +123,9 @@
         <div id="comparePendingActions" class="compare-report-pending-actions">
             <a class="ui primary button" href="/p/${project.id}/${appId}/version/report/list?tab=compare&highlightReportId=${reportId}">返回报告列表</a>
             <a class="ui button" href="/p/${project.id}/version/report/detail/${reportId}">手动重试打开</a>
+        </div>
+    </div>
+</div>
         </div>
     </div>
 </div>

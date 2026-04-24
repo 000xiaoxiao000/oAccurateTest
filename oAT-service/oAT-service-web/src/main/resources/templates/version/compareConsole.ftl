@@ -384,32 +384,51 @@
 <#assign versionItemActive="active">
 <#include "../projectHeader.ftl">
 <!--面包屑导航-->
-<div class="ui breadcrumb" style="margin: 5px">
-    <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
-    <span class="divider">/</span>
-    <a class=" section" href="/p/${project.id}/${appInfo.id}/version/list">${appInfo.name}</a>
-    <span class="divider">/</span>
-    <div class="active section">版本比对</div>
+<div class="ui container">
+    <div class="ui small breadcrumb version-breadcrumb">
+        <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
+        <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/${appInfo.id}/version/list">${appInfo.name}</a>
+        <span class="divider">/</span>
+        <div class="active section">比对控制台</div>
+    </div>
 </div>
 
 <!--内容主体-->
-<div class="ui grid attached container" style="margin-top: 14px">
-    <div class="ui four wide column">
-        <#assign appId=appInfo.id/>
-        <#assign appName=appInfo.name/>
-        <#assign versionCompareActive="active"/>
-        <#include "LeftNavigationMenu.ftl">
-    </div>
+<div class="ui container version-center-page">
+    <div class="version-page-layout">
+        <div class="version-page-side">
+            <#assign appId=appInfo.id/>
+            <#assign appName=appInfo.name/>
+            <#assign versionCompareActive="active"/>
+            <#include "LeftNavigationMenu.ftl">
+        </div>
 
-    <div class="ui twelve wide column">
-        <div class="compare-shell">
+        <div class="version-page-main">
+            <div class="version-page-header">
+                <div>
+                    <div class="version-page-kicker">
+                        <i class="terminal icon"></i>
+                        版本中心
+                    </div>
+                    <h1 class="version-page-title">比对控制台</h1>
+                    <p class="version-page-desc">实时跟踪版本差异分析进度、统计结果和运行日志。</p>
+                </div>
+                <div class="version-page-actions">
+                    <a class="ui button" href="/p/${project.id}/${appInfo.id}/version/compare">
+                        <i class="left arrow icon"></i>返回版本比对
+                    </a>
+                    <a id="openReport" class="ui primary button" href="#" style="display: none">查看报告</a>
+                </div>
+            </div>
+            <div class="version-page-body">
+                <div class="compare-shell">
             <div class="compare-hero">
                 <div class="title-row">
                     <div>
                         <div class="main-title">${compareJob.name}</div>
                         <div class="sub-title">版本差异分析正在执行，下面会实时展示进度、统计与日志。</div>
                     </div>
-                    <a id="openReport" class="ui inverted button" href="#" style="display: none">查看报告</a>
                 </div>
                 <div class="compare-badges">
                     <#if compareJob.gitBranch??>
@@ -489,6 +508,8 @@
                     <h4 class="ui header">实时日志</h4>
                 </div>
                 <div id="compareLogger"></div>
+            </div>
+        </div>
             </div>
         </div>
     </div>

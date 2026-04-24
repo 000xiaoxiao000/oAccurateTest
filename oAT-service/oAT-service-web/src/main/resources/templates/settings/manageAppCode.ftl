@@ -261,7 +261,7 @@
                 </div>
                 <h1 class="project-settings-hero-title">应用与代码管理</h1>
                 <p class="project-settings-hero-desc">
-                    统一管理应用关联仓库、接口扫描与版本列表，帮助团队将应用资产与代码资产保持一致。
+                    统一管理应用关联仓库与版本列表，帮助团队将应用资产与代码资产保持一致。
                 </p>
                 <div class="project-settings-meta">
                     <div class="project-settings-meta-card">
@@ -281,7 +281,7 @@
 
             <div id="center-content" class="project-settings-content">
                 <h2 class="project-settings-section-title">应用资产入口</h2>
-                <p class="project-settings-section-desc">对于主导应用，可进入仓库配置、接口扫描与覆盖、版本列表等关键资产入口。</p>
+                <p class="project-settings-section-desc">对于主导应用，可进入仓库配置、版本列表等关键资产入口。</p>
 
                 <div class="project-settings-table-wrap">
                     <table class="ui celled table">
@@ -320,9 +320,6 @@
                                                 <div class="left menu">
                                                     <a class="item" href="/p/${project.id}/app/${app.id}/repository">
                                                         <i class="edit icon"></i>仓库配置
-                                                    </a>
-                                                    <a class="item" href="/p/${project.id}/app/${app.id}/api-endpoints">
-                                                        <i class="sitemap icon"></i>接口扫描与覆盖
                                                     </a>
                                                     <a class="item" href="/p/${project.id}/${app.id}/version/list">
                                                         <i class="list icon"></i>版本列表

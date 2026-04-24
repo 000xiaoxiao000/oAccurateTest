@@ -77,12 +77,19 @@
         }
 
         .snapshot-select-cell {
-            width: 42px;
-            text-align: center;
+            width: 30px;
+            text-align: left;
+            padding-left: 0.28em !important;
+            padding-right: 0.28em !important;
         }
 
         .snapshot-select-cell .ui.checkbox {
             margin: 0;
+            min-height: 17px;
+        }
+
+        .snapshot-select-cell .ui.checkbox label {
+            padding-left: 17px;
         }
 
         .snapshot-detail-body .ui.secondary.compact.menu {
@@ -100,7 +107,13 @@
 
         #mySnapshotListTable {
             table-layout: fixed;
+            width: 100%;
             border: 1px solid rgba(34, 36, 38, .08);
+        }
+
+        #mySnapshotListTable tbody td {
+            overflow: hidden;
+            vertical-align: middle;
         }
 
         #mySnapshotListTable tbody tr.focus .snapshot-title,
@@ -135,9 +148,16 @@
             gap: 0.35em;
             width: 100%;
             min-width: 0;
+            overflow: hidden;
+        }
+
+        #mySnapshotListTable .snapshot-title .icon {
+            flex: 0 0 auto;
+            margin-right: 0;
         }
 
         #mySnapshotListTable .snapshot-title span {
+            display: block;
             flex: 1 1 auto;
             min-width: 0;
             overflow: hidden;
@@ -147,6 +167,7 @@
 
         #mySnapshotListTable .snapshot-name-cell {
             min-width: 0;
+            max-width: 0;
         }
 
         #mySnapshotListTable.show-full-name .snapshot-title span {
@@ -155,9 +176,19 @@
         }
 
         #mySnapshotListTable .meta-text {
+            width: 68px;
             font-size: 0.88em;
             color: #666;
+            text-align: right;
             white-space: nowrap;
+        }
+
+        #mySnapshotListTable .api-coverage-cell {
+            width: 58px;
+            text-align: center;
+            color: #4a5568;
+            white-space: nowrap;
+            font-size: 0.88em;
         }
 
         #mySnapshotListTable .hover.dropdown > .icon {
@@ -377,6 +408,13 @@
                 </div>
                 <div class="ui attached segment snapshot-list-scroll">
                     <table id="mySnapshotListTable" class="ui selectable compact very basic single line table">
+                        <colgroup>
+                            <col style="width: 30px;">
+                            <col>
+                            <col style="width: 58px;">
+                            <col style="width: 68px;">
+                            <col style="width: 34px;">
+                        </colgroup>
                         <tbody id="mySnapshotTableBody">
                         <#list snapshots as snap >
                             <tr data-snapshot-id="${snap.id}" data-trace-id="${snap.traceId}" class="snapshot-row">
@@ -389,10 +427,13 @@
                                 <td class="snapshot-name-cell" title="${snap.name}">
                                     <a class="snapshot-title" href="javascript:void(0);"><i class="file outline icon"></i><span>${snap.name}</span></a>
                                 </td>
+                                <td class="api-coverage-cell" title="接口覆盖率（已覆盖数 / 总数）">
+                                    ${snap.apiCoverageText!'0 / 0'}
+                                </td>
                                 <td class="right aligned meta-text">
                                     <span title="${snap.updateTimeText!'-'}">${snap.updateTimeRelativeText!'-'}</span>
                                 </td>
-                                <td style="width: 44px;">
+                                <td style="width: 34px; text-align: center; padding-left: 0.28em; padding-right: 0.28em;">
                                     <div class="ui hover dropdown">
                                         <i class="setting link icon"></i>
                                         <div class="ui left menu">
@@ -430,7 +471,7 @@
                         </#list>
                         <#if snapshots?size == 0>
                             <tr id="mySnapshotEmptyRow" class="empty-state-row">
-                                <td colspan="4">暂无数据</td>
+                                <td colspan="5">暂无数据</td>
                             </tr>
                         </#if>
                         </tbody>
@@ -556,7 +597,7 @@
             function ensureMySnapshotEmptyState() {
                 var hasDataRow = $('#mySnapshotTableBody tr[data-snapshot-id]').length > 0;
                 if (!hasDataRow && $('#mySnapshotEmptyRow').length === 0) {
-                    $('#mySnapshotTableBody').append('<tr id="mySnapshotEmptyRow" class="empty-state-row"><td colspan="4">暂无数据</td></tr>');
+                    $('#mySnapshotTableBody').append('<tr id="mySnapshotEmptyRow" class="empty-state-row"><td colspan="5">暂无数据</td></tr>');
                 }
                 if (hasDataRow) {
                     $('#mySnapshotEmptyRow').remove();
