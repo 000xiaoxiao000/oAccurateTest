@@ -1,5 +1,7 @@
 package com.oAT.web.control;
 
+import com.oAT.web.esDao.CaseCenterRepository;
+import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SnapshotService;
 import com.oAT.web.service.entity.ProjectVo;
@@ -19,6 +21,8 @@ public class ShareControl {
     SnapshotService snapshotService;
     @Autowired
     ProjectService projectService;
+    @Autowired
+    CaseCenterRepository centerRepository;
 
     // 打开快照共享页
     @RequestMapping("/snapshot/{id}")
@@ -49,6 +53,21 @@ public class ShareControl {
 
 
     // 打开用例共享页
-    private void openUseCase() {}
+    @RequestMapping("/usecase/{id}")
+    public String openUseCase(@PathVariable String id, Model model) {
+        CaseCenterIndex index = centerRepository.findById(id).orElse(null);
+        if (index == null || index.getUsecase() == null) {
+            model.addAttribute("errorMessage", "找不到指定用例");
+            return "forward:/error/404";
+        }
+        String projectId = index.getUsecase().getProjectId();
+        ProjectVo project = projectService.getProject(projectId);
+        if (project == null) {
+            model.addAttribute("errorMessage", "找不到指定项目");
+            return "forward:/error/404";
+        }
+        model.addAttribute("_share", true);
+        return "forward:/p/" + project.getId() + "/usecase/detail?id=" + id;
+    }
 
 }

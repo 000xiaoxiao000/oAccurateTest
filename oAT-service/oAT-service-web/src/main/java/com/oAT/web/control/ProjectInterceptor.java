@@ -47,6 +47,7 @@ public class ProjectInterceptor implements HandlerInterceptor {
         if (share != null && share) {
             project = projectService.getProject(projectId);
             request.setAttribute("project", project);
+            request.setAttribute("apps", appService.getAppList(projectId));
             request.setAttribute("aiLlmEnabled", aiLlmEnabled);
             setMascotPrimary(request, project);
             return true;

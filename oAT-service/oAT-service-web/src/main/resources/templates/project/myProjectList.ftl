@@ -6,44 +6,44 @@
    <#include "../common.ftl">
     <style>
         .my-projects-page {
-            margin-bottom: 48px;
+            margin-bottom: 40px;
         }
 
         .my-projects-hero {
-            padding: 28px 32px !important;
-            border-radius: 16px !important;
+            padding: 18px 24px !important;
+            border-radius: 14px !important;
             background: linear-gradient(135deg, #f7fbff 0%, #eef5ff 45%, #f6f9fc 100%) !important;
             border: 1px solid #dce7f5 !important;
-            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06) !important;
-            margin-bottom: 24px !important;
+            box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05) !important;
+            margin-bottom: 14px !important;
         }
 
         .my-projects-hero-label {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 6px 12px;
+            padding: 4px 10px;
             border-radius: 999px;
             background: rgba(33, 133, 208, 0.08);
             color: #1d6fa5;
             font-size: 12px;
             font-weight: 600;
             letter-spacing: 0.04em;
-            margin-bottom: 14px;
+            margin-bottom: 8px;
         }
 
         .my-projects-hero-title {
-            margin: 0 0 10px !important;
-            font-size: 2rem !important;
+            margin: 0 0 6px !important;
+            font-size: 1.65rem !important;
             font-weight: 700 !important;
             color: #1f2937;
         }
 
         .my-projects-hero-desc {
             margin: 0;
-            max-width: 700px;
-            font-size: 15px;
-            line-height: 1.75;
+            max-width: 720px;
+            font-size: 13px;
+            line-height: 1.55;
             color: #5b6675;
         }
 
@@ -55,73 +55,80 @@
         }
 
         .my-projects-primary-btn.ui.button {
-            border-radius: 10px;
-            padding: 12px 20px;
-            box-shadow: 0 8px 20px rgba(33, 133, 208, 0.18);
+            border-radius: 9px;
+            padding: 10px 18px;
+            box-shadow: 0 6px 16px rgba(33, 133, 208, 0.16);
         }
 
         .my-projects-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
         }
 
         .my-projects-stat-card {
             background: #fff;
             border: 1px solid #e8edf4;
-            border-radius: 14px;
-            padding: 18px 20px;
-            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+            border-radius: 12px;
+            padding: 12px 14px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035);
         }
 
         .my-projects-stat-label {
             color: #7b8794;
-            font-size: 13px;
-            margin-bottom: 10px;
+            font-size: 12px;
+            margin-bottom: 6px;
         }
 
         .my-projects-stat-value {
             color: #1f2937;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: 700;
             line-height: 1;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
         }
 
         .my-projects-stat-extra {
             color: #8d99a6;
             font-size: 12px;
+            line-height: 1.25;
         }
 
         .my-projects-toolbar {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-end;
             flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 18px;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding: 12px 14px;
+            border: 1px solid #e8edf4;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.78);
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.035);
         }
 
         .my-projects-toolbar-title {
             margin: 0 !important;
             color: #1f2937;
+            font-size: 1.2rem !important;
         }
 
         .my-projects-toolbar-meta {
             color: #7b8794;
-            font-size: 13px;
-            margin-top: 6px;
+            font-size: 12px;
+            margin-top: 3px;
         }
 
         .my-projects-filter {
-            min-width: 260px;
+            min-width: 240px;
         }
 
         .my-projects-filter-group {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
@@ -141,7 +148,7 @@
         .my-projects-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 16px;
+            gap: 14px;
             align-items: stretch;
         }
 
@@ -531,16 +538,21 @@
 
         @media only screen and (max-width: 767px) {
             .my-projects-hero {
-                padding: 22px 20px !important;
+                padding: 16px 18px !important;
             }
 
             .my-projects-hero-actions {
                 justify-content: flex-start;
-                margin-top: 18px;
+                margin-top: 10px;
+            }
+
+            .my-projects-stats {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
 
             .my-projects-toolbar {
                 align-items: stretch;
+                padding: 12px;
             }
 
             .my-projects-filter {
