@@ -122,15 +122,9 @@
             <version>4.14.1</version>
         </dependency>
         <dependency>
-            <groupId>org.pegdown</groupId>
-            <artifactId>pegdown</artifactId>
-            <version>1.6.0</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.ow2.asm</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+            <version>0.21.0</version>
         </dependency>
         <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
         <dependency>

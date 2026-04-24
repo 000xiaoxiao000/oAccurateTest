@@ -8,6 +8,7 @@ import com.oAT.web.service.AppService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SnapshotService;
 import com.oAT.web.service.SystemSnapshotService;
+import com.oAT.web.service.UsecaseFileService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.UserService;
 import com.oAT.web.service.entity.AppVo;
@@ -20,7 +21,8 @@ import com.oAT.web.service.entity.UsecaseDirectoryVo;
 import com.oAT.web.service.entity.UsecaseVo;
 import com.oAT.web.service.entity.UserVo;
 import org.apache.commons.lang3.ArrayUtils;
-import org.pegdown.PegDownProcessor;
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
@@ -33,7 +35,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.SessionAttribute;
+import org.springframework.web.multipart.MultipartFile;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -50,10 +55,15 @@ import java.util.stream.Stream;
 @RequestMapping({"/p/{projectId}/usecase", "/p/{projectId}/usecase/"})
 public class UsecaseControl {
 
+    private static final Parser MARKDOWN_PARSER = Parser.builder().build();
+    private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder().build();
+
     @Autowired
     private SnapshotService snapshotService;
     @Autowired
     private UsecaseService usecaseService;
+    @Autowired
+    private UsecaseFileService usecaseFileService;
     @Autowired
     private SystemSnapshotService systemSnapshotService;
 
@@ -231,12 +241,14 @@ public class UsecaseControl {
             model.addAttribute("labels", labels);
         }
         if (StringUtils.hasText(usecase.getContent())) {
-            // markdown 转html
-            String html = new PegDownProcessor().markdownToHtml(usecase.getContent());
-            model.addAttribute("usecaseContent", html);
+            model.addAttribute("usecaseContent", renderMarkdown(usecase.getContent()));
         }
 
         return "/usecase/usecaseDetail";
+    }
+
+    private String renderMarkdown(String markdown) {
+        return MARKDOWN_RENDERER.render(MARKDOWN_PARSER.parse(markdown));
     }
 
     /**
@@ -320,6 +332,41 @@ public class UsecaseControl {
     public ResultNotified<String> doDeleteUsecase(@PathVariable String projectId, String id) {
         usecaseService.doDeleteUsecase(projectId, id);
         return new ResultNotified<>(true, "用例删除成功");
+    }
+
+    @RequestMapping("/template/download")
+    public void downloadTemplate(HttpServletResponse response) throws IOException {
+        usecaseFileService.downloadTemplate(response);
+    }
+
+    @RequestMapping("/upload")
+    @ResponseBody
+    public ResultNotified<?> uploadUsecases(@PathVariable String projectId, @SessionAttribute UserVo user, String directory, MultipartFile file) throws IOException {
+        com.oAT.web.service.entity.UsecaseImportResult importResult = usecaseFileService.importUsecases(projectId, user.getId(), directory, file);
+        if (importResult.hasErrors()) {
+            ResultNotified<com.oAT.web.service.entity.UsecaseImportResult> result = new ResultNotified<>(false, "用例上传失败");
+            result.setErrorMessage(buildImportErrorMessage(importResult));
+            result.setData(importResult);
+            return result;
+        }
+        ResultNotified<com.oAT.web.service.entity.UsecaseImportResult> result = new ResultNotified<>(true, "用例上传成功，导入 " + importResult.getSuccessCount() + " 条");
+        result.setData(importResult);
+        return result;
+    }
+
+    @RequestMapping("/export")
+    public void exportUsecases(@PathVariable String projectId, String directory, String sort, String keyword, HttpServletResponse response) throws IOException {
+        usecaseFileService.exportUsecases(projectId, directory, sort, keyword, response);
+    }
+
+    private String buildImportErrorMessage(com.oAT.web.service.entity.UsecaseImportResult importResult) {
+        if (importResult == null || importResult.getErrors() == null || importResult.getErrors().isEmpty()) {
+            return "用例上传失败";
+        }
+        return importResult.getErrors().stream()
+                .limit(10)
+                .map(error -> "第" + error.getRowNumber() + "行：" + error.getMessage())
+                .collect(Collectors.joining("；"));
     }
 
     @RequestMapping("/rebuildSearchData")
