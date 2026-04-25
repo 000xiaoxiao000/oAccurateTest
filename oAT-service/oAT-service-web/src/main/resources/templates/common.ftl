@@ -7,6 +7,8 @@
 <script src="/js/common.js?version=1"></script>
 <link href="/css/common.css?version=1" rel="stylesheet">
 <link href="/css/theme.css?version=1" rel="stylesheet">
+<link href="/css/list-controls.css?version=1" rel="stylesheet">
+<script src="/js/list-controls.js?version=1"></script>
 <style>
     .compare-empty-state {
         min-height: 180px;

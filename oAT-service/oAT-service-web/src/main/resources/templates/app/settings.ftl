@@ -162,6 +162,42 @@
                             </div>
                         </div>
                     </div>
+                    <div class="ui segment probe-alert-summary">
+                        <div class="app-unified-section-head probe-alert-summary-head">
+                            <div>
+                                <h4 class="ui header">探针运行状态</h4>
+                                <p class="app-unified-section-desc">这里只展示摘要，详细实例和告警记录请进入详情页查看。</p>
+                            </div>
+                            <a class="ui basic teal button" href="/p/${project.id}/app/${app.id}/probe-alerts">
+                                查看详情
+                                <i class="right arrow icon"></i>
+                            </a>
+                        </div>
+                        <div class="ui four tiny statistics probe-alert-stats">
+                            <div class="green statistic">
+                                <div class="value">${probeAlertDashboard.onlineCount!0}</div>
+                                <div class="label">在线探针</div>
+                            </div>
+                            <div class="red statistic">
+                                <div class="value">${probeAlertDashboard.offlineCount!0}</div>
+                                <div class="label">离线探针</div>
+                            </div>
+                            <div class="blue statistic">
+                                <div class="value">${probeAlertDashboard.recentEventCount!0}</div>
+                                <div class="label">最近告警</div>
+                            </div>
+                            <div class="orange statistic">
+                                <div class="value">${probeAlertDashboard.failedNotifyCount!0}</div>
+                                <div class="label">通知失败</div>
+                            </div>
+                        </div>
+                        <#if probeAlertDashboard.latestEventMessage??>
+                            <div class="probe-alert-latest">
+                                <span class="meta-chip">最近：${probeAlertDashboard.latestEventTimeText!'-'}</span>
+                                <span>${probeAlertDashboard.latestEventMessage}</span>
+                            </div>
+                        </#if>
+                    </div>
                     <#if loginNameRole != "visitor">
                         <div class="app-unified-form-actions">
                             <div class="ui primary button" type="submit">

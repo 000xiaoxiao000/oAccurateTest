@@ -49,8 +49,9 @@
                 </div>
             </div>
             <div class="version-page-body">
+                <div class="oat-list-toolbar js-list-control" data-table="#versionListTable" data-client-pagination="false" data-search-placeholder="搜索版本号、描述、分支或 Commit" data-empty-colspan="5"></div>
                 <div class="version-table-wrap">
-            <table class="ui celled table">
+            <table id="versionListTable" class="ui celled table">
                 <thead>
                 <tr>
                     <th>版本号</th>
@@ -111,7 +112,8 @@
                 <tfoot>
                 <tr>
                     <th colspan="5">
-                        <div class="ui right floated pagination menu">
+                        <#if page.totalPages gt 0>
+                        <div class="oat-list-pagination"><div class="oat-list-page-info">共 ${page.totalElements} 条，第 ${page.number + 1} / ${page.totalPages} 页</div><div class="ui pagination menu">
                             <#if page.hasPrevious()>
                                 <a class="icon item" href="?page=${page.number - 1}&size=${page.size}">
                                     <i class="left chevron icon"></i>
@@ -131,7 +133,10 @@
                                     <i class="right chevron icon"></i>
                                 </a>
                             </#if>
-                        </div>
+                        </div></div>
+                        <#else>
+                            <div class="oat-list-page-info">共 0 条</div>
+                        </#if>
                     </th>
                 </tr>
                 </tfoot>

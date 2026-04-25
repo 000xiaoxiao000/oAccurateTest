@@ -6,6 +6,7 @@ import com.oAT.web.esDao.entity.App;
 import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
+import com.oAT.web.service.ProbeAlertDashboardService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SystemLogService;
 import com.oAT.web.service.entity.AppVo;
@@ -41,6 +42,9 @@ public class AppControl {
 
     @Autowired
     ClientSessionService sessionService;
+
+    @Autowired
+    private ProbeAlertDashboardService probeAlertDashboardService;
 
     @Autowired
     private SystemLogService systemLogService;
@@ -269,7 +273,31 @@ public class AppControl {
 
         model.addAttribute("app", app);
         model.addAttribute("apps", appList);
+        model.addAttribute("probeAlertDashboard", probeAlertDashboardService.getDashboard(appId, 10));
         return "/app/settings";
+    }
+
+    @RequestMapping("{appId}/probe-alerts")
+    public String openProbeAlerts(@PathVariable String projectId, @PathVariable String appId,
+                                  @SessionAttribute UserVo user, Model model) {
+        AppVo app = appService.getApp(appId);
+        List<AppVo> appList = appService.getAppList(projectId);
+
+        String loginName = user.getName();
+        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
+
+        String loginNameRole = "visitor";
+        for (ProjectMemberVo member : members) {
+            if (loginName.equals(member.getMemberName())) {
+                loginNameRole = String.valueOf(member.getRole());
+            }
+        }
+
+        model.addAttribute("loginNameRole", loginNameRole);
+        model.addAttribute("app", app);
+        model.addAttribute("apps", appList);
+        model.addAttribute("probeAlertDashboard", probeAlertDashboardService.getDashboard(appId));
+        return "/app/probeAlerts";
     }
 
 }

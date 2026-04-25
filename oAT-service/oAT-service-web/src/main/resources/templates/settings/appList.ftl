@@ -573,8 +573,9 @@
                     </#if>
                 </div>
 
+                <div class="oat-list-toolbar js-list-control" data-table="#projectAppTable" data-page-size="10" data-search-placeholder="搜索应用名称、版本、工程或类型" data-empty-colspan="6"></div>
                 <div class="project-settings-table-wrap">
-                    <table class="ui celled table">
+                    <table id="projectAppTable" class="ui celled table">
                         <thead>
                         <tr>
                             <th>类型</th>
