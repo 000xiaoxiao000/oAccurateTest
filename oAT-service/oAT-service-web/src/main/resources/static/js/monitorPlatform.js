@@ -343,7 +343,7 @@ function applyProbeSearchFilter() {
 
 function showMonitorOscilloscope() {
     $('#monitorDetail').hide();
-    $('#emptyTip').show();
+    $('#emptyTip').css('display', 'block');
     $('#monitorListBody tr.focus').removeClass('focus');
     resetMonitorSelectionState();
     drawMonitorOscilloscope();
@@ -355,8 +355,8 @@ function showMonitorOscilloscope() {
 function openMonitorDetail(projectid, traceId) {
     currentProjectId = projectid;
     // 初始化界面
-    $("#emptyTip").hide();
-    $("#monitorDetail").show();
+    $("#emptyTip").css('display', 'none');
+    $("#monitorDetail").css('display', 'block');
     $("#svg-canvas").children().remove();
     // 初始化画布大小
     $("#svg-canvas").attr('width', $("#monitorDetail").width());
@@ -421,7 +421,7 @@ function refreshMonitorList(projectid) {
 
     if (newItems === undefined || newItems.length == 0) {
         resetMonitorSelectionState();
-        $("#emptyTip").show();
+        $("#emptyTip").css('display', 'block');
         $("#monitorDetail").hide();
         resetMonitorWave();
         updateMonitorOverview([]);

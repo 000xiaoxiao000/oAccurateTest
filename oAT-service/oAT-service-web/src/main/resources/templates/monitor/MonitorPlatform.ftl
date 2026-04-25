@@ -270,7 +270,7 @@
         }
 
         .monitor-scope-state {
-            display: block !important;
+            display: block;
             height: 100%;
             min-height: 0;
             padding: 14px !important;
