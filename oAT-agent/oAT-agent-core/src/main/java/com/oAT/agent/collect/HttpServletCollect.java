@@ -159,9 +159,6 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             if (Pattern.matches(urlExcludeRegex, uri)) {
                 return null;
             }
-            if ("/actuator/health".equals(uri)) {
-                return null;
-            }
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]urlExclude pattern error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             return null;
