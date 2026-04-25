@@ -143,12 +143,28 @@
     </div>
 </div>
 <script>
+    function fitHomeMapView(cy) {
+        if ('${visualAngle}' != 'home') {
+            return;
+        }
+        var applyHomeFit = function () {
+            cy.fit(cy.elements(), 180);
+            if (cy.zoom() > 0.65) {
+                cy.zoom(0.65);
+                cy.center(cy.elements());
+            }
+        };
+        cy.one('layoutstop', applyHomeFit);
+        setTimeout(applyHomeFit, 0);
+    }
+
     // 初始化画布
     fetch("${dataUrl}").then(function (res) {
         //隐藏节点信息框
         document.getElementById('bottom_nodeInfo').style.display = 'none';
         return res.json();
     }).then(buildMap).then(function (cy) {
+        fitHomeMapView(cy);
         // 点击节点显示详情
         cy.on('select', 'node,edge', showDetail);
         // 设置

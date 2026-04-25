@@ -33,7 +33,7 @@ public class ProbeAlertSseService implements DisposableBean {
             return emitter;
         }
         emittersByProject.computeIfAbsent(projectId, key -> new CopyOnWriteArrayList<>()).add(emitter);
-        logger.info("探针告警 SSE 已连接, projectId={}, activeConnections={}", projectId, countProjectEmitters(projectId));
+        logger.debug("探针告警 SSE 已连接, projectId={}, activeConnections={}", projectId, countProjectEmitters(projectId));
         emitter.onCompletion(() -> removeEmitter(projectId, emitter));
         emitter.onTimeout(() -> removeEmitter(projectId, emitter));
         emitter.onError(error -> removeEmitter(projectId, emitter));
@@ -51,11 +51,11 @@ public class ProbeAlertSseService implements DisposableBean {
         }
         List<SseEmitter> emitters = emittersByProject.get(event.getProjectId());
         if (emitters == null || emitters.isEmpty()) {
-            logger.info("探针告警 SSE 无在线连接, projectId={}, eventId={}, eventType={}", event.getProjectId(), event.getId(), event.getEventType());
+            logger.debug("探针告警 SSE 无在线连接, projectId={}, eventId={}, eventType={}", event.getProjectId(), event.getId(), event.getEventType());
             return;
         }
         ProbeAlertDashboardVo.ProbeAlertEventItemVo item = probeAlertDashboardService.toEventItem(event);
-        logger.info("探针告警 SSE 开始广播, projectId={}, eventId={}, eventType={}, connections={}",
+        logger.debug("探针告警 SSE 开始广播, projectId={}, eventId={}, eventType={}, connections={}",
                 event.getProjectId(), event.getId(), event.getEventType(), emitters.size());
         for (SseEmitter emitter : emitters) {
             try {

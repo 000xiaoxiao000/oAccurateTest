@@ -1,5 +1,6 @@
 package com.oAT.web.domain;
 
+import com.oAT.agent.model.TraceNode;
 import com.oAT.web.esDao.entity.Remote;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.entity.AppVo;
@@ -7,9 +8,12 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -18,10 +22,16 @@ public class AppRelationLayer implements ImageLayer {
 
     private List<AppVo> apps;
     private List<SystemSnapshot> snapshots;
+    private Map<String, Collection<TraceNode>> traceNodesBySnapshotId;
 
     public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots) {
+        this(apps, snapshots, Collections.emptyMap());
+    }
+
+    public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots, Map<String, Collection<TraceNode>> traceNodesBySnapshotId) {
         this.apps = apps;
         this.snapshots = snapshots;
+        this.traceNodesBySnapshotId = traceNodesBySnapshotId;
     }
 
     @Override
@@ -41,11 +51,20 @@ public class AppRelationLayer implements ImageLayer {
         snapshots.stream()
                 .filter(snapshot -> StringUtils.hasText(snapshot.getAppId()))
                 .filter(snapshot -> appIds.contains(snapshot.getAppId()))
-                .forEach(snapshot -> Arrays.stream(snapshot.getRemotes() == null ? new Remote[0] : snapshot.getRemotes())
-                        .filter(remote -> StringUtils.hasText(remote.getAppId()))
-                        .filter(remote -> appIds.contains(remote.getAppId()))
-                        .filter(remote -> !snapshot.getAppId().equals(remote.getAppId()))
-                        .forEach(remote -> addRelation(relations, snapshot.getAppId(), remote)));
+                .forEach(snapshot -> {
+                    Arrays.stream(snapshot.getRemotes() == null ? new Remote[0] : snapshot.getRemotes())
+                            .filter(remote -> StringUtils.hasText(remote.getAppId()))
+                            .filter(remote -> appIds.contains(remote.getAppId()))
+                            .filter(remote -> !snapshot.getAppId().equals(remote.getAppId()))
+                            .forEach(remote -> addRelation(relations, snapshot.getAppId(), remote));
+                    traceNodesBySnapshotId.getOrDefault(snapshot.getId(), Collections.emptyList()).stream()
+                            .map(this::getTraceNodeAppId)
+                            .filter(Optional::isPresent)
+                            .map(Optional::get)
+                            .filter(appIds::contains)
+                            .filter(appId -> !snapshot.getAppId().equals(appId))
+                            .forEach(appId -> addRelation(relations, snapshot.getAppId(), appId, "调用"));
+                });
         return relations.values().stream()
                 .map(this::buildEdge)
                 .collect(Collectors.toList());
@@ -59,6 +78,22 @@ public class AppRelationLayer implements ImageLayer {
         if (StringUtils.hasText(remote.getType())) {
             relation.types.put(remote.getType(), relation.types.getOrDefault(remote.getType(), 0) + 1);
         }
+    }
+
+    private void addRelation(Map<String, AppRelation> relations, String sourceAppId, String targetAppId, String type) {
+        String key = sourceAppId + "->" + targetAppId;
+        AppRelation relation = relations.computeIfAbsent(key, k -> new AppRelation(sourceAppId, targetAppId));
+        relation.count++;
+        if (StringUtils.hasText(type)) {
+            relation.types.put(type, relation.types.getOrDefault(type, 0) + 1);
+        }
+    }
+
+    private Optional<String> getTraceNodeAppId(TraceNode traceNode) {
+        if (traceNode == null || traceNode.getApp() == null || !StringUtils.hasText(traceNode.getApp().getAppId())) {
+            return Optional.empty();
+        }
+        return Optional.of(traceNode.getApp().getAppId());
     }
 
     private ImageElement buildEdge(AppRelation relation) {
