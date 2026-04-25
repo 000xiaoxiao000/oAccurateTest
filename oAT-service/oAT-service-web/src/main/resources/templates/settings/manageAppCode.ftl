@@ -283,8 +283,9 @@
                 <h2 class="project-settings-section-title">应用资产入口</h2>
                 <p class="project-settings-section-desc">对于主导应用，可进入仓库配置、版本列表等关键资产入口。</p>
 
+                <div class="oat-list-toolbar js-list-control" data-table="#manageAppCodeTable" data-page-size="10" data-search-placeholder="搜索应用名称、工程或类型" data-empty-colspan="5"></div>
                 <div class="project-settings-table-wrap">
-                    <table class="ui celled table">
+                    <table id="manageAppCodeTable" class="ui celled table">
                         <thead>
                         <tr>
                             <th>类型</th>

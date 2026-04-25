@@ -222,8 +222,9 @@
                 <h2 class="project-settings-section-title">在线实例列表</h2>
                 <p class="project-settings-section-desc">点击“详情”可展开查看部署路径、进程号、JVM 版本与启动参数等运行时信息。</p>
 
+                <div class="oat-list-toolbar js-list-control" data-table="#onlineAppTable" data-page-size="10" data-search-placeholder="搜索 IP、应用、工程、Agent 版本" data-empty-colspan="6"></div>
                 <div class="project-online-table-wrap">
-                    <table class="ui fixed table">
+                    <table id="onlineAppTable" class="ui fixed table">
                         <thead>
                         <tr>
                             <th class="three wide">系统IP</th>
@@ -236,7 +237,7 @@
                         </thead>
                         <tbody>
                         <#list sessions as session>
-                            <tr>
+                            <tr class="js-list-row">
                                 <td class="three wide">${session.clientInfo.addressIp}</td>
                                 <td>${(session.application.appName)!'未定义'}</td>
                                 <td>${(session.application.projectSrcName)!''}</td>
@@ -246,7 +247,7 @@
                                     <a class="ui button" onclick="$('#app${session_index}').toggle();">详情</a>
                                 </td>
                             </tr>
-                            <tr>
+                            <tr class="js-list-detail">
                                 <td id="app${session_index}" colspan="6" style="display: none; padding: 0;">
                                     <div class="project-online-detail">
                                         <div class="ui list">

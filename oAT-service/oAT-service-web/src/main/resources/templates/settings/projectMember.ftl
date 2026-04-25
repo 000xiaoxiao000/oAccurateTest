@@ -242,13 +242,14 @@
                 <h2 class="project-settings-section-title">成员与权限</h2>
                 <p class="project-settings-section-desc">创建人始终保留最高权限。非访客角色可调整成员权限，并将新成员加入当前项目。</p>
 
+                <div class="oat-list-toolbar js-list-control" data-table="#projectMemberTable" data-page-size="10" data-search-placeholder="搜索成员名称、邮箱或角色" data-empty-colspan="3"></div>
                 <div class="project-member-table-wrap">
-                    <table class="ui table">
+                    <table id="projectMemberTable" class="ui table">
                         <tbody>
                         <#list members as member>
                             <tr>
                                 <td class="center aligned">
-                                    <span class="project-member-name">${member.memberName}</span>
+                                    <span class="project-member-name">${member.memberName}</span><span style="display:none"> ${member.memberEmail!}</span>
                                 </td>
                                 <td class="center aligned">
                                     <#if member.role=="owner">

@@ -347,7 +347,8 @@
                 <div id="coverageReportListArea">
                     <h4 class="ui dividing header">全量 / 增量覆盖率报告 (按版本生成)</h4>
                     <#if generatedReports?? && (generatedReports?size > 0)>
-                        <table class="ui fixed selectable table celled">
+                        <div class="oat-list-toolbar js-list-control" data-table="#coverageGeneratedReportTable" data-page-size="10" data-search-placeholder="搜索版本号、报告类型、分支或 Commit" data-empty-colspan="5"></div>
+                        <table id="coverageGeneratedReportTable" class="ui fixed selectable table celled">
                             <thead>
                             <tr>
                                 <th class="five wide">版本号 / 描述</th>
@@ -433,7 +434,8 @@
                 </h4>
 
                 <#if snapshots?? && (snapshots?size > 0)>
-                    <table class="ui celled selectable fixed table">
+                    <div class="oat-list-toolbar js-list-control" data-table="#snapshotCoverageTable" data-page-size="10" data-search-placeholder="搜索快照名称、创建人、评论或时间" data-empty-colspan="5"></div>
+                    <table id="snapshotCoverageTable" class="ui celled selectable fixed table">
                         <thead>
                         <tr>
                             <th class="five wide">快照名称</th>
@@ -499,7 +501,8 @@
             <#elseif tab == 'compare'>
                 <h4 class="ui dividing header compare-record-heading">代码比对报告记录</h4>
                 <#if reports?? && (reports?size > 0)>
-                    <table class="ui very basic celled table compare-record-table">
+                    <div class="oat-list-toolbar js-list-control" data-table="#compareRecordTable" data-client-pagination="false" data-search-placeholder="搜索报告名称、分支或 Commit" data-empty-colspan="4"></div>
+                    <table id="compareRecordTable" class="ui very basic celled table compare-record-table">
                         <thead>
                         <tr>
                             <th class="five wide">报告名称</th>
@@ -582,7 +585,7 @@
                         <#if windowStart lt 2>
                             <#assign windowStart = 2>
                         </#if>
-                        <div class="ui stackable grid" style="margin-top: 12px;">
+                        <div class="oat-list-pagination">
                             <div class="eight wide column compare-page-column">
                                 <div class="ui mini form">
                                     <div class="inline fields compare-inline-fields">
@@ -632,7 +635,7 @@
                             <span class="compare-page-text">共 <span class="compare-total-count">${page.totalElements}</span> 条，第 <span class="compare-current-page">${page.number + 1}</span> / <span class="compare-total-pages">${page.totalPages}</span> 页</span>
                         </div>
                     <#elseif page??>
-                        <div class="ui stackable grid" style="margin-top: 12px;">
+                        <div class="oat-list-pagination">
                             <div class="sixteen wide column compare-page-column">
                                 <div class="ui mini form">
                                     <div class="inline fields compare-inline-fields">
