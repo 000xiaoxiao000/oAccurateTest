@@ -6,6 +6,170 @@ var autoSavedTraceCache = {
     my: {},
     system: {}
 };
+var monitorWavePoints = [];
+var monitorReceivedCount = 0;
+
+function escapeMonitorHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatMonitorTime(time) {
+    if (!time) {
+        return '-';
+    }
+    var date = new Date(time);
+    if (isNaN(date.getTime())) {
+        return '-';
+    }
+    return date.toLocaleTimeString();
+}
+
+function updateMonitorOverview(items) {
+    var count = $('#monitorListBody tr').length;
+    $('#monitorRequestCount').text(count);
+    if (items && items.length > 0) {
+        var latest = items[items.length - 1];
+        $('#monitorLastReceive').text(formatMonitorTime(latest.cacheTime));
+        $('#latestTraceTitle').text(latest.title || '未命名请求');
+        $('#latestTraceSource').text((latest.addressIp || '-') + (latest.clientIp ? ' / ' + latest.clientIp : ''));
+        $('#oscilloscopeStatusText').text('接收中');
+    } else if (count === 0) {
+        $('#monitorLastReceive').text('等待中');
+        $('#latestTraceTitle').text('暂无');
+        $('#latestTraceSource').text('-');
+        $('#oscilloscopeStatusText').text('等待请求');
+    }
+}
+
+function pushMonitorWave(items) {
+    if (!items || items.length === 0) {
+        drawMonitorOscilloscope();
+        return;
+    }
+    $.each(items, function (index, item) {
+        monitorWavePoints.push({
+            time: item.cacheTime || new Date().getTime(),
+            title: item.title || '',
+            ip: item.addressIp || item.clientIp || '',
+            level: Math.min(1, 0.35 + ((item.title || '').length % 8) / 10)
+        });
+    });
+    if (monitorWavePoints.length > 80) {
+        monitorWavePoints = monitorWavePoints.slice(monitorWavePoints.length - 80);
+    }
+    drawMonitorOscilloscope();
+}
+
+function drawMonitorOscilloscope() {
+    var canvas = document.getElementById('oscilloscopeCanvas');
+    if (!canvas) {
+        return;
+    }
+    var rect = canvas.getBoundingClientRect();
+    var width = Math.max(320, Math.floor(rect.width || canvas.parentNode.clientWidth || 900));
+    var height = Math.max(180, Math.floor(rect.height || 220));
+    var ratio = window.devicePixelRatio || 1;
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(148, 163, 184, .15)';
+    ctx.lineWidth = 1;
+    for (var x = 0; x < width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+    }
+    for (var y = 28; y < height; y += 32) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+
+    var baseline = height * 0.58;
+    ctx.strokeStyle = 'rgba(94, 234, 212, .28)';
+    ctx.beginPath();
+    ctx.moveTo(0, baseline);
+    ctx.lineTo(width, baseline);
+    ctx.stroke();
+
+    if (monitorWavePoints.length === 0) {
+        $('#oscilloscopeEmpty').show();
+        return;
+    }
+    $('#oscilloscopeEmpty').hide();
+
+    var spacing = width / Math.max(18, monitorWavePoints.length - 1);
+    var startX = Math.max(0, width - spacing * (monitorWavePoints.length - 1) - 24);
+
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#5eead4';
+    ctx.shadowColor = 'rgba(45, 212, 191, .65)';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    $.each(monitorWavePoints, function (index, point) {
+        var x = startX + index * spacing;
+        var pulse = Math.sin(index * 1.7) * 18 + point.level * 56;
+        var y = baseline - pulse;
+        if (index === 0) {
+            ctx.moveTo(x, baseline);
+        }
+        ctx.lineTo(x, y);
+        ctx.lineTo(x + Math.min(16, spacing * .45), baseline + Math.sin(index) * 8);
+    });
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    $.each(monitorWavePoints.slice(-12), function (index, point) {
+        var realIndex = monitorWavePoints.length - 12 + index;
+        var x = startX + realIndex * spacing;
+        var y = baseline - (Math.sin(realIndex * 1.7) * 18 + point.level * 56);
+        ctx.fillStyle = '#22d3ee';
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function renderProbeList(projectid, sessions) {
+    var $probeList = $('#probeList');
+    if (!$probeList.length) {
+        return;
+    }
+    $('#onlineProbeCount').text(sessions ? sessions.length : 0);
+    if (!sessions || sessions.length === 0) {
+        $probeList.html('<div class="probe-empty"><i class="plug icon"></i> 暂无在线探针，启动 Agent 后会显示在这里</div>');
+        return;
+    }
+    var html = sessions.map(function (session) {
+        var client = session.clientInfo || {};
+        var app = session.application || {};
+        var heartbeat = session.lastHeartbeatTime ? formatMonitorTime(session.lastHeartbeatTime) : '-';
+        return '<div class="probe-card" data-ip="' + escapeMonitorHtml(client.addressIp || '') + '" data-app-id="' + escapeMonitorHtml(client.appKey || '') + '">'
+            + '<span class="probe-status-dot"></span>'
+            + '<div style="min-width: 0;">'
+            + '<div class="probe-name">' + escapeMonitorHtml(app.appName || '未定义应用') + '</div>'
+            + '<div class="probe-meta">' + escapeMonitorHtml(client.addressIp || '-') + ' · PID ' + escapeMonitorHtml(client.pid || '-') + ' · Agent ' + escapeMonitorHtml(client.agentVersion || '-') + '</div>'
+            + '<div class="probe-meta">在线 ' + escapeMonitorHtml(session.onlineTime || '-') + ' · 心跳 ' + escapeMonitorHtml(heartbeat) + '</div>'
+            + '</div><span class="probe-badge">在线</span></div>';
+    }).join('');
+    $probeList.html(html);
+}
+
+function refreshProbeStatus(projectid) {
+    $.getJSON('/p/' + projectid + '/monitor/probeStatus', function (sessions) {
+        renderProbeList(projectid, sessions || []);
+    });
+}
 
 /*
  * 打开监控详情
@@ -81,6 +245,9 @@ function refreshMonitorList(projectid) {
         resetMonitorSelectionState();
         $("#emptyTip").show();
         $("#monitorDetail").hide();
+        monitorWavePoints = [];
+        updateMonitorOverview([]);
+        drawMonitorOscilloscope();
     } else {
         appendItems(projectid, newItems);
     }
@@ -113,6 +280,7 @@ function appendItems(projectid, newItems) {
     if (newItems === undefined || newItems.length == 0) {
         return;
     }
+    monitorReceivedCount += newItems.length;
     newItems.some(function (value, index, array) {
         var cacheDate = new Date(value.cacheTime);
         var timeText = cacheDate.toLocaleDateString() + " " + cacheDate.toLocaleTimeString();
@@ -130,10 +298,15 @@ function appendItems(projectid, newItems) {
         tryAutoSaveSnapshots(projectid, value.traceId, value.title || '');
     });
     lastIndex = newItems[newItems.length - 1].index;
+    updateMonitorOverview(newItems);
+    pushMonitorWave(newItems);
 }
 
 function clearItem() {
     $("#monitorListBody").children().remove();
+    monitorWavePoints = [];
+    updateMonitorOverview([]);
+    drawMonitorOscilloscope();
 }
 
 // 添加样式选中效果
@@ -388,6 +561,4 @@ function openCreateSystemSnapshot() {
         alert(resultInform.errorMessage);
     }
 }*/
-
-
 

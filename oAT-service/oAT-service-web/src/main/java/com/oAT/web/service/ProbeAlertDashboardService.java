@@ -11,6 +11,7 @@ import org.springframework.util.StringUtils;
 
 import java.text.SimpleDateFormat;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -35,10 +36,7 @@ public class ProbeAlertDashboardService {
         List<ProbeInstanceStatus> statuses = probeInstanceStatusRepository.findByAppId(appId).stream()
                 .sorted(Comparator.comparing(ProbeInstanceStatus::getUpdateTime, Comparator.nullsLast(Comparator.reverseOrder())))
                 .collect(Collectors.toList());
-        List<ProbeAlertEvent> events = probeAlertEventRepository.findByAppId(appId).stream()
-                .sorted(Comparator.comparing(ProbeAlertEvent::getEventTime, Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(Math.max(1, eventLimit))
-                .collect(Collectors.toList());
+        List<ProbeAlertEvent> events = sortedEvents(probeAlertEventRepository.findByAppId(appId), eventLimit);
 
         dashboard.setOnlineCount(statuses.stream().filter(this::isOnline).count());
         dashboard.setOfflineCount(statuses.stream().filter(this::isOffline).count());
@@ -52,6 +50,22 @@ public class ProbeAlertDashboardService {
             dashboard.setLatestEventMessage(latest.getMessage());
         }
         return dashboard;
+    }
+
+    public List<ProbeAlertDashboardVo.ProbeAlertEventItemVo> getRecentProjectEvents(String projectId, int eventLimit) {
+        if (!StringUtils.hasText(projectId)) {
+            return Collections.emptyList();
+        }
+        return sortedEvents(probeAlertEventRepository.findByProjectId(projectId), eventLimit).stream()
+                .map(this::toEventItem)
+                .collect(Collectors.toList());
+    }
+
+    private List<ProbeAlertEvent> sortedEvents(List<ProbeAlertEvent> events, int eventLimit) {
+        return events.stream()
+                .sorted(Comparator.comparing(ProbeAlertEvent::getEventTime, Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(Math.max(1, eventLimit))
+                .collect(Collectors.toList());
     }
 
     private ProbeAlertDashboardVo.ProbeStatusItemVo toStatusItem(ProbeInstanceStatus status) {
@@ -79,6 +93,7 @@ public class ProbeAlertDashboardService {
         item.setEventType(event.getEventType());
         item.setEventTypeLabel(eventTypeLabel(event.getEventType()));
         item.setEventTypeColor(eventTypeColor(event.getEventType()));
+        item.setAppName(event.getAppName());
         item.setProbeText(buildProbeText(event));
         item.setEventTimeText(formatDate(event.getEventTime()));
         item.setMessage(event.getMessage());

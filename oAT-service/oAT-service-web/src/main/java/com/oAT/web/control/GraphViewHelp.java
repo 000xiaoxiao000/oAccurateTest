@@ -40,6 +40,7 @@ public class GraphViewHelp {
         rootGraphNode.setType("browser");
         rootGraphNode.setState(isSuccessfulResponseCode(httpRootNode.getResponseCode()) ? "ok" : "error");
         rootGraphNode.setTips(httpRootNode.getRequestUrl());
+        rootGraphNode.setData(httpRootNode.getTraceNodeId());
         nodes.add(rootGraphNode);
         graphView.setShowDefaultNode(rootGraphNode);
         graphView.setTitle(httpRootNode.getRequestUrl());
@@ -76,6 +77,9 @@ public class GraphViewHelp {
         if (StringUtils.hasText(node2.getTips())) {
             sb.append("<br>");
             sb.append(node2.getTips());
+        }
+        if (node1.getData() == null && node2.getData() != null) {
+            node1.setData(node2.getData());
         }
         if (sb.toString().startsWith("<br>")) {
             sb.delete(0, 4);
@@ -186,6 +190,7 @@ public class GraphViewHelp {
             graphViewNode.setTitle(traceNode.getApp().getAppName());
             graphViewNode.setType("http server"); // Http服务
             graphViewNode.setState(((HttpTraceNode) traceNode).getError() == null ? "normal" : "error");
+            graphViewNode.setData(traceNode.getTraceNodeId());
         } else if (traceNode instanceof DubboTraceNode) {
             DubboTraceNode dubboNode = (DubboTraceNode) traceNode;
             url = dubboNode.getRemoteUrl();
@@ -206,6 +211,7 @@ public class GraphViewHelp {
             graphViewNode.setTitle(name);
             graphViewNode.setType("dubbo server");// dubbo 服务
             graphViewNode.setState(dubboNode.getError() == null ? "normal" : "error");
+            graphViewNode.setData(traceNode.getTraceNodeId());
         } else if (traceNode instanceof SqlTraceNode) {
             SqlTraceNode sqlNode = (SqlTraceNode) traceNode;
             url = ((SqlTraceNode) traceNode).getJdbcUrl();
@@ -220,6 +226,7 @@ public class GraphViewHelp {
             SqlStatParse parse = new SqlStatParse(sqlNode.getSql(), sqlNode.getDatabase().getType());
             String tip = parse.getAll().stream().map(a -> a.getModel() + " -> " + a.getTableName()).distinct().collect(Collectors.joining("<br>"));
             graphViewNode.setTips(tip);
+            graphViewNode.setData(traceNode.getTraceNodeId());
         }else if (traceNode instanceof CKSqlTraceNode) {
             CKSqlTraceNode sqlNode = (CKSqlTraceNode) traceNode;
             url = ((CKSqlTraceNode) traceNode).getJdbcUrl();
@@ -234,6 +241,7 @@ public class GraphViewHelp {
             SqlStatParse parse = new SqlStatParse(sqlNode.getSql(), sqlNode.getDatabase().getType());
             String tip = parse.getAll().stream().map(a -> a.getModel() + " -> " + a.getTableName()).distinct().collect(Collectors.joining("<br>"));
             graphViewNode.setTips(tip);
+            graphViewNode.setData(traceNode.getTraceNodeId());
         }else if (traceNode instanceof RedisTraceNode) {
             RedisTraceNode redisNode = (RedisTraceNode) traceNode;
             id = redisNode.getHost() + "@" + redisNode.getPort(); // ip host port
@@ -243,6 +251,7 @@ public class GraphViewHelp {
             graphViewNode.setType("redis");
             graphViewNode.setState(((RedisTraceNode) traceNode).getError() == null ? "normal" : "error");
             graphViewNode.setTips(redisNode.getType());
+            graphViewNode.setData(traceNode.getTraceNodeId());
         } else {
             graphViewNode = null;
         }

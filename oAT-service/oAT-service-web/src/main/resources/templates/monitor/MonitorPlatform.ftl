@@ -95,8 +95,202 @@
 
         .monitor-list-scroll {
             padding: 0;
-            height: calc(100vh - 212px);
+            height: calc(100vh - 438px);
             overflow: auto;
+        }
+
+        .monitor-overview-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+
+        .monitor-overview-card {
+            padding: 16px 18px;
+            border: 1px solid #e4edf7;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #ffffff 0%, #f5fbff 100%);
+            box-shadow: 0 14px 34px rgba(15, 23, 42, .06);
+        }
+
+        .monitor-overview-label {
+            color: #718096;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .monitor-overview-value {
+            margin-top: 8px;
+            color: #1f2937;
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .monitor-overview-sub {
+            margin-top: 8px;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .probe-dashboard-card {
+            margin-bottom: 14px !important;
+            border-radius: 18px !important;
+            border-color: #e4edf7 !important;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, .06) !important;
+        }
+
+        .probe-dashboard-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 14px 16px;
+            border-bottom: 1px solid #edf2f7;
+        }
+
+        .probe-dashboard-title {
+            color: #1f2937;
+            font-weight: 800;
+        }
+
+        .probe-list {
+            max-height: 220px;
+            overflow: auto;
+            padding: 10px 12px 12px;
+        }
+
+        .probe-card {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 8px;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: background .18s ease, transform .18s ease;
+        }
+
+        .probe-card:hover,
+        .probe-card.active {
+            background: #eefaf9;
+            transform: translateY(-1px);
+        }
+
+        .probe-status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 0 6px rgba(34, 197, 94, .12);
+            animation: probePulse 1.8s ease-in-out infinite;
+        }
+
+        .probe-name {
+            overflow: hidden;
+            color: #1f2937;
+            font-weight: 800;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .probe-meta {
+            margin-top: 3px;
+            overflow: hidden;
+            color: #64748b;
+            font-size: 12px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .probe-badge {
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #dcfce7;
+            color: #15803d;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .probe-empty {
+            padding: 24px 14px;
+            color: #94a3b8;
+            text-align: center;
+        }
+
+        .oscilloscope-card {
+            position: relative;
+            overflow: hidden;
+            min-height: 260px;
+            border-radius: 18px;
+            background: radial-gradient(circle at top left, rgba(45, 212, 191, .16), transparent 36%), #0f172a;
+            box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .18), 0 18px 44px rgba(15, 23, 42, .18);
+        }
+
+        .oscilloscope-header {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 18px 0;
+            color: #dbeafe;
+        }
+
+        .oscilloscope-title {
+            font-size: 16px;
+            font-weight: 900;
+        }
+
+        .oscilloscope-subtitle {
+            margin-top: 4px;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .oscilloscope-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #5eead4;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        #oscilloscopeCanvas {
+            display: block;
+            width: 100%;
+            height: 220px;
+        }
+
+        .oscilloscope-empty {
+            position: absolute;
+            left: 50%;
+            top: 58%;
+            transform: translate(-50%, -50%);
+            color: #94a3b8;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        .monitor-request-summary {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .monitor-request-card {
+            padding: 14px;
+            border: 1px solid #e4edf7;
+            border-radius: 16px;
+            background: #fff;
+        }
+
+        @keyframes probePulse {
+            0%, 100% { box-shadow: 0 0 0 5px rgba(34, 197, 94, .12); }
+            50% { box-shadow: 0 0 0 9px rgba(34, 197, 94, .04); }
         }
 
         #monitorListTable .monitor-name-cell {
@@ -144,6 +338,11 @@
                 height: auto;
                 max-height: 45vh;
             }
+
+            .monitor-overview-grid,
+            .monitor-request-summary {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 
@@ -153,6 +352,28 @@
 <#include "../projectHeader.ftl">
 
 <div class="monitor-page">
+<div class="monitor-overview-grid">
+    <div class="monitor-overview-card">
+        <div class="monitor-overview-label">在线探针</div>
+        <div class="monitor-overview-value" id="onlineProbeCount">${onlineProbeCount!0}</div>
+        <div class="monitor-overview-sub">当前项目已连接实例</div>
+    </div>
+    <div class="monitor-overview-card">
+        <div class="monitor-overview-label">项目应用</div>
+        <div class="monitor-overview-value">${apps?size}</div>
+        <div class="monitor-overview-sub">已纳入监控范围</div>
+    </div>
+    <div class="monitor-overview-card">
+        <div class="monitor-overview-label">实时请求</div>
+        <div class="monitor-overview-value" id="monitorRequestCount">0</div>
+        <div class="monitor-overview-sub">当前过滤窗口内</div>
+    </div>
+    <div class="monitor-overview-card">
+        <div class="monitor-overview-label">最后接收</div>
+        <div class="monitor-overview-value" id="monitorLastReceive" style="font-size: 20px;">等待中</div>
+        <div class="monitor-overview-sub">监控数据到达时间</div>
+    </div>
+</div>
 <!--中间过滤条件-->
 <div id="middleFilter" class="ui sticky top segment monitor-toolbar" style="margin-bottom: 14px;">
     <div class="monitor-toolbar-left">
@@ -284,6 +505,39 @@
 </div>
 <div class="monitor-layout page-split-layout">
     <div id="monitorListPanel" class="monitor-list-panel page-split-list-panel">
+        <div class="ui segment probe-dashboard-card">
+            <div class="probe-dashboard-header">
+                <div>
+                    <div class="probe-dashboard-title">探针在线状态</div>
+                    <div class="ui mini grey text">点击探针可快速过滤 IP</div>
+                </div>
+                <button class="ui mini basic icon button" onclick="refreshProbeStatus('${projectId}')" title="刷新探针状态">
+                    <i class="sync icon"></i>
+                </button>
+            </div>
+            <div id="probeList" class="probe-list">
+                <#if onlineSessions?? && (onlineSessions?size > 0)>
+                    <#list onlineSessions as session>
+                        <#assign client=session.clientInfo>
+                        <#assign app=session.application>
+                        <div class="probe-card" data-ip="${(client.addressIp)!''}" data-app-id="${(client.appKey)!''}">
+                            <span class="probe-status-dot"></span>
+                            <div style="min-width: 0;">
+                                <div class="probe-name">${(app.appName)!'未定义应用'}</div>
+                                <div class="probe-meta">${(client.addressIp)!'-'} · PID ${(client.pid)!'-'} · Agent ${(client.agentVersion)!'-'}</div>
+                                <div class="probe-meta">在线 ${session.onlineTime!'-'} · 心跳 ${(session.lastHeartbeatTime?number_to_datetime?string('HH:mm:ss'))!'-'}</div>
+                            </div>
+                            <span class="probe-badge">在线</span>
+                        </div>
+                    </#list>
+                <#else>
+                    <div class="probe-empty">
+                        <i class="plug icon"></i>
+                        暂无在线探针，启动 Agent 后会显示在这里
+                    </div>
+                </#if>
+            </div>
+        </div>
         <div class="ui segment monitor-panel-segment page-panel-shell">
             <div class="ui block header top attached segment page-section-header">
                 <div class="ui compact tiny menu page-nav-menu">
@@ -319,12 +573,35 @@
         <!--欢迎提示面版-->
         <div id="emptyTip" class="ui grid middle aligned center aligned segment monitor-empty-state page-empty-state">
             <div class="column">
-                <h2 class="ui header">
-                    监控详情视图
-                    <div class="ui sub header">
-                        从左边监控列表选择您要查看的请求
+                <div class="oscilloscope-card">
+                    <div class="oscilloscope-header">
+                        <div>
+                            <div class="oscilloscope-title">实时请求示波器</div>
+                            <div class="oscilloscope-subtitle">探针在线后，请求进入时会在这里形成实时脉冲</div>
+                        </div>
+                        <div class="oscilloscope-status"><span class="probe-status-dot"></span><span id="oscilloscopeStatusText">等待请求</span></div>
                     </div>
-                </h2>
+                    <canvas id="oscilloscopeCanvas"></canvas>
+                    <div id="oscilloscopeEmpty" class="oscilloscope-empty">
+                        <i class="wave square icon"></i>
+                        <div>暂无请求波形</div>
+                        <div style="font-size: 12px; margin-top: 6px;">当监控列表收到请求后，波形会自动滚动</div>
+                    </div>
+                </div>
+                <div class="monitor-request-summary">
+                    <div class="monitor-request-card">
+                        <div class="monitor-overview-label">最新请求</div>
+                        <div id="latestTraceTitle" class="monitor-overview-sub" style="color: #1f2937; font-weight: 800;">暂无</div>
+                    </div>
+                    <div class="monitor-request-card">
+                        <div class="monitor-overview-label">请求来源</div>
+                        <div id="latestTraceSource" class="monitor-overview-sub" style="color: #1f2937; font-weight: 800;">-</div>
+                    </div>
+                    <div class="monitor-request-card">
+                        <div class="monitor-overview-label">操作提示</div>
+                        <div class="monitor-overview-sub" style="color: #1f2937; font-weight: 800;">点击左侧请求查看链路详情</div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -570,6 +847,21 @@
                 doSaveSnapshot('${projectId}', function () {
                     $("#newSnapshotForm").parents(".modal").modal('hide');
                 });
+            }
+        });
+        drawMonitorOscilloscope();
+        refreshProbeStatus('${projectId}');
+        setInterval(function () {
+            refreshProbeStatus('${projectId}');
+            drawMonitorOscilloscope();
+        }, 15000);
+        $('#probeList').on('click', '.probe-card', function () {
+            $('#probeList .probe-card').removeClass('active');
+            $(this).addClass('active');
+            var ip = $(this).data('ip');
+            if (ip) {
+                $('.ipFilter').dropdown('set selected', ip);
+                refreshMonitorList('${projectId}');
             }
         });
     });

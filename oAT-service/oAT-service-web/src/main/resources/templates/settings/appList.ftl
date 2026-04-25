@@ -274,10 +274,26 @@
             box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22) !important;
         }
 
+        body.app-edit-modal-open {
+            overflow: hidden !important;
+        }
+
+        body.app-edit-modal-open > .ui.dimmer.modals,
+        body.app-edit-modal-open > .ui.page.dimmer.modals {
+            position: fixed !important;
+            inset: 0 !important;
+            overflow: hidden !important;
+            padding: 0 !important;
+        }
+
         .app-edit-modal.ui.modal.visible,
         .app-edit-modal.ui.modal.active {
             display: flex !important;
             flex-direction: column;
+            top: 16px !important;
+            bottom: 16px !important;
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
         }
 
         .app-edit-modal .app-modal-header {
@@ -339,9 +355,13 @@
             max-height: none;
             overflow-y: auto;
             overflow-x: hidden;
-            padding: 24px 26px 18px !important;
+            padding: 24px 26px 88px !important;
             background: #fff;
             -webkit-overflow-scrolling: touch;
+        }
+
+        .app-edit-modal .app-modal-content > form {
+            padding-bottom: 16px;
         }
 
         .app-edit-modal .app-modal-section {
@@ -385,26 +405,36 @@
         }
 
         .app-edit-modal textarea[name="describe"] {
-            min-height: 120px;
+            min-height: 72px;
+            height: 84px;
             resize: vertical;
+        }
+
+        .app-edit-modal textarea[name="properties"] {
+            min-height: 240px;
         }
 
         .app-edit-modal .CodeMirror {
             border: 1px solid #d9e3ef;
             border-radius: 12px;
-            min-height: 210px;
+            height: min(36vh, 320px);
+            min-height: 220px;
+            max-height: 320px;
             background: #fff;
+            box-sizing: border-box;
         }
 
         .app-edit-modal .CodeMirror-scroll {
-            min-height: 210px;
-            overflow-y: auto;
+            height: 100%;
+            min-height: 0;
+            max-height: 320px;
+            overflow-y: auto !important;
+            overflow-x: auto !important;
         }
 
         .app-edit-modal .actions.app-modal-actions {
             flex: 0 0 auto;
-            position: sticky;
-            bottom: 0;
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: flex-end;
@@ -684,6 +714,36 @@
         var $editDialog = $("#editDialog");
         $editDialog.html('<div class="ui active centered inline loader" style="margin: 48px auto;"></div>');
         $editDialog.load('/p/${project.id}/app/edit?appId=' + appId, function() {
+            function lockEditModalLayout() {
+                $('body').addClass('app-edit-modal-open');
+                $('.ui.dimmer.modals').css({
+                    position: 'fixed',
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    left: 0,
+                    overflow: 'hidden',
+                    padding: 0
+                });
+                $editDialog.css({
+                    position: 'fixed',
+                    top: '16px',
+                    left: '50%',
+                    bottom: '16px',
+                    margin: '0',
+                    transform: 'translateX(-50%)',
+                    width: 'min(94vw, 1200px)',
+                    height: 'calc(100vh - 32px)',
+                    maxHeight: 'calc(100vh - 32px)'
+                });
+                $editDialog.find('.app-modal-content').css({
+                    flex: '1 1 auto',
+                    minHeight: 0,
+                    overflowY: 'auto',
+                    overflowX: 'hidden'
+                });
+                $editDialog.find('.app-modal-content').scrollTop(0);
+            }
             $editDialog.modal({
                 autofocus: false,
                 observeChanges: true,
@@ -691,10 +751,16 @@
                 closable: false,
                 transition: 'fade',
                 duration: 120,
+                onShow: lockEditModalLayout,
                 onVisible: function() {
+                    lockEditModalLayout();
                     if (typeof editor !== 'undefined' && editor) {
+                        editor.setSize(null, 'min(36vh, 320px)');
                         editor.refresh();
                     }
+                },
+                onHidden: function() {
+                    $('body').removeClass('app-edit-modal-open');
                 }
             }).modal('show');
         });
