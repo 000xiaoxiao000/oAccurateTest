@@ -39,21 +39,9 @@
 
     #stackNodeDetail {
         position: static;
-        margin: 14px 0 0;
         width: 100%;
         max-width: none;
         min-width: 0;
-        overflow: visible;
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
-        border-radius: 14px;
-        background: #fff;
-    }
-
-    #stackNodeDetail > .label {
-        display: block;
-        width: 100%;
-        box-sizing: border-box;
-        border-radius: 14px 14px 0 0 !important;
     }
 
     #stackNodeDetail.max {
@@ -464,14 +452,13 @@
         </tbody>
     </table>
 </div>
-<div id="stackNodeDetail" class="ui raised segment hidden"
-     style="">
-    <div class="ui top attached grey  label" style="border: none;top: -0.5px">
-        节点详情
-        <i class="close link icon" style="float: right;font-size: 1.1em;"
+<div id="stackNodeDetail" class="ui segment page-detail-card trace-node-detail-card hidden">
+    <div class="page-detail-card-title trace-node-detail-title">
+        <span>节点详情</span>
+        <i class="close link icon" style="font-size: 1.1em;"
            onclick="$('#stackNodeDetail').toggleClass('hidden');"></i>
     </div>
-    <div class="content ui">
+    <div class="content ui trace-node-detail-content">
     </div>
 </div>
 <!--覆盖率报告-->

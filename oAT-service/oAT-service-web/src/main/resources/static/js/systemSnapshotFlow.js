@@ -10,6 +10,10 @@ function buildTopo(svgId, data, operation) {
         });
     // 设置图标
     data.nodes.some(function (value) {
+        if (value.icon) {
+            value.icon = String(value.icon).toLowerCase();
+            return false;
+        }
         if (value.type == "browser") {
             value.icon = "desktop";
         } else if (value.type == "http server") {
