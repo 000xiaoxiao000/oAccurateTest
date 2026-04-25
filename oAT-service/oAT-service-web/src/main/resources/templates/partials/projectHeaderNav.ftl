@@ -8,15 +8,6 @@
         transform: translateY(-50%);
     }
 
-    .probe-alert-global-toast-meta {
-        display: inline-block;
-        margin-top: 4px;
-        color: rgba(0, 0, 0, .62);
-        font-size: 12px;
-        line-height: 1.45;
-        word-break: break-all;
-    }
-
     #appItem .menu > .item {
         position: relative;
         padding-right: 120px !important;
@@ -179,14 +170,13 @@
     initProbeAlertGlobalToast('${project.id}');
 
     function initProbeAlertGlobalToast(projectId) {
-        if (!projectId || !window.localStorage) {
+        if (!projectId || !window.EventSource || !window.localStorage) {
             return;
         }
         var storageKey = 'oat.probeAlert.lastSeen.' + projectId;
-        var endpoint = '/p/' + projectId + '/app/probe-alerts/recent?limit=1';
-        var initialized = false;
+        var endpoint = '/p/' + projectId + '/app/probe-alerts/stream';
         var toastDuration = 12000;
-        var pollInterval = 10000;
+        var source = new EventSource(endpoint);
 
         function eventTimestamp(event) {
             return event && event.eventTimeText ? event.eventTimeText : '';
@@ -211,29 +201,32 @@
             return 'success';
         }
 
-        function poll() {
-            $.getJSON(endpoint)
-                .done(function (result) {
-                    var events = result && result.events ? result.events : [];
-                    if (!events.length) {
-                        initialized = true;
-                        return;
-                    }
-                    var lastSeen = localStorage.getItem(storageKey) || '';
-                    var newestEvent = events[0];
-                    var newestIdentity = eventIdentity(newestEvent);
-                    if (initialized && newestIdentity && newestIdentity !== lastSeen) {
-                        notifyToast(buildToastMessage(newestEvent), toastType(newestEvent), toastDuration);
-                    }
-                    if (newestIdentity) {
-                        localStorage.setItem(storageKey, newestIdentity);
-                    }
-                    initialized = true;
-                });
-        }
+        source.addEventListener('connected', function () {
+            console.debug && console.debug('probe alert sse connected');
+        });
 
-        poll();
-        setInterval(poll, pollInterval);
+        source.addEventListener('probe-alert', function (message) {
+            var event;
+            try {
+                event = JSON.parse(message.data || '{}');
+            } catch (ignore) {
+                return;
+            }
+            var identity = eventIdentity(event);
+            if (!identity || identity === localStorage.getItem(storageKey)) {
+                return;
+            }
+            localStorage.setItem(storageKey, identity);
+            notifyToast(buildToastMessage(event), toastType(event), toastDuration);
+        });
+
+        source.onerror = function () {
+            console.debug && console.debug('probe alert sse disconnected, browser will retry');
+        };
+
+        $(window).on('beforeunload', function () {
+            source.close();
+        });
     }
 
 </script>

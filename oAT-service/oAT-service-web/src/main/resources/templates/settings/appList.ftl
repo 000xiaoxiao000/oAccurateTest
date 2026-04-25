@@ -267,8 +267,8 @@
             margin: 0 !important;
             transform: translateX(-50%) !important;
             width: min(94vw, 1200px) !important;
-            height: calc(100vh - 32px) !important;
-            max-height: calc(100vh - 32px) !important;
+            height: calc(100dvh - 32px) !important;
+            max-height: calc(100dvh - 32px) !important;
             border-radius: 18px !important;
             overflow: hidden !important;
             box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22) !important;
@@ -355,9 +355,13 @@
             max-height: none;
             overflow-y: auto;
             overflow-x: hidden;
-            padding: 24px 26px 88px !important;
+            padding: 18px 26px 22px !important;
             background: #fff;
             -webkit-overflow-scrolling: touch;
+        }
+
+        .app-edit-modal.ui.modal > .content.app-modal-content {
+            display: block;
         }
 
         .app-edit-modal .app-modal-content > form {
@@ -365,8 +369,8 @@
         }
 
         .app-edit-modal .app-modal-section {
-            margin-bottom: 22px;
-            padding: 18px;
+            margin-bottom: 16px;
+            padding: 16px;
             border: 1px solid #e7edf5;
             border-radius: 16px;
             background: #fbfdff;
@@ -405,21 +409,21 @@
         }
 
         .app-edit-modal textarea[name="describe"] {
-            min-height: 72px;
-            height: 84px;
+            min-height: 56px;
+            height: 64px;
             resize: vertical;
         }
 
         .app-edit-modal textarea[name="properties"] {
-            min-height: 240px;
+            min-height: 160px;
         }
 
         .app-edit-modal .CodeMirror {
             border: 1px solid #d9e3ef;
             border-radius: 12px;
-            height: min(36vh, 320px);
-            min-height: 220px;
-            max-height: 320px;
+            height: clamp(180px, 28vh, 260px);
+            min-height: 180px;
+            max-height: 260px;
             background: #fff;
             box-sizing: border-box;
         }
@@ -427,14 +431,15 @@
         .app-edit-modal .CodeMirror-scroll {
             height: 100%;
             min-height: 0;
-            max-height: 320px;
+            max-height: 260px;
             overflow-y: auto !important;
             overflow-x: auto !important;
         }
 
         .app-edit-modal .actions.app-modal-actions {
             flex: 0 0 auto;
-            position: relative;
+            position: sticky;
+            bottom: 0;
             display: flex;
             align-items: center;
             justify-content: flex-end;
@@ -442,7 +447,8 @@
             padding: 14px 26px 16px !important;
             border-top: 1px solid #e6eef7;
             background: #f8fafc;
-            z-index: 2;
+            z-index: 3;
+            box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.06);
         }
 
         .app-edit-modal .actions.app-modal-actions:before,
@@ -657,9 +663,9 @@
                                                     <i class="setting icon"></i>
                                                 </span>
                                                 <div class="left menu">
-                                                    <div class="item" onclick="openEditDialog('${app.id}');">
+                                                    <a class="item" href="/p/${project.id}/app/edit?appId=${app.id}">
                                                         <i class="edit icon"></i>编辑
-                                                    </div>
+                                                    </a>
                                                     <a class="item" href="${app.id}/oAT.key" download=""><i class="download icon"></i>下载注册文件</a>
                                                     <div class="divider"></div>
                                                     <div class="item" onclick="openDelDialog('${app.id}');">
@@ -685,10 +691,6 @@
     </div>
 </div>
 
-<div id="editDialog" class="ui modal standard app-edit-modal">
-
-</div>
-
 <!-- 删除用例弹出框-->
 <div id="deleteDialog" class="ui small modal">
     <div class="header">删除应用</div>
@@ -709,62 +711,6 @@
         on: 'hover'
     });
     $('.commit-id').popup();
-
-    function openEditDialog(appId) {
-        var $editDialog = $("#editDialog");
-        $editDialog.html('<div class="ui active centered inline loader" style="margin: 48px auto;"></div>');
-        $editDialog.load('/p/${project.id}/app/edit?appId=' + appId, function() {
-            function lockEditModalLayout() {
-                $('body').addClass('app-edit-modal-open');
-                $('.ui.dimmer.modals').css({
-                    position: 'fixed',
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    left: 0,
-                    overflow: 'hidden',
-                    padding: 0
-                });
-                $editDialog.css({
-                    position: 'fixed',
-                    top: '16px',
-                    left: '50%',
-                    bottom: '16px',
-                    margin: '0',
-                    transform: 'translateX(-50%)',
-                    width: 'min(94vw, 1200px)',
-                    height: 'calc(100vh - 32px)',
-                    maxHeight: 'calc(100vh - 32px)'
-                });
-                $editDialog.find('.app-modal-content').css({
-                    flex: '1 1 auto',
-                    minHeight: 0,
-                    overflowY: 'auto',
-                    overflowX: 'hidden'
-                });
-                $editDialog.find('.app-modal-content').scrollTop(0);
-            }
-            $editDialog.modal({
-                autofocus: false,
-                observeChanges: true,
-                detachable: false,
-                closable: false,
-                transition: 'fade',
-                duration: 120,
-                onShow: lockEditModalLayout,
-                onVisible: function() {
-                    lockEditModalLayout();
-                    if (typeof editor !== 'undefined' && editor) {
-                        editor.setSize(null, 'min(36vh, 320px)');
-                        editor.refresh();
-                    }
-                },
-                onHidden: function() {
-                    $('body').removeClass('app-edit-modal-open');
-                }
-            }).modal('show');
-        });
-    }
 
     function openDelDialog(appId) {
         // Set up the click handler for the confirmation button

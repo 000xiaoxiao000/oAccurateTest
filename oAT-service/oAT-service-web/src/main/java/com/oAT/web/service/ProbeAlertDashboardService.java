@@ -87,7 +87,7 @@ public class ProbeAlertDashboardService {
         return item;
     }
 
-    private ProbeAlertDashboardVo.ProbeAlertEventItemVo toEventItem(ProbeAlertEvent event) {
+    public ProbeAlertDashboardVo.ProbeAlertEventItemVo toEventItem(ProbeAlertEvent event) {
         ProbeAlertDashboardVo.ProbeAlertEventItemVo item = new ProbeAlertDashboardVo.ProbeAlertEventItemVo();
         item.setId(event.getId());
         item.setEventType(event.getEventType());

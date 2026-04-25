@@ -38,21 +38,27 @@
     }
 
     #stackNodeDetail {
-        position: fixed;
-        right: 0px;
-        top: 0px;
-        bottom: 5px;
-        margin: 0px;
-        z-index: 20;
-        max-width: 25em;
-        min-width: 20em;
-        overflow-y: auto;
+        position: static;
+        margin: 14px 0 0;
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+        overflow: visible;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        border-radius: 14px;
+        background: #fff;
+    }
+
+    #stackNodeDetail > .label {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 14px 14px 0 0 !important;
     }
 
     #stackNodeDetail.max {
-        left: 0px;
-        right: 0px;
-        max-width: 100vw;
+        width: 100%;
+        max-width: none;
     }
 </style>
 
@@ -253,7 +259,7 @@
             </div>
 
             <div class="app-unified-content">
-                <div class="ui secondary pointing four item stackable menu big snapshot-detail-tabs">
+                <div class="ui secondary pointing four item stackable menu big snapshot-detail-tabs" id="snapshotDetailTabs">
                     <a class="item active" data-tab="definition">基本信息</a>
                     <a class="item" data-tab="flow">流程图</a>
                     <a class="item" data-tab="usage">堆栈列表</a>
@@ -420,8 +426,8 @@
     </div>
 </div>
 <div class="ui tab" data-tab="flow"
-     style="width: 100%;height: calc(100vh - 210px);">
-    <svg id="svg-canvas" style="width: 100%;height: 100%">
+     style="width: 100%; min-height: 320px;">
+    <svg id="svg-canvas" style="width: 100%;height: 320px; display: block;">
     </svg>
 </div>
 
@@ -457,25 +463,15 @@
         </#list>
         </tbody>
     </table>
-    <div id="stackNodeDetail" class="ui raised segment hidden"
-         style="">
-        <div class="ui top attached grey  label" style="border: none;top: -0.5px">
-            节点详情
-            <i class="close link icon" style="float: right;font-size: 1.1em;"
-               onclick="$('#stackNodeDetail').toggleClass('hidden');"></i>
-
-            <script>
-                function maxDetailWindow() {
-                    $('#stackNodeDetail').toggleClass('max');
-                    $('#stackNodeDetail .window.icon').toggleClass('maximize');
-                    $('#stackNodeDetail .window.icon').toggleClass('restore');
-                    $('#stackNodeDetail .content').toggleClass('text segment container');
-                }
-            </script>
-            <i class="window maximize outline link icon" onclick="maxDetailWindow();" style="float: right;font-size: 1.1em;"></i>
-        </div>
-        <div class="content ui">
-        </div>
+</div>
+<div id="stackNodeDetail" class="ui raised segment hidden"
+     style="">
+    <div class="ui top attached grey  label" style="border: none;top: -0.5px">
+        节点详情
+        <i class="close link icon" style="float: right;font-size: 1.1em;"
+           onclick="$('#stackNodeDetail').toggleClass('hidden');"></i>
+    </div>
+    <div class="content ui">
     </div>
 </div>
 <!--覆盖率报告-->
@@ -560,10 +556,15 @@
         if (defaultTab) {
             activeTab = defaultTab;
         }
-        // 初始化选项卡
-        $('.ui.menu .item').tab({
+        var snapshotTabs = $('#snapshotDetailTabs .item');
+        // 初始化选项卡，只绑定快照详情页顶部页签，避免影响左侧/顶部导航菜单。
+        snapshotTabs.tab({
+            context: '.snapshot-detail-main',
             onVisible: function (tabPath) {
                 activeTab = tabPath;
+                if (tabPath != "flow" && tabPath != "usage") {
+                    $('#stackNodeDetail').toggleClass('hidden', true);
+                }
                 if (tabPath == "flow" && !initFlow) {
                     buildFlow();
 
@@ -571,7 +572,7 @@
             }
         });
         if (defaultTab) {
-            $('.ui.menu .item').tab('change tab', defaultTab);
+            snapshotTabs.tab('change tab', defaultTab);
         }
         //  如果程图初始激活页 就需要先调用该方法
         // buildFlow();
@@ -595,8 +596,7 @@
             $("#svg-canvas").children().remove();
             var g = buildTopo("svg-canvas", datas, {
                 nodeClick: function (id, index, array) {
-                    var node = g.node(id);
-                    showTraceNodeDetail(node && node.data ? node.data : id);
+                    showTraceNodeDetail(id);
                 }
             });
             initFlow = true;
@@ -625,11 +625,15 @@
 
     // 打开堆栈节点详情
     function showTraceNodeDetail(id) {
-        data = "traceId=${snapshot.traceId}&nodeId=" + id;
+        var data = "traceId=${snapshot.traceId}&nodeId=" + id;
         // 加载 节点详情页
         $('#stackNodeDetail .content').load("/p/${project.id}/${app.id}/snapshot/node/${snapshot.id}", data, function (response, status, xhr) {
             if ("success" == status) {
                 $('#stackNodeDetail').toggleClass('hidden', false);
+                var detailPanel = $('#stackNodeDetail');
+                if (detailPanel.length) {
+                    $('html, body').animate({scrollTop: detailPanel.offset().top - 90}, 180);
+                }
             }
         });
     }

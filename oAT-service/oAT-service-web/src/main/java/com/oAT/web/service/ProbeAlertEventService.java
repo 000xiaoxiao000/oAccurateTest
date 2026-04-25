@@ -21,6 +21,9 @@ public class ProbeAlertEventService {
     @Autowired
     private ProbeWebhookNotifyService probeWebhookNotifyService;
 
+    @Autowired
+    private ProbeAlertSseService probeAlertSseService;
+
     public ProbeAlertEvent createOnlineEvent(ProbeInstanceStatus status, AppVo app) {
         ProbeAlertEvent event = createBaseEvent(status, ProbeAlertEvent.EventType.ONLINE, "探针上线：" + describeProbe(status));
         return saveAndNotify(event, app, app != null && Boolean.TRUE.equals(app.getProbeAlertOnOnline()));
@@ -78,6 +81,7 @@ public class ProbeAlertEventService {
             logger.warn("创建探针告警事件但跳过 Webhook, eventId={}, appId={}, eventType={}, reason={}",
                     saved.getId(), saved.getAppId(), saved.getEventType(), buildSkipReason(app, eventNotifyEnabled));
         }
+        probeAlertSseService.broadcast(saved);
         return saved;
     }
 

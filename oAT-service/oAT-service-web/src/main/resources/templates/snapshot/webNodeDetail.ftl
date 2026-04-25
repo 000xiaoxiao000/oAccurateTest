@@ -19,11 +19,39 @@
             </div>
             <div class="item">
                 <span class="listHeader">状态码：</span>
+                <#assign responseCode = (node.responseCode!'')?trim>
+                <#if responseCode?matches('2\\d\\d')>
+                    <i class="ui green circle icon" style="display: inline"></i>
+                <#else>
+                    <i class="ui red circle icon" style="display: inline"></i>
+                </#if>
                 ${node.responseCode!}
             </div>
+            <div class="ui fitted divider"></div>
             <div class="item">
-                <span class="listHeader">客户端IP：</span>
-                ${node.clientIp!}
+                <span class="listHeader">客户端IP:</span>
+                ${node.clientIp!'not found'}
+            </div>
+            <div class="item">
+                <span class="listHeader">Cookie:</span>
+                ${(node.requestHeader.cookie)!'not found'}
+            </div>
+            <div class="item">
+                <span class="listHeader">user-agent:</span>
+                ${(node.requestHeader.userAgent)!'not found'}
+            </div>
+            <div class="item">
+                <span class="listHeader">服务端IP：</span>
+                ${node.serverIp}
+            </div>
+            <div class="ui fitted  divider"></div>
+            <div class="item">
+                <span class="listHeader">日期时间：</span>
+                ${node.beginTime?number_to_datetime}
+            </div>
+            <div class="item">
+                <span class="listHeader">总耗时ms：</span>
+                ${node.useTime}
             </div>
         </div>
     </div>
@@ -35,13 +63,14 @@
             请求参数
         </div>
         <div class="ui list content active" style="margin:0px 0px 0px 25px">
-            <#if params?? && (params?size > 0)>
-                <#list params as param>
+            <#if node.requestParamNames?? && (node.requestParamNames?size > 0)>
+                <#list node.requestParamNames as paramName>
                     <div class="item">
-                        <span class="listHeader">${param.name}:</span>
-                        <#if param.value??>
-                            <#if param.value?has_content>
-                                ${param.value}
+                        <span class="listHeader">${paramName}:</span>
+                        <#if node.requestParamValues?? && (node.requestParamValues?size > paramName_index)>
+                            <#assign paramValue = node.requestParamValues[paramName_index]>
+                            <#if paramValue?has_content>
+                                ${paramValue}
                             <#else>
                                 <span style="color: #999;">(空值)</span>
                             </#if>
