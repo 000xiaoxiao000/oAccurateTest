@@ -683,7 +683,7 @@
             return [
                 { id: 'message', $el: $messageSection, minWidth: 180, minHeight: 120, preferredHeight: 190 },
                 { id: 'context', $el: $contextSection, minWidth: 160, minHeight: 48, preferredHeight: 68 },
-                { id: 'quick', $el: $quickSection, minWidth: 180, minHeight: 110, preferredHeight: 150 },
+                { id: 'quick', $el: $quickSection, minWidth: 180, minHeight: 92, preferredHeight: 150 },
                 { id: 'starter', $el: $starterSection, minWidth: 180, minHeight: 86, preferredHeight: 114 },
                 { id: 'compose', $el: $compose, minWidth: 220, minHeight: 122, preferredHeight: 144 }
             ];
@@ -890,7 +890,7 @@
             var starterHeight = 104;
             var composeHeight = 142;
             var sideHeight = Math.max(220, bounds.usableHeight - composeHeight - gap);
-            var quickActualHeight = Math.min(quickHeight, Math.max(110, sideHeight - starterHeight - gap));
+            var quickActualHeight = Math.min(quickHeight, Math.max(92, sideHeight - starterHeight - gap));
             var starterActualHeight = Math.max(86, sideHeight - quickActualHeight - gap);
             return {
                 message: { left: bounds.leftOffset, top: top, width: mainWidth, height: messageHeight },
@@ -899,6 +899,46 @@
                 starter: { left: bounds.leftOffset + mainWidth + gap, top: top + quickActualHeight + gap, width: sideWidth, height: starterActualHeight },
                 compose: { left: bounds.leftOffset, top: bounds.topOffset + bounds.usableHeight - composeHeight, width: bounds.width, height: composeHeight }
             };
+        }
+
+        function compactQuickLinkLayout() {
+            if (!$quickSection.is(':visible') || !$quickLinks.length || !$quickLinks.children().length) {
+                return;
+            }
+
+            var quickItem = getLayoutItems().filter(function (item) { return item.id === 'quick'; })[0];
+            if (!quickItem || !$quickSection.hasClass('ai-floating-layout-item')) {
+                return;
+            }
+
+            var current = collectLayoutMap();
+            var quickRect = current.quick;
+            var starterRect = current.starter;
+            if (!quickRect) {
+                return;
+            }
+
+            var headerHeight = $quickSection.find('.ai-floating-section-header').outerHeight(true) || 0;
+            var maxBodyHeight = parseFloat($quickLinks.css('max-height')) || 120;
+            var bodyHeight = Math.min($quickLinks[0].scrollHeight || $quickLinks.outerHeight(true) || 0, maxBodyHeight);
+            var desiredHeight = Math.ceil(headerHeight + bodyHeight + 4);
+            desiredHeight = Math.max(quickItem.minHeight, desiredHeight);
+
+            var shrinkBy = Math.floor(quickRect.height - desiredHeight);
+            if (shrinkBy <= 24) {
+                return;
+            }
+
+            current.quick = $.extend({}, quickRect, { height: desiredHeight });
+            if (starterRect) {
+                var sameColumn = starterRect.left < quickRect.left + quickRect.width && quickRect.left < starterRect.left + starterRect.width;
+                var belowQuick = starterRect.top >= quickRect.top + quickRect.height - 2;
+                if (sameColumn && belowQuick) {
+                    current.starter = $.extend({}, starterRect, { top: Math.max(quickRect.top + desiredHeight + 10, starterRect.top - shrinkBy) });
+                }
+            }
+
+            applyLayoutMap(current);
         }
 
         function clampLayoutRect(rect, item) {
@@ -1960,6 +2000,7 @@
             });
             $quickLinks.html(html);
             $('#aiFloatingQuickLinkSection').show();
+            compactQuickLinkLayout();
         }
 
         function saveHistory(entry) {

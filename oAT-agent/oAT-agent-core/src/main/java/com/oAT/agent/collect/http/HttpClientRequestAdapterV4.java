@@ -4,7 +4,10 @@ import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -99,6 +102,48 @@ public class HttpClientRequestAdapterV4 {
             logger.error("[Agent-EXCError]HttpClientRequestAdapter getURL error: " + StackTraceFormatter.formatExceptionWithAgentMark(e));
         }
         return "";
+    }
+
+    public String getRequestBody() {
+        if (httpRequest == null) {
+            return null;
+        }
+        try {
+            Method _getEntity = httpRequest.getClass().getMethod("getEntity");
+            Object entity = _getEntity.invoke(httpRequest);
+            if (entity == null) {
+                return null;
+            }
+            Method _isRepeatable = entity.getClass().getMethod("isRepeatable");
+            Object repeatable = _isRepeatable.invoke(entity);
+            if (!Boolean.TRUE.equals(repeatable)) {
+                return "[non-repeatable entity omitted]";
+            }
+            Method _getContent = entity.getClass().getMethod("getContent");
+            Object content = _getContent.invoke(entity);
+            if (!(content instanceof InputStream)) {
+                return null;
+            }
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            try (InputStream inputStream = (InputStream) content) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1 && outputStream.size() < 8192) {
+                    int writable = Math.min(bytesRead, 8192 - outputStream.size());
+                    outputStream.write(buffer, 0, writable);
+                }
+            }
+            String body = new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+            if (body.length() >= 8192) {
+                return body + "...";
+            }
+            return body;
+        } catch (NoSuchMethodException e) {
+            return null;
+        } catch (Exception e) {
+            logger.error("[Agent-EXCError]HttpClientRequestAdapter getRequestBody error: " + StackTraceFormatter.formatExceptionWithAgentMark(e));
+            return null;
+        }
     }
 
     public Map<String, String> getRequestHeaders() {

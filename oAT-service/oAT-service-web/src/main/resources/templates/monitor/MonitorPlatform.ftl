@@ -104,8 +104,15 @@
 
         .monitor-list-scroll {
             padding: 0;
-            height: calc(100vh - 410px);
+            flex: 1 1 auto;
+            height: auto;
+            min-height: 0;
             overflow: auto;
+        }
+
+        .monitor-layout {
+            height: calc(100vh - 288px);
+            min-height: 420px;
         }
 
         .monitor-overview-grid {
@@ -264,18 +271,25 @@
 
         .monitor-scope-state {
             display: block !important;
-            min-height: calc(100vh - 390px);
+            height: 100%;
+            min-height: 0;
             padding: 14px !important;
             margin-top: 0 !important;
         }
 
         .monitor-scope-state .monitor-scope-column {
+            display: flex;
+            flex-direction: column;
             width: 100% !important;
+            height: 100%;
             max-width: none !important;
         }
 
         .oscilloscope-card {
             position: relative;
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
             overflow: hidden;
             min-height: 240px;
             border-radius: 18px;
@@ -334,9 +348,10 @@
         }
 
         #oscilloscopeCanvas {
+            flex: 1 1 auto;
             display: block;
             width: 100%;
-            height: 200px;
+            min-height: 0;
         }
 
         .oscilloscope-empty {
@@ -396,6 +411,8 @@
         @media (max-width: 960px) {
             .monitor-layout {
                 flex-direction: column;
+                height: auto;
+                min-height: 0;
             }
 
             .monitor-list-panel,
