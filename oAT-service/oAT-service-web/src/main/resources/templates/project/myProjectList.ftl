@@ -338,20 +338,6 @@
             color: #b45309;
         }
 
-        .my-project-progress {
-            height: 5px;
-            margin-top: 8px;
-            border-radius: 999px;
-            overflow: hidden;
-            background: #e7edf5;
-        }
-
-        .my-project-progress-bar {
-            height: 100%;
-            border-radius: inherit;
-            background: linear-gradient(90deg, #21ba45 0%, #2185d0 100%);
-        }
-
         .my-project-meta-item--hide-on-card {
             display: none;
         }
@@ -768,14 +754,6 @@
                 <#assign updateTimeMs = (p.updateTime?long)!0>
                 <#assign createTimeMs = (p.createTime?long)!0>
                 <#assign sortTimestamp = updateTimeMs>
-                <#assign completionPercent = 60>
-                <#if projectDescription?has_content>
-                    <#assign completionPercent = completionPercent + 25>
-                </#if>
-                <#if p.updateTime??>
-                    <#assign completionPercent = completionPercent + 15>
-                </#if>
-                <#assign completionStatusClass = (completionPercent >= 85)?then('is-positive', 'is-warning')>
                 <#if sortTimestamp == 0>
                     <#assign sortTimestamp = createTimeMs>
                 </#if>
@@ -832,13 +810,6 @@
                             <div class="my-project-meta-item">
                                 <div class="my-project-meta-label">最近更新</div>
                                 <div class="my-project-meta-value" title="<#if p.updateTime??>${p.updateTime?string('yyyy-MM-dd HH:mm:ss')}<#else>暂无记录</#if>"><#if p.updateTime??>${p.updateTime?string('yyyy-MM-dd HH:mm')}<#else>暂无记录</#if></div>
-                            </div>
-                            <div class="my-project-meta-item my-project-meta-item--wide">
-                                <div class="my-project-meta-label">信息完整度</div>
-                                <div class="my-project-meta-value ${completionStatusClass}">${completionPercent}%</div>
-                                <div class="my-project-progress" aria-label="信息完整度 ${completionPercent}%">
-                                    <div class="my-project-progress-bar" style="width: ${completionPercent}%;"></div>
-                                </div>
                             </div>
                         </div>
                     </div>

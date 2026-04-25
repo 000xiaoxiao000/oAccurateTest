@@ -367,9 +367,43 @@
         $('#describeCount').text(($('textarea[name="describe"]').val() || '').length);
     }
 
+    function showCreateProjectValidationError(message, $field) {
+        showToast(message, 'error');
+        if ($field && $field.length) {
+            $field.closest('.field').addClass('error');
+            $field.focus();
+        }
+    }
+
+    function getCreateProjectValidationError() {
+        var $name = $('input[name="name"]');
+        var name = $.trim($name.val() || '');
+        var describe = $('textarea[name="describe"]').val() || '';
+
+        if (!name) {
+            return { message: '请输入项目名称', field: $name };
+        }
+        if (name.length < 4) {
+            return { message: '项目名称至少包含4个字符，当前只有' + name.length + '个字符', field: $name };
+        }
+        if (name.length > 50) {
+            return { message: '项目名称不能超过50个字符', field: $name };
+        }
+        if (describe.length > 512) {
+            return { message: '项目描述不能超过512个字符', field: $('textarea[name="describe"]') };
+        }
+        return null;
+    }
+
     function submitCreateProject() {
         var $form = $('.ui.form');
-        if (!$form.form('is valid')) {
+        var validationError = getCreateProjectValidationError();
+        if (validationError) {
+            showCreateProjectValidationError(validationError.message, validationError.field);
+            return;
+        }
+
+        if (!$form.form('validate form')) {
             return;
         }
 
@@ -385,8 +419,9 @@
             } else {
                 showToast(res.message || '项目创建失败', 'error');
             }
-        }).fail(function() {
-            showToast('网络请求失败', 'error');
+        }).fail(function(xhr) {
+            var message = (xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.errorMessage)) || '网络请求失败';
+            showToast(message, 'error');
         });
     }
 
@@ -437,9 +472,15 @@
 
     $(function () {
         updateCreateCounters();
-        $('input[name="name"], textarea[name="describe"]').on('input', updateCreateCounters);
+        $('input[name="name"], textarea[name="describe"]').on('input', function () {
+            updateCreateCounters();
+            $(this).closest('.field').removeClass('error');
+        });
         $('#resetCreateProject').on('click', function () {
-            setTimeout(updateCreateCounters, 0);
+            setTimeout(function () {
+                updateCreateCounters();
+                $('.ui.form .field').removeClass('error');
+            }, 0);
         });
     });
 </script>
