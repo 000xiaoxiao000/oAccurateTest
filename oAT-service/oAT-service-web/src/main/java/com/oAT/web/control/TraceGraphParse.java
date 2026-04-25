@@ -568,6 +568,28 @@ public class TraceGraphParse {
 
                 }
 
+                for (FeignTraceNode feignNode : ((ApplicationGraphNode) group).getFeignNodes()) {
+
+
+
+                    buildRemoteInvokeEdge(fromId, feignNode);
+
+
+
+                }
+
+
+
+                for (SofaRpcTraceNode sofaRpcNode : ((ApplicationGraphNode) group).getSofaRpcNodes()) {
+
+
+
+                    buildRemoteInvokeEdge(fromId, sofaRpcNode);
+
+
+
+                }
+
 
 
                 for (SqlTraceNode sqlNode : ((ApplicationGraphNode) group).getSqlNodes()) {
@@ -639,6 +661,28 @@ public class TraceGraphParse {
 
 
         return nodes.get(traceNodeId + ".remote");
+
+
+
+    }
+
+    private void buildRemoteInvokeEdge(String fromId, RemoteInvokeNode remoteInvokeNode) {
+
+
+
+        if (!(remoteInvokeNode instanceof TraceNode) || remoteInvokeNode.getRemoteApp() == null) {
+
+
+
+            return;
+
+
+
+        }
+
+
+
+        buildEdges(fromId, remoteInvokeNode.getRemoteApp().getAppId(), (TraceNode) remoteInvokeNode);
 
 
 
@@ -1047,6 +1091,5 @@ public class TraceGraphParse {
 
 
 }
-
 
 

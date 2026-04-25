@@ -26,7 +26,7 @@
         </div>
         <div class="item">
             <span class="listHeader">远程调用数：</span>
-            ${(data.dubboNodes?size) + (data.httpClientNodes?size)}
+            ${(data.dubboNodes?size) + (data.httpClientNodes?size) + (data.feignNodes?size) + (data.sofaRpcNodes?size)}
         </div>
 
         <div class="red item ">
@@ -252,6 +252,72 @@
                             <div class="ui divider"/>
                             <div class="ui tiny left floated header ">请求体：</div>
                             <pre style="white-space: pre-wrap; word-break: break-all;"><code class="basic">${node.serviceBody!'无请求体'}</code></pre>
+                            <div class="ui divider"/>
+                        </div>
+                    </div>
+                </td>
+                <td>${node.useTime}ms</td>
+            </tr>
+        </#list>
+        <#list data.feignNodes as node>
+            <tr <#if node.error??> class="error" </#if> >
+                <td>${data.dubboNodes?size + data.httpClientNodes?size + node_index + 1}</td>
+                <td>feign</td>
+                <td>
+                    <div class="ui fluid accordion ">
+                        <div class="ui title">
+                            ${node.remoteMethod!} ${node.remoteUrl!}
+                            <#if node.error??>
+                                <i class="ui warning sign red icon poping up"
+                                   data-content="${node.error.message!}"
+                                   data-variation="tiny inverted"></i>
+                            </#if>
+                        </div>
+                        <div class="ui content segment">
+                            <div class="ui tiny left floated header ">远程应用：</div>
+                            ${(node.remoteApp.appName)!}
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">请求地址：</div>
+                            <div style="word-break: break-all;">${node.remoteUrl!}</div>
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">请求体：</div>
+                            <pre style="white-space: pre-wrap; word-break: break-all;"><code class="basic">${node.remoteBody!'无请求体'}</code></pre>
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">返回结果：</div>
+                            <pre style="white-space: pre-wrap; word-break: break-all;"><code class="basic">${node.remoteResponse!'无返回结果'}</code></pre>
+                            <div class="ui divider"/>
+                        </div>
+                    </div>
+                </td>
+                <td>${node.useTime}ms</td>
+            </tr>
+        </#list>
+        <#list data.sofaRpcNodes as node>
+            <tr <#if node.error??> class="error" </#if> >
+                <td>${data.dubboNodes?size + data.httpClientNodes?size + data.feignNodes?size + node_index + 1}</td>
+                <td>sofaRPC</td>
+                <td>
+                    <div class="ui fluid accordion ">
+                        <div class="ui title">
+                            ${node.interfaceName!}#${node.methodName!}
+                            <#if node.error??>
+                                <i class="ui warning sign red icon poping up"
+                                   data-content="${node.error.message!}"
+                                   data-variation="tiny inverted"></i>
+                            </#if>
+                        </div>
+                        <div class="ui content segment">
+                            <div class="ui tiny left floated header ">远程应用：</div>
+                            ${(node.remoteApp.appName)!}
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">远程地址：</div>
+                            <div style="word-break: break-all;">${node.directUrl!}</div>
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">输入参数：</div>
+                            <pre style="white-space: pre-wrap; word-break: break-all;"><code class="json">${node.inParam!}</code></pre>
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">返回结果：</div>
+                            <pre style="white-space: pre-wrap; word-break: break-all;"><code class="json">${node.outParam!}</code></pre>
                             <div class="ui divider"/>
                         </div>
                     </div>

@@ -86,7 +86,7 @@ function buildMap(data) {
             maxZoom: 6, // 缩放最大比例
             wheelSensitivity: 0.1, boxSelectionEnabled: true,// 是否允许框选 按住ctrl或shift 拖动鼠标框选
             elements: data,
-            style: fetch('/css/map.cycss?v=1').then(function (value) {
+            style: fetch('/css/map.cycss?v=2').then(function (value) {
                 return value.text();
             }),
             layout: coseLayoutOptions

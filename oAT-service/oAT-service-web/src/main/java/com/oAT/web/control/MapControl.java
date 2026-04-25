@@ -115,7 +115,18 @@ public class MapControl {
     public List<ImageElement> getHomeMapData(@PathVariable String projectId) {
         List<AppVo> appList = appService.getAppList(projectId);
         List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId);
-        return new AppRelationLayer(appList, snapshots).elements();
+        Map<String, Collection<TraceNode>> traceNodesBySnapshotId = snapshots.stream()
+                .filter(snapshot -> StringUtils.hasText(snapshot.getTraceId()))
+                .collect(Collectors.toMap(SystemSnapshot::getId, this::getTraceNodesSafely, (left, right) -> left));
+        return new AppRelationLayer(appList, snapshots, traceNodesBySnapshotId).elements();
+    }
+
+    private Collection<TraceNode> getTraceNodesSafely(SystemSnapshot snapshot) {
+        try {
+            return snapshotService.getTraceNodes(snapshot.getTraceId());
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 
     @RequestMapping("/code")

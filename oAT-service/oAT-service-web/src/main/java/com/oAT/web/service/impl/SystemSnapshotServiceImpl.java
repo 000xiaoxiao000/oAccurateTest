@@ -116,8 +116,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
         // 解析封装 远程调用
         Remote[] remotes = nodes.stream()
-                .filter(a -> a instanceof DubboTraceNode)
-                .map(a -> buildRemote((DubboTraceNode) a, nodes))
+                .filter(a -> a instanceof RemoteInvokeNode)
+                .map(a -> buildRemote((RemoteInvokeNode) a, nodes))
                 .collect(Collectors.toList())
                 .toArray(new Remote[0]); // 过滤
         snapshot.setRemotes(remotes);
@@ -155,16 +155,30 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         return repository.save(oldSnapshot);
     }
 
-    //TODO 远程调用节点暂时只构建Dubbo
-    private Remote buildRemote(DubboTraceNode dubboNode, Collection<TraceNode> nodes) {
+    private Remote buildRemote(RemoteInvokeNode remoteInvokeNode, Collection<TraceNode> nodes) {
+        TraceNode traceNode = (TraceNode) remoteInvokeNode;
         Remote remote = new Remote();
-        remote.setType("dubbo");
-        remote.setUrl(dubboNode.getRemoteUrl());
-        remote.setInvokerInterface(dubboNode.getServiceInterface() + "#" + dubboNode.getServiceMethodName());
-        nodes.stream().filter(a -> a.getTraceNodeId().equals(dubboNode.getTraceNodeId() + ".remote"))
-                .findAny().ifPresent(
-                        a -> remote.setAppId(a.getApp().getAppId())
-                );
+        remote.setType(traceNode.toType());
+        if (remoteInvokeNode instanceof DubboTraceNode) {
+            DubboTraceNode dubboNode = (DubboTraceNode) remoteInvokeNode;
+            remote.setUrl(dubboNode.getRemoteUrl());
+            remote.setInvokerInterface(dubboNode.getServiceInterface() + "#" + dubboNode.getServiceMethodName());
+        } else if (remoteInvokeNode instanceof FeignTraceNode) {
+            FeignTraceNode feignNode = (FeignTraceNode) remoteInvokeNode;
+            remote.setUrl(feignNode.getRemoteUrl());
+            remote.setInvokerInterface(feignNode.getRemoteFeignTargetName() + "#" + feignNode.getRemoteMethod());
+        } else if (remoteInvokeNode instanceof SofaRpcTraceNode) {
+            SofaRpcTraceNode sofaRpcNode = (SofaRpcTraceNode) remoteInvokeNode;
+            remote.setUrl(sofaRpcNode.getDirectUrl());
+            remote.setInvokerInterface(sofaRpcNode.getInterfaceName() + "#" + sofaRpcNode.getMethodName());
+        }
+        if (remoteInvokeNode.getRemoteApp() != null) {
+            remote.setAppId(remoteInvokeNode.getRemoteApp().getAppId());
+        } else {
+            nodes.stream().filter(a -> a.getTraceNodeId().equals(traceNode.getTraceNodeId() + ".remote"))
+                    .filter(a -> a.getApp() != null)
+                    .findAny().ifPresent(a -> remote.setAppId(a.getApp().getAppId()));
+        }
         return remote;
     }
 
