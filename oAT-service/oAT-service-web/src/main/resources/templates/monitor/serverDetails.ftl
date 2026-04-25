@@ -26,7 +26,7 @@
         </div>
         <div class="item">
             <span class="listHeader">远程调用数：</span>
-            ${data.dubboNodes?size}
+            ${(data.dubboNodes?size) + (data.httpClientNodes?size)}
         </div>
 
         <div class="red item ">
@@ -225,6 +225,39 @@
                 <td>${node.useTime}ms</td>
             </tr>
 
+        </#list>
+        <#list data.httpClientNodes as node>
+            <tr <#if node.error??> class="error" </#if> >
+                <td>${data.dubboNodes?size + node_index + 1}</td>
+                <td>http</td>
+                <td>
+                    <div class="ui fluid accordion ">
+                        <div class="ui title">
+                            ${node.serviceMethod!} ${node.serviceURL!}
+                            <#if node.error??>
+                                <i class="ui warning sign red icon poping up"
+                                   data-content="${node.error.message!}"
+                                   data-variation="tiny inverted"></i>
+                            </#if>
+                        </div>
+                        <div class="ui content segment">
+                            <div class="ui tiny left floated header ">请求方法：</div>
+                            ${node.serviceMethod!}
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">请求地址：</div>
+                            <div style="word-break: break-all;">${node.serviceURL!}</div>
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">请求头：</div>
+                            <pre style="white-space: pre-wrap; word-break: break-all;"><code class="basic">${node.serviceHeaders!}</code></pre>
+                            <div class="ui divider"/>
+                            <div class="ui tiny left floated header ">请求体：</div>
+                            <pre style="white-space: pre-wrap; word-break: break-all;"><code class="basic">${node.serviceBody!'无请求体'}</code></pre>
+                            <div class="ui divider"/>
+                        </div>
+                    </div>
+                </td>
+                <td>${node.useTime}ms</td>
+            </tr>
         </#list>
         </tbody>
     </table>

@@ -85,6 +85,7 @@ public class HttpClientCollectV4 extends AbstractByteTransformCollect implements
             node.setServiceMethod(invocation.getMethod());
             node.setServiceURL(invocation.getURL());
             node.setServiceHeaders(invocation.getRequestHeaders().toString());
+            node.setServiceBody(invocation.getRequestBody());
 
             Map<String, String> map = new HashMap<>();
             map.put("userheader", userHeader);

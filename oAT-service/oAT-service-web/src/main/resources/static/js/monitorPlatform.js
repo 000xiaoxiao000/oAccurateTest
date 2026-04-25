@@ -115,7 +115,7 @@ function updateMonitorScopeHint(laneCount, hiddenLaneCount) {
     if (monitorScopeMode === 'single') {
         text = monitorSelectedProbeIp
             ? '当前探针 ' + monitorSelectedProbeIp + '：只展示该探针收到的请求波形'
-            : '当前探针：请先点击下方在线探针卡片选择一个探针';
+            : '当前探针：请先点击上方在线探针卡片选择一个探针';
     } else if (monitorScopeMode === 'lanes') {
         text = '多探针泳道：每条横线代表一个探针，最多显示活跃前 ' + monitorScopeLaneLimit + ' 个';
         if (laneCount) {
