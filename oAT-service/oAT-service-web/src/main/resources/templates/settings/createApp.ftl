@@ -287,6 +287,9 @@
 
 <script>
     function submitCreateApp() {
+        if (editor) {
+            editor.save();
+        }
         var $form = $('.ui.form');
         if (!$form.form('is valid')) {
             return;
