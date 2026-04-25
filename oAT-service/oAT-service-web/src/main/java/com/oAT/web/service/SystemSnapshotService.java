@@ -26,6 +26,8 @@ public interface SystemSnapshotService {
 
     List<SystemSnapshot> findAll(String projectId, String appId);
 
+    List<SystemSnapshot> findAll(String projectId);
+
     void asyncCalculateCoverage(String snapshotId);
 
 }

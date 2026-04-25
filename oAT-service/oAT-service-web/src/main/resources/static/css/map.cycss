@@ -85,7 +85,9 @@ node.app{
   background-image:/images/1f4bb.png;
   background-fit: contain;
   background-clip: none;
-  font-size: 10px;
+  width: 36;
+  height: 36;
+  font-size: 8px;
 }
 node:selected{
   z-index: 999;
@@ -111,6 +113,18 @@ edge.highlight{
     color: #df3c5a;
     line-color: #df3c5a;
     target-arrow-color: #df3c5a;
+}
+edge.app-relation{
+    content: data(name);
+    curve-style: unbundled-bezier;
+    line-color: #21b8b0;
+    target-arrow-color: #21b8b0;
+    target-arrow-shape: triangle-backcurve;
+    width: 2px;
+    font-size: 7px;
+    color: #4b5563;
+    text-background-color: #f6f8fb;
+    text-background-opacity: 0.85;
 }
 /*调用*/
 edge.invoke{

@@ -246,6 +246,12 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         return list;
     }
 
+    @Override
+    public List<SystemSnapshot> findAll(String projectId) {
+        Assert.notNull(projectId, "参数projectId不能为空");
+        return repository.findByProjectId(projectId);
+    }
+
     @Async("coverageExecutor")
     @Override
     public void asyncCalculateCoverage(String snapshotId) {
