@@ -170,13 +170,18 @@
     initProbeAlertGlobalToast('${project.id}');
 
     function initProbeAlertGlobalToast(projectId) {
-        if (!projectId || !window.EventSource || !window.localStorage) {
+        if (!projectId || !window.EventSource || !window.localStorage || window.__probeAlertSseStarted) {
             return;
         }
+        window.__probeAlertSseStarted = true;
         var storageKey = 'oat.probeAlert.lastSeen.' + projectId;
         var endpoint = '/p/' + projectId + '/app/probe-alerts/stream';
         var toastDuration = 12000;
-        var source = new EventSource(endpoint);
+        var source = null;
+        var reconnectTimer = null;
+        var reconnectDelay = 30000;
+        var maxReconnectDelay = 300000;
+        var closedByPage = false;
 
         function eventTimestamp(event) {
             return event && event.eventTimeText ? event.eventTimeText : '';
@@ -201,31 +206,59 @@
             return 'success';
         }
 
-        source.addEventListener('connected', function () {
-            console.debug && console.debug('probe alert sse connected');
-        });
-
-        source.addEventListener('probe-alert', function (message) {
-            var event;
-            try {
-                event = JSON.parse(message.data || '{}');
-            } catch (ignore) {
+        function scheduleReconnect() {
+            if (closedByPage || reconnectTimer) {
                 return;
             }
-            var identity = eventIdentity(event);
-            if (!identity || identity === localStorage.getItem(storageKey)) {
+            reconnectTimer = setTimeout(function () {
+                reconnectTimer = null;
+                connect();
+            }, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+        }
+
+        function connect() {
+            if (closedByPage) {
                 return;
             }
-            localStorage.setItem(storageKey, identity);
-            notifyToast(buildToastMessage(event), toastType(event), toastDuration);
-        });
+            if (source) {
+                source.close();
+            }
+            source = new EventSource(endpoint);
+            source.addEventListener('connected', function () {
+                reconnectDelay = 30000;
+            });
+            source.addEventListener('probe-alert', function (message) {
+                var event;
+                try {
+                    event = JSON.parse(message.data || '{}');
+                } catch (ignore) {
+                    return;
+                }
+                var identity = eventIdentity(event);
+                if (!identity || identity === localStorage.getItem(storageKey)) {
+                    return;
+                }
+                localStorage.setItem(storageKey, identity);
+                notifyToast(buildToastMessage(event), toastType(event), toastDuration);
+            });
+            source.onerror = function () {
+                source.close();
+                source = null;
+                scheduleReconnect();
+            };
+        }
 
-        source.onerror = function () {
-            console.debug && console.debug('probe alert sse disconnected, browser will retry');
-        };
+        connect();
 
         $(window).on('beforeunload', function () {
-            source.close();
+            closedByPage = true;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+            }
+            if (source) {
+                source.close();
+            }
         });
     }
 
