@@ -117,17 +117,21 @@
 </#if>
 
 <#if project?? && project.id??>
-<script>
-    (function () {
-        var projectId = '${project.id}';
-        if (!projectId || !window.EventSource || window.__probeAlertSseStarted) {
-            return;
-        }
-        window.__probeAlertSseStarted = true;
-        var storageKey = 'oat.probeAlert.lastSeen.' + projectId;
-        var endpoint = '/p/' + projectId + '/app/probe-alerts/stream';
-        var toastDuration = 12000;
-        var source = new EventSource(endpoint);
+	<script>
+	    (function () {
+	        var projectId = '${project.id}';
+	        if (!projectId || !window.EventSource || window.__probeAlertSseStarted) {
+	            return;
+	        }
+	        window.__probeAlertSseStarted = true;
+	        var storageKey = 'oat.probeAlert.lastSeen.' + projectId;
+	        var endpoint = '/p/' + projectId + '/app/probe-alerts/stream';
+	        var toastDuration = 12000;
+	        var source = null;
+	        var reconnectTimer = null;
+	        var reconnectDelay = 30000;
+	        var maxReconnectDelay = 300000;
+	        var closedByPage = false;
 
         function eventTimestamp(event) {
             return event && event.eventTimeText ? event.eventTimeText : '';
@@ -149,39 +153,63 @@
             return event.eventType === 'OFFLINE' ? 'warning' : 'success';
         }
 
-        source.addEventListener('connected', function () {
-            if (window.console) {
-                console.info('probe alert sse connected:', endpoint);
-            }
-        });
+	        function scheduleReconnect() {
+	            if (closedByPage || reconnectTimer) {
+	                return;
+	            }
+	            reconnectTimer = setTimeout(function () {
+	                reconnectTimer = null;
+	                connect();
+	            }, reconnectDelay);
+	            reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+	        }
 
-        source.addEventListener('probe-alert', function (message) {
-            var event;
-            try {
-                event = JSON.parse(message.data || '{}');
-            } catch (e) {
-                if (window.console) {
-                    console.warn('probe alert sse data parse failed:', message.data, e);
-                }
-                return;
-            }
-            var identity = eventIdentity(event);
-            if (!identity || identity === localStorage.getItem(storageKey)) {
-                return;
-            }
-            localStorage.setItem(storageKey, identity);
-            notifyToast(buildToastMessage(event), toastType(event), toastDuration);
-        });
+	        function connect() {
+	            if (closedByPage) {
+	                return;
+	            }
+	            if (source) {
+	                source.close();
+	            }
+	            source = new EventSource(endpoint);
+	            source.addEventListener('connected', function () {
+	                reconnectDelay = 30000;
+	            });
+	            source.addEventListener('probe-alert', function (message) {
+	                var event;
+	                try {
+	                    event = JSON.parse(message.data || '{}');
+	                } catch (e) {
+	                    if (window.console) {
+	                        console.debug && console.debug('probe alert sse data parse failed:', message.data, e);
+	                    }
+	                    return;
+	                }
+	                var identity = eventIdentity(event);
+	                if (!identity || identity === localStorage.getItem(storageKey)) {
+	                    return;
+	                }
+	                localStorage.setItem(storageKey, identity);
+	                notifyToast(buildToastMessage(event), toastType(event), toastDuration);
+	            });
+	            source.onerror = function () {
+	                source.close();
+	                source = null;
+	                scheduleReconnect();
+	            };
+	        }
 
-        source.onerror = function (error) {
-            if (window.console) {
-                console.warn('probe alert sse disconnected or failed:', endpoint, error);
-            }
-        };
+	        connect();
 
-        $(window).on('beforeunload', function () {
-            source.close();
-        });
-    })();
-</script>
+	        $(window).on('beforeunload', function () {
+	            closedByPage = true;
+	            if (reconnectTimer) {
+	                clearTimeout(reconnectTimer);
+	            }
+	            if (source) {
+	                source.close();
+	            }
+	        });
+	    })();
+	</script>
 </#if>

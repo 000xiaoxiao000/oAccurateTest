@@ -85,9 +85,9 @@ node.app{
   background-image:/images/1f4bb.png;
   background-fit: contain;
   background-clip: none;
-  width: 36;
-  height: 36;
-  font-size: 8px;
+  width: 56;
+  height: 56;
+  font-size: 10px;
 }
 node:selected{
   z-index: 999;

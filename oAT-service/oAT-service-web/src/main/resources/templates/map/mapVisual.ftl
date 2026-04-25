@@ -149,8 +149,8 @@
         }
         var applyHomeFit = function () {
             cy.fit(cy.elements(), 180);
-            if (cy.zoom() > 0.65) {
-                cy.zoom(0.65);
+            if (cy.zoom() > 0.9) {
+                cy.zoom(0.9);
                 cy.center(cy.elements());
             }
         };

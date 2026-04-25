@@ -23,15 +23,22 @@ public class AppRelationLayer implements ImageLayer {
     private List<AppVo> apps;
     private List<SystemSnapshot> snapshots;
     private Map<String, Collection<TraceNode>> traceNodesBySnapshotId;
+    private Collection<Collection<TraceNode>> liveTraceNodeGroups;
 
     public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots) {
         this(apps, snapshots, Collections.emptyMap());
     }
 
     public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots, Map<String, Collection<TraceNode>> traceNodesBySnapshotId) {
+        this(apps, snapshots, traceNodesBySnapshotId, Collections.emptyList());
+    }
+
+    public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots, Map<String, Collection<TraceNode>> traceNodesBySnapshotId,
+                            Collection<Collection<TraceNode>> liveTraceNodeGroups) {
         this.apps = apps;
         this.snapshots = snapshots;
         this.traceNodesBySnapshotId = traceNodesBySnapshotId;
+        this.liveTraceNodeGroups = liveTraceNodeGroups;
     }
 
     @Override
@@ -57,17 +64,60 @@ public class AppRelationLayer implements ImageLayer {
                             .filter(remote -> appIds.contains(remote.getAppId()))
                             .filter(remote -> !snapshot.getAppId().equals(remote.getAppId()))
                             .forEach(remote -> addRelation(relations, snapshot.getAppId(), remote));
-                    traceNodesBySnapshotId.getOrDefault(snapshot.getId(), Collections.emptyList()).stream()
-                            .map(this::getTraceNodeAppId)
-                            .filter(Optional::isPresent)
-                            .map(Optional::get)
-                            .filter(appIds::contains)
-                            .filter(appId -> !snapshot.getAppId().equals(appId))
-                            .forEach(appId -> addRelation(relations, snapshot.getAppId(), appId, "调用"));
+                    addTraceRemoteInvokeRelations(relations, appIds, traceNodesBySnapshotId.getOrDefault(snapshot.getId(), Collections.emptyList()));
                 });
+        liveTraceNodeGroups.forEach(traceNodes -> addTraceRemoteInvokeRelations(relations, appIds, traceNodes));
         return relations.values().stream()
                 .map(this::buildEdge)
                 .collect(Collectors.toList());
+    }
+
+    private void addTraceRemoteInvokeRelations(Map<String, AppRelation> relations, Set<String> appIds, Collection<TraceNode> traceNodes) {
+        addTraceAppRelations(relations, appIds, traceNodes);
+        traceNodes.stream()
+                .filter(traceNode -> traceNode instanceof com.oAT.agent.model.RemoteInvokeNode)
+                .filter(traceNode -> traceNode.getApp() != null)
+                .forEach(traceNode -> {
+                    com.oAT.agent.model.RemoteInvokeNode remoteInvokeNode = (com.oAT.agent.model.RemoteInvokeNode) traceNode;
+                    if (remoteInvokeNode.getRemoteApp() == null) {
+                        return;
+                    }
+                    String sourceAppId = traceNode.getApp().getAppId();
+                    String targetAppId = remoteInvokeNode.getRemoteApp().getAppId();
+                    if (appIds.contains(sourceAppId) && appIds.contains(targetAppId) && !sourceAppId.equals(targetAppId)) {
+                        addRelation(relations, sourceAppId, targetAppId, traceNode.toType());
+                    }
+                });
+    }
+
+    private void addTraceAppRelations(Map<String, AppRelation> relations, Set<String> appIds, Collection<TraceNode> traceNodes) {
+        Optional<String> sourceAppId = traceNodes.stream()
+                .filter(traceNode -> "0".equals(traceNode.getTraceNodeId()))
+                .map(this::getTraceNodeAppId)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .filter(appIds::contains)
+                .findFirst();
+        if (!sourceAppId.isPresent()) {
+            sourceAppId = traceNodes.stream()
+                    .map(this::getTraceNodeAppId)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .filter(appIds::contains)
+                    .findFirst();
+        }
+        if (!sourceAppId.isPresent()) {
+            return;
+        }
+        String source = sourceAppId.get();
+        traceNodes.stream()
+                .map(this::getTraceNodeAppId)
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .filter(appIds::contains)
+                .filter(appId -> !source.equals(appId))
+                .distinct()
+                .forEach(appId -> addRelation(relations, source, appId, "调用"));
     }
 
     private void addRelation(Map<String, AppRelation> relations, String sourceAppId, Remote remote) {

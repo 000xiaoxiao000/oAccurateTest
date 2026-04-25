@@ -45,6 +45,9 @@ public class MapControl {
     SnapshotService snapshotService;
 
     @Autowired
+    ClientSessionService clientSessionService;
+
+    @Autowired
     ProjectService projectService;
 
     @Autowired
@@ -118,7 +121,22 @@ public class MapControl {
         Map<String, Collection<TraceNode>> traceNodesBySnapshotId = snapshots.stream()
                 .filter(snapshot -> StringUtils.hasText(snapshot.getTraceId()))
                 .collect(Collectors.toMap(SystemSnapshot::getId, this::getTraceNodesSafely, (left, right) -> left));
-        return new AppRelationLayer(appList, snapshots, traceNodesBySnapshotId).elements();
+        Collection<Collection<TraceNode>> liveTraceNodeGroups = getRecentLiveTraceNodeGroups(appList);
+        return new AppRelationLayer(appList, snapshots, traceNodesBySnapshotId, liveTraceNodeGroups).elements();
+    }
+
+    private Collection<Collection<TraceNode>> getRecentLiveTraceNodeGroups(List<AppVo> appList) {
+        TraceItemSearchParam searchParam = new TraceItemSearchParam();
+        searchParam.setAppIds(appList.stream().map(AppVo::getId).collect(Collectors.toList()));
+        searchParam.setMaxSize(500);
+        return clientSessionService.getTraceItemByTime(24 * 60 * 60, searchParam).stream()
+                .map(TraceItemVo::getTraceId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .map(clientSessionService::getTraceNodes)
+                .filter(nodes -> nodes != null && !nodes.isEmpty())
+                .map(Map::values)
+                .collect(Collectors.toList());
     }
 
     private Collection<TraceNode> getTraceNodesSafely(SystemSnapshot snapshot) {
