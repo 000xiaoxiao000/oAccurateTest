@@ -259,12 +259,14 @@
         }
 
         .app-edit-modal.ui.modal {
+            display: none;
             position: fixed !important;
             top: 16px !important;
             left: 50% !important;
             bottom: 16px !important;
             margin: 0 !important;
             transform: translateX(-50%) !important;
+            width: min(94vw, 1200px) !important;
             height: calc(100vh - 32px) !important;
             max-height: calc(100vh - 32px) !important;
             border-radius: 18px !important;
@@ -336,6 +338,7 @@
             height: auto;
             max-height: none;
             overflow-y: auto;
+            overflow-x: hidden;
             padding: 24px 26px 18px !important;
             background: #fff;
             -webkit-overflow-scrolling: touch;
@@ -466,6 +469,15 @@
 
             .app-edit-modal .app-modal-section {
                 padding: 16px;
+            }
+
+            .app-edit-modal.ui.modal {
+                top: 8px !important;
+                bottom: 8px !important;
+                width: calc(100vw - 16px) !important;
+                height: calc(100dvh - 16px) !important;
+                max-height: calc(100dvh - 16px) !important;
+                border-radius: 14px !important;
             }
 
             .app-edit-modal .actions.app-modal-actions {
