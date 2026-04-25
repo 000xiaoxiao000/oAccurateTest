@@ -752,9 +752,9 @@
                         <div class="monitor-card-title page-detail-card-title">调用链路</div>
                         <svg id="svg-canvas" height="200" width="900"></svg>
                     </div>
-                    <div class="monitor-node-card page-detail-card">
-                        <div class="monitor-card-title page-detail-card-title">节点详情</div>
-                        <div id="nodeDetail" class="ui segment basic" style="min-height: calc(100vh - 560px); padding: 0;"></div>
+                    <div class="monitor-node-card page-detail-card trace-node-detail-card">
+                        <div class="monitor-card-title page-detail-card-title trace-node-detail-title">节点详情</div>
+                        <div id="nodeDetail" class="ui segment basic trace-node-detail-content"></div>
                     </div>
                 </div>
             </div>

@@ -115,6 +115,18 @@
             border-color: var(--page-accent);
         }
 
+        .snapshot-flow-tab {
+            height: clamp(260px, 36vh, 380px);
+            min-height: 260px;
+            overflow: hidden;
+        }
+
+        .snapshot-flow-canvas {
+            display: block;
+            height: 100%;
+            min-height: 0;
+        }
+
         #mySnapshotListTable {
             table-layout: fixed;
             width: 100%;
@@ -265,25 +277,6 @@
         .edgePath path {
             stroke: #333;
             stroke-width: 1.5px;
-        }
-
-        .snapshot-node-detail-card {
-            margin-top: 14px !important;
-            border-color: #e4edf7 !important;
-            border-radius: 16px !important;
-            box-shadow: 0 12px 32px rgba(15, 23, 42, .06) !important;
-        }
-
-        .snapshot-node-detail-card > .label {
-            display: block;
-            width: 100%;
-            box-sizing: border-box;
-            border-radius: 16px 16px 0 0 !important;
-        }
-
-        .snapshot-node-detail-card .content {
-            padding: 10px;
-            word-break: break-all;
         }
 
         tr.selected td {
@@ -523,19 +516,19 @@
                             <a class="item" data-tab="stack">堆栈列表</a>
                         </div>
                         <!-- 内容 -->
-                        <div class="ui attached segment page-plain-segment page-fill-height">
-                            <div class="ui tab active" data-tab="flow" style="padding: 2px">
-                                <svg id="svg-canvas" class="page-fill-height" style="padding: 0px;" width="100%"></svg>
+                        <div class="ui attached segment page-plain-segment">
+                            <div class="ui tab active snapshot-flow-tab" data-tab="flow" style="padding: 2px">
+                                <svg id="svg-canvas" class="snapshot-flow-canvas" style="padding: 0px;" width="100%"></svg>
                             </div>
                             <div class="ui tab" data-tab="stack" style="padding: 2px">
                             </div>
                         </div>
-                        <div id="stackNodeDetail" class="ui raised segment snapshot-node-detail-card hidden">
-                            <div class="ui top attached label" style="border: none;top: -0.5px">
-                                节点详情
-                                <i class="close link icon snapshot-detail-close" style="float: right;font-size: 1.1em;"></i>
+                        <div id="stackNodeDetail" class="ui segment page-detail-card trace-node-detail-card snapshot-node-detail-card hidden">
+                            <div class="page-detail-card-title trace-node-detail-title">
+                                <span>节点详情</span>
+                                <i class="close link icon snapshot-detail-close" style="font-size: 1.1em;"></i>
                             </div>
-                            <div class="ui content">
+                            <div class="ui content trace-node-detail-content">
                             </div>
                         </div>
                     </div>
@@ -823,8 +816,7 @@
                         $("#svg-canvas").children().remove();
                         var g = buildTopo("svg-canvas", monitorData, {
                             nodeClick: function (id, index, array) {
-                                var node = g.node(id);
-                                openSnapshotNodeDetail(traceId, node && node.data ? node.data : id);
+                                openSnapshotNodeDetail(traceId, id);
                             }
                         });
                     }

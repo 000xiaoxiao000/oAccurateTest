@@ -2,9 +2,15 @@ package com.oAT.web.control;
 
 import com.alibaba.druid.sql.SQLUtils;
 import com.oAT.agent.model.*;
+import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.CoverageMethodKeyUtil;
+import com.oAT.web.control.entity.ApplicationGraphNode;
+import com.oAT.web.control.entity.ClientGraphNode;
+import com.oAT.web.control.entity.DatabaseGraphNode;
+import com.oAT.web.control.entity.GraphNode;
 import com.oAT.web.control.entity.GraphView;
 import com.oAT.web.control.entity.Param;
+import com.oAT.web.control.entity.RedisGraphNode;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.control.entity.StackItem;
 import com.oAT.web.esDao.StaticInfoRepository;
@@ -641,6 +647,54 @@ public class SnapshotControl {
 
     @RequestMapping("/node")
     public String openNodeDetail(String traceId, String nodeId, Model model) {
+        TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(traceId));
+        GraphNode graphNode = parse.getGraphNode(nodeId);
+        if (graphNode != null) {
+            return openGraphNodeDetail(traceId, graphNode, model);
+        }
+        return openRawTraceNodeDetail(traceId, nodeId, model);
+    }
+
+    private Map<String, TraceNode> buildTraceNodeMap(String traceId) {
+        Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
+        return nodes.stream()
+                .filter(Objects::nonNull)
+                .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
+                .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node,
+                        (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private String openGraphNodeDetail(String traceId, GraphNode graphNode, Model model) {
+        if (graphNode instanceof ClientGraphNode) {
+            model.addAttribute("node", ((ClientGraphNode) graphNode).getTraceNode());
+            return "/monitor/httpNodeDetails";
+        } else if (graphNode instanceof ApplicationGraphNode) {
+            String sessionId = ((ApplicationGraphNode) graphNode).getSessionId();
+            ClientSessionVo clientSession = clientSessionService.getClientSession(sessionId);
+            model.addAttribute("appSession", clientSession);
+            model.addAttribute("data", graphNode);
+            model.addAttribute("traceId", traceId);
+            return "/monitor/serverDetails";
+        } else if (graphNode instanceof DatabaseGraphNode) {
+            if (((DatabaseGraphNode) graphNode).getCkdatabase() != null) {
+                model.addAttribute("database", ((DatabaseGraphNode) graphNode).getCkdatabase());
+                model.addAttribute("data", graphNode);
+                model.addAttribute("traceId", traceId);
+                return "/monitor/ckdatabaseDetails";
+            }
+            model.addAttribute("database", ((DatabaseGraphNode) graphNode).getDatabase());
+            model.addAttribute("data", graphNode);
+            model.addAttribute("traceId", traceId);
+            return "/monitor/databaseDetails";
+        } else if (graphNode instanceof RedisGraphNode) {
+            model.addAttribute("redis", graphNode);
+            model.addAttribute("traceId", traceId);
+            return "/monitor/redisNodeDetails";
+        }
+        throw new RuntimeException("Failed to resolve graph model: " + graphNode.getClass().getName());
+    }
+
+    private String openRawTraceNodeDetail(String traceId, String nodeId, Model model) {
         TraceNode node = snapshotService.getTraceNode(traceId, nodeId);
         if (node instanceof HttpTraceNode) {
             HttpTraceNode httpNode = resolveHttpNodeWithLiveFallback(traceId, (HttpTraceNode) node);
@@ -719,9 +773,7 @@ public class SnapshotControl {
     @RequestMapping("/detail/graph/{traceId}")
     @ResponseBody
     public GraphView getGraphView(@PathVariable String projectId, @PathVariable String traceId) {
-        Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
-        GraphViewHelp graphViewHelp = new GraphViewHelp(nodes);
-        return graphViewHelp.buildGraphView();
+        return new TraceGraphParse(buildTraceNodeMap(traceId)).getGraphView();
     }
 
     @RequestMapping("/detail/stack/{traceId}")
