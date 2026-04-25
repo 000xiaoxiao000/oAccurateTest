@@ -12,6 +12,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.DigestUtils;
@@ -27,6 +28,9 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Autowired
     private SystemRepository systemRepository;
+
+    @Autowired
+    private ElasticsearchOperations elasticsearchOperations;
 
     @Override
     public ProjectVo createProject(CreateProjectParam param) {
@@ -45,6 +49,7 @@ public class ProjectServiceImpl implements ProjectService {
         member.setRole(ProjectMemberVo.Role.owner.toString());
         SystemIndex projectMemberIndex = new SystemIndex(member);
         systemRepository.save(projectMemberIndex);
+        elasticsearchOperations.indexOps(SystemIndex.class).refresh();
 
         // 封装返回结果
         ProjectVo pv = new ProjectVo();
