@@ -114,7 +114,8 @@ public class MapControl {
     @ResponseBody
     public List<ImageElement> getHomeMapData(@PathVariable String projectId) {
         List<AppVo> appList = appService.getAppList(projectId);
-        return new AppLayer(appList).elements();
+        List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId);
+        return new AppRelationLayer(appList, snapshots).elements();
     }
 
     @RequestMapping("/code")
