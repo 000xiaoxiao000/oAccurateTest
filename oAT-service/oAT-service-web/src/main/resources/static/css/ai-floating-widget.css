@@ -675,6 +675,12 @@
     flex-shrink: 0;
 }
 
+.ai-floating-layout-item .ai-floating-quick-links {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+}
+
 .ai-floating-quick-link {
     display: block;
     padding: 8px 10px;
