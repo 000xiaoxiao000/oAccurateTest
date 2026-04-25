@@ -872,3 +872,12 @@ a:hover {
 .probe-alert-error {
     color: var(--oat-danger);
 }
+
+.probe-alert-global-toast-meta {
+    display: inline-block;
+    margin-top: 4px;
+    color: rgba(0, 0, 0, .62);
+    font-size: 12px;
+    line-height: 1.45;
+    word-break: break-all;
+}

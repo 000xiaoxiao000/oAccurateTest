@@ -115,3 +115,73 @@
 <!-- 浮动小窗逻辑（仅在非 Interactive 页面激活） -->
 <script src="/js/ai-floating-widget.js?v=${.now}"></script>
 </#if>
+
+<#if project?? && project.id??>
+<script>
+    (function () {
+        var projectId = '${project.id}';
+        if (!projectId || !window.EventSource || window.__probeAlertSseStarted) {
+            return;
+        }
+        window.__probeAlertSseStarted = true;
+        var storageKey = 'oat.probeAlert.lastSeen.' + projectId;
+        var endpoint = '/p/' + projectId + '/app/probe-alerts/stream';
+        var toastDuration = 12000;
+        var source = new EventSource(endpoint);
+
+        function eventTimestamp(event) {
+            return event && event.eventTimeText ? event.eventTimeText : '';
+        }
+
+        function eventIdentity(event) {
+            return [event.id || '', eventTimestamp(event), event.eventType || '', event.probeText || ''].join('|');
+        }
+
+        function buildToastMessage(event) {
+            var appName = event.appName || '探针';
+            var typeText = event.eventTypeLabel || event.eventType || '状态变化';
+            var probe = event.probeText || '-';
+            var time = event.eventTimeText || '-';
+            return appName + ' ' + typeText + '<br><span class="probe-alert-global-toast-meta">' + probe + '<br>' + time + '</span>';
+        }
+
+        function toastType(event) {
+            return event.eventType === 'OFFLINE' ? 'warning' : 'success';
+        }
+
+        source.addEventListener('connected', function () {
+            if (window.console) {
+                console.info('probe alert sse connected:', endpoint);
+            }
+        });
+
+        source.addEventListener('probe-alert', function (message) {
+            var event;
+            try {
+                event = JSON.parse(message.data || '{}');
+            } catch (e) {
+                if (window.console) {
+                    console.warn('probe alert sse data parse failed:', message.data, e);
+                }
+                return;
+            }
+            var identity = eventIdentity(event);
+            if (!identity || identity === localStorage.getItem(storageKey)) {
+                return;
+            }
+            localStorage.setItem(storageKey, identity);
+            notifyToast(buildToastMessage(event), toastType(event), toastDuration);
+        });
+
+        source.onerror = function (error) {
+            if (window.console) {
+                console.warn('probe alert sse disconnected or failed:', endpoint, error);
+            }
+        };
+
+        $(window).on('beforeunload', function () {
+            source.close();
+        });
+    })();
+</script>
+</#if>

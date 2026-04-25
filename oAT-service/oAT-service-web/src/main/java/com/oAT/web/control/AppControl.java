@@ -7,6 +7,7 @@ import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
 import com.oAT.web.service.ProbeAlertDashboardService;
+import com.oAT.web.service.ProbeAlertSseService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SystemLogService;
 import com.oAT.web.service.entity.AppVo;
@@ -21,6 +22,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.nio.charset.StandardCharsets;
@@ -48,6 +50,9 @@ public class AppControl {
 
     @Autowired
     private ProbeAlertDashboardService probeAlertDashboardService;
+
+    @Autowired
+    private ProbeAlertSseService probeAlertSseService;
 
     @Autowired
     private SystemLogService systemLogService;
@@ -116,9 +121,29 @@ public class AppControl {
     }
 
     @RequestMapping("edit")
-    public String openEditView(@PathVariable String projectId, String appId, Model model) {
+    public String openEditView(@PathVariable String projectId,
+                               String appId,
+                               Model model,
+                               @SessionAttribute UserVo user) {
+        ProjectVo project = projectService.getProjectByProjectIdAndMemberId(projectId, user.getId());
+        if (project == null) {
+            model.addAttribute("errorMessage", "找不到指定项目,或者您没有该项目的访问权限");
+            return "/error/404";
+        }
+
         AppVo app = appService.getApp(appId);
+        model.addAttribute("project", project);
         model.addAttribute("app", app);
+
+        String loginName = user.getName();
+        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
+        String loginNameRole = "visitor";
+        for (ProjectMemberVo member : members) {
+            if (loginName.equals(member.getMemberName())) {
+                loginNameRole = String.valueOf(member.getRole());
+            }
+        }
+        model.addAttribute("loginNameRole", loginNameRole);
         return "/settings/editApp";
     }
 
@@ -313,6 +338,12 @@ public class AppControl {
         result.put("success", true);
         result.put("events", events);
         return result;
+    }
+
+    @RequestMapping(value = "probe-alerts/stream", produces = "text/event-stream")
+    @ResponseBody
+    public SseEmitter streamProbeAlerts(@PathVariable String projectId) {
+        return probeAlertSseService.subscribe(projectId);
     }
 
 }

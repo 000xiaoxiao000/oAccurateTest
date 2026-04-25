@@ -267,11 +267,23 @@
             stroke-width: 1.5px;
         }
 
-        #stackNodeDetail.max {
-            left: 0px;
-            right: 0px;
-            padding: 20px;
-            width: 100vw;
+        .snapshot-node-detail-card {
+            margin-top: 14px !important;
+            border-color: #e4edf7 !important;
+            border-radius: 16px !important;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, .06) !important;
+        }
+
+        .snapshot-node-detail-card > .label {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 16px 16px 0 0 !important;
+        }
+
+        .snapshot-node-detail-card .content {
+            padding: 10px;
+            word-break: break-all;
         }
 
         tr.selected td {
@@ -307,25 +319,6 @@
 </head>
 <body class="page-theme">
 <#include "../commonFunction.ftl">
-
-<div id="stackNodeDetail" class="ui right vertical wide sidebar raised segment"
-     style="background-color: white;overflow: hidden">
-    <div class="ui top attached label" style="border: none;top: -0.5px">
-        节点详情
-        <i class="close link icon snapshot-detail-close" style="float: right;font-size: 1.1em;"></i>
-
-        <script>
-            function maxDetailWindow() {
-                $('#stackNodeDetail').toggleClass('max');
-                $('#stackNodeDetail .window.icon').toggleClass('maximize');
-                $('#stackNodeDetail .window.icon').toggleClass('restore');
-            }
-        </script>
-        <i class="window maximize outline link icon snapshot-detail-toggle" style="float: right;font-size: 1.1em;"></i>
-    </div>
-    <div class="ui content container" style="padding: 5px;position:absolute;top: 5px;bottom:5px;overflow-y: auto;word-break: break-all">
-    </div>
-</div>
 
 <div class="pusher">
     <!--头部菜单 引入-->
@@ -536,7 +529,14 @@
                             </div>
                             <div class="ui tab" data-tab="stack" style="padding: 2px">
                             </div>
-                            <!--节点详情-->
+                        </div>
+                        <div id="stackNodeDetail" class="ui raised segment snapshot-node-detail-card hidden">
+                            <div class="ui top attached label" style="border: none;top: -0.5px">
+                                节点详情
+                                <i class="close link icon snapshot-detail-close" style="float: right;font-size: 1.1em;"></i>
+                            </div>
+                            <div class="ui content">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -716,10 +716,7 @@
             }
 
             $('.snapshot-detail-close').on('click', function () {
-                $('#stackNodeDetail').sidebar('hide');
-            });
-            $('.snapshot-detail-toggle').on('click', function () {
-                maxDetailWindow();
+                $('#stackNodeDetail').toggleClass('hidden', true);
             });
             $('.snapshot-open-report').on('click', function () {
                 openCodeReport();
@@ -800,10 +797,8 @@
             $('#snapshotBatchUsecaseDropdown').dropdown({
                 on: 'click'
             });
-            $(".menu .item[data-tab]").tab();
-            $("#stackNodeDetail").sidebar({
-                "transition": 'overlay',
-                "dimPage": false
+            $('#tabSwitch .item[data-tab]').tab({
+                context: '#monitorDetail'
             });
             $("table.selectable tr").click(function (e) {
                 $(this).parent().children("tr").removeClass("selected");
@@ -816,9 +811,9 @@
                 $("#codeReport").hide();
                 $("#monitorDetail").show();
                 $('#monitorDetail').attr('traceId', traceId);
-                $.tab('change tab', 'flow');
-                $("#tabSwitch .item.active").removeClass("active");
-                $("#tabSwitch .item[data-tab='flow']").addClass("active");
+                $('#tabSwitch .item[data-tab="flow"]').tab('change tab', 'flow');
+                $('#stackNodeDetail').toggleClass('hidden', true);
+                $('#stackNodeDetail .ui.content').empty();
                 // 装载监控数据
                 $.ajax({
                     url: "detail/graph/" + traceId,
@@ -851,8 +846,9 @@
             }
 
             function openSnapshotNodeDetail(traceId, nodeId) {
-                $('#stackNodeDetail').sidebar('show');
-                $('#stackNodeDetail .ui.content')
+                var detailPanel = $('#stackNodeDetail');
+                detailPanel.toggleClass('hidden', false);
+                detailPanel.find('.ui.content')
                     .first()
                     .load("node?traceId=" + traceId + "&nodeId=" + nodeId);
             }
@@ -874,7 +870,6 @@
                             e.stopPropagation();//阻止事件冒泡
                             $(this).parent().children("tr").removeClass("selected");
                             $(this).addClass("selected");
-                            $('#stackNodeDetail').sidebar('show');
                             openSnapshotNodeDetail(traceId, $(this).attr('nodeId'))
                         });
                     }

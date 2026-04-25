@@ -1,6 +1,5 @@
 package com.oAT.web.control;
 
-import com.alibaba.druid.sql.SQLUtils;
 import com.oAT.agent.model.*;
 import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.DateUtil;
@@ -13,6 +12,7 @@ import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.LableType;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.UserVo;
+import com.oAT.server.model.ClientSessionVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,11 +23,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.Serializable;
-import java.net.URI;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Controller
 @RequestMapping("/p/{projectId}/{appId}/snapshot/")
@@ -301,56 +299,54 @@ public class SystemSnapshotControl {
         SystemSnapshot snapshot = systemSnapshotService.getById(id);
         Assert.notNull(snapshot, "找不到系统快照id=" + id);
         Collection<TraceNode> nodes = snapshotService.getTraceNodes(snapshot.getTraceId());
-        GraphViewHelp graphViewHelp = new GraphViewHelp(nodes);
-        return graphViewHelp.buildGraphView();
+        Map<String, TraceNode> nodeMap = nodes.stream()
+                .filter(Objects::nonNull)
+                .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
+                .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
+        return new TraceGraphParse(nodeMap).getGraphView();
     }
 
     @RequestMapping("/node/{snapshotId}")
     public String openNodeDetail(@PathVariable String snapshotId, String traceId, String nodeId, Model model) {
-        TraceNode node = snapshotService.getTraceNode(traceId, nodeId);
-        if (node instanceof HttpTraceNode) {
-            HttpTraceNode httpNode = resolveHttpNodeWithLiveFallback(traceId, (HttpTraceNode) node);
-            model.addAttribute("node", httpNode);
-            model.addAttribute("params", buildHttpParams(httpNode));
-            return "snapshot/webNodeDetail";
-        } else if (node instanceof SqlTraceNode) {
-            model.addAttribute("node", node);
-            if (((SqlTraceNode) node).getSql() != null) {
-                String formatSql = SQLUtils.format(((SqlTraceNode) node).getSql(), ((SqlTraceNode) node).getDatabase().getType());
-                model.addAttribute("sql", formatSql);
-            }
-            return "snapshot/sqlNodeDetail";
-        } else if (node instanceof CKSqlTraceNode) {
-            model.addAttribute("node", node);
-            if (((CKSqlTraceNode) node).getSql() != null) {
-                String formatSql = SQLUtils.format(((CKSqlTraceNode) node).getSql(), ((CKSqlTraceNode) node).getDatabase().getType());
-                model.addAttribute("sql", formatSql);
-            }
-            return "snapshot/sqlNodeDetail";
-        } else if (node instanceof DubboTraceNode) {
-            model.addAttribute("node", node);
-            URI uri = GraphViewHelp.buildURI(node, ((DubboTraceNode) node).getRemoteUrl());
-            model.addAttribute("remoteIp", uri.getHost());
-            return "snapshot/dubboNodeDetail";
-        } else if (node instanceof RedisTraceNode) {
-            model.addAttribute("connectionName", ((RedisTraceNode) node).getHost() + "@" + ((RedisTraceNode) node).getPort());
-            model.addAttribute("cmd", ((RedisTraceNode) node).getCmd().replace("<", "&lt;").replace(">", "&gt;"));
-            return "snapshot/redisNodeDetail";
-        }
-        return null;
-    }
+        Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
+        Map<String, TraceNode> nodeMap = nodes.stream()
+                .filter(Objects::nonNull)
+                .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
+                .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
+        TraceGraphParse parse = new TraceGraphParse(nodeMap);
+        GraphNode node = parse.getGraphNode(nodeId);
+        Assert.notNull(node, "not found GraphNode: " + nodeId);
 
-    private List<Param> buildHttpParams(HttpTraceNode httpNode) {
-        String[] names = httpNode.getRequestParamNames();
-        if (names == null || names.length == 0) {
-            return Collections.emptyList();
-        }
+        if (node instanceof ClientGraphNode) {
+            model.addAttribute("node", ((ClientGraphNode) node).getTraceNode());
+            return "/monitor/httpNodeDetails";
+        } else if (node instanceof ApplicationGraphNode) {
+            String sessionId = ((ApplicationGraphNode) node).getSessionId();
+            ClientSessionVo clientSession = clientSessionService.getClientSession(sessionId);
+            model.addAttribute("appSession", clientSession);
+            model.addAttribute("data", node);
+            model.addAttribute("traceId", traceId);
+            return "/monitor/serverDetails";
+        } else if (node instanceof DatabaseGraphNode) {
+            if (((DatabaseGraphNode) node).getCkdatabase() != null) {
+                model.addAttribute("database", ((DatabaseGraphNode) node).getCkdatabase());
+                model.addAttribute("data", node);
+                model.addAttribute("traceId", traceId);
+                return "/monitor/ckdatabaseDetails";
+            }
 
-        String[] values = httpNode.getRequestParamValues();
-        return Stream.iterate(0, i -> i + 1)
-                .limit(names.length)
-                .map(i -> new Param(names[i], values != null && i < values.length ? values[i] : null))
-                .collect(Collectors.toList());
+            model.addAttribute("database", ((DatabaseGraphNode) node).getDatabase());
+            model.addAttribute("data", node);
+            model.addAttribute("traceId", traceId);
+            return "/monitor/databaseDetails";
+
+        } else if (node instanceof RedisGraphNode) {
+            model.addAttribute("redis", node);
+            model.addAttribute("traceId", traceId);
+            return "/monitor/redisNodeDetails";
+        } else {
+            throw new RuntimeException("Failed to resolve graph model: " + node.getClass().getName());
+        }
     }
 
     private Map<String, String> buildSnapshotTimeTextMap(List<SystemSnapshot> snapshots) {
@@ -413,35 +409,6 @@ public class SystemSnapshotControl {
             return "-";
         }
         return DateUtil.timeDifference(date) + "前";
-    }
-
-    private HttpTraceNode resolveHttpNodeWithLiveFallback(String traceId, HttpTraceNode snapshotNode) {
-        if (hasCompleteRequestParams(snapshotNode)) {
-            return snapshotNode;
-        }
-        Map<String, TraceNode> cachedNodes = clientSessionService.getTraceNodes(traceId);
-        if (cachedNodes == null || cachedNodes.isEmpty()) {
-            return snapshotNode;
-        }
-        TraceNode cachedNode = cachedNodes.get(snapshotNode.getTraceNodeId());
-        if (cachedNode instanceof HttpTraceNode && hasAnyRequestParams((HttpTraceNode) cachedNode)) {
-            return (HttpTraceNode) cachedNode;
-        }
-        return snapshotNode;
-    }
-
-    private boolean hasCompleteRequestParams(HttpTraceNode httpNode) {
-        String[] names = httpNode.getRequestParamNames();
-        if (names == null || names.length == 0) {
-            return false;
-        }
-        String[] values = httpNode.getRequestParamValues();
-        return values != null && values.length >= names.length;
-    }
-
-    private boolean hasAnyRequestParams(HttpTraceNode httpNode) {
-        String[] names = httpNode.getRequestParamNames();
-        return names != null && names.length > 0;
     }
 
     /**

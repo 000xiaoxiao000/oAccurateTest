@@ -37,7 +37,16 @@
         }
 
         .monitor-page {
-            padding: 10px 10px 0;
+            padding: 8px 12px 0;
+        }
+
+        .monitor-toolbar.ui.segment {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 12px 16px !important;
+            border-radius: 16px !important;
         }
 
         .monitor-toolbar-left {
@@ -54,7 +63,7 @@
             justify-content: flex-end;
             flex-wrap: wrap;
             gap: 12px;
-            margin-top: 10px;
+            margin-top: 0;
         }
 
         .monitor-autosave-inline {
@@ -95,19 +104,23 @@
 
         .monitor-list-scroll {
             padding: 0;
-            height: calc(100vh - 438px);
+            height: calc(100vh - 410px);
             overflow: auto;
         }
 
         .monitor-overview-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 14px;
+            gap: 10px;
+            margin-bottom: 10px;
         }
 
         .monitor-overview-card {
-            padding: 16px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 14px;
             border: 1px solid #e4edf7;
             border-radius: 18px;
             background: linear-gradient(135deg, #ffffff 0%, #f5fbff 100%);
@@ -121,21 +134,26 @@
         }
 
         .monitor-overview-value {
-            margin-top: 8px;
+            margin-top: 0;
             color: #1f2937;
-            font-size: 28px;
+            font-size: 22px;
             font-weight: 800;
             line-height: 1;
         }
 
         .monitor-overview-sub {
-            margin-top: 8px;
+            margin-top: 4px;
             color: #94a3b8;
             font-size: 12px;
         }
 
         .probe-dashboard-card {
-            margin-bottom: 14px !important;
+            display: grid !important;
+            grid-template-columns: minmax(220px, 280px) minmax(260px, 420px) minmax(160px, 1fr);
+            align-items: center;
+            gap: 8px 12px;
+            margin-bottom: 10px !important;
+            padding: 10px 14px !important;
             border-radius: 18px !important;
             border-color: #e4edf7 !important;
             box-shadow: 0 12px 32px rgba(15, 23, 42, .06) !important;
@@ -146,8 +164,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 10px;
-            padding: 14px 16px;
-            border-bottom: 1px solid #edf2f7;
+            padding: 0;
         }
 
         .probe-dashboard-title {
@@ -155,32 +172,57 @@
             font-weight: 800;
         }
 
+        .probe-search {
+            padding: 0;
+        }
+
+        .probe-search .ui.input > input {
+            border-radius: 12px !important;
+            border-color: #dbe7f3 !important;
+            background: #fbfdff !important;
+        }
+
+        .probe-list-summary {
+            padding: 0;
+            color: #94a3b8;
+            font-size: 12px;
+            text-align: right;
+        }
+
         .probe-list {
-            max-height: 220px;
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            gap: 6px;
+            max-height: 136px;
             overflow: auto;
-            padding: 10px 12px 12px;
+            padding: 8px 0 0;
+            border-top: 1px solid #edf2f7;
         }
 
         .probe-card {
             display: grid;
             grid-template-columns: auto minmax(0, 1fr) auto;
-            gap: 10px;
+            gap: 8px;
             align-items: center;
-            padding: 10px 8px;
+            padding: 8px 6px;
+            border: 1px solid transparent;
             border-radius: 14px;
+            background: #fbfdff;
             cursor: pointer;
-            transition: background .18s ease, transform .18s ease;
+            transition: background .18s ease, border-color .18s ease, transform .18s ease;
         }
 
         .probe-card:hover,
         .probe-card.active {
             background: #eefaf9;
+            border-color: #bfeee9;
             transform: translateY(-1px);
         }
 
         .probe-status-dot {
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             border-radius: 999px;
             background: #22c55e;
             box-shadow: 0 0 0 6px rgba(34, 197, 94, .12);
@@ -214,15 +256,28 @@
         }
 
         .probe-empty {
+            grid-column: 1 / -1;
             padding: 24px 14px;
             color: #94a3b8;
             text-align: center;
         }
 
+        .monitor-scope-state {
+            display: block !important;
+            min-height: calc(100vh - 390px);
+            padding: 14px !important;
+            margin-top: 0 !important;
+        }
+
+        .monitor-scope-state .monitor-scope-column {
+            width: 100% !important;
+            max-width: none !important;
+        }
+
         .oscilloscope-card {
             position: relative;
             overflow: hidden;
-            min-height: 260px;
+            min-height: 240px;
             border-radius: 18px;
             background: radial-gradient(circle at top left, rgba(45, 212, 191, .16), transparent 36%), #0f172a;
             box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .18), 0 18px 44px rgba(15, 23, 42, .18);
@@ -232,8 +287,9 @@
             position: relative;
             z-index: 1;
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
+            gap: 12px;
             padding: 16px 18px 0;
             color: #dbeafe;
         }
@@ -249,6 +305,25 @@
             font-size: 12px;
         }
 
+        .oscilloscope-actions {
+            display: flex;
+            align-items: flex-end;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .oscilloscope-mode .button {
+            background: rgba(15, 23, 42, .28) !important;
+            color: #cbd5e1 !important;
+            box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .22) !important;
+        }
+
+        .oscilloscope-mode .button.active {
+            background: rgba(20, 184, 166, .22) !important;
+            color: #99f6e4 !important;
+            box-shadow: inset 0 0 0 1px rgba(94, 234, 212, .46) !important;
+        }
+
         .oscilloscope-status {
             display: inline-flex;
             align-items: center;
@@ -261,7 +336,7 @@
         #oscilloscopeCanvas {
             display: block;
             width: 100%;
-            height: 220px;
+            height: 200px;
         }
 
         .oscilloscope-empty {
@@ -339,6 +414,19 @@
                 max-height: 45vh;
             }
 
+            .monitor-toolbar.ui.segment {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .probe-dashboard-card {
+                grid-template-columns: 1fr;
+            }
+
+            .probe-list-summary {
+                text-align: left;
+            }
+
             .monitor-overview-grid,
             .monitor-request-summary {
                 grid-template-columns: 1fr;
@@ -354,26 +442,74 @@
 <div class="monitor-page">
 <div class="monitor-overview-grid">
     <div class="monitor-overview-card">
-        <div class="monitor-overview-label">在线探针</div>
+        <div>
+            <div class="monitor-overview-label">在线探针</div>
+            <div class="monitor-overview-sub">当前项目已连接实例</div>
+        </div>
         <div class="monitor-overview-value" id="onlineProbeCount">${onlineProbeCount!0}</div>
-        <div class="monitor-overview-sub">当前项目已连接实例</div>
     </div>
     <div class="monitor-overview-card">
-        <div class="monitor-overview-label">项目应用</div>
+        <div>
+            <div class="monitor-overview-label">项目应用</div>
+            <div class="monitor-overview-sub">已纳入监控范围</div>
+        </div>
         <div class="monitor-overview-value">${apps?size}</div>
-        <div class="monitor-overview-sub">已纳入监控范围</div>
     </div>
     <div class="monitor-overview-card">
-        <div class="monitor-overview-label">实时请求</div>
+        <div>
+            <div class="monitor-overview-label">实时请求</div>
+            <div class="monitor-overview-sub">当前过滤窗口内</div>
+        </div>
         <div class="monitor-overview-value" id="monitorRequestCount">0</div>
-        <div class="monitor-overview-sub">当前过滤窗口内</div>
     </div>
     <div class="monitor-overview-card">
-        <div class="monitor-overview-label">最后接收</div>
-        <div class="monitor-overview-value" id="monitorLastReceive" style="font-size: 20px;">等待中</div>
-        <div class="monitor-overview-sub">监控数据到达时间</div>
+        <div>
+            <div class="monitor-overview-label">最后接收</div>
+            <div class="monitor-overview-sub">监控数据到达时间</div>
+        </div>
+        <div class="monitor-overview-value" id="monitorLastReceive" style="font-size: 18px;">等待中</div>
     </div>
 </div>
+        <div class="ui segment probe-dashboard-card">
+            <div class="probe-dashboard-header">
+                <div>
+                    <div class="probe-dashboard-title">探针在线状态</div>
+                    <div class="ui mini grey text">点击探针可快速过滤 IP</div>
+                </div>
+                <button class="ui mini basic icon button" onclick="refreshProbeStatus('${projectId}')" title="刷新探针状态">
+                    <i class="sync icon"></i>
+                </button>
+            </div>
+            <div class="probe-search">
+                <div class="ui fluid icon input">
+                    <i class="search icon"></i>
+                    <input id="probeSearchInput" type="text" placeholder="搜索应用、IP、PID、Agent">
+                </div>
+            </div>
+            <div id="probeListSummary" class="probe-list-summary">在线 ${onlineProbeCount!0} 个探针</div>
+            <div id="probeList" class="probe-list">
+                <#if onlineSessions?? && (onlineSessions?size > 0)>
+                    <#list onlineSessions as session>
+                        <#assign client=session.clientInfo>
+                        <#assign app=session.application>
+                        <div class="probe-card" data-ip="${(client.addressIp)!''}" data-app-id="${(client.appKey)!''}">
+                            <span class="probe-status-dot"></span>
+                            <div style="min-width: 0;">
+                                <div class="probe-name">${(app.appName)!'未定义应用'}</div>
+                                <div class="probe-meta">${(client.addressIp)!'-'} · PID ${(client.pid)!'-'} · Agent ${(client.agentVersion)!'-'}</div>
+                                <div class="probe-meta">在线 ${session.onlineTime!'-'} · 心跳 ${(session.lastHeartbeatTime?number_to_datetime?string('HH:mm:ss'))!'-'}</div>
+                            </div>
+                            <span class="probe-badge">在线</span>
+                        </div>
+                    </#list>
+                <#else>
+                    <div class="probe-empty">
+                        <i class="plug icon"></i>
+                        暂无在线探针，启动 Agent 后会显示在这里
+                    </div>
+                </#if>
+            </div>
+        </div>
 <!--中间过滤条件-->
 <div id="middleFilter" class="ui sticky top segment monitor-toolbar" style="margin-bottom: 14px;">
     <div class="monitor-toolbar-left">
@@ -505,39 +641,6 @@
 </div>
 <div class="monitor-layout page-split-layout">
     <div id="monitorListPanel" class="monitor-list-panel page-split-list-panel">
-        <div class="ui segment probe-dashboard-card">
-            <div class="probe-dashboard-header">
-                <div>
-                    <div class="probe-dashboard-title">探针在线状态</div>
-                    <div class="ui mini grey text">点击探针可快速过滤 IP</div>
-                </div>
-                <button class="ui mini basic icon button" onclick="refreshProbeStatus('${projectId}')" title="刷新探针状态">
-                    <i class="sync icon"></i>
-                </button>
-            </div>
-            <div id="probeList" class="probe-list">
-                <#if onlineSessions?? && (onlineSessions?size > 0)>
-                    <#list onlineSessions as session>
-                        <#assign client=session.clientInfo>
-                        <#assign app=session.application>
-                        <div class="probe-card" data-ip="${(client.addressIp)!''}" data-app-id="${(client.appKey)!''}">
-                            <span class="probe-status-dot"></span>
-                            <div style="min-width: 0;">
-                                <div class="probe-name">${(app.appName)!'未定义应用'}</div>
-                                <div class="probe-meta">${(client.addressIp)!'-'} · PID ${(client.pid)!'-'} · Agent ${(client.agentVersion)!'-'}</div>
-                                <div class="probe-meta">在线 ${session.onlineTime!'-'} · 心跳 ${(session.lastHeartbeatTime?number_to_datetime?string('HH:mm:ss'))!'-'}</div>
-                            </div>
-                            <span class="probe-badge">在线</span>
-                        </div>
-                    </#list>
-                <#else>
-                    <div class="probe-empty">
-                        <i class="plug icon"></i>
-                        暂无在线探针，启动 Agent 后会显示在这里
-                    </div>
-                </#if>
-            </div>
-        </div>
         <div class="ui segment monitor-panel-segment page-panel-shell">
             <div class="ui block header top attached segment page-section-header">
                 <div class="ui compact tiny menu page-nav-menu">
@@ -571,21 +674,28 @@
     </div>
     <div class="monitor-detail-panel page-split-detail-panel" style="padding-right: 0;">
         <!--欢迎提示面版-->
-        <div id="emptyTip" class="ui grid middle aligned center aligned segment monitor-empty-state page-empty-state">
-            <div class="column">
+        <div id="emptyTip" class="ui segment monitor-empty-state page-empty-state monitor-scope-state">
+            <div class="monitor-scope-column">
                 <div class="oscilloscope-card">
                     <div class="oscilloscope-header">
                         <div>
                             <div class="oscilloscope-title">实时请求示波器</div>
-                            <div class="oscilloscope-subtitle">探针在线后，请求进入时会在这里形成实时脉冲</div>
+                            <div id="oscilloscopeSubtitle" class="oscilloscope-subtitle">聚合全部探针：圆点 = 一次请求；折线 = 请求脉冲趋势；扫描线 = 实时监听节奏</div>
                         </div>
-                        <div class="oscilloscope-status"><span class="probe-status-dot"></span><span id="oscilloscopeStatusText">等待请求</span></div>
+                        <div class="oscilloscope-actions">
+                            <div class="ui mini buttons oscilloscope-mode">
+                                <button type="button" class="ui button active" data-mode="aggregate">全部探针</button>
+                                <button type="button" class="ui button" data-mode="single">当前探针</button>
+                                <button type="button" class="ui button" data-mode="lanes">多探针泳道</button>
+                            </div>
+                            <div class="oscilloscope-status"><span class="probe-status-dot"></span><span id="oscilloscopeStatusText">等待请求</span></div>
+                        </div>
                     </div>
                     <canvas id="oscilloscopeCanvas"></canvas>
                     <div id="oscilloscopeEmpty" class="oscilloscope-empty">
                         <i class="wave square icon"></i>
                         <div>暂无请求波形</div>
-                        <div style="font-size: 12px; margin-top: 6px;">当监控列表收到请求后，波形会自动滚动</div>
+                        <div style="font-size: 12px; margin-top: 6px;">当监控列表收到请求后，每个请求会形成一个圆点</div>
                     </div>
                 </div>
                 <div class="monitor-request-summary">
@@ -614,6 +724,10 @@
                             <div class="monitor-detail-kicker page-detail-kicker">实时监控详情</div>
                             <div id="monitorDetailTitle" class="monitor-detail-title page-detail-title"></div>
                         </div>
+                        <button class="ui basic teal button" onclick="showMonitorOscilloscope()">
+                            <i class="wave square icon"></i>
+                            返回示波器
+                        </button>
                     </div>
                 </div>
                 <div class="monitor-detail-content">
@@ -849,21 +963,34 @@
                 });
             }
         });
-        drawMonitorOscilloscope();
+        startMonitorOscilloscopeAnimation();
         refreshProbeStatus('${projectId}');
         setInterval(function () {
             refreshProbeStatus('${projectId}');
-            drawMonitorOscilloscope();
         }, 15000);
         $('#probeList').on('click', '.probe-card', function () {
             $('#probeList .probe-card').removeClass('active');
             $(this).addClass('active');
             var ip = $(this).data('ip');
             if (ip) {
+                setMonitorScopeMode('single', ip);
                 $('.ipFilter').dropdown('set selected', ip);
                 refreshMonitorList('${projectId}');
             }
         });
+        $('.oscilloscope-mode').on('click', '.button', function () {
+            var mode = $(this).data('mode');
+            setMonitorScopeMode(mode, monitorSelectedProbeIp);
+            if (mode === 'aggregate' || mode === 'lanes') {
+                $('#probeList .probe-card').removeClass('active');
+                $('.ipFilter').dropdown('clear');
+                refreshMonitorList('${projectId}');
+            } else if (monitorSelectedProbeIp) {
+                $('.ipFilter').dropdown('set selected', monitorSelectedProbeIp);
+                refreshMonitorList('${projectId}');
+            }
+        });
+        $('#probeSearchInput').on('input', applyProbeSearchFilter);
     });
 </script>
 

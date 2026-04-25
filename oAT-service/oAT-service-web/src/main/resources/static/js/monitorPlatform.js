@@ -7,7 +7,12 @@ var autoSavedTraceCache = {
     system: {}
 };
 var monitorWavePoints = [];
+var monitorWaveTraceIds = {};
 var monitorReceivedCount = 0;
+var monitorOscilloscopeAnimationStarted = false;
+var monitorScopeMode = 'aggregate';
+var monitorSelectedProbeIp = '';
+var monitorScopeLaneLimit = 8;
 
 function escapeMonitorHtml(value) {
     return String(value == null ? '' : value)
@@ -52,7 +57,13 @@ function pushMonitorWave(items) {
         return;
     }
     $.each(items, function (index, item) {
+        var traceKey = item.traceId || (item.cacheTime + ':' + item.title);
+        if (monitorWaveTraceIds[traceKey]) {
+            return;
+        }
+        monitorWaveTraceIds[traceKey] = true;
         monitorWavePoints.push({
+            traceId: item.traceId || '',
             time: item.cacheTime || new Date().getTime(),
             title: item.title || '',
             ip: item.addressIp || item.clientIp || '',
@@ -61,8 +72,167 @@ function pushMonitorWave(items) {
     });
     if (monitorWavePoints.length > 80) {
         monitorWavePoints = monitorWavePoints.slice(monitorWavePoints.length - 80);
+        monitorWaveTraceIds = {};
+        $.each(monitorWavePoints, function (index, point) {
+            if (point.traceId) {
+                monitorWaveTraceIds[point.traceId] = true;
+            }
+        });
     }
     drawMonitorOscilloscope();
+}
+
+function resetMonitorWave() {
+    monitorWavePoints = [];
+    monitorWaveTraceIds = {};
+}
+
+function setMonitorScopeMode(mode, probeIp) {
+    monitorScopeMode = mode || 'aggregate';
+    if (probeIp) {
+        monitorSelectedProbeIp = probeIp;
+    }
+    $('.oscilloscope-mode .button').removeClass('active');
+    $('.oscilloscope-mode .button[data-mode="' + monitorScopeMode + '"]').addClass('active');
+    updateMonitorScopeHint();
+    drawMonitorOscilloscope();
+}
+
+function getMonitorScopePoints() {
+    if (monitorScopeMode === 'single') {
+        if (!monitorSelectedProbeIp) {
+            return [];
+        }
+        return monitorWavePoints.filter(function (point) {
+            return point.ip === monitorSelectedProbeIp;
+        });
+    }
+    return monitorWavePoints;
+}
+
+function updateMonitorScopeHint(laneCount, hiddenLaneCount) {
+    var text = '聚合全部探针：圆点 = 一次请求；折线 = 请求脉冲趋势；扫描线 = 实时监听节奏';
+    if (monitorScopeMode === 'single') {
+        text = monitorSelectedProbeIp
+            ? '当前探针 ' + monitorSelectedProbeIp + '：只展示该探针收到的请求波形'
+            : '当前探针：请先点击下方在线探针卡片选择一个探针';
+    } else if (monitorScopeMode === 'lanes') {
+        text = '多探针泳道：每条横线代表一个探针，最多显示活跃前 ' + monitorScopeLaneLimit + ' 个';
+        if (laneCount) {
+            text += '，当前显示 ' + laneCount + ' 条';
+        }
+        if (hiddenLaneCount) {
+            text += '，其余 ' + hiddenLaneCount + ' 个聚合在列表过滤中查看';
+        }
+    }
+    $('#oscilloscopeSubtitle').text(text);
+}
+
+function drawMonitorGrid(ctx, width, height) {
+    ctx.strokeStyle = 'rgba(148, 163, 184, .15)';
+    ctx.lineWidth = 1;
+    for (var x = 0; x < width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+    }
+    for (var y = 28; y < height; y += 32) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+    }
+}
+
+function drawMonitorSweep(ctx, width, height) {
+    var sweepX = ((Date.now() / 18) % (width + 80)) - 40;
+    var scanGradient = ctx.createLinearGradient(sweepX - 40, 0, sweepX + 40, 0);
+    scanGradient.addColorStop(0, 'rgba(94, 234, 212, 0)');
+    scanGradient.addColorStop(0.5, 'rgba(94, 234, 212, .24)');
+    scanGradient.addColorStop(1, 'rgba(94, 234, 212, 0)');
+    ctx.fillStyle = scanGradient;
+    ctx.fillRect(sweepX - 40, 0, 80, height);
+    ctx.strokeStyle = 'rgba(94, 234, 212, .55)';
+    ctx.beginPath();
+    ctx.moveTo(sweepX, 0);
+    ctx.lineTo(sweepX, height);
+    ctx.stroke();
+}
+
+function drawMonitorPulseTrace(ctx, points, width, baseline, pulseHeight, color, leftPadding) {
+    if (!points.length) {
+        return;
+    }
+    var spacing = (width - leftPadding - 24) / Math.max(18, points.length - 1);
+    var startX = Math.max(leftPadding, width - spacing * (points.length - 1) - 24);
+    var plottedPoints = [];
+    $.each(points, function (index, point) {
+        var x = startX + index * spacing;
+        var pulse = point.level * pulseHeight;
+        plottedPoints.push({x: x, y: baseline - pulse, point: point});
+    });
+
+    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = 'rgba(45, 212, 191, .65)';
+    ctx.shadowBlur = 9;
+    ctx.beginPath();
+    $.each(plottedPoints, function (index, plot) {
+        if (index === 0) {
+            ctx.moveTo(plot.x, baseline);
+        }
+        ctx.lineTo(plot.x, plot.y);
+        ctx.lineTo(plot.x + Math.min(14, spacing * .38), baseline);
+    });
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    $.each(plottedPoints, function (index, plot) {
+        ctx.fillStyle = '#22d3ee';
+        ctx.beginPath();
+        ctx.arc(plot.x, plot.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function drawMonitorLanes(ctx, width, height) {
+    var groups = {};
+    $.each(monitorWavePoints, function (index, point) {
+        var ip = point.ip || '未知探针';
+        if (!groups[ip]) {
+            groups[ip] = [];
+        }
+        groups[ip].push(point);
+    });
+    var lanes = Object.keys(groups).map(function (ip) {
+        return {ip: ip, points: groups[ip]};
+    }).sort(function (a, b) {
+        return b.points.length - a.points.length;
+    });
+    var visibleLanes = lanes.slice(0, monitorScopeLaneLimit);
+    updateMonitorScopeHint(visibleLanes.length, Math.max(0, lanes.length - visibleLanes.length));
+    if (!visibleLanes.length) {
+        $('#oscilloscopeEmpty').show();
+        return;
+    }
+    $('#oscilloscopeEmpty').hide();
+
+    var topPadding = 20;
+    var laneHeight = (height - topPadding - 18) / visibleLanes.length;
+    $.each(visibleLanes, function (laneIndex, lane) {
+        var baseline = topPadding + laneHeight * laneIndex + laneHeight * .68;
+        ctx.strokeStyle = 'rgba(94, 234, 212, .22)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(78, baseline);
+        ctx.lineTo(width - 8, baseline);
+        ctx.stroke();
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(lane.ip, 10, baseline + 4);
+        drawMonitorPulseTrace(ctx, lane.points, width, baseline, Math.max(16, laneHeight * .42), '#5eead4', 86);
+    });
 }
 
 function drawMonitorOscilloscope() {
@@ -80,21 +250,15 @@ function drawMonitorOscilloscope() {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    ctx.strokeStyle = 'rgba(148, 163, 184, .15)';
-    ctx.lineWidth = 1;
-    for (var x = 0; x < width; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-    }
-    for (var y = 28; y < height; y += 32) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
+    drawMonitorGrid(ctx, width, height);
+    drawMonitorSweep(ctx, width, height);
+
+    if (monitorScopeMode === 'lanes') {
+        drawMonitorLanes(ctx, width, height);
+        return;
     }
 
+    var points = getMonitorScopePoints();
     var baseline = height * 0.58;
     ctx.strokeStyle = 'rgba(94, 234, 212, .28)';
     ctx.beginPath();
@@ -102,42 +266,25 @@ function drawMonitorOscilloscope() {
     ctx.lineTo(width, baseline);
     ctx.stroke();
 
-    if (monitorWavePoints.length === 0) {
+    updateMonitorScopeHint();
+    if (points.length === 0) {
         $('#oscilloscopeEmpty').show();
         return;
     }
     $('#oscilloscopeEmpty').hide();
+    drawMonitorPulseTrace(ctx, points, width, baseline, 58, '#5eead4', 0);
+}
 
-    var spacing = width / Math.max(18, monitorWavePoints.length - 1);
-    var startX = Math.max(0, width - spacing * (monitorWavePoints.length - 1) - 24);
-
-    ctx.lineWidth = 2.5;
-    ctx.strokeStyle = '#5eead4';
-    ctx.shadowColor = 'rgba(45, 212, 191, .65)';
-    ctx.shadowBlur = 10;
-    ctx.beginPath();
-    $.each(monitorWavePoints, function (index, point) {
-        var x = startX + index * spacing;
-        var pulse = Math.sin(index * 1.7) * 18 + point.level * 56;
-        var y = baseline - pulse;
-        if (index === 0) {
-            ctx.moveTo(x, baseline);
-        }
-        ctx.lineTo(x, y);
-        ctx.lineTo(x + Math.min(16, spacing * .45), baseline + Math.sin(index) * 8);
-    });
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    $.each(monitorWavePoints.slice(-12), function (index, point) {
-        var realIndex = monitorWavePoints.length - 12 + index;
-        var x = startX + realIndex * spacing;
-        var y = baseline - (Math.sin(realIndex * 1.7) * 18 + point.level * 56);
-        ctx.fillStyle = '#22d3ee';
-        ctx.beginPath();
-        ctx.arc(x, y, 4, 0, Math.PI * 2);
-        ctx.fill();
-    });
+function startMonitorOscilloscopeAnimation() {
+    if (monitorOscilloscopeAnimationStarted) {
+        return;
+    }
+    monitorOscilloscopeAnimationStarted = true;
+    function tick() {
+        drawMonitorOscilloscope();
+        window.requestAnimationFrame(tick);
+    }
+    window.requestAnimationFrame(tick);
 }
 
 function renderProbeList(projectid, sessions) {
@@ -148,6 +295,7 @@ function renderProbeList(projectid, sessions) {
     $('#onlineProbeCount').text(sessions ? sessions.length : 0);
     if (!sessions || sessions.length === 0) {
         $probeList.html('<div class="probe-empty"><i class="plug icon"></i> 暂无在线探针，启动 Agent 后会显示在这里</div>');
+        $('#probeListSummary').text('在线 0 个探针');
         return;
     }
     var html = sessions.map(function (session) {
@@ -163,12 +311,42 @@ function renderProbeList(projectid, sessions) {
             + '</div><span class="probe-badge">在线</span></div>';
     }).join('');
     $probeList.html(html);
+    applyProbeSearchFilter();
 }
 
 function refreshProbeStatus(projectid) {
     $.getJSON('/p/' + projectid + '/monitor/probeStatus', function (sessions) {
         renderProbeList(projectid, sessions || []);
     });
+}
+
+function applyProbeSearchFilter() {
+    var keyword = $.trim($('#probeSearchInput').val() || '').toLowerCase();
+    var total = 0;
+    var visible = 0;
+    $('#probeList .probe-card').each(function () {
+        total++;
+        var matched = !keyword || $(this).text().toLowerCase().indexOf(keyword) >= 0;
+        $(this).toggle(matched);
+        if (matched) {
+            visible++;
+        }
+    });
+    if (total === 0) {
+        $('#probeListSummary').text('在线 0 个探针');
+    } else if (keyword) {
+        $('#probeListSummary').text('匹配 ' + visible + ' / 在线 ' + total + ' 个探针');
+    } else {
+        $('#probeListSummary').text('在线 ' + total + ' 个探针');
+    }
+}
+
+function showMonitorOscilloscope() {
+    $('#monitorDetail').hide();
+    $('#emptyTip').show();
+    $('#monitorListBody tr.focus').removeClass('focus');
+    resetMonitorSelectionState();
+    drawMonitorOscilloscope();
 }
 
 /*
@@ -245,10 +423,11 @@ function refreshMonitorList(projectid) {
         resetMonitorSelectionState();
         $("#emptyTip").show();
         $("#monitorDetail").hide();
-        monitorWavePoints = [];
+        resetMonitorWave();
         updateMonitorOverview([]);
         drawMonitorOscilloscope();
     } else {
+        resetMonitorWave();
         appendItems(projectid, newItems);
     }
     lastUpdateTime = new Date().getTime();
@@ -304,7 +483,7 @@ function appendItems(projectid, newItems) {
 
 function clearItem() {
     $("#monitorListBody").children().remove();
-    monitorWavePoints = [];
+    resetMonitorWave();
     updateMonitorOverview([]);
     drawMonitorOscilloscope();
 }
@@ -561,4 +740,3 @@ function openCreateSystemSnapshot() {
         alert(resultInform.errorMessage);
     }
 }*/
-
