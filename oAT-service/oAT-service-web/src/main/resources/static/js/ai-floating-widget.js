@@ -126,6 +126,9 @@
                     applyPosition(getCurrentPosition());
                 }
                 writeLocalJSON(positionKey, getCurrentPosition());
+                if (open) {
+                    compactQuickLinkLayout();
+                }
             });
         }
 
@@ -919,8 +922,7 @@
             }
 
             var headerHeight = $quickSection.find('.ai-floating-section-header').outerHeight(true) || 0;
-            var maxBodyHeight = parseFloat($quickLinks.css('max-height')) || 120;
-            var bodyHeight = Math.min($quickLinks[0].scrollHeight || $quickLinks.outerHeight(true) || 0, maxBodyHeight);
+            var bodyHeight = $quickLinks[0].scrollHeight || $quickLinks.outerHeight(true) || 0;
             var desiredHeight = Math.ceil(headerHeight + bodyHeight + 4);
             desiredHeight = Math.max(quickItem.minHeight, desiredHeight);
 
