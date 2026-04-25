@@ -65,6 +65,12 @@ public class AppServiceImpl implements AppService, StandardDate {
         app.setRepoAddress(appVo.getRepoAddress());
         app.setRepoUserName(appVo.getRepoUserName());
         app.setRepoPassword(appVo.getRepoPassword());
+        app.setProbeAlertEnabled(Boolean.TRUE.equals(appVo.getProbeAlertEnabled()));
+        app.setProbeOfflineThresholdSeconds(normalizeProbeOfflineThresholdSeconds(appVo.getProbeOfflineThresholdSeconds()));
+        app.setProbeWebhookUrl(appVo.getProbeWebhookUrl());
+        app.setProbeAlertOnOnline(Boolean.TRUE.equals(appVo.getProbeAlertOnOnline()));
+        app.setProbeAlertOnOffline(appVo.getProbeAlertOnOffline() == null ? Boolean.TRUE : appVo.getProbeAlertOnOffline());
+        app.setProbeAlertOnRecovered(appVo.getProbeAlertOnRecovered() == null ? Boolean.TRUE : appVo.getProbeAlertOnRecovered());
         appIndex.setApp(app);
         appIndex.setUpdateTime(new java.util.Date());
         systemRepository.save(appIndex);
@@ -214,7 +220,31 @@ public class AppServiceImpl implements AppService, StandardDate {
         AppVo appVo = new AppVo();
         BeanUtils.copyProperties(systemIndex, appVo);
         BeanUtils.copyProperties(systemIndex.getApp(), appVo);
+        fillProbeAlertDefaults(appVo);
         return appVo;
+    }
+
+    private void fillProbeAlertDefaults(AppVo appVo) {
+        if (appVo.getProbeAlertEnabled() == null) {
+            appVo.setProbeAlertEnabled(Boolean.FALSE);
+        }
+        appVo.setProbeOfflineThresholdSeconds(normalizeProbeOfflineThresholdSeconds(appVo.getProbeOfflineThresholdSeconds()));
+        if (appVo.getProbeAlertOnOnline() == null) {
+            appVo.setProbeAlertOnOnline(Boolean.FALSE);
+        }
+        if (appVo.getProbeAlertOnOffline() == null) {
+            appVo.setProbeAlertOnOffline(Boolean.TRUE);
+        }
+        if (appVo.getProbeAlertOnRecovered() == null) {
+            appVo.setProbeAlertOnRecovered(Boolean.TRUE);
+        }
+    }
+
+    private Integer normalizeProbeOfflineThresholdSeconds(Integer thresholdSeconds) {
+        if (thresholdSeconds == null || thresholdSeconds <= 0) {
+            return 90;
+        }
+        return Math.max(30, thresholdSeconds);
     }
 
     /**

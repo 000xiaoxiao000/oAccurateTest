@@ -79,6 +79,10 @@
                     </div>
                 </div>
                 <form class="ui form app-unified-form" action="/p/${project.id}/app/${app.id}/edit" method="post">
+                    <#if toastMessage??>
+                        <input type="hidden" id="pageToastMessage" value="${toastMessage}">
+                        <input type="hidden" id="pageToastMessageType" value="${toastMessageType!'success'}">
+                    </#if>
                     <div class="field">
                         <label>应用id</label>
                         <input type="text" value="${app.id}" readonly name="id">
@@ -115,6 +119,48 @@
                     <div class="field">
                         <label>应用参数</label>
                         <textarea rows="4" name="properties" placeholder="必须重启相关应用配置才会生效">${app.properties!}</textarea>
+                    </div>
+
+                    <div class="ui divider"></div>
+                    <h3 class="ui header">探针上下线告警</h3>
+                    <p class="app-unified-section-desc">按每个探针实例独立判断上下线，超过配置阈值未收到心跳后发送通用 Webhook 通知。下线阈值最小支持 <strong>30 秒</strong>，小于 30 秒会自动按 30 秒保存，避免频繁心跳抖动造成误报。测试时可填当前服务内置地址：<code>http://127.0.0.1:8899/webhook/oat/probe-alert</code>。</p>
+                    <div class="field">
+                        <div class="ui checkbox">
+                            <input type="checkbox" name="probeAlertEnabled" value="true" <#if app.probeAlertEnabled?? && app.probeAlertEnabled>checked="checked"</#if>>
+                            <label>启用探针实例上下线告警</label>
+                        </div>
+                    </div>
+                    <div class="two fields">
+                        <div class="field">
+                            <label>下线阈值（秒）</label>
+                            <input type="number" min="30" name="probeOfflineThresholdSeconds" value="${app.probeOfflineThresholdSeconds!90}">
+                            <div class="ui pointing basic label">最小 30 秒；保存小于 30 的值时会自动调整为 30 秒。</div>
+                        </div>
+                        <div class="field">
+                            <label>Webhook 地址</label>
+                            <input type="text" name="probeWebhookUrl" value="${app.probeWebhookUrl!}" placeholder="http://127.0.0.1:8899/webhook/oat/probe-alert">
+                        </div>
+                    </div>
+                    <div class="inline fields">
+                        <label>通知事件：</label>
+                        <div class="field">
+                            <div class="ui checkbox">
+                                <input type="checkbox" name="probeAlertOnOffline" value="true" <#if app.probeAlertOnOffline?? && app.probeAlertOnOffline>checked="checked"</#if>>
+                                <label>下线</label>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <div class="ui checkbox">
+                                <input type="checkbox" name="probeAlertOnRecovered" value="true" <#if app.probeAlertOnRecovered?? && app.probeAlertOnRecovered>checked="checked"</#if>>
+                                <label>恢复上线</label>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <div class="ui checkbox">
+                                <input type="checkbox" name="probeAlertOnOnline" value="true" <#if app.probeAlertOnOnline?? && app.probeAlertOnOnline>checked="checked"</#if>>
+                                <label>首次上线</label>
+                            </div>
+                        </div>
                     </div>
                     <#if loginNameRole != "visitor">
                         <div class="app-unified-form-actions">
@@ -169,6 +215,11 @@
         $('.ui.container .click.dropdown').dropdown({
             on: 'click'
         });
+        $('.ui.checkbox').checkbox();
+        var pageToastMessage = $('#pageToastMessage').val();
+        if (pageToastMessage) {
+            notifyToast(pageToastMessage, $('#pageToastMessageType').val() || 'success');
+        }
         $(".ui.button[type='submit']").click(function () {
             $(this).parents("form").first().submit();
         });

@@ -14,6 +14,7 @@ import com.oAT.web.esDao.SystemRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
+import com.oAT.web.service.ProbeStatusService;
 import com.oAT.web.service.TraceNodeCache;
 import com.oAT.web.service.TraceNodeFilter;
 import com.oAT.web.service.entity.AppVo;
@@ -68,6 +69,9 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
 
     @Autowired
     AppService appService;
+
+    @Autowired
+    ProbeStatusService probeStatusService;
 
     @Autowired
     private ClientRepository clientRepository;
@@ -260,6 +264,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
 //        result.setUploadUrls();
         // 保存至 Redis
         redisTemplate.opsForValue().set(SESSIONS_KEY_PREFIX + result.getSessionId(), result, sessionClearValidity, TimeUnit.MILLISECONDS);
+        probeStatusService.onLogin(result);
         return result;
     }
 
@@ -291,6 +296,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         Assert.notNull(vo, "找不到指定客户端session id=" + sessionId);
         vo.setLastHeartbeatTime(System.currentTimeMillis());
         redisTemplate.opsForValue().set(SESSIONS_KEY_PREFIX + sessionId, vo, sessionClearValidity, TimeUnit.MILLISECONDS);
+        probeStatusService.onHeartbeat(vo);
     }
 
     @Override

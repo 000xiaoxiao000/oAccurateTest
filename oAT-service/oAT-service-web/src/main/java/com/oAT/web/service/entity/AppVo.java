@@ -38,6 +38,13 @@ public class AppVo implements Serializable {
 
     private SnapshotDirectory[] snapshotDirs;
 
+    private Boolean probeAlertEnabled;
+    private Integer probeOfflineThresholdSeconds;
+    private String probeWebhookUrl;
+    private Boolean probeAlertOnOnline;
+    private Boolean probeAlertOnOffline;
+    private Boolean probeAlertOnRecovered;
+
     public String getId() {
         return id;
     }
@@ -182,5 +189,53 @@ public class AppVo implements Serializable {
 
     public void setSnapshotDirs(SnapshotDirectory[] snapshotDirs) {
         this.snapshotDirs = snapshotDirs;
+    }
+
+    public Boolean getProbeAlertEnabled() {
+        return probeAlertEnabled;
+    }
+
+    public void setProbeAlertEnabled(Boolean probeAlertEnabled) {
+        this.probeAlertEnabled = probeAlertEnabled;
+    }
+
+    public Integer getProbeOfflineThresholdSeconds() {
+        return probeOfflineThresholdSeconds;
+    }
+
+    public void setProbeOfflineThresholdSeconds(Integer probeOfflineThresholdSeconds) {
+        this.probeOfflineThresholdSeconds = probeOfflineThresholdSeconds;
+    }
+
+    public String getProbeWebhookUrl() {
+        return probeWebhookUrl;
+    }
+
+    public void setProbeWebhookUrl(String probeWebhookUrl) {
+        this.probeWebhookUrl = probeWebhookUrl;
+    }
+
+    public Boolean getProbeAlertOnOnline() {
+        return probeAlertOnOnline;
+    }
+
+    public void setProbeAlertOnOnline(Boolean probeAlertOnOnline) {
+        this.probeAlertOnOnline = probeAlertOnOnline;
+    }
+
+    public Boolean getProbeAlertOnOffline() {
+        return probeAlertOnOffline;
+    }
+
+    public void setProbeAlertOnOffline(Boolean probeAlertOnOffline) {
+        this.probeAlertOnOffline = probeAlertOnOffline;
+    }
+
+    public Boolean getProbeAlertOnRecovered() {
+        return probeAlertOnRecovered;
+    }
+
+    public void setProbeAlertOnRecovered(Boolean probeAlertOnRecovered) {
+        this.probeAlertOnRecovered = probeAlertOnRecovered;
     }
 }

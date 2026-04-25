@@ -19,6 +19,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -115,14 +116,41 @@ public class AppControl {
     }
 
     @RequestMapping(value = "{appId}/edit", method = RequestMethod.POST)
-    @ResponseBody
-    public com.oAT.web.control.entity.ResultNotified openEditView(@PathVariable String projectId,
+    public String openEditView(@PathVariable String projectId,
                                @PathVariable String appId,
-                               @SessionAttribute UserVo user, AppVo app) {
+                               @SessionAttribute UserVo user,
+                               AppVo app,
+                               @RequestParam(value = "probeAlertEnabled", defaultValue = "false") boolean probeAlertEnabled,
+                               @RequestParam(value = "probeAlertOnOffline", defaultValue = "false") boolean probeAlertOnOffline,
+                               @RequestParam(value = "probeAlertOnRecovered", defaultValue = "false") boolean probeAlertOnRecovered,
+                               @RequestParam(value = "probeAlertOnOnline", defaultValue = "false") boolean probeAlertOnOnline,
+                               RedirectAttributes redirectAttributes) {
         Assert.isTrue(app.getId().equalsIgnoreCase(appId), "参数非法");
+        boolean notificationEventsAdjusted = probeAlertEnabled && !probeAlertOnOffline && !probeAlertOnRecovered && !probeAlertOnOnline;
+        app.setProbeAlertEnabled(probeAlertEnabled);
+        if (notificationEventsAdjusted) {
+            probeAlertOnOffline = true;
+            probeAlertOnRecovered = true;
+        }
+        app.setProbeAlertOnOffline(probeAlertOnOffline);
+        app.setProbeAlertOnRecovered(probeAlertOnRecovered);
+        app.setProbeAlertOnOnline(probeAlertOnOnline);
+        Integer submittedOfflineThresholdSeconds = app.getProbeOfflineThresholdSeconds();
+        boolean offlineThresholdAdjusted = submittedOfflineThresholdSeconds != null
+                && submittedOfflineThresholdSeconds > 0
+                && submittedOfflineThresholdSeconds < 30;
         app = appService.updateApp(projectId, app);
         doLog(SystemLogService.Action.editApp, "修改了应用信息", user, app);
-        return new com.oAT.web.control.entity.ResultNotified(true, "应用修改成功", "/p/" + projectId + "/app/" + appId + "/settings");
+        String toastMessage = "应用修改成功";
+        if (offlineThresholdAdjusted) {
+            toastMessage += "。下线阈值最小支持 30 秒，已自动按 30 秒保存。";
+        }
+        if (notificationEventsAdjusted) {
+            toastMessage += "。启用告警时至少需要选择一个通知事件，已自动启用下线和恢复上线通知。";
+        }
+        redirectAttributes.addFlashAttribute("toastMessage", toastMessage);
+        redirectAttributes.addFlashAttribute("toastMessageType", "success");
+        return "redirect:/p/" + projectId + "/app/" + appId + "/settings";
     }
 
     @RequestMapping(value = "{appId}/delete", method = RequestMethod.POST)

@@ -87,6 +87,22 @@ public class App implements Serializable {
     @Field(type = FieldType.Object)
     private SnapshotDirectory[] snapshotDirs;
 
+    /**
+     * 探针实例上下线告警配置
+     */
+    @Field(type = FieldType.Boolean)
+    private Boolean probeAlertEnabled;
+    @Field(type = FieldType.Integer)
+    private Integer probeOfflineThresholdSeconds;
+    @Field(type = FieldType.Keyword)
+    private String probeWebhookUrl;
+    @Field(type = FieldType.Boolean)
+    private Boolean probeAlertOnOnline;
+    @Field(type = FieldType.Boolean)
+    private Boolean probeAlertOnOffline;
+    @Field(type = FieldType.Boolean)
+    private Boolean probeAlertOnRecovered;
+
     // ============ getter/setter ============
 
     public String getName() {
@@ -200,6 +216,54 @@ public class App implements Serializable {
 
     public void setSnapshotDirs(SnapshotDirectory[] snapshotDirs) {
         this.snapshotDirs = snapshotDirs;
+    }
+
+    public Boolean getProbeAlertEnabled() {
+        return probeAlertEnabled;
+    }
+
+    public void setProbeAlertEnabled(Boolean probeAlertEnabled) {
+        this.probeAlertEnabled = probeAlertEnabled;
+    }
+
+    public Integer getProbeOfflineThresholdSeconds() {
+        return probeOfflineThresholdSeconds;
+    }
+
+    public void setProbeOfflineThresholdSeconds(Integer probeOfflineThresholdSeconds) {
+        this.probeOfflineThresholdSeconds = probeOfflineThresholdSeconds;
+    }
+
+    public String getProbeWebhookUrl() {
+        return probeWebhookUrl;
+    }
+
+    public void setProbeWebhookUrl(String probeWebhookUrl) {
+        this.probeWebhookUrl = probeWebhookUrl;
+    }
+
+    public Boolean getProbeAlertOnOnline() {
+        return probeAlertOnOnline;
+    }
+
+    public void setProbeAlertOnOnline(Boolean probeAlertOnOnline) {
+        this.probeAlertOnOnline = probeAlertOnOnline;
+    }
+
+    public Boolean getProbeAlertOnOffline() {
+        return probeAlertOnOffline;
+    }
+
+    public void setProbeAlertOnOffline(Boolean probeAlertOnOffline) {
+        this.probeAlertOnOffline = probeAlertOnOffline;
+    }
+
+    public Boolean getProbeAlertOnRecovered() {
+        return probeAlertOnRecovered;
+    }
+
+    public void setProbeAlertOnRecovered(Boolean probeAlertOnRecovered) {
+        this.probeAlertOnRecovered = probeAlertOnRecovered;
     }
 
     public enum Range {

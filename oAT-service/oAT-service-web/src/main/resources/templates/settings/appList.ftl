@@ -258,6 +258,225 @@
             white-space: nowrap;
         }
 
+        .app-edit-modal.ui.modal {
+            position: fixed !important;
+            top: 16px !important;
+            left: 50% !important;
+            bottom: 16px !important;
+            margin: 0 !important;
+            transform: translateX(-50%) !important;
+            height: calc(100vh - 32px) !important;
+            max-height: calc(100vh - 32px) !important;
+            border-radius: 18px !important;
+            overflow: hidden !important;
+            box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22) !important;
+        }
+
+        .app-edit-modal.ui.modal.visible,
+        .app-edit-modal.ui.modal.active {
+            display: flex !important;
+            flex-direction: column;
+        }
+
+        .app-edit-modal .app-modal-header {
+            position: relative;
+            flex: 0 0 auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 22px 26px;
+            border-bottom: 1px solid #e6eef7;
+            background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 55%, #f9fbfd 100%);
+        }
+
+        .app-edit-modal .app-modal-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            padding: 5px 11px;
+            border-radius: 999px;
+            background: rgba(33, 133, 208, 0.08);
+            color: #1d6fa5;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        .app-edit-modal .app-modal-title {
+            margin: 0 0 6px;
+            color: #1f2937;
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+
+        .app-edit-modal .app-modal-desc {
+            margin: 0;
+            color: #617080;
+            line-height: 1.65;
+        }
+
+        .app-edit-modal .app-modal-close {
+            margin: 0 !important;
+            color: #64748b !important;
+            opacity: 1 !important;
+            transition: color 0.18s ease, transform 0.18s ease;
+        }
+
+        .app-edit-modal .app-modal-close:hover {
+            color: #ef4444 !important;
+            transform: rotate(90deg);
+        }
+
+        .app-edit-modal .app-modal-content {
+            flex: 1 1 auto;
+            min-height: 0;
+            height: auto;
+            max-height: none;
+            overflow-y: auto;
+            padding: 24px 26px 18px !important;
+            background: #fff;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .app-edit-modal .app-modal-section {
+            margin-bottom: 22px;
+            padding: 18px;
+            border: 1px solid #e7edf5;
+            border-radius: 16px;
+            background: #fbfdff;
+        }
+
+        .app-edit-modal .app-modal-section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            color: #334155;
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .app-edit-modal .app-modal-section-title .icon {
+            color: #2185d0;
+        }
+
+        .app-edit-modal .ui.form .field > label,
+        .app-edit-modal .ui.form .inline.fields > label {
+            color: #334155;
+            font-weight: 700;
+        }
+
+        .app-edit-modal .ui.form input,
+        .app-edit-modal .ui.form textarea {
+            border-radius: 12px !important;
+            border-color: #d9e3ef !important;
+        }
+
+        .app-edit-modal .ui.form input:focus,
+        .app-edit-modal .ui.form textarea:focus {
+            border-color: rgba(0, 181, 173, .7) !important;
+            box-shadow: 0 0 0 3px rgba(0, 181, 173, .12) !important;
+        }
+
+        .app-edit-modal textarea[name="describe"] {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .app-edit-modal .CodeMirror {
+            border: 1px solid #d9e3ef;
+            border-radius: 12px;
+            min-height: 210px;
+            background: #fff;
+        }
+
+        .app-edit-modal .CodeMirror-scroll {
+            min-height: 210px;
+            overflow-y: auto;
+        }
+
+        .app-edit-modal .actions.app-modal-actions {
+            flex: 0 0 auto;
+            position: sticky;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 14px 26px 16px !important;
+            border-top: 1px solid #e6eef7;
+            background: #f8fafc;
+            z-index: 2;
+        }
+
+        .app-edit-modal .actions.app-modal-actions:before,
+        .app-edit-modal .actions.app-modal-actions:after {
+            display: none !important;
+        }
+
+        .app-edit-modal .app-modal-actions .ui.button {
+            margin: 0 !important;
+            border-radius: 10px;
+            min-width: 96px;
+        }
+
+        .app-edit-modal .app-version-fields .field {
+            min-width: 0;
+        }
+
+        .app-edit-modal .app-alert-desc {
+            margin: -4px 0 16px;
+            color: #64748b;
+            line-height: 1.65;
+        }
+
+        .app-edit-modal .app-alert-desc code {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 2px 6px;
+            border-radius: 6px;
+            background: #eef5ff;
+            color: #1d4ed8;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .app-edit-modal .app-alert-switch {
+            padding: 12px 14px;
+            border: 1px solid #dbeafe;
+            border-radius: 12px;
+            background: #f8fbff;
+        }
+
+        .app-edit-modal .app-alert-events.inline.fields {
+            align-items: center;
+            margin-bottom: 0;
+        }
+
+        @media only screen and (max-width: 767px) {
+            .app-edit-modal .app-modal-header,
+            .app-edit-modal .app-modal-content,
+            .app-edit-modal .actions.app-modal-actions {
+                padding-left: 20px !important;
+                padding-right: 20px !important;
+            }
+
+            .app-edit-modal .app-modal-section {
+                padding: 16px;
+            }
+
+            .app-edit-modal .actions.app-modal-actions {
+                flex-direction: column-reverse;
+            }
+
+            .app-edit-modal .app-modal-actions .ui.button {
+                width: 100%;
+            }
+        }
+
         @media only screen and (max-width: 960px) {
             .project-settings-layout {
                 grid-template-columns: 1fr;
@@ -423,7 +642,7 @@
     </div>
 </div>
 
-<div id="editDialog" class="ui modal standard ">
+<div id="editDialog" class="ui modal standard app-edit-modal">
 
 </div>
 
@@ -449,8 +668,23 @@
     $('.commit-id').popup();
 
     function openEditDialog(appId) {
-        $("#editDialog").load('/p/${project.id}/app/edit?appId=' + appId);
-        $("#editDialog").modal('show');
+        var $editDialog = $("#editDialog");
+        $editDialog.html('<div class="ui active centered inline loader" style="margin: 48px auto;"></div>');
+        $editDialog.load('/p/${project.id}/app/edit?appId=' + appId, function() {
+            $editDialog.modal({
+                autofocus: false,
+                observeChanges: true,
+                detachable: false,
+                closable: false,
+                transition: 'fade',
+                duration: 120,
+                onVisible: function() {
+                    if (typeof editor !== 'undefined' && editor) {
+                        editor.refresh();
+                    }
+                }
+            }).modal('show');
+        });
     }
 
     function openDelDialog(appId) {

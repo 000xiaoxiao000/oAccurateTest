@@ -11,58 +11,80 @@
 <#include  "../normalHeader.ftl">
 
 <!--内容主体-->
-<div class="ui grid attached  container">
-    <!-- 左边导航菜单 -->
-    <div class="ui four wide column">
-        <div class="ui vertical menu">
-            <h4 class="ui item header">账户设置</h4>
-            <a class="item" href="/user/info">
-                基本信息
-            </a>
-            <a class="item active " href="/user/password">
-                更改密码
-            </a>
+<div class="ui container app-page-shell account-settings-page page-theme">
+    <div class="account-settings-hero">
+        <div>
+            <div class="account-settings-eyebrow">Account Settings</div>
+            <h2 class="account-settings-title">账户设置</h2>
+            <p class="account-settings-desc">统一管理你的账户基础资料与安全设置，保持个人信息准确可靠。</p>
         </div>
+        <i class="shield alternate icon account-settings-hero-icon"></i>
     </div>
-    <!-- 中间内容 -->
-    <div class="ui twelve wide column">
 
-        <h4 class="ui top attached block header">基本信息</h4>
-        <div class="ui attached segment">
-            <div id="successMessage" class="ui success message" style="display: none">
+    <div class="account-settings-layout">
+        <aside class="account-settings-sidebar">
+            <div class="account-settings-sidebar-title">设置菜单</div>
+            <div class="account-settings-nav">
+                <a class="account-settings-nav-item" href="/user/info">
+                    <i class="id card outline icon"></i>
+                    <span>基本信息</span>
+                </a>
+                <a class="account-settings-nav-item active" href="/user/password">
+                    <i class="lock icon"></i>
+                    <span>更改密码</span>
+                </a>
+            </div>
+        </aside>
+
+        <main class="account-settings-content">
+            <div class="account-settings-section-head">
+                <div>
+                    <h3 class="account-settings-section-title">更改密码</h3>
+                    <p class="account-settings-section-desc">建议使用更强的密码组合，定期更新以提升账户安全性。</p>
+                </div>
+            </div>
+            <div id="successMessage" class="ui success message account-settings-message" style="display: none">
                 <div class="header">
                     密码修改成功！
                 </div>
                 <p>现在你可以用新密码登陆了</p>
             </div>
-            <div id="failMessage" class="ui negative message" style="display: none">
+            <div id="failMessage" class="ui negative message account-settings-message" style="display: none">
                 <div class="header">
                     密码修改失败！
                 </div>
                 <p class="message">输入了错误的旧密码！</p>
             </div>
-            <form id="passwordForm" class="ui form">
+            <form id="passwordForm" class="ui form account-settings-form">
                 <div class="required field">
                     <label>原密码</label>
-                    <label>
-                        <input type="password" name="oldPassword" placeholder="原密码">
-                    </label>
+                    <div class="ui left icon input">
+                        <i class="key icon"></i>
+                        <input type="password" name="oldPassword" placeholder="请输入原密码">
+                    </div>
                 </div>
                 <div class="required field">
                     <label>新密码</label>
-                    <label>
-                        <input type="password" name="newPassword" placeholder="新密码">
-                    </label>
+                    <div class="ui left icon input">
+                        <i class="lock icon"></i>
+                        <input type="password" name="newPassword" placeholder="请输入新密码">
+                    </div>
                 </div>
                 <div class="required field">
                     <label>新密码确认</label>
-                    <label>
-                        <input type="password" name="newPasswordConfirm" placeholder="新密码确认">
-                    </label>
+                    <div class="ui left icon input">
+                        <i class="check circle outline icon"></i>
+                        <input type="password" name="newPasswordConfirm" placeholder="请再次输入新密码">
+                    </div>
                 </div>
-                <button class="ui button" type="button" onclick="doUpdate();">更改密码</button>
+                <div class="account-settings-actions">
+                    <button class="ui primary button" type="button" onclick="doUpdate();">
+                        <i class="sync alternate icon"></i>
+                        更改密码
+                    </button>
+                </div>
             </form>
-        </div>
+        </main>
     </div>
 </div>
 
