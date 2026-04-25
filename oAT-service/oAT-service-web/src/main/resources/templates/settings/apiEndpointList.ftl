@@ -199,7 +199,8 @@
                 </div>
                 <h1 class="project-settings-hero-title">接口扫描与覆盖</h1>
                 <p class="project-settings-hero-desc">
-                    支持优先使用系统中已通过 Git 拉取并缓存的源码 zip，也可手动上传源码 zip 或制品包 jar/war。系统会扫描 HTTP、HTTP Client、Feign、RPC 接口并建立索引。
+                    支持优先使用系统中已通过 Git 拉取并缓存的源码 .zip，也可手动上传源码 .zip 或制品包 .jar / .war。系统会扫描 HTTP、HTTP Client、Feign、RPC
+                    接口。
                 </p>
                 <div class="project-settings-meta">
                     <div class="project-settings-meta-card">
@@ -222,7 +223,8 @@
                     <h2 class="project-settings-section-title">扫描输入</h2>
                     <p class="project-settings-section-desc">蓝色表示已覆盖，灰色表示未覆盖。建议优先使用系统已缓存的源码包，以便重复扫描和结果复用。</p>
                     <div class="ui info message">
-                        支持优先使用系统中已通过 Git 拉取并缓存的源码 <b>.zip</b>，也可手动上传源码 <b>.zip</b> 或制品包 <b>.jar/.war</b>。系统会基于 <b>AST</b> 和 <b>ASM</b> 扫描 HTTP、HTTP Client、Feign、RPC 接口并建立索引；蓝色表示已覆盖，灰色表示未覆盖。
+                        支持优先使用系统中已通过 Git 拉取并缓存的源码 <b>.zip</b>，也可手动上传源码 <b>.zip</b> 或制品包 <b>.jar / .war</b>。系统会扫描
+                        HTTP、HTTP Client、Feign、RPC 接口；蓝色表示已覆盖，灰色表示未覆盖。
                     </div>
                     <form class="ui form" id="uploadForm" enctype="multipart/form-data">
                         <div class="field">
