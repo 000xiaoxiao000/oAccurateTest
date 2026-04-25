@@ -395,6 +395,13 @@
         return null;
     }
 
+    function setCreateProjectFormDisabled(disabled) {
+        var $form = $('.ui.form');
+        $form.find('input, textarea, button').prop('disabled', disabled);
+        $form.find('.ui.button').toggleClass('disabled', disabled);
+        $('.create-project-back').prop('disabled', disabled).toggleClass('disabled', disabled);
+    }
+
     function submitCreateProject() {
         var $form = $('.ui.form');
         var validationError = getCreateProjectValidationError();
@@ -408,6 +415,7 @@
         }
 
         var data = $form.serialize();
+        setCreateProjectFormDisabled(true);
         $.post('/project/doCreate', data, function(res) {
             if (res.success || res.result) {
                 showToast(res.message || '项目创建成功', 'success');
@@ -417,9 +425,11 @@
                     }, 1000);
                 }
             } else {
+                setCreateProjectFormDisabled(false);
                 showToast(res.message || '项目创建失败', 'error');
             }
         }).fail(function(xhr) {
+            setCreateProjectFormDisabled(false);
             var message = (xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.errorMessage)) || '网络请求失败';
             showToast(message, 'error');
         });

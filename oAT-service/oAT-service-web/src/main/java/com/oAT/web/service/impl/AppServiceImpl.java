@@ -12,6 +12,7 @@ import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.Directory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -30,6 +31,8 @@ public class AppServiceImpl implements AppService, StandardDate {
     private SystemSnapshotRepository systemSnapshotRepository;
     @Autowired
     private UsecaseService usecaseService;
+    @Autowired
+    private ElasticsearchOperations elasticsearchOperations;
 
     /**
      * 创建新的应用
@@ -41,6 +44,7 @@ public class AppServiceImpl implements AppService, StandardDate {
         Assert.hasText(app.getCreateProjectId(), "param 'app.projectId' must be not null");
         Assert.hasText(app.getCreateUserId(), "param 'app.createUserId' must be not null");
         SystemIndex systemIndex = systemRepository.save(new SystemIndex(app));
+        elasticsearchOperations.indexOps(SystemIndex.class).refresh();
         return convertApp(systemIndex);
     }
 

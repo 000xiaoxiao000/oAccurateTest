@@ -35,7 +35,29 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     @Field(type = FieldType.Object)
     private HttpTraceNode httpNode;
     @Field(type = FieldType.Object)
+    private HttpClientTraceNode httpClientNode;
+    @Field(type = FieldType.Object)
+    private FeignTraceNode feignNode;
+    @Field(type = FieldType.Object)
     private RedisTraceNode redisNode;
+    @Field(type = FieldType.Object)
+    private ServiceTraceNode serviceNode;
+    @Field(type = FieldType.Object)
+    private SofaRpcTraceNode sofaRpcNode;
+    @Field(type = FieldType.Object)
+    private SofaRpcRemoteTraceNode sofaRpcRemoteNode;
+    @Field(type = FieldType.Object)
+    private RabbitMQTraceNode rabbitMQNode;
+    @Field(type = FieldType.Object)
+    private RabbitMQRemoteTraceNode rabbitMQRemoteNode;
+    @Field(type = FieldType.Object)
+    private RocketMQProducerTraceNode rocketMQProducerNode;
+    @Field(type = FieldType.Object)
+    private RocketMQConsumerTraceNode rocketMQConsumerNode;
+    @Field(type = FieldType.Object)
+    private KafkaMQTraceNode kafkaMQNode;
+    @Field(type = FieldType.Object)
+    private KafkaMQRemoteTraceNode kafkaMQRemoteNode;
 
     /**
      * 该构造方法为自动注入保留方法，
@@ -51,12 +73,34 @@ public class TraceNodeIndex implements StandardDate, Serializable {
             this.dubboRemoteNode = (DubboRemoteTraceNode) node;
         } else if (node instanceof HttpTraceNode) {
             this.httpNode = (HttpTraceNode) node;
+        } else if (node instanceof HttpClientTraceNode) {
+            this.httpClientNode = (HttpClientTraceNode) node;
+        } else if (node instanceof FeignTraceNode) {
+            this.feignNode = (FeignTraceNode) node;
         } else if (node instanceof SqlTraceNode) {
             this.sqlNode = (SqlTraceNode) node;
         }else if (node instanceof CKSqlTraceNode) {
             this.cksqlNode = (CKSqlTraceNode) node;
         }else if (node instanceof RedisTraceNode) {
             this.redisNode = (RedisTraceNode) node;
+        } else if (node instanceof ServiceTraceNode) {
+            this.serviceNode = (ServiceTraceNode) node;
+        } else if (node instanceof SofaRpcTraceNode) {
+            this.sofaRpcNode = (SofaRpcTraceNode) node;
+        } else if (node instanceof SofaRpcRemoteTraceNode) {
+            this.sofaRpcRemoteNode = (SofaRpcRemoteTraceNode) node;
+        } else if (node instanceof RabbitMQTraceNode) {
+            this.rabbitMQNode = (RabbitMQTraceNode) node;
+        } else if (node instanceof RabbitMQRemoteTraceNode) {
+            this.rabbitMQRemoteNode = (RabbitMQRemoteTraceNode) node;
+        } else if (node instanceof RocketMQProducerTraceNode) {
+            this.rocketMQProducerNode = (RocketMQProducerTraceNode) node;
+        } else if (node instanceof RocketMQConsumerTraceNode) {
+            this.rocketMQConsumerNode = (RocketMQConsumerTraceNode) node;
+        } else if (node instanceof KafkaMQTraceNode) {
+            this.kafkaMQNode = (KafkaMQTraceNode) node;
+        } else if (node instanceof KafkaMQRemoteTraceNode) {
+            this.kafkaMQRemoteNode = (KafkaMQRemoteTraceNode) node;
         } else {
             throw new RuntimeException("unknown " + node.getClass().getName());
         }
@@ -70,12 +114,34 @@ public class TraceNodeIndex implements StandardDate, Serializable {
             return dubboRemoteNode;
         } else if (httpNode != null) {
             return httpNode;
+        } else if (httpClientNode != null) {
+            return httpClientNode;
+        } else if (feignNode != null) {
+            return feignNode;
         } else if (sqlNode != null) {
             return sqlNode;
         }else if (cksqlNode != null) {
             return cksqlNode;
         }else if (redisNode != null) {
             return redisNode;
+        } else if (serviceNode != null) {
+            return serviceNode;
+        } else if (sofaRpcNode != null) {
+            return sofaRpcNode;
+        } else if (sofaRpcRemoteNode != null) {
+            return sofaRpcRemoteNode;
+        } else if (rabbitMQNode != null) {
+            return rabbitMQNode;
+        } else if (rabbitMQRemoteNode != null) {
+            return rabbitMQRemoteNode;
+        } else if (rocketMQProducerNode != null) {
+            return rocketMQProducerNode;
+        } else if (rocketMQConsumerNode != null) {
+            return rocketMQConsumerNode;
+        } else if (kafkaMQNode != null) {
+            return kafkaMQNode;
+        } else if (kafkaMQRemoteNode != null) {
+            return kafkaMQRemoteNode;
         }
         throw new DirtyDataException("invalid TraceNode");
     }
@@ -104,6 +170,11 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     public TraceNodeIndex(HttpTraceNode httpNode) {
         this.httpNode = httpNode;
         init(httpNode);
+    }
+
+    public TraceNodeIndex(FeignTraceNode feignNode) {
+        this.feignNode = feignNode;
+        init(feignNode);
     }
 
     public TraceNodeIndex(RedisTraceNode redisNode) {
@@ -202,12 +273,100 @@ public class TraceNodeIndex implements StandardDate, Serializable {
         this.httpNode = httpNode;
     }
 
+    public FeignTraceNode getFeignNode() {
+        return feignNode;
+    }
+
+    public void setFeignNode(FeignTraceNode feignNode) {
+        this.feignNode = feignNode;
+    }
+
+    public HttpClientTraceNode getHttpClientNode() {
+        return httpClientNode;
+    }
+
+    public void setHttpClientNode(HttpClientTraceNode httpClientNode) {
+        this.httpClientNode = httpClientNode;
+    }
+
     public RedisTraceNode getRedisNode() {
         return redisNode;
     }
 
     public void setRedisNode(RedisTraceNode redisNode) {
         this.redisNode = redisNode;
+    }
+
+    public ServiceTraceNode getServiceNode() {
+        return serviceNode;
+    }
+
+    public void setServiceNode(ServiceTraceNode serviceNode) {
+        this.serviceNode = serviceNode;
+    }
+
+    public SofaRpcTraceNode getSofaRpcNode() {
+        return sofaRpcNode;
+    }
+
+    public void setSofaRpcNode(SofaRpcTraceNode sofaRpcNode) {
+        this.sofaRpcNode = sofaRpcNode;
+    }
+
+    public SofaRpcRemoteTraceNode getSofaRpcRemoteNode() {
+        return sofaRpcRemoteNode;
+    }
+
+    public void setSofaRpcRemoteNode(SofaRpcRemoteTraceNode sofaRpcRemoteNode) {
+        this.sofaRpcRemoteNode = sofaRpcRemoteNode;
+    }
+
+    public RabbitMQTraceNode getRabbitMQNode() {
+        return rabbitMQNode;
+    }
+
+    public void setRabbitMQNode(RabbitMQTraceNode rabbitMQNode) {
+        this.rabbitMQNode = rabbitMQNode;
+    }
+
+    public RabbitMQRemoteTraceNode getRabbitMQRemoteNode() {
+        return rabbitMQRemoteNode;
+    }
+
+    public void setRabbitMQRemoteNode(RabbitMQRemoteTraceNode rabbitMQRemoteNode) {
+        this.rabbitMQRemoteNode = rabbitMQRemoteNode;
+    }
+
+    public RocketMQProducerTraceNode getRocketMQProducerNode() {
+        return rocketMQProducerNode;
+    }
+
+    public void setRocketMQProducerNode(RocketMQProducerTraceNode rocketMQProducerNode) {
+        this.rocketMQProducerNode = rocketMQProducerNode;
+    }
+
+    public RocketMQConsumerTraceNode getRocketMQConsumerNode() {
+        return rocketMQConsumerNode;
+    }
+
+    public void setRocketMQConsumerNode(RocketMQConsumerTraceNode rocketMQConsumerNode) {
+        this.rocketMQConsumerNode = rocketMQConsumerNode;
+    }
+
+    public KafkaMQTraceNode getKafkaMQNode() {
+        return kafkaMQNode;
+    }
+
+    public void setKafkaMQNode(KafkaMQTraceNode kafkaMQNode) {
+        this.kafkaMQNode = kafkaMQNode;
+    }
+
+    public KafkaMQRemoteTraceNode getKafkaMQRemoteNode() {
+        return kafkaMQRemoteNode;
+    }
+
+    public void setKafkaMQRemoteNode(KafkaMQRemoteTraceNode kafkaMQRemoteNode) {
+        this.kafkaMQRemoteNode = kafkaMQRemoteNode;
     }
 
     public String getAppId() {
