@@ -10,6 +10,7 @@ import com.oAT.web.service.ProbeAlertDashboardService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SystemLogService;
 import com.oAT.web.service.entity.AppVo;
+import com.oAT.web.service.entity.ProbeAlertDashboardVo;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
@@ -25,7 +26,9 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 应用管理控制器
@@ -298,6 +301,18 @@ public class AppControl {
         model.addAttribute("apps", appList);
         model.addAttribute("probeAlertDashboard", probeAlertDashboardService.getDashboard(appId));
         return "/app/probeAlerts";
+    }
+
+    @RequestMapping("probe-alerts/recent")
+    @ResponseBody
+    public Map<String, Object> recentProbeAlerts(@PathVariable String projectId,
+                                                 @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 20));
+        List<ProbeAlertDashboardVo.ProbeAlertEventItemVo> events = probeAlertDashboardService.getRecentProjectEvents(projectId, safeLimit);
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("events", events);
+        return result;
     }
 
 }

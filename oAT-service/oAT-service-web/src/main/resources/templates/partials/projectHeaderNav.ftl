@@ -8,6 +8,15 @@
         transform: translateY(-50%);
     }
 
+    .probe-alert-global-toast-meta {
+        display: inline-block;
+        margin-top: 4px;
+        color: rgba(0, 0, 0, .62);
+        font-size: 12px;
+        line-height: 1.45;
+        word-break: break-all;
+    }
+
     #appItem .menu > .item {
         position: relative;
         padding-right: 120px !important;
@@ -166,5 +175,65 @@
     });
     // 出场3秒后基于动画隐藏 消息
     setTimeout("$('.message.close.3s').transition('scale');", 3000);
+
+    initProbeAlertGlobalToast('${project.id}');
+
+    function initProbeAlertGlobalToast(projectId) {
+        if (!projectId || !window.localStorage) {
+            return;
+        }
+        var storageKey = 'oat.probeAlert.lastSeen.' + projectId;
+        var endpoint = '/p/' + projectId + '/app/probe-alerts/recent?limit=1';
+        var initialized = false;
+        var toastDuration = 12000;
+        var pollInterval = 10000;
+
+        function eventTimestamp(event) {
+            return event && event.eventTimeText ? event.eventTimeText : '';
+        }
+
+        function eventIdentity(event) {
+            return [event.id || '', eventTimestamp(event), event.eventType || '', event.probeText || ''].join('|');
+        }
+
+        function buildToastMessage(event) {
+            var appName = event.appName || '探针';
+            var typeText = event.eventTypeLabel || event.eventType || '状态变化';
+            var probe = event.probeText || '-';
+            var time = event.eventTimeText || '-';
+            return appName + ' ' + typeText + '<br><span class="probe-alert-global-toast-meta">' + probe + '<br>' + time + '</span>';
+        }
+
+        function toastType(event) {
+            if (event.eventType === 'OFFLINE') {
+                return 'warning';
+            }
+            return 'success';
+        }
+
+        function poll() {
+            $.getJSON(endpoint)
+                .done(function (result) {
+                    var events = result && result.events ? result.events : [];
+                    if (!events.length) {
+                        initialized = true;
+                        return;
+                    }
+                    var lastSeen = localStorage.getItem(storageKey) || '';
+                    var newestEvent = events[0];
+                    var newestIdentity = eventIdentity(newestEvent);
+                    if (initialized && newestIdentity && newestIdentity !== lastSeen) {
+                        notifyToast(buildToastMessage(newestEvent), toastType(newestEvent), toastDuration);
+                    }
+                    if (newestIdentity) {
+                        localStorage.setItem(storageKey, newestIdentity);
+                    }
+                    initialized = true;
+                });
+        }
+
+        poll();
+        setInterval(poll, pollInterval);
+    }
 
 </script>

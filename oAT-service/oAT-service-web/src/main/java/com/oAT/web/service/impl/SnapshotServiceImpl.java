@@ -165,7 +165,7 @@ public class SnapshotServiceImpl implements SnapshotService{
     @Override
     public TraceNode getTraceNode(String traceId, String nodeId) {
         Assert.hasText(traceId, "参数'traceId'不能为空");
-        Assert.hasText(traceId, "参数'nodeId'不能为空");
+        Assert.hasText(nodeId, "参数'nodeId'不能为空");
         Optional<TraceNodeIndex> optional = traceNodeRepository.findById(traceId + "_" + nodeId);
         TraceNodeIndex index = optional.orElseThrow(() ->
                 new IllegalArgumentException(String.format("找不到指定数据 traceId=%s nodeId=%s", traceId, nodeId)));

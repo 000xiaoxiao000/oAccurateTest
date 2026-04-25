@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface ProbeAlertEventRepository extends ElasticsearchRepository<ProbeAlertEvent, String> {
     List<ProbeAlertEvent> findByAppId(String appId);
+
+    List<ProbeAlertEvent> findByProjectId(String projectId);
 }

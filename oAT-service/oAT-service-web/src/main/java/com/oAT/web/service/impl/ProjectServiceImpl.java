@@ -51,6 +51,7 @@ public class ProjectServiceImpl implements ProjectService {
         BeanUtils.copyProperties(projectIndex, pv);
         BeanUtils.copyProperties(projectIndex.getProject(), pv);
         fillProjectCreatorDisplayName(pv);
+        fillProjectMemberCount(pv);
         return pv;
     }
 
@@ -307,7 +308,17 @@ public class ProjectServiceImpl implements ProjectService {
         BeanUtils.copyProperties(entity, projectVo);
         BeanUtils.copyProperties(entity.getProject(), projectVo);
         fillProjectCreatorDisplayName(projectVo);
+        fillProjectMemberCount(projectVo);
         return projectVo;
+    }
+
+    private void fillProjectMemberCount(ProjectVo projectVo) {
+        if (projectVo == null || projectVo.getId() == null) {
+            return;
+        }
+
+        List<SystemIndex> members = systemRepository.findByProjectMember_ProjectId(projectVo.getId(), PageRequest.of(0, 1000));
+        projectVo.setMemberCount(members.size());
     }
 
     private void fillProjectCreatorDisplayName(ProjectVo projectVo) {

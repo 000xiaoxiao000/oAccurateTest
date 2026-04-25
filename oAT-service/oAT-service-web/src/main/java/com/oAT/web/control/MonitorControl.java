@@ -2,6 +2,7 @@ package com.oAT.web.control;
 
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientSessionVo;
+import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.*;
 import com.oAT.web.esDao.entity.LabelGroup;
 import com.oAT.web.esDao.entity.SystemSnapshot;
@@ -43,12 +44,42 @@ public class MonitorControl {
     public String openMonitorPlatformView(@PathVariable String projectId, String appId, Model model) {
         model.addAttribute("projectId", projectId);
         List<AppVo> appList = appService.getAppList(projectId);
+        List<String> appIds = new ArrayList<>(appList.size());
+        for (AppVo appVo : appList) {
+            appIds.add(appVo.getId());
+            appVo.setOnlineCount(clientSessionService.getOnlineSessionsByAppId(appVo.getId()).size());
+        }
+        List<ClientSessionVo> onlineSessions = new ArrayList<>();
+        for (ClientSessionVo session : clientSessionService.getOnlineSessions()) {
+            String sessionAppId = session.getClientInfo() == null ? null : session.getClientInfo().getAppKey();
+            if (!StringUtils.hasText(sessionAppId) || appIds.contains(sessionAppId)) {
+                session.setOnlineTime(DateUtil.timeDifference(session.getLoginTime(), new Date()));
+                onlineSessions.add(session);
+            }
+        }
         List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.snapshot);
 
         model.addAttribute("labels", labels);
         model.addAttribute("apps", appList);
+        model.addAttribute("onlineSessions", onlineSessions);
+        model.addAttribute("onlineProbeCount", onlineSessions.size());
         model.addAttribute("appId", appId);
         return "/monitor/MonitorPlatform";
+    }
+
+    @RequestMapping("/probeStatus")
+    @ResponseBody
+    public List<ClientSessionVo> getProbeStatus(@PathVariable String projectId) {
+        List<String> appIds = getAppIds(projectId);
+        List<ClientSessionVo> onlineSessions = new ArrayList<>();
+        for (ClientSessionVo session : clientSessionService.getOnlineSessions()) {
+            String sessionAppId = session.getClientInfo() == null ? null : session.getClientInfo().getAppKey();
+            if (!StringUtils.hasText(sessionAppId) || appIds.contains(sessionAppId)) {
+                session.setOnlineTime(DateUtil.timeDifference(session.getLoginTime(), new Date()));
+                onlineSessions.add(session);
+            }
+        }
+        return onlineSessions;
     }
 
     /**

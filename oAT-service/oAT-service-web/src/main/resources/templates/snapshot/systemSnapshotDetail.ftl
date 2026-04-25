@@ -595,7 +595,8 @@
             $("#svg-canvas").children().remove();
             var g = buildTopo("svg-canvas", datas, {
                 nodeClick: function (id, index, array) {
-                    g.node(id);
+                    var node = g.node(id);
+                    showTraceNodeDetail(node && node.data ? node.data : id);
                 }
             });
             initFlow = true;

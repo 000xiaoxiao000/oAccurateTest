@@ -308,7 +308,7 @@
 
         .my-project-card-meta {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
             margin-top: auto;
         }
@@ -322,7 +322,7 @@
         }
 
         .my-project-meta-item--wide {
-            grid-column: span 3;
+            grid-column: span 2;
         }
 
         .my-project-meta-item--primary {
@@ -827,11 +827,11 @@
                             </div>
                             <div class="my-project-meta-item">
                                 <div class="my-project-meta-label">创建时间</div>
-                                <div class="my-project-meta-value is-compact"><#if p.createTime??>${p.createTime?string('MM-dd HH:mm')}<#else>暂无记录</#if></div>
+                                <div class="my-project-meta-value" title="<#if p.createTime??>${p.createTime?string('yyyy-MM-dd HH:mm:ss')}<#else>暂无记录</#if>"><#if p.createTime??>${p.createTime?string('yyyy-MM-dd HH:mm')}<#else>暂无记录</#if></div>
                             </div>
                             <div class="my-project-meta-item">
                                 <div class="my-project-meta-label">最近更新</div>
-                                <div class="my-project-meta-value is-compact"><#if p.updateTime??>${p.updateTime?string('MM-dd HH:mm')}<#else>暂无记录</#if></div>
+                                <div class="my-project-meta-value" title="<#if p.updateTime??>${p.updateTime?string('yyyy-MM-dd HH:mm:ss')}<#else>暂无记录</#if>"><#if p.updateTime??>${p.updateTime?string('yyyy-MM-dd HH:mm')}<#else>暂无记录</#if></div>
                             </div>
                             <div class="my-project-meta-item my-project-meta-item--wide">
                                 <div class="my-project-meta-label">信息完整度</div>

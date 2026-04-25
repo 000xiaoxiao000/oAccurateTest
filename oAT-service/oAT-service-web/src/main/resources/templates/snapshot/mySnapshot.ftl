@@ -826,7 +826,12 @@
                     success: function (monitorData) {
                         $("#monitorDetailTitle").text(monitorData.title);
                         $("#svg-canvas").children().remove();
-                        buildTopo("svg-canvas", monitorData);
+                        var g = buildTopo("svg-canvas", monitorData, {
+                            nodeClick: function (id, index, array) {
+                                var node = g.node(id);
+                                openSnapshotNodeDetail(traceId, node && node.data ? node.data : id);
+                            }
+                        });
                     }
                 });
                 // 构建堆栈列表
@@ -843,6 +848,13 @@
                 }
                 targetRow.trigger('click');
                 return true;
+            }
+
+            function openSnapshotNodeDetail(traceId, nodeId) {
+                $('#stackNodeDetail').sidebar('show');
+                $('#stackNodeDetail .ui.content')
+                    .first()
+                    .load("node?traceId=" + traceId + "&nodeId=" + nodeId);
             }
 
             function buildStackTable(traceId) {
@@ -863,9 +875,7 @@
                             $(this).parent().children("tr").removeClass("selected");
                             $(this).addClass("selected");
                             $('#stackNodeDetail').sidebar('show');
-                            $('#stackNodeDetail .ui.content')
-                                .first()
-                                .load("node?traceId=" + traceId + "&nodeId=" + $(this).attr('nodeId'))
+                            openSnapshotNodeDetail(traceId, $(this).attr('nodeId'))
                         });
                     }
                 });

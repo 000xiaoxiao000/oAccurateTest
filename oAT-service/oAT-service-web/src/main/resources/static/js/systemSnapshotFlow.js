@@ -28,7 +28,7 @@ function buildTopo(svgId, data, operation) {
         var labelVal = "<div class='labelContent' ><i class='ui icon big grey " + value.icon + " ' style='display: inline'></i> <span class='labelTitle'>" +
             value.title + "</span><br> <span class='subTitle'> " + value.subTitle + "</span> </div>";
 
-        g.setNode(value.id, {label: labelVal, labelType: "html", class: value.state, rx: 5, ry: 5,tips:value.tips});
+        g.setNode(value.id, {label: labelVal, labelType: "html", class: value.state, rx: 5, ry: 5, tips: value.tips, data: value.data});
     });
     // 添加关系
     data.edges.some(function (value, index, array) {

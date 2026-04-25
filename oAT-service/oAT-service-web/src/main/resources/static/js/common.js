@@ -81,8 +81,9 @@ function buildTopo(svgId, data, operation) {
  * 显示悬浮提示 (Toast)
  * @param message 提示内容
  * @param type 类型: 'success' (成功，绿色), 'error' (失败，红色), 'info' (默认，无色/蓝色)
+ * @param customDuration 自定义展示时长，单位毫秒
  */
-function showToast(message, type) {
+function showToast(message, type, customDuration) {
     var container = $('#toast-container');
     if (container.length === 0) {
         $('body').append('<div id="toast-container"></div>');
@@ -103,6 +104,14 @@ function showToast(message, type) {
         headerText = '失败';
         iconClass = 'exclamation circle';
         duration = 10000; // Failure toasts stay for 10 seconds
+    } else if (type === 'warning') {
+        messageClass = 'warning';
+        headerText = '提醒';
+        iconClass = 'exclamation triangle';
+        duration = 8000;
+    }
+    if (customDuration && customDuration > 0) {
+        duration = customDuration;
     }
 
     var toastHtml =
@@ -136,10 +145,10 @@ function showToast(message, type) {
 }
 
 // Unified notify entry: prefer toast, fallback to native alert when toast stack is unavailable.
-function notifyToast(message, type) {
+function notifyToast(message, type, customDuration) {
     var text = (message === undefined || message === null) ? '' : String(message);
     if (typeof showToast === 'function') {
-        showToast(text, type || 'info');
+        showToast(text, type || 'info', customDuration);
         return;
     }
     if (typeof window !== 'undefined' && typeof window.alert === 'function') {
