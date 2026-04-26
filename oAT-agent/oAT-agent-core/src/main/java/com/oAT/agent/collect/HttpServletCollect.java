@@ -162,17 +162,38 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         if (params == null || params.length < 2 || params[1] == null) {
             return null;
         }
-        Object resp = params[1];
+        Object rawResponse = resolveResponseWrapper(params);
         try {
-            if (resp instanceof JavaxServletResponseWrapper
-                    || resp instanceof JavaxHttpServletResponseWrapper
-                    || resp instanceof JakartaHttpServletResponseWrapper) {
-                return new HttpServletResponseAdapter(resp);
+            if (rawResponse != null) {
+                return new HttpServletResponseAdapter(rawResponse);
             }
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]获取响应异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         }
         return null;
+    }
+
+    private Object resolveResponseWrapper(Object[] params) {
+        if (params == null) {
+            return null;
+        }
+        if (params.length > 2 && isResponseWrapper(params[2])) {
+            return params[2];
+        }
+        if (params.length > 1 && isResponseWrapper(params[1])) {
+            return params[1];
+        }
+        return null;
+    }
+
+    private boolean isResponseWrapper(Object candidate) {
+        if (candidate == null) {
+            return false;
+        }
+        String className = candidate.getClass().getName();
+        return "com.oAT.agent.collect.http.JavaxServletResponseWrapper".equals(className)
+                || "com.oAT.agent.collect.http.JavaxHttpServletResponseWrapper".equals(className)
+                || "com.oAT.agent.collect.http.JakartaHttpServletResponseWrapper".equals(className);
     }
 
     public HttpServletTraceNodeWrapper begin(Object[] params) {
@@ -468,29 +489,6 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             }
         }
         traceSession.saveNode(node);
-    }
-
-    private Object resolveResponseWrapper(Object[] params) {
-        if (params == null) {
-            return null;
-        }
-        if (params.length > 2 && isResponseWrapper(params[2])) {
-            return params[2];
-        }
-        if (params.length > 1 && isResponseWrapper(params[1])) {
-            return params[1];
-        }
-        return null;
-    }
-
-    private boolean isResponseWrapper(Object candidate) {
-        if (candidate == null) {
-            return false;
-        }
-        String className = candidate.getClass().getName();
-        return "com.oAT.agent.collect.http.JavaxServletResponseWrapper".equals(className)
-                || "com.oAT.agent.collect.http.JavaxHttpServletResponseWrapper".equals(className)
-                || "com.oAT.agent.collect.http.JakartaHttpServletResponseWrapper".equals(className);
     }
 
     public class HttpServletTraceNodeWrapper implements ISessionDestroy {
