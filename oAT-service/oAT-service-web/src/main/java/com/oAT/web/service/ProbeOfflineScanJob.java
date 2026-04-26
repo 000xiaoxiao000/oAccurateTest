@@ -18,7 +18,27 @@ public class ProbeOfflineScanJob {
         try {
             probeStatusService.scanOfflineProbes();
         } catch (Exception e) {
+            if (isInterrupted(e)) {
+                Thread.currentThread().interrupt();
+                logger.warn("探针离线扫描任务被中断，本次扫描已停止");
+                return;
+            }
             logger.error("探针离线扫描任务执行失败", e);
         }
+    }
+
+    private boolean isInterrupted(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof InterruptedException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase().contains("interrupted")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return Thread.currentThread().isInterrupted();
     }
 }

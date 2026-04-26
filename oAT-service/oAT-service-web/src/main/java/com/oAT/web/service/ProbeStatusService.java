@@ -40,7 +40,22 @@ public class ProbeStatusService {
     }
 
     public void scanOfflineProbes() {
-        List<ProbeInstanceStatus> onlineStatuses = probeInstanceStatusRepository.findByStatus(ProbeInstanceStatus.Status.ONLINE.toString());
+        if (Thread.currentThread().isInterrupted()) {
+            logger.warn("探针离线扫描跳过，当前调度线程已被中断");
+            return;
+        }
+
+        List<ProbeInstanceStatus> onlineStatuses;
+        try {
+            onlineStatuses = probeInstanceStatusRepository.findByStatus(ProbeInstanceStatus.Status.ONLINE.toString());
+        } catch (RuntimeException e) {
+            if (isInterrupted(e)) {
+                Thread.currentThread().interrupt();
+                logger.warn("探针离线扫描读取在线探针时被中断，本次扫描停止");
+                return;
+            }
+            throw e;
+        }
         long nowMillis = System.currentTimeMillis();
         if (logger.isDebugEnabled()) {
             logger.debug("开始扫描探针离线状态, onlineCount={}", onlineStatuses.size());
@@ -74,6 +89,12 @@ public class ProbeStatusService {
                 status.setLastAlertTime(event.getEventTime());
                 probeInstanceStatusRepository.save(status);
             } catch (Exception e) {
+                if (isInterrupted(e)) {
+                    Thread.currentThread().interrupt();
+                    logger.warn("扫描探针离线状态时被中断，本次扫描停止, probeKey={}, appId={}",
+                            status.getProbeKey(), status.getAppId());
+                    return;
+                }
                 logger.error("扫描探针离线状态失败, probeKey={}, appId={}", status.getProbeKey(), status.getAppId(), e);
             }
         }
@@ -157,6 +178,21 @@ public class ProbeStatusService {
         status.setAgentVersion(clientInfo.getAgentVersion());
         status.setLoginTime(session.getLoginTime());
         status.setLastHeartbeatTime(heartbeatTime);
+    }
+
+    private boolean isInterrupted(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof InterruptedException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && message.toLowerCase().contains("interrupted")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return Thread.currentThread().isInterrupted();
     }
 
     private int resolveOfflineThresholdSeconds(AppVo app) {

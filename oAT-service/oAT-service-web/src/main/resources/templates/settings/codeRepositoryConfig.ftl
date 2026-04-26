@@ -324,12 +324,14 @@
     <div class="ui small breadcrumb project-settings-breadcrumb">
         <a class="section" href="/p/${project.id}/home">${project.name}</a>
         <span class="divider">/</span>
+        <a class="section" href="/p/${project.id}/manageAppCode">应用与代码管理</a>
+        <span class="divider">/</span>
         <div class="active section">仓库配置</div>
     </div>
 
     <div class="project-settings-layout">
         <div class="project-settings-side">
-            <#assign settingsAppActive="active"/>
+            <#assign settingsManageCodeActive="active"/>
             <#assign coeRepositoryConfig="active"/>
             <#assign loginRole=loginNameRole />
             <#include "LeftNavigationMenu.ftl">
@@ -342,7 +344,7 @@
                 </div>
                 <h1 class="project-settings-hero-title">仓库配置</h1>
                 <p class="project-settings-hero-desc">
-                    配置当前应用的代码仓库地址与认证方式，便于后续拉取源码、扫描接口以及维护版本资产。
+                    配置当前应用的代码仓库地址与认证方式，便于后续拉取源码、扫描接口以及维护版本资产。该页面归属于应用与代码管理。
                 </p>
                 <div class="project-settings-meta">
                     <div class="project-settings-meta-card">

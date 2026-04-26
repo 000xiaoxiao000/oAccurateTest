@@ -7,7 +7,9 @@ import com.oAT.web.service.GitService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.UserVo;
+import com.oAT.web.esDao.entity.SystemIndex;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,6 +33,8 @@ public class manageAppCodeControl {
     ClientSessionService sessionService;
     @Autowired
     GitService gitService;
+    @Autowired
+    ElasticsearchOperations elasticsearchOperations;
 
     @RequestMapping("/manageAppCode")
     public String manageAppCode(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
@@ -63,6 +67,7 @@ public class manageAppCodeControl {
         existingApp.setRepoPassword(appVo.getRepoPassword());
         // existingApp.setRepoBranch(appVo.getRepoBranch());
         appService.updateApp(projectId, existingApp);
+        elasticsearchOperations.indexOps(SystemIndex.class).refresh();
         return new com.oAT.web.control.entity.ResultNotified(true, "配置保存成功");
     }
 
