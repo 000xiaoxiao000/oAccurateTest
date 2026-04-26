@@ -66,6 +66,54 @@
             margin-top: 0;
         }
 
+        .monitor-auto-refresh {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #64748b;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .monitor-auto-refresh .ui.toggle.checkbox {
+            min-height: 18px;
+        }
+
+        .monitor-auto-refresh .ui.mini.input {
+            width: 58px;
+        }
+
+        .monitor-auto-refresh .ui.mini.input input {
+            padding: 6px 8px !important;
+            text-align: center;
+        }
+
+        .monitor-list-panel .page-section-header {
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .monitor-list-panel .page-nav-menu {
+            width: 100%;
+        }
+
+        .monitor-list-panel .page-nav-menu .page-nav-link {
+            flex: 1 1 0;
+            min-width: 0;
+        }
+
+        .monitor-list-panel .page-section-actions {
+            width: 100%;
+            justify-content: space-between;
+            flex-wrap: nowrap;
+        }
+
+        @media only screen and (max-width: 1100px) {
+            .monitor-list-panel .page-section-actions {
+                flex-wrap: wrap;
+            }
+        }
+
         .monitor-autosave-inline {
             display: flex;
             align-items: center;
@@ -671,6 +719,17 @@
                     </a>
                 </div>
                 <div class="page-section-actions">
+                    <div class="monitor-auto-refresh" title="页面可见时按设置间隔增量获取最新监控数据，页面切到后台会自动暂停">
+                        <div class="ui toggle checkbox" id="monitorAutoRefreshToggleWrapper">
+                            <input type="checkbox" id="monitorAutoRefreshToggle" checked="checked">
+                            <label for="monitorAutoRefreshToggle">自动刷新</label>
+                        </div>
+                        <div class="ui mini input">
+                            <input type="number" id="monitorAutoRefreshSeconds" min="3" max="120" step="1" value="10" aria-label="自动刷新间隔秒数">
+                        </div>
+                        <span>秒</span>
+                        <span id="monitorAutoRefreshIntervalText">运行中</span>
+                    </div>
                     <div class="ui mini basic icon button poping up" onclick="pullNewItem('${projectId}');" data-content="获取最新数据"
                          data-variation="tiny inverted" title="刷新列表">
                         <i class="refresh icon"></i>
@@ -981,6 +1040,7 @@
             }
         });
         startMonitorOscilloscopeAnimation();
+        initMonitorAutoRefresh('${projectId}');
         refreshProbeStatus('${projectId}');
         setInterval(function () {
             refreshProbeStatus('${projectId}');

@@ -140,6 +140,35 @@
             min-width: 0;
         }
 
+        .project-alert-desc {
+            margin: -4px 0 16px;
+            color: #64748b;
+            line-height: 1.65;
+        }
+
+        .project-alert-desc code {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 2px 6px;
+            border-radius: 6px;
+            background: #eef5ff;
+            color: #1d4ed8;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .project-alert-switch {
+            padding: 12px 14px;
+            border: 1px solid #dbeafe;
+            border-radius: 12px;
+            background: #f8fbff;
+        }
+
+        .project-alert-events.inline.fields {
+            align-items: center;
+            margin-bottom: 0;
+        }
+
         .project-settings-actions {
             display: flex;
             justify-content: flex-end;
@@ -271,10 +300,57 @@
                           name="properties"><#include "appInitConfig.properties"></textarea>
             </div>
 
+            <div class="field">
+                <label><i class="bell outline icon"></i>探针上下线告警：</label>
+                <p class="project-alert-desc">按每个探针实例独立判断上下线，超过配置阈值未收到心跳后发送通用 Webhook 通知。下线阈值最小支持 <strong>30 秒</strong>，小于 30 秒会自动按 30 秒保存，避免频繁心跳抖动造成误报。测试时可填当前服务内置地址：<code>http://127.0.0.1:8899/webhook/oat/probe-alert</code>。</p>
+            </div>
+            <div class="field project-alert-switch">
+                <div class="ui checkbox">
+                    <input type="hidden" name="probeAlertEnabled" value="false">
+                    <input type="checkbox" name="probeAlertEnabled" value="true">
+                    <label>启用探针实例上下线告警</label>
+                </div>
+            </div>
+            <div class="two fields">
+                <div class="field">
+                    <label>下线阈值（秒）</label>
+                    <input type="number" min="30" name="probeOfflineThresholdSeconds" value="90" placeholder="例如：90">
+                    <div class="ui pointing basic label">最小 30 秒；保存小于 30 的值时会自动调整为 30 秒。</div>
+                </div>
+                <div class="field">
+                    <label>Webhook 地址</label>
+                    <input type="text" name="probeWebhookUrl" placeholder="http://127.0.0.1:8899/webhook/oat/probe-alert">
+                </div>
+            </div>
+            <div class="inline fields project-alert-events">
+                <label>通知事件</label>
+                <div class="field">
+                    <div class="ui checkbox">
+                        <input type="hidden" name="probeAlertOnOffline" value="false">
+                        <input type="checkbox" name="probeAlertOnOffline" value="true" checked="checked">
+                        <label>下线</label>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="ui checkbox">
+                        <input type="hidden" name="probeAlertOnRecovered" value="false">
+                        <input type="checkbox" name="probeAlertOnRecovered" value="true" checked="checked">
+                        <label>恢复上线</label>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="ui checkbox">
+                        <input type="hidden" name="probeAlertOnOnline" value="false">
+                        <input type="checkbox" name="probeAlertOnOnline" value="true">
+                        <label>首次上线</label>
+                    </div>
+                </div>
+            </div>
+
             <div class="project-settings-actions">
                 <a class="ui button" href="/p/${project.id}/app/list">取消并返回</a>
                 <button class="ui button" type="reset">重置</button>
-                <button class="ui primary button" type="button" onclick="submitCreateApp()">
+                <button id="createAppSubmitButton" class="ui primary button" type="button" onclick="submitCreateApp()">
                     <i class="save outline icon"></i>
                     创建应用
                 </button>
@@ -287,15 +363,23 @@
 
 <script>
     function submitCreateApp() {
+        var $form = $('.ui.form');
+        if (oatIsFormSubmitting($form)) {
+            return;
+        }
         if (editor) {
             editor.save();
         }
-        var $form = $('.ui.form');
         if (!$form.form('is valid')) {
             return;
         }
 
         var data = $form.serialize();
+        oatSetFormSubmitting($form, true, {
+            submitButton: '#createAppSubmitButton',
+            editor: editor,
+            extraControls: '.project-settings-hero-actions .ui.button'
+        });
         $.post('/p/${project.id}/app/doCreate', data, function (res) {
             if (res.success || res.result) {
                 showToast(res.message || '应用创建成功', 'success');
@@ -305,14 +389,18 @@
                     }, 1000);
                 }
             } else {
+                oatSetFormSubmitting($form, false, {submitButton: '#createAppSubmitButton', editor: editor});
                 showToast(res.message || '应用创建失败', 'error');
             }
         }).fail(function () {
+            oatSetFormSubmitting($form, false, {submitButton: '#createAppSubmitButton', editor: editor});
             showToast('异常请求', 'error');
         });
     }
 
     $(function () {
+        $('.ui.checkbox').checkbox();
+        $('.ui.radio.checkbox').checkbox();
         // 设置表单验证规则
         $('.ui.form')
                 .form({

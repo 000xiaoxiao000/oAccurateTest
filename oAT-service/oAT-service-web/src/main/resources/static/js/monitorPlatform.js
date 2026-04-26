@@ -13,6 +13,10 @@ var monitorOscilloscopeAnimationStarted = false;
 var monitorScopeMode = 'aggregate';
 var monitorSelectedProbeIp = '';
 var monitorScopeLaneLimit = 8;
+var monitorListRequesting = false;
+var monitorAutoRefreshTimer = null;
+var monitorAutoRefreshEnabled = true;
+var monitorAutoRefreshInterval = 10000;
 
 function escapeMonitorHtml(value) {
     return String(value == null ? '' : value)
@@ -49,6 +53,91 @@ function updateMonitorOverview(items) {
         $('#latestTraceSource').text('-');
         $('#oscilloscopeStatusText').text('等待请求');
     }
+}
+
+function updateMonitorAutoRefreshText() {
+    var $text = $('#monitorAutoRefreshIntervalText');
+    if (!$text.length) {
+        return;
+    }
+    if (!monitorAutoRefreshEnabled) {
+        $text.text('已暂停');
+    } else if (document.hidden) {
+        $text.text('后台暂停');
+    } else {
+        $text.text('运行中');
+    }
+}
+
+function normalizeMonitorAutoRefreshSeconds(value) {
+    var seconds = parseInt(value, 10);
+    if (isNaN(seconds)) {
+        seconds = 10;
+    }
+    return Math.min(120, Math.max(3, seconds));
+}
+
+function syncMonitorAutoRefreshIntervalFromInput() {
+    var $input = $('#monitorAutoRefreshSeconds');
+    if (!$input.length) {
+        monitorAutoRefreshInterval = 10000;
+        return;
+    }
+    var seconds = normalizeMonitorAutoRefreshSeconds($input.val());
+    $input.val(seconds);
+    monitorAutoRefreshInterval = seconds * 1000;
+}
+
+function stopMonitorAutoRefresh() {
+    if (monitorAutoRefreshTimer) {
+        clearInterval(monitorAutoRefreshTimer);
+        monitorAutoRefreshTimer = null;
+    }
+    updateMonitorAutoRefreshText();
+}
+
+function startMonitorAutoRefresh(projectid) {
+    stopMonitorAutoRefresh();
+    if (!monitorAutoRefreshEnabled || document.hidden) {
+        updateMonitorAutoRefreshText();
+        return;
+    }
+    monitorAutoRefreshTimer = setInterval(function () {
+        if (!monitorListRequesting && monitorAutoRefreshEnabled && !document.hidden) {
+            pullNewItem(projectid, true);
+        }
+    }, monitorAutoRefreshInterval);
+    updateMonitorAutoRefreshText();
+}
+
+function initMonitorAutoRefresh(projectid) {
+    var $toggle = $('#monitorAutoRefreshToggle');
+    syncMonitorAutoRefreshIntervalFromInput();
+    monitorAutoRefreshEnabled = !$toggle.length || $toggle.is(':checked');
+    $('#monitorAutoRefreshToggleWrapper').checkbox({
+        onChecked: function () {
+            monitorAutoRefreshEnabled = true;
+            startMonitorAutoRefresh(projectid);
+        },
+        onUnchecked: function () {
+            monitorAutoRefreshEnabled = false;
+            stopMonitorAutoRefresh();
+        }
+    });
+    $(document).on('visibilitychange.monitorAutoRefresh', function () {
+        startMonitorAutoRefresh(projectid);
+    });
+    $('#monitorAutoRefreshSeconds').on('change blur', function () {
+        syncMonitorAutoRefreshIntervalFromInput();
+        startMonitorAutoRefresh(projectid);
+    }).on('keydown', function (event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            $(this).blur();
+        }
+    });
+    $(window).on('beforeunload.monitorAutoRefresh', stopMonitorAutoRefresh);
+    startMonitorAutoRefresh(projectid);
 }
 
 function pushMonitorWave(items) {
@@ -411,47 +500,65 @@ var lastUpdateTime = 0;
 
 //刷新监控列表
 function refreshMonitorList(projectid) {
-    $("#monitorListBody").children().remove();
-    //var newItems = $("#itemFilter").ajaxSubmit({ async: false}).responseJSON;
-    // var form = new FormData(document.getElementById("itemFilter"));
-    // var dataForm = $("#itemFilter").serialize();
-    var newItems = $.ajax({
-        url: "/p/" + projectid + "/monitor/getNodeByTime", data: $("#itemFilter").serialize(), async: false
-    }).responseJSON;
-
-    if (newItems === undefined || newItems.length == 0) {
-        resetMonitorSelectionState();
-        $("#emptyTip").css('display', 'block');
-        $("#monitorDetail").hide();
-        resetMonitorWave();
-        updateMonitorOverview([]);
-        drawMonitorOscilloscope();
-    } else {
-        resetMonitorWave();
-        appendItems(projectid, newItems);
+    if (monitorListRequesting) {
+        return;
     }
-    lastUpdateTime = new Date().getTime();
+    monitorListRequesting = true;
+    $("#monitorListBody").children().remove();
+    try {
+        //var newItems = $("#itemFilter").ajaxSubmit({ async: false}).responseJSON;
+        // var form = new FormData(document.getElementById("itemFilter"));
+        // var dataForm = $("#itemFilter").serialize();
+        var newItems = $.ajax({
+            url: "/p/" + projectid + "/monitor/getNodeByTime", data: $("#itemFilter").serialize(), async: false
+        }).responseJSON;
+
+        if (newItems === undefined || newItems.length == 0) {
+            resetMonitorSelectionState();
+            $("#emptyTip").css('display', 'block');
+            $("#monitorDetail").hide();
+            resetMonitorWave();
+            updateMonitorOverview([]);
+            drawMonitorOscilloscope();
+        } else {
+            resetMonitorWave();
+            appendItems(projectid, newItems);
+        }
+        lastUpdateTime = new Date().getTime();
+    } finally {
+        monitorListRequesting = false;
+    }
 }
 
 // 拉取新的监控数据
-function pullNewItem(projectid) {
+function pullNewItem(projectid, silent) {
+    if (monitorListRequesting) {
+        return;
+    }
+    monitorListRequesting = true;
     // 如果最后更新时间超过两分钟，拉取则换成更新
     if (lastIndex == 0 || (new Date().getTime() - lastUpdateTime) > (2 * 60 * 1000)) {
+        monitorListRequesting = false;
         refreshMonitorList(projectid);
         return;
     }
+    try {
+        var newItems = $.ajax({
+            url: "/p/" + projectid + "/monitor/getNodeByIndex?lastIndex=" + lastIndex + "&maxSize=200", async: false
+        }).responseJSON;
 
-    var newItems = $.ajax({
-        url: "/p/" + projectid + "/monitor/getNodeByIndex?lastIndex=" + lastIndex + "&maxSize=200", async: false
-    }).responseJSON;
-
-    if (newItems !== undefined && newItems.length > 0) {
-        appendItems(projectid, newItems);
-    } else {
-        // 如果返回为空，且不是第一次拉取，说明可能数据已过期或被清理，尝试全量刷新
-        refreshMonitorList(projectid);
+        if (newItems !== undefined && newItems.length > 0) {
+            appendItems(projectid, newItems);
+        } else if (!silent) {
+            // 手动刷新为空时做一次全量刷新；自动刷新为空则不重刷，避免无新数据时产生额外负担
+            monitorListRequesting = false;
+            refreshMonitorList(projectid);
+            return;
+        }
+        lastUpdateTime = new Date().getTime();
+    } finally {
+        monitorListRequesting = false;
     }
-    lastUpdateTime = new Date().getTime();
 }
 
 function appendItems(projectid, newItems) {

@@ -325,6 +325,17 @@
                 }
                 return false;
             },
+            onSuccess: function () {
+                var $form = $(this);
+                if (oatIsFormSubmitting($form)) {
+                    return false;
+                }
+                oatSetFormSubmitting($form, true, {
+                    submitButton: $form.find('.ui.primary.button').first(),
+                    keepFieldsEnabled: true
+                });
+                return true;
+            },
             fields: {
                 name: {
                     identifier: 'name',

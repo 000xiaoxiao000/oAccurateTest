@@ -397,13 +397,17 @@
 
     function setCreateProjectFormDisabled(disabled) {
         var $form = $('.ui.form');
-        $form.find('input, textarea, button').prop('disabled', disabled);
-        $form.find('.ui.button').toggleClass('disabled', disabled);
-        $('.create-project-back').prop('disabled', disabled).toggleClass('disabled', disabled);
+        oatSetFormSubmitting($form, disabled, {
+            submitButton: '.ui.form .ui.primary.button',
+            extraControls: '.create-project-back'
+        });
     }
 
     function submitCreateProject() {
         var $form = $('.ui.form');
+        if (oatIsFormSubmitting($form)) {
+            return;
+        }
         var validationError = getCreateProjectValidationError();
         if (validationError) {
             showCreateProjectValidationError(validationError.message, validationError.field);

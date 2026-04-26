@@ -205,7 +205,7 @@
                 <div class="project-settings-meta">
                     <div class="project-settings-meta-card">
                         <div class="project-settings-meta-label">在线实例数</div>
-                        <div class="project-settings-meta-value">${sessions?size}</div>
+                            <div id="onlineSessionTotal" class="project-settings-meta-value">${sessions?size}</div>
                     </div>
                     <div class="project-settings-meta-card">
                         <div class="project-settings-meta-label">项目编号</div>
@@ -235,19 +235,19 @@
                             <th class="two wide right aligned">操作</th>
                         </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="onlineAppTableBody">
                         <#list sessions as session>
-                            <tr class="js-list-row">
+                            <tr class="js-list-row" data-session-index="${session_index}" data-session-key="${session.clientInfo.addressIp!}|${(session.application.appName)!'未定义'}|${(session.application.projectSrcName)!''}|${session.clientInfo.pid!}|${session.clientInfo.systemDir!}">
                                 <td class="three wide">${session.clientInfo.addressIp}</td>
                                 <td>${(session.application.appName)!'未定义'}</td>
                                 <td>${(session.application.projectSrcName)!''}</td>
                                 <td class="two wide">${session.clientInfo.agentVersion}</td>
-                                <td class="two wide">${session.onlineTime}</td>
+                                <td class="two wide js-online-time">${session.onlineTime}</td>
                                 <td class="two wide right aligned">
-                                    <a class="ui button" onclick="$('#app${session_index}').toggle();">详情</a>
+                                    <a class="ui button" onclick="toggleOnlineDetail(${session_index});">详情</a>
                                 </td>
                             </tr>
-                            <tr class="js-list-detail">
+                            <tr class="js-list-detail" data-session-index="${session_index}" data-session-key="${session.clientInfo.addressIp!}|${(session.application.appName)!'未定义'}|${(session.application.projectSrcName)!''}|${session.clientInfo.pid!}|${session.clientInfo.systemDir!}">
                                 <td id="app${session_index}" colspan="6" style="display: none; padding: 0;">
                                     <div class="project-online-detail">
                                         <div class="ui list">
@@ -302,6 +302,93 @@
         //      $("#" + appId).css('display', 'none');
         //  }
     }
+
+    function toggleOnlineDetail(index) {
+        var $detailRow = $('.js-list-detail[data-session-index="' + index + '"]');
+        $detailRow.toggle();
+        $detailRow.find('td').show();
+    }
+
+    function escapeOnlineHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, function (char) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char];
+        });
+    }
+
+    function onlineSessionKey(session) {
+        return [session.addressIp || '', session.appName || '', session.projectSrcName || '', session.pid || '', session.systemDir || ''].join('|');
+    }
+
+    function renderOnlineSessions(sessions) {
+        var nextSignature = sessions.map(onlineSessionKey).join('||');
+        if ($('#onlineAppTableBody').attr('data-session-signature') === nextSignature) {
+            sessions.forEach(function (session) {
+                var key = onlineSessionKey(session);
+                $('.js-list-row').filter(function () {
+                    return $(this).attr('data-session-key') === key;
+                }).find('.js-online-time').text(session.onlineTime || '');
+            });
+            $('#onlineSessionTotal').text(sessions.length);
+            return;
+        }
+        var openedDetails = {};
+        $('.js-list-detail td:visible').each(function () {
+            openedDetails[$(this).closest('tr').attr('data-session-key')] = true;
+        });
+        var rows = [];
+        sessions.forEach(function (session, index) {
+            var key = onlineSessionKey(session);
+            var detailId = 'appDynamic' + index;
+            var detailDisplay = openedDetails[key] ? '' : 'display: none; ';
+            rows.push('<tr class="js-list-row" data-session-index="' + index + '" data-session-key="' + escapeOnlineHtml(key) + '">'
+                + '<td class="three wide">' + escapeOnlineHtml(session.addressIp) + '</td>'
+                + '<td>' + escapeOnlineHtml(session.appName || '未定义') + '</td>'
+                + '<td>' + escapeOnlineHtml(session.projectSrcName) + '</td>'
+                + '<td class="two wide">' + escapeOnlineHtml(session.agentVersion) + '</td>'
+                + '<td class="two wide js-online-time">' + escapeOnlineHtml(session.onlineTime) + '</td>'
+                + '<td class="two wide right aligned"><a class="ui button" onclick="toggleOnlineDetail(' + index + ');">详情</a></td>'
+                + '</tr>');
+            rows.push('<tr class="js-list-detail" data-session-index="' + index + '" data-session-key="' + escapeOnlineHtml(key) + '">'
+                + '<td id="' + detailId + '" colspan="6" style="' + detailDisplay + 'padding: 0;">'
+                + '<div class="project-online-detail"><div class="ui list">'
+                + '<div class="item"><div class="header">部署路径</div><div class="project-online-detail-value">' + escapeOnlineHtml(session.systemDir) + '</div></div>'
+                + '<div class="item"><div class="header">进程ID</div><div class="project-online-detail-value">' + escapeOnlineHtml(session.pid) + '</div></div>'
+                + '<div class="item"><div class="header">JVM版本</div><div class="project-online-detail-value">' + escapeOnlineHtml(session.jvmVersion) + '</div></div>'
+                + '<div class="item"><div class="header">JVM启动参数</div><div class="project-online-detail-value">' + escapeOnlineHtml(session.jvmOption) + '</div></div>'
+                + '</div></div></td></tr>');
+        });
+        if (!rows.length) {
+            rows.push('<tr class="js-list-row"><td colspan="6" class="center aligned" style="color:#94a3b8;">暂无在线应用</td></tr>');
+        }
+        $('#onlineAppTableBody').attr('data-session-signature', nextSignature).html(rows.join(''));
+        $('#onlineSessionTotal').text(sessions.length).transition('pulse');
+        if (window.OatListControls && typeof window.OatListControls.refresh === 'function') {
+            window.OatListControls.refresh('#onlineAppTable');
+        }
+        Object.keys(openedDetails).forEach(function (key) {
+            var $primaryRow = $('.js-list-row').filter(function () {
+                return $(this).attr('data-session-key') === key;
+            });
+            if ($primaryRow.is(':visible')) {
+                $primaryRow.next('.js-list-detail').show().find('td').show();
+            }
+        });
+    }
+
+    function refreshOnlineSessions() {
+        $.get('/p/${project.id}/app/online-sessions', function (res) {
+            if (!(res && (res.success || res.result) && res.sessions)) {
+                return;
+            }
+            renderOnlineSessions(res.sessions);
+        });
+    }
+
+    var onlineSessionsRefreshTimer = setInterval(refreshOnlineSessions, 5000);
+    refreshOnlineSessions();
+    $(window).on('beforeunload', function () {
+        clearInterval(onlineSessionsRefreshTimer);
+    });
 </script>
 </body>
 

@@ -2,11 +2,15 @@ package com.oAT.web.service.impl;
 
 import com.oAT.agent.model.*;
 import com.oAT.web.common.SqlStatParse;
+import com.oAT.web.domain.RemoteCallResolver;
+import com.oAT.web.esDao.ApiEndpointRepository;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
 import com.oAT.web.esDao.entity.*;
+import com.oAT.web.service.AppService;
 import com.oAT.web.service.SystemSnapshotService;
+import com.oAT.web.service.entity.AppVo;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +36,12 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
     @Autowired
     StaticInfoRepository staticInfoRepository;
+
+    @Autowired
+    AppService appService;
+
+    @Autowired
+    ApiEndpointRepository apiEndpointRepository;
 
     @Autowired
     com.oAT.web.service.SnapshotService snapshotService;
@@ -115,9 +125,10 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         snapshot.setCodes(codes);
 
         // 解析封装 远程调用
+        RemoteCallResolver remoteCallResolver = buildRemoteCallResolver(projectId);
         Remote[] remotes = nodes.stream()
-                .filter(a -> a instanceof RemoteInvokeNode)
-                .map(a -> buildRemote((RemoteInvokeNode) a, nodes))
+                .filter(this::isRemoteTraceNode)
+                .map(a -> buildRemote(a, nodes, remoteCallResolver))
                 .collect(Collectors.toList())
                 .toArray(new Remote[0]); // 过滤
         snapshot.setRemotes(remotes);
@@ -155,31 +166,50 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         return repository.save(oldSnapshot);
     }
 
-    private Remote buildRemote(RemoteInvokeNode remoteInvokeNode, Collection<TraceNode> nodes) {
-        TraceNode traceNode = (TraceNode) remoteInvokeNode;
+    private boolean isRemoteTraceNode(TraceNode traceNode) {
+        return traceNode instanceof RemoteInvokeNode || traceNode instanceof HttpClientTraceNode;
+    }
+
+    private Remote buildRemote(TraceNode traceNode, Collection<TraceNode> nodes, RemoteCallResolver remoteCallResolver) {
         Remote remote = new Remote();
         remote.setType(traceNode.toType());
-        if (remoteInvokeNode instanceof DubboTraceNode) {
-            DubboTraceNode dubboNode = (DubboTraceNode) remoteInvokeNode;
+        if (traceNode instanceof DubboTraceNode) {
+            DubboTraceNode dubboNode = (DubboTraceNode) traceNode;
             remote.setUrl(dubboNode.getRemoteUrl());
             remote.setInvokerInterface(dubboNode.getServiceInterface() + "#" + dubboNode.getServiceMethodName());
-        } else if (remoteInvokeNode instanceof FeignTraceNode) {
-            FeignTraceNode feignNode = (FeignTraceNode) remoteInvokeNode;
+        } else if (traceNode instanceof FeignTraceNode) {
+            FeignTraceNode feignNode = (FeignTraceNode) traceNode;
             remote.setUrl(feignNode.getRemoteUrl());
             remote.setInvokerInterface(feignNode.getRemoteFeignTargetName() + "#" + feignNode.getRemoteMethod());
-        } else if (remoteInvokeNode instanceof SofaRpcTraceNode) {
-            SofaRpcTraceNode sofaRpcNode = (SofaRpcTraceNode) remoteInvokeNode;
+        } else if (traceNode instanceof SofaRpcTraceNode) {
+            SofaRpcTraceNode sofaRpcNode = (SofaRpcTraceNode) traceNode;
             remote.setUrl(sofaRpcNode.getDirectUrl());
             remote.setInvokerInterface(sofaRpcNode.getInterfaceName() + "#" + sofaRpcNode.getMethodName());
+        } else if (traceNode instanceof HttpClientTraceNode) {
+            HttpClientTraceNode httpClientNode = (HttpClientTraceNode) traceNode;
+            remote.setUrl(httpClientNode.getServiceURL());
+            remote.setInvokerInterface(httpClientNode.getServiceMethod() + " " + httpClientNode.getServiceURL());
         }
-        if (remoteInvokeNode.getRemoteApp() != null) {
-            remote.setAppId(remoteInvokeNode.getRemoteApp().getAppId());
-        } else {
+        if (traceNode instanceof RemoteInvokeNode && ((RemoteInvokeNode) traceNode).getRemoteApp() != null) {
+            remote.setAppId(((RemoteInvokeNode) traceNode).getRemoteApp().getAppId());
+        }
+        if (!StringUtils.hasText(remote.getAppId())) {
             nodes.stream().filter(a -> a.getTraceNodeId().equals(traceNode.getTraceNodeId() + ".remote"))
                     .filter(a -> a.getApp() != null)
                     .findAny().ifPresent(a -> remote.setAppId(a.getApp().getAppId()));
         }
+        if (!StringUtils.hasText(remote.getAppId())) {
+            remoteCallResolver.resolve(traceNode, nodes).ifPresent(relation -> remote.setAppId(relation.getTargetAppId()));
+        }
         return remote;
+    }
+
+    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
+        List<AppVo> apps = appService.getAppList(projectId);
+        List<ApiEndpointIndex> endpoints = apps.stream()
+                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
+                .collect(Collectors.toList());
+        return new RemoteCallResolver(apps, endpoints);
     }
 
     private String buildSrc(@NotNull StackNodeVo stackNodeVo) {

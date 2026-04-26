@@ -24,6 +24,7 @@ public class AppRelationLayer implements ImageLayer {
     private List<SystemSnapshot> snapshots;
     private Map<String, Collection<TraceNode>> traceNodesBySnapshotId;
     private Collection<Collection<TraceNode>> liveTraceNodeGroups;
+    private RemoteCallResolver remoteCallResolver;
 
     public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots) {
         this(apps, snapshots, Collections.emptyMap());
@@ -35,10 +36,16 @@ public class AppRelationLayer implements ImageLayer {
 
     public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots, Map<String, Collection<TraceNode>> traceNodesBySnapshotId,
                             Collection<Collection<TraceNode>> liveTraceNodeGroups) {
+        this(apps, snapshots, traceNodesBySnapshotId, liveTraceNodeGroups, new RemoteCallResolver(apps, Collections.emptyList()));
+    }
+
+    public AppRelationLayer(List<AppVo> apps, List<SystemSnapshot> snapshots, Map<String, Collection<TraceNode>> traceNodesBySnapshotId,
+                            Collection<Collection<TraceNode>> liveTraceNodeGroups, RemoteCallResolver remoteCallResolver) {
         this.apps = apps;
         this.snapshots = snapshots;
         this.traceNodesBySnapshotId = traceNodesBySnapshotId;
         this.liveTraceNodeGroups = liveTraceNodeGroups;
+        this.remoteCallResolver = remoteCallResolver;
     }
 
     @Override
@@ -75,19 +82,12 @@ public class AppRelationLayer implements ImageLayer {
     private void addTraceRemoteInvokeRelations(Map<String, AppRelation> relations, Set<String> appIds, Collection<TraceNode> traceNodes) {
         addTraceAppRelations(relations, appIds, traceNodes);
         traceNodes.stream()
-                .filter(traceNode -> traceNode instanceof com.oAT.agent.model.RemoteInvokeNode)
-                .filter(traceNode -> traceNode.getApp() != null)
-                .forEach(traceNode -> {
-                    com.oAT.agent.model.RemoteInvokeNode remoteInvokeNode = (com.oAT.agent.model.RemoteInvokeNode) traceNode;
-                    if (remoteInvokeNode.getRemoteApp() == null) {
-                        return;
-                    }
-                    String sourceAppId = traceNode.getApp().getAppId();
-                    String targetAppId = remoteInvokeNode.getRemoteApp().getAppId();
-                    if (appIds.contains(sourceAppId) && appIds.contains(targetAppId) && !sourceAppId.equals(targetAppId)) {
-                        addRelation(relations, sourceAppId, targetAppId, traceNode.toType());
-                    }
-                });
+                .map(traceNode -> remoteCallResolver.resolve(traceNode, traceNodes))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .filter(relation -> appIds.contains(relation.getSourceAppId()))
+                .filter(relation -> appIds.contains(relation.getTargetAppId()))
+                .forEach(relation -> addRelation(relations, relation.getSourceAppId(), relation.getTargetAppId(), relation.getType()));
     }
 
     private void addTraceAppRelations(Map<String, AppRelation> relations, Set<String> appIds, Collection<TraceNode> traceNodes) {
@@ -176,10 +176,10 @@ public class AppRelationLayer implements ImageLayer {
 
         private String label() {
             if (types.isEmpty()) {
-                return "调用 x" + count;
+                return "调用 ×" + count;
             }
             return types.entrySet().stream()
-                    .map(entry -> entry.getKey() + " x" + entry.getValue())
+                    .map(entry -> entry.getKey() + " ×" + entry.getValue())
                     .collect(Collectors.joining(","));
         }
     }

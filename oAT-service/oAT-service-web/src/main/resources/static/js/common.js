@@ -156,6 +156,35 @@ function notifyToast(message, type, customDuration) {
     }
 }
 
+function oatSetFormSubmitting(form, submitting, options) {
+    var $form = $(form);
+    var settings = options || {};
+    var $submitButton = settings.submitButton ? $(settings.submitButton) : $form.find('[type="submit"], .ui.primary.button, .ui.secondary.button').last();
+
+    $form.data('oatSubmitting', submitting);
+    $form.toggleClass('loading disabled', submitting);
+    if (!settings.keepFieldsEnabled) {
+        $form.find('input, textarea, select, button').prop('disabled', submitting);
+    }
+    $form.find('.ui.button, .ui.checkbox, .ui.radio.checkbox, .ui.dropdown').toggleClass('disabled', submitting);
+    $form.find('a.ui.button').toggleClass('disabled', submitting).attr('aria-disabled', submitting ? 'true' : 'false');
+
+    if ($submitButton.length) {
+        $submitButton.toggleClass('loading disabled', submitting).prop('disabled', submitting);
+    }
+    if (settings.extraControls) {
+        $(settings.extraControls).toggleClass('disabled', submitting).prop('disabled', submitting).attr('aria-disabled', submitting ? 'true' : 'false');
+    }
+    if (settings.editor && typeof settings.editor.setOption === 'function') {
+        settings.editor.setOption('readOnly', submitting ? 'nocursor' : false);
+        $(settings.editor.getWrapperElement()).toggleClass('disabled', submitting).css('opacity', submitting ? 0.6 : '');
+    }
+}
+
+function oatIsFormSubmitting(form) {
+    return Boolean($(form).data('oatSubmitting'));
+}
+
 function dismissToast($toast) {
     if (typeof $toast.transition === 'function') {
         $toast.transition({

@@ -4,6 +4,9 @@ import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.*;
+import com.oAT.web.domain.RemoteCallResolver;
+import com.oAT.web.esDao.ApiEndpointRepository;
+import com.oAT.web.esDao.entity.ApiEndpointIndex;
 import com.oAT.web.esDao.entity.LabelGroup;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.*;
@@ -38,6 +41,9 @@ public class MonitorControl {
 
     @Autowired
     SystemSnapshotService systemSnapshotService;
+
+    @Autowired
+    ApiEndpointRepository apiEndpointRepository;
 
     // 默认打开视图
     @RequestMapping("")
@@ -94,6 +100,14 @@ public class MonitorControl {
         return clientSessionService.getTraceItemByIndex(lastIndex, true, maxSize == null ? 50 : maxSize, appIds);
     }
 
+    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
+        List<AppVo> apps = appService.getAppList(projectId);
+        List<ApiEndpointIndex> endpoints = apps.stream()
+                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
+                .collect(java.util.stream.Collectors.toList());
+        return new RemoteCallResolver(apps, endpoints);
+    }
+
     private List<String> getAppIds(String projectId) {
         List<AppVo> appList = appService.getAppList(projectId);
         List<String> appIds = new ArrayList<>(appList.size());
@@ -130,8 +144,8 @@ public class MonitorControl {
 
     @RequestMapping("/getTraceGraph")
     @ResponseBody
-    public GraphView getTraceGraph(String traceId) {
-        return new TraceGraphParse(getTraceNode(traceId)).getGraphView();
+    public GraphView getTraceGraph(@PathVariable String projectId, String traceId) {
+        return new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId)).getGraphView();
     }
 
     /**
@@ -156,8 +170,8 @@ public class MonitorControl {
     }
 
     @RequestMapping("/{traceId}/{nodeId}.html")
-    public String getNodeDetailView(@PathVariable String traceId, @PathVariable String nodeId, Model model) {
-        TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId));
+    public String getNodeDetailView(@PathVariable String projectId, @PathVariable String traceId, @PathVariable String nodeId, Model model) {
+        TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId));
         GraphNode node = parse.getGraphNode(nodeId);
         Assert.notNull(node, "not found GraphNode: " + nodeId);
 

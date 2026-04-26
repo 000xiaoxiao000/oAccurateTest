@@ -200,7 +200,7 @@
                     </div>
                     <#if loginNameRole != "visitor">
                         <div class="app-unified-form-actions">
-                            <div class="ui primary button" type="submit">
+                            <div id="appSettingsSaveButton" class="ui primary button" type="submit">
                                 <i class="save outline icon"></i>
                                 保存
                             </div>
@@ -226,7 +226,7 @@
                         </div>
                         <#if loginNameRole != "visitor">
                             <div class="app-unified-form-actions">
-                                <div class="ui red button" type="submit">
+                                <div id="appDeleteSubmitButton" class="ui red button" type="submit">
                                     确认删除该应用
                                 </div>
                             </div>
@@ -252,6 +252,17 @@
             on: 'click'
         });
         $('.ui.checkbox').checkbox();
+        $('.app-unified-form').on('submit', function () {
+            var $form = $(this);
+            if (oatIsFormSubmitting($form)) {
+                return false;
+            }
+            oatSetFormSubmitting($form, true, {
+                submitButton: $form.find('.ui.button[type="submit"]').first(),
+                keepFieldsEnabled: true
+            });
+            return true;
+        });
         var pageToastMessage = $('#pageToastMessage').val();
         if (pageToastMessage) {
             notifyToast(pageToastMessage, $('#pageToastMessageType').val() || 'success');

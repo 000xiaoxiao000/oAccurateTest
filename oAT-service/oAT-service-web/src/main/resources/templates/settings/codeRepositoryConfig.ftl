@@ -243,7 +243,7 @@
                         </div>
                     </div>
 
-                    <button class="ui secondary button" type="button" onclick="submitRepositoryConfig()">
+                    <button id="repositoryConfigSubmitButton" class="ui secondary button" type="button" onclick="submitRepositoryConfig()">
                         <i class="check icon"></i> 保存配置
                     </button>
                 </form>
@@ -255,26 +255,30 @@
 <script>
     function submitRepositoryConfig() {
         var $form = $('.ui.form');
+        if (oatIsFormSubmitting($form)) {
+            return;
+        }
         var action = $form.attr('action');
+        var data = $form.serialize();
 
-        $form.addClass('loading');
+        oatSetFormSubmitting($form, true, {submitButton: '#repositoryConfigSubmitButton'});
         $.ajax({
             type: 'POST',
             url: action,
-            data: $form.serialize(),
+            data: data,
             success: function(res) {
-                $form.removeClass('loading');
                 if (res.success || res.result) {
                     showToast(res.message || '保存成功', 'success');
                     setTimeout(function() {
                         window.location.href = "/p/${project.id}/manageAppCode";
                     }, 1000);
                 } else {
+                    oatSetFormSubmitting($form, false, {submitButton: '#repositoryConfigSubmitButton'});
                     showToast(res.message || '保存失败', 'error');
                 }
             },
             error: function() {
-                $form.removeClass('loading');
+                oatSetFormSubmitting($form, false, {submitButton: '#repositoryConfigSubmitButton'});
                 showToast('网络请求失败', 'error');
             }
         });
