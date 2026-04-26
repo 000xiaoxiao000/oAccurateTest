@@ -623,7 +623,7 @@
                     </div>
                     <div class="editor-actions">
                         <div class="ui secondary button" onclick="doCancelUsecase()">离开用例</div>
-                        <div class="ui primary button" onclick="doSaveUsecase()">更新用例</div>
+                        <div class="ui primary button" id="usecaseSaveButton" onclick="doSaveUsecase()">更新用例</div>
                     </div>
                 </div>
 
@@ -659,21 +659,39 @@
     <#--simplemde.val('${usecase.content}')-->
 
     function doSaveUsecase() {
+        var $form = $("#usecaseForm");
+        if (oatIsFormSubmitting($form)) {
+            return false;
+        }
         // 验证表单
-        if (!$('.ui.form').form('validate form')) {
+        if (!$form.form('validate form')) {
             return false;
         }
         $("#doc-edit").val(simplemde.value());
-        var resultInform = $.ajax({
+        var data = $form.serialize();
+        var editor = simplemde && simplemde.codemirror ? simplemde.codemirror : null;
+        var submittingOptions = {
+            submitButton: '#usecaseSaveButton',
+            editor: editor,
+            extraControls: '.editor-actions .ui.button'
+        };
+        oatSetFormSubmitting($form, true, submittingOptions);
+        $.ajax({
             url: "/p/${project.id}/usecase/doSave",
-            data: $("#usecaseForm").serialize(),
-            async: false
-        }).responseJSON;
-        if (resultInform.result) {
-            showToast(resultInform.message, 'success');
-        } else {
-            showToast(resultInform.errorMessage, 'error');
-        }
+            data: data,
+            success: function(resultInform) {
+                if (resultInform.result) {
+                    showToast(resultInform.message, 'success');
+                } else {
+                    showToast(resultInform.errorMessage, 'error');
+                }
+                oatSetFormSubmitting($form, false, submittingOptions);
+            },
+            error: function() {
+                oatSetFormSubmitting($form, false, submittingOptions);
+                showToast('网络请求失败', 'error');
+            }
+        });
     }
 
     function doCancelUsecase() {

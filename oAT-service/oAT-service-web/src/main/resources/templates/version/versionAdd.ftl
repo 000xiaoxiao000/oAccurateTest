@@ -46,6 +46,9 @@
                     <p class="version-page-desc">从 Git 拉取代码或上传制品包，创建应用版本并用于后续覆盖率和比对分析。</p>
                 </div>
                 <div class="version-page-actions">
+                    <a class="ui button" href="/p/${project.id}/app/${appId}/repository">
+                        <i class="setting icon"></i>仓库配置
+                    </a>
                     <a class="ui button" href="/p/${project.id}/${appId}/version/list">
                         <i class="left arrow icon"></i>返回版本列表
                     </a>
@@ -137,7 +140,7 @@
                     </div>
                 </div>
                 <div class="version-form-actions">
-                    <button class="ui button positive" type="submit">创建新的版本</button>
+                    <button class="ui button positive" type="submit" id="versionCreateButton">创建新的版本</button>
                     <button class="ui button" type="reset">重置</button>
                 </div>
                 <div class="ui error message"></div>
@@ -478,15 +481,22 @@
                     }
 
                     var $form = $(this);
+                    if (oatIsFormSubmitting($form)) {
+                        return false;
+                    }
                     var action = $form.attr('action');
+                    var data = $form.serialize();
+                    var submittingOptions = {
+                        submitButton: '#versionCreateButton',
+                        extraControls: '.version-page-actions .ui.button, .version-page-body .ui.menu .item'
+                    };
 
-                    $form.addClass('loading');
+                    oatSetFormSubmitting($form, true, submittingOptions);
                     $.ajax({
                         type: 'POST',
                         url: action,
-                        data: $form.serialize(),
+                        data: data,
                         success: function(res) {
-                            $form.removeClass('loading');
                             if (res.success || res.result) {
                                 sessionStorage.setItem('toastMessage', successMessage);
                                 sessionStorage.setItem('toastMessageType', 'success');
@@ -495,11 +505,12 @@
                                     window.location.href = "/p/${project.id}/${appId}/version/list";
                                 }, 1000);
                             } else {
+                                oatSetFormSubmitting($form, false, submittingOptions);
                                 showToast(res.message || '版本创建失败', 'error');
                             }
                         },
                         error: function() {
-                            $form.removeClass('loading');
+                            oatSetFormSubmitting($form, false, submittingOptions);
                             showToast('网络请求失败', 'error');
                         }
                     });
