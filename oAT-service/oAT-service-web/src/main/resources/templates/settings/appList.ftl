@@ -721,33 +721,84 @@
     });
     $('.commit-id').popup();
 
-    function refreshAppOnlineCounts() {
-        $.get('/p/${project.id}/app/online-counts', function (res) {
-            if (!(res && (res.success || res.result) && res.counts)) {
+    function applyAppOnlineCounts(res) {
+        if (!(res && (res.success || res.result) && res.counts)) {
+            return;
+        }
+        $('.project-app-online-count').each(function () {
+            var $count = $(this);
+            var appId = $count.data('app-id');
+            if (!Object.prototype.hasOwnProperty.call(res.counts, appId)) {
                 return;
             }
-            $('.project-app-online-count').each(function () {
-                var $count = $(this);
-                var appId = $count.data('app-id');
-                if (!Object.prototype.hasOwnProperty.call(res.counts, appId)) {
-                    return;
-                }
-                var newCount = Number(res.counts[appId]) || 0;
-                var oldCount = Number($count.attr('data-online-count')) || 0;
-                if (newCount === oldCount) {
-                    return;
-                }
-                $count.attr('data-online-count', newCount).text(newCount);
-                $count.closest('td').transition('pulse');
-            });
+            var newCount = Number(res.counts[appId]) || 0;
+            var oldCount = Number($count.attr('data-online-count')) || 0;
+            if (newCount === oldCount) {
+                return;
+            }
+            $count.attr('data-online-count', newCount).text(newCount);
+            $count.closest('td').transition('pulse');
         });
     }
 
-    var appOnlineCountRefreshTimer = setInterval(refreshAppOnlineCounts, 5000);
-    refreshAppOnlineCounts();
-    $(window).on('beforeunload', function () {
-        clearInterval(appOnlineCountRefreshTimer);
-    });
+    (function startAppOnlineCountStream() {
+        if (!window.EventSource) {
+            $.get('/p/${project.id}/app/online-counts', applyAppOnlineCounts);
+            return;
+        }
+        var closedByPage = false;
+        var reconnectTimer = null;
+        var reconnectDelay = 3000;
+        var maxReconnectDelay = 30000;
+        var source = null;
+
+        function scheduleReconnect() {
+            if (closedByPage || reconnectTimer) {
+                return;
+            }
+            reconnectTimer = setTimeout(function () {
+                reconnectTimer = null;
+                connect();
+            }, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+        }
+
+        function connect() {
+            if (closedByPage) {
+                return;
+            }
+            if (source) {
+                source.close();
+            }
+            source = new EventSource('/p/${project.id}/app/online-counts/stream');
+            source.addEventListener('connected', function () {
+                reconnectDelay = 3000;
+            });
+            source.addEventListener('online-counts', function (message) {
+                try {
+                    applyAppOnlineCounts(JSON.parse(message.data || '{}'));
+                } catch (ignore) {
+                }
+            });
+            source.onerror = function () {
+                source.close();
+                source = null;
+                scheduleReconnect();
+            };
+        }
+
+        connect();
+
+        $(window).on('beforeunload', function () {
+            closedByPage = true;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+            }
+            if (source) {
+                source.close();
+            }
+        });
+    })();
 
     function openDelDialog(appId) {
         // Set up the click handler for the confirmation button

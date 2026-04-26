@@ -6,6 +6,7 @@ import com.oAT.web.esDao.entity.App;
 import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
+import com.oAT.web.service.OnlineInstanceSseService;
 import com.oAT.web.service.ProbeAlertDashboardService;
 import com.oAT.web.service.ProbeAlertSseService;
 import com.oAT.web.service.ProjectService;
@@ -57,6 +58,9 @@ public class AppControl {
     private ProbeAlertSseService probeAlertSseService;
 
     @Autowired
+    private OnlineInstanceSseService onlineInstanceSseService;
+
+    @Autowired
     private SystemLogService systemLogService;
 
     @RequestMapping("create")
@@ -77,8 +81,9 @@ public class AppControl {
     public String openAppListView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
         List<AppVo> list = appService.getAppList(projectId);
         model.addAttribute("apps", list);
+        Map<String, Integer> onlineCounts = onlineInstanceSseService.buildCounts(projectId);
         for (AppVo appVo : list) {
-            appVo.setOnlineCount(sessionService.getOnlineSessionsByAppId(appVo.getId()).size());
+            appVo.setOnlineCount(onlineCounts.getOrDefault(appVo.getId(), 0));
         }
 
         String loginName = user.getName();
@@ -308,17 +313,17 @@ public class AppControl {
     @RequestMapping("online-counts")
     @ResponseBody
     public Map<String, Object> getOnlineCounts(@PathVariable String projectId) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        Map<String, Integer> counts = new HashMap<>();
-        for (AppVo appVo : apps) {
-            counts.put(appVo.getId(), sessionService.getOnlineSessionsByAppId(appVo.getId()).size());
-        }
-
         Map<String, Object> result = new HashMap<>();
         result.put("success", true);
-        result.put("counts", counts);
+        result.put("counts", onlineInstanceSseService.buildCounts(projectId));
         result.put("serverTime", System.currentTimeMillis());
         return result;
+    }
+
+    @RequestMapping(value = "online-counts/stream", produces = "text/event-stream")
+    @ResponseBody
+    public SseEmitter streamOnlineCounts(@PathVariable String projectId) {
+        return onlineInstanceSseService.subscribe(projectId);
     }
 
     @RequestMapping("online-sessions")
