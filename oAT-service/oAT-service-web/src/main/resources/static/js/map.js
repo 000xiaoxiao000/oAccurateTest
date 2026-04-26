@@ -53,6 +53,30 @@ const coseLayoutOptions = {
     minTemp: 1.0
 };
 
+var appRelationLayoutOptions = Object.assign({}, coseLayoutOptions, {
+    padding: 90,
+    componentSpacing: 60,
+    nodeRepulsion: 1200000,
+    idealEdgeLength: 180,
+    edgeElasticity: 120,
+    gravity: 120,
+    numIter: 800,
+    initialTemp: 120
+});
+
+function getMapLayoutOptions(data) {
+    var elements = Array.isArray(data) ? data : ((data && data.elements) || []);
+    var hasAppRelation = elements.some(function (element) {
+        if (!element || element.group !== 'edges' || !element.classes) {
+            return false;
+        }
+        return Array.isArray(element.classes)
+            ? element.classes.indexOf('app-relation') >= 0
+            : String(element.classes).indexOf('app-relation') >= 0;
+    });
+    return hasAppRelation ? appRelationLayoutOptions : coseLayoutOptions;
+}
+
 var breadthfirstLayoutOptions = {
     name: 'breadthfirst',
     fit: true, // 是否将观察窗口与图相匹配
@@ -80,16 +104,17 @@ var breadthfirstLayoutOptions = {
 
 function buildMap(data) {
     try {
+        var layoutOptions = getMapLayoutOptions(data);
         var cy = window.cy = cytoscape({
             container: document.getElementById('map_body'), // 容器id
             minZoom: 0.2,// 缩放最小比例
             maxZoom: 6, // 缩放最大比例
             wheelSensitivity: 0.1, boxSelectionEnabled: true,// 是否允许框选 按住ctrl或shift 拖动鼠标框选
             elements: data,
-            style: fetch('/css/map.cycss?v=2').then(function (value) {
+            style: fetch('/css/map.cycss?v=3').then(function (value) {
                 return value.text();
             }),
-            layout: coseLayoutOptions
+            layout: layoutOptions
         });
 
         var doubleClickDelayMs = 350;
@@ -208,6 +233,7 @@ function buildMap(data) {
                 return false;
             }
         };
+        cy.layoutOptions = layoutOptions;
         cy.loadElement = loadElement;
         cy.doFind = doFind;
         cy.doRefresh = doRefresh;
@@ -241,7 +267,7 @@ function loadElement(url, select, fullLayout, title) {
             //     // maximal: false,
             //     // fit: true
             // }).run();
-            cy.layout(coseLayoutOptions).run();
+            cy.layout(cy.layoutOptions || coseLayoutOptions).run();
         } else {
             doRefresh();
         }
@@ -314,5 +340,5 @@ function doSubSelectUnionNode(ele) {
 }
 
 function doRefresh() {
-    cy.layout(coseLayoutOptions).run();
+    cy.layout(cy.layoutOptions || coseLayoutOptions).run();
 }

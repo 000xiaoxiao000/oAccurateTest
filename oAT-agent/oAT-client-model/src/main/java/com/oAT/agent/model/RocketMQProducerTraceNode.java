@@ -2,7 +2,7 @@ package com.oAT.agent.model;
 
 import java.io.Serializable;
 
-public class RocketMQProducerTraceNode extends TraceNode implements Serializable, StatementError {
+public class RocketMQProducerTraceNode extends TraceNode implements Serializable, StatementError, RemoteInvokeNode {
     private static final long serialVersionUID = -7156032079009497957L;
 
     String producer;
@@ -26,6 +26,15 @@ public class RocketMQProducerTraceNode extends TraceNode implements Serializable
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    @Override
+    public Application getRemoteApp() {
+        return remoteApp;
+    }
+
+    public void setRemoteApp(Application remoteApp) {
+        this.remoteApp = remoteApp;
     }
 
     public void setError(Error error) {

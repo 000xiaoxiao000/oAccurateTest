@@ -59,6 +59,12 @@ public class ApplicationGraphNode extends GraphNode {
 
     private final List<SofaRpcTraceNode> sofaRpcNodes = new ArrayList<>();
 
+    private final List<RabbitMQTraceNode> rabbitMQNodes = new ArrayList<>();
+
+    private final List<RocketMQProducerTraceNode> rocketMQProducerNodes = new ArrayList<>();
+
+    private final List<KafkaMQTraceNode> kafkaMQNodes = new ArrayList<>();
+
     // redis
     private final List<RedisTraceNode> redisNodes = new ArrayList<>();
 
@@ -104,6 +110,18 @@ public class ApplicationGraphNode extends GraphNode {
 
     public List<SofaRpcTraceNode> getSofaRpcNodes() {
         return sofaRpcNodes;
+    }
+
+    public List<RabbitMQTraceNode> getRabbitMQNodes() {
+        return rabbitMQNodes;
+    }
+
+    public List<RocketMQProducerTraceNode> getRocketMQProducerNodes() {
+        return rocketMQProducerNodes;
+    }
+
+    public List<KafkaMQTraceNode> getKafkaMQNodes() {
+        return kafkaMQNodes;
     }
 
 
@@ -168,6 +186,12 @@ public class ApplicationGraphNode extends GraphNode {
             feignNodes.add((FeignTraceNode) node);
         } else if (node instanceof SofaRpcTraceNode) {
             sofaRpcNodes.add((SofaRpcTraceNode) node);
+        } else if (node instanceof RabbitMQTraceNode) {
+            rabbitMQNodes.add((RabbitMQTraceNode) node);
+        } else if (node instanceof RocketMQProducerTraceNode) {
+            rocketMQProducerNodes.add((RocketMQProducerTraceNode) node);
+        } else if (node instanceof KafkaMQTraceNode) {
+            kafkaMQNodes.add((KafkaMQTraceNode) node);
         } else if (node instanceof RedisTraceNode) {
             redisNodes.add((RedisTraceNode) node);
         }

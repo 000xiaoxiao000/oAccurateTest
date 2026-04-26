@@ -4,6 +4,8 @@ import com.oAT.agent.model.*;
 import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.*;
+import com.oAT.web.domain.RemoteCallResolver;
+import com.oAT.web.esDao.ApiEndpointRepository;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.BusinessException;
@@ -63,6 +65,9 @@ public class SystemSnapshotControl {
 
     @Autowired
     private ApiEndpointAnalysisService apiEndpointAnalysisService;
+
+    @Autowired
+    private ApiEndpointRepository apiEndpointRepository;
 
     // 打开系统快照列表
     @RequestMapping("/list")
@@ -290,6 +295,14 @@ public class SystemSnapshotControl {
         }
     }
 
+    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
+        List<AppVo> apps = appService.getAppList(projectId);
+        List<ApiEndpointIndex> endpoints = apps.stream()
+                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
+                .collect(Collectors.toList());
+        return new RemoteCallResolver(apps, endpoints);
+    }
+
     /**
      * 将 TraceNode 转换成前台堆栈列表树节点
      */
@@ -303,17 +316,17 @@ public class SystemSnapshotControl {
                 .filter(Objects::nonNull)
                 .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
                 .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
-        return new TraceGraphParse(nodeMap).getGraphView();
+        return new TraceGraphParse(nodeMap, buildRemoteCallResolver(projectId)).getGraphView();
     }
 
     @RequestMapping("/node/{snapshotId}")
-    public String openNodeDetail(@PathVariable String snapshotId, String traceId, String nodeId, Model model) {
+    public String openNodeDetail(@PathVariable String projectId, @PathVariable String snapshotId, String traceId, String nodeId, Model model) {
         Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
         Map<String, TraceNode> nodeMap = nodes.stream()
                 .filter(Objects::nonNull)
                 .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
                 .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
-        TraceGraphParse parse = new TraceGraphParse(nodeMap);
+        TraceGraphParse parse = new TraceGraphParse(nodeMap, buildRemoteCallResolver(projectId));
         GraphNode node = parse.getGraphNode(nodeId);
         Assert.notNull(node, "not found GraphNode: " + nodeId);
 

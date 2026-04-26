@@ -238,7 +238,7 @@
                             <label>手动上传源码包或制品包（兜底）</label>
                             <input type="file" name="file" id="artifactFile" accept=".zip,.jar,.war">
                         </div>
-                        <button type="button" class="ui primary button" onclick="uploadArtifact()"><i class="upload icon"></i> 开始扫描</button>
+                        <button id="apiEndpointUploadButton" type="button" class="ui primary button" onclick="uploadArtifact()"><i class="upload icon"></i> 开始扫描</button>
                         <button type="button" class="ui button" onclick="loadCachedZips();loadEndpoints()"><i class="refresh icon"></i> 刷新列表</button>
                     </form>
                 </div>
@@ -336,6 +336,10 @@
 
     function uploadArtifact() {
         var form = document.getElementById('uploadForm');
+        var $form = $(form);
+        if (oatIsFormSubmitting($form)) {
+            return;
+        }
         var data = new FormData(form);
         var cachePath = $('#cachedZipSelect').val() || '';
         var fileInput = document.getElementById('artifactFile');
@@ -349,6 +353,7 @@
             return;
         }
 
+        oatSetFormSubmitting($form, true, {submitButton: '#apiEndpointUploadButton'});
         $.ajax({
             url: '/p/${project.id}/app/${app.id}/api-endpoints/upload',
             type: 'POST',
@@ -356,6 +361,7 @@
             processData: false,
             contentType: false,
             success: function (res) {
+                oatSetFormSubmitting($form, false, {submitButton: '#apiEndpointUploadButton'});
                 if (res.result || res.success) {
                     showToast(res.message || '扫描成功', 'success');
                     form.reset();
@@ -367,6 +373,7 @@
                 }
             },
             error: function (xhr) {
+                oatSetFormSubmitting($form, false, {submitButton: '#apiEndpointUploadButton'});
                 showToast((xhr.responseJSON && xhr.responseJSON.message) || '上传失败', 'error');
             }
         });

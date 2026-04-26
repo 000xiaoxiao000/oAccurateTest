@@ -25,8 +25,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import javax.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -100,11 +102,31 @@ public class AppControl {
      */
     @RequestMapping("doCreate")
     @ResponseBody
-    public com.oAT.web.control.entity.ResultNotified doCreateApp(@SessionAttribute UserVo user, App app) {
+    public com.oAT.web.control.entity.ResultNotified doCreateApp(@SessionAttribute UserVo user,
+                                                                 App app,
+                                                                 HttpServletRequest request) {
         app.setCreateUserId(user.getId());
+        boolean probeAlertEnabled = isCheckboxChecked(request, "probeAlertEnabled");
+        boolean probeAlertOnOffline = isCheckboxChecked(request, "probeAlertOnOffline");
+        boolean probeAlertOnRecovered = isCheckboxChecked(request, "probeAlertOnRecovered");
+        boolean probeAlertOnOnline = isCheckboxChecked(request, "probeAlertOnOnline");
+        boolean notificationEventsAdjusted = probeAlertEnabled && !probeAlertOnOffline && !probeAlertOnRecovered && !probeAlertOnOnline;
+        app.setProbeAlertEnabled(probeAlertEnabled);
+        if (notificationEventsAdjusted) {
+            probeAlertOnOffline = true;
+            probeAlertOnRecovered = true;
+        }
+        app.setProbeAlertOnOffline(probeAlertOnOffline);
+        app.setProbeAlertOnRecovered(probeAlertOnRecovered);
+        app.setProbeAlertOnOnline(probeAlertOnOnline);
         AppVo appVo = appService.createApp(app);
         doLog(SystemLogService.Action.addApp, "添加了一个新应用", user, appVo);
         return new com.oAT.web.control.entity.ResultNotified(true, "应用创建成功", "/p/" + app.getCreateProjectId() + "/app/list");
+    }
+
+    private boolean isCheckboxChecked(HttpServletRequest request, String name) {
+        String[] values = request.getParameterValues(name);
+        return values != null && Arrays.stream(values).anyMatch("true"::equalsIgnoreCase);
     }
 
     private void doLog(SystemLogService.Action action, String actionMessage, UserVo user, AppVo appVo) {
@@ -152,12 +174,13 @@ public class AppControl {
                                @PathVariable String appId,
                                @SessionAttribute UserVo user,
                                AppVo app,
-                               @RequestParam(value = "probeAlertEnabled", defaultValue = "false") boolean probeAlertEnabled,
-                               @RequestParam(value = "probeAlertOnOffline", defaultValue = "false") boolean probeAlertOnOffline,
-                               @RequestParam(value = "probeAlertOnRecovered", defaultValue = "false") boolean probeAlertOnRecovered,
-                               @RequestParam(value = "probeAlertOnOnline", defaultValue = "false") boolean probeAlertOnOnline,
+                               HttpServletRequest request,
                                RedirectAttributes redirectAttributes) {
         Assert.isTrue(app.getId().equalsIgnoreCase(appId), "参数非法");
+        boolean probeAlertEnabled = isCheckboxChecked(request, "probeAlertEnabled");
+        boolean probeAlertOnOffline = isCheckboxChecked(request, "probeAlertOnOffline");
+        boolean probeAlertOnRecovered = isCheckboxChecked(request, "probeAlertOnRecovered");
+        boolean probeAlertOnOnline = isCheckboxChecked(request, "probeAlertOnOnline");
         boolean notificationEventsAdjusted = probeAlertEnabled && !probeAlertOnOffline && !probeAlertOnRecovered && !probeAlertOnOnline;
         app.setProbeAlertEnabled(probeAlertEnabled);
         if (notificationEventsAdjusted) {
@@ -207,7 +230,21 @@ public class AppControl {
 
     @RequestMapping("doEdit")
     @ResponseBody
-    public com.oAT.web.control.entity.ResultNotified doEditApp(@PathVariable String projectId, @SessionAttribute UserVo user, AppVo app) {
+    public com.oAT.web.control.entity.ResultNotified doEditApp(@PathVariable String projectId,
+                                                              @SessionAttribute UserVo user,
+                                                              AppVo app,
+                                                              HttpServletRequest request) {
+        app.setProbeAlertEnabled(isCheckboxChecked(request, "probeAlertEnabled"));
+        boolean probeAlertOnOffline = isCheckboxChecked(request, "probeAlertOnOffline");
+        boolean probeAlertOnRecovered = isCheckboxChecked(request, "probeAlertOnRecovered");
+        boolean probeAlertOnOnline = isCheckboxChecked(request, "probeAlertOnOnline");
+        if (Boolean.TRUE.equals(app.getProbeAlertEnabled()) && !probeAlertOnOffline && !probeAlertOnRecovered && !probeAlertOnOnline) {
+            probeAlertOnOffline = true;
+            probeAlertOnRecovered = true;
+        }
+        app.setProbeAlertOnOffline(probeAlertOnOffline);
+        app.setProbeAlertOnRecovered(probeAlertOnRecovered);
+        app.setProbeAlertOnOnline(probeAlertOnOnline);
         app = appService.updateApp(projectId, app);
         doLog(SystemLogService.Action.editApp, "修改了应用信息", user, app);
         return new com.oAT.web.control.entity.ResultNotified(true, "应用修改成功");
@@ -247,21 +284,9 @@ public class AppControl {
 
     @RequestMapping("online")
     public String openOnlineList(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        List<ClientSessionVo> list = new ArrayList<>();
         List<AppVo> apps = appService.getAppList(projectId);
         model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
-        List<String> appIds = new ArrayList<>();
-        for (AppVo appVo : apps) {
-            appIds.add(appVo.getId());
-        }
-        for (ClientSessionVo onlineSession : sessionService.getOnlineSessions()) {
-            // 应用key等于空 ，或者属于当前项目
-            if (!StringUtils.hasText(onlineSession.getClientInfo().getAppKey()) ||
-                    appIds.contains(onlineSession.getClientInfo().getAppKey())) {
-                onlineSession.setOnlineTime(DateUtil.timeDifference(onlineSession.getLoginTime(), new Date()));
-                list.add(onlineSession);
-            }
-        }
+        List<ClientSessionVo> list = getProjectOnlineSessions(projectId);
 
         String loginName = user.getName();
         List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
@@ -278,6 +303,65 @@ public class AppControl {
 
         model.addAttribute("sessions", list);
         return "/settings/onlineAppList";
+    }
+
+    @RequestMapping("online-counts")
+    @ResponseBody
+    public Map<String, Object> getOnlineCounts(@PathVariable String projectId) {
+        List<AppVo> apps = appService.getAppList(projectId);
+        Map<String, Integer> counts = new HashMap<>();
+        for (AppVo appVo : apps) {
+            counts.put(appVo.getId(), sessionService.getOnlineSessionsByAppId(appVo.getId()).size());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("counts", counts);
+        result.put("serverTime", System.currentTimeMillis());
+        return result;
+    }
+
+    @RequestMapping("online-sessions")
+    @ResponseBody
+    public Map<String, Object> getOnlineSessions(@PathVariable String projectId) {
+        List<Map<String, Object>> sessions = new ArrayList<>();
+        for (ClientSessionVo onlineSession : getProjectOnlineSessions(projectId)) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("addressIp", onlineSession.getClientInfo().getAddressIp());
+            item.put("agentVersion", onlineSession.getClientInfo().getAgentVersion());
+            item.put("systemDir", onlineSession.getClientInfo().getSystemDir());
+            item.put("pid", onlineSession.getClientInfo().getPid());
+            item.put("jvmVersion", onlineSession.getClientInfo().getJvmVersion());
+            item.put("jvmOption", onlineSession.getClientInfo().getJvmOption());
+            item.put("onlineTime", onlineSession.getOnlineTime());
+            item.put("appName", onlineSession.getApplication() == null ? "未定义" : onlineSession.getApplication().getAppName());
+            item.put("projectSrcName", onlineSession.getApplication() == null ? "" : onlineSession.getApplication().getProjectSrcName());
+            sessions.add(item);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("sessions", sessions);
+        result.put("total", sessions.size());
+        result.put("serverTime", System.currentTimeMillis());
+        return result;
+    }
+
+    private List<ClientSessionVo> getProjectOnlineSessions(String projectId) {
+        List<ClientSessionVo> list = new ArrayList<>();
+        List<AppVo> apps = appService.getAppList(projectId);
+        List<String> appIds = new ArrayList<>();
+        for (AppVo appVo : apps) {
+            appIds.add(appVo.getId());
+        }
+        for (ClientSessionVo onlineSession : sessionService.getOnlineSessions()) {
+            if (!StringUtils.hasText(onlineSession.getClientInfo().getAppKey()) ||
+                    appIds.contains(onlineSession.getClientInfo().getAppKey())) {
+                onlineSession.setOnlineTime(DateUtil.timeDifference(onlineSession.getLoginTime(), new Date()));
+                list.add(onlineSession);
+            }
+        }
+        return list;
     }
 
     @RequestMapping("{appId}/settings")

@@ -43,6 +43,11 @@ public class AppServiceImpl implements AppService, StandardDate {
         Assert.hasText(app.getName(), "param 'app.name' must be not null");
         Assert.hasText(app.getCreateProjectId(), "param 'app.projectId' must be not null");
         Assert.hasText(app.getCreateUserId(), "param 'app.createUserId' must be not null");
+        app.setProbeAlertEnabled(Boolean.TRUE.equals(app.getProbeAlertEnabled()));
+        app.setProbeOfflineThresholdSeconds(normalizeProbeOfflineThresholdSeconds(app.getProbeOfflineThresholdSeconds()));
+        app.setProbeAlertOnOnline(Boolean.TRUE.equals(app.getProbeAlertOnOnline()));
+        app.setProbeAlertOnOffline(app.getProbeAlertOnOffline() == null ? Boolean.TRUE : app.getProbeAlertOnOffline());
+        app.setProbeAlertOnRecovered(app.getProbeAlertOnRecovered() == null ? Boolean.TRUE : app.getProbeAlertOnRecovered());
         SystemIndex systemIndex = systemRepository.save(new SystemIndex(app));
         elasticsearchOperations.indexOps(SystemIndex.class).refresh();
         return convertApp(systemIndex);

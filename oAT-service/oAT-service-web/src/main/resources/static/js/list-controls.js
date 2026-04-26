@@ -97,6 +97,15 @@
             );
         }
 
+        function refresh(resetPage) {
+            $tbody = $table.find('tbody').first();
+            $primaryRows = $tbody.children('tr').not('.js-list-detail');
+            if (resetPage) {
+                currentPage = 1;
+            }
+            apply();
+        }
+
         $toolbar.on('input', '.js-list-search-input', function () {
             currentPage = 1;
             apply();
@@ -111,8 +120,19 @@
             apply();
         });
 
+        $toolbar.data('oatListControlRefresh', refresh);
         apply();
     }
+
+    window.OatListControls = window.OatListControls || {};
+    window.OatListControls.refresh = function (tableSelector, resetPage) {
+        $('.js-list-control').each(function () {
+            var $toolbar = $(this);
+            if ($toolbar.data('table') === tableSelector && typeof $toolbar.data('oatListControlRefresh') === 'function') {
+                $toolbar.data('oatListControlRefresh')(resetPage);
+            }
+        });
+    };
 
     $(function () {
         $('.js-list-control').each(initListControl);

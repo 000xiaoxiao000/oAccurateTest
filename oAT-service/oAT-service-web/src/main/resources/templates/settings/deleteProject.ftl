@@ -96,12 +96,19 @@
     });
 
     $('#confirm-delete-btn').click(function() {
+        var $button = $(this);
         var password = $('#password').val();
         if (!password) {
             $('#error-text').text('请输入密码');
             $('#error-message-box').show();
             return;
         }
+
+        if ($button.hasClass('disabled')) {
+            return;
+        }
+        $button.addClass('loading disabled').prop('disabled', true);
+        $('#password, #toggle-password').prop('disabled', true).addClass('disabled');
 
         $.ajax({
             url: '/p/${project.id}/doDelete',
@@ -116,12 +123,16 @@
                         window.location.href = response.data || '/myProjects';
                     }, 1500);
                 } else {
+                    $button.removeClass('loading disabled').prop('disabled', false);
+                    $('#password, #toggle-password').prop('disabled', false).removeClass('disabled');
                     // 显示错误信息
                     $('#error-text').text(response.message || '删除失败');
                     $('#error-message-box').show();
                 }
             },
             error: function() {
+                $button.removeClass('loading disabled').prop('disabled', false);
+                $('#password, #toggle-password').prop('disabled', false).removeClass('disabled');
                 $('#error-text').text('请求失败，请稍后重试');
                 $('#error-message-box').show();
             }

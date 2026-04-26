@@ -13,7 +13,10 @@ import com.oAT.web.control.entity.Param;
 import com.oAT.web.control.entity.RedisGraphNode;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.control.entity.StackItem;
+import com.oAT.web.domain.RemoteCallResolver;
+import com.oAT.web.esDao.ApiEndpointRepository;
 import com.oAT.web.esDao.StaticInfoRepository;
+import com.oAT.web.esDao.entity.ApiEndpointIndex;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.LabelGroup;
@@ -80,6 +83,9 @@ public class SnapshotControl {
 
     @Autowired
     private ApiEndpointAnalysisService apiEndpointAnalysisService;
+
+    @Autowired
+    private ApiEndpointRepository apiEndpointRepository;
 
     @PostMapping("/save")
     @ResponseBody
@@ -646,13 +652,21 @@ public class SnapshotControl {
     }
 
     @RequestMapping("/node")
-    public String openNodeDetail(String traceId, String nodeId, Model model) {
-        TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(traceId));
+    public String openNodeDetail(@PathVariable String projectId, String traceId, String nodeId, Model model) {
+        TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(traceId), buildRemoteCallResolver(projectId));
         GraphNode graphNode = parse.getGraphNode(nodeId);
         if (graphNode != null) {
             return openGraphNodeDetail(traceId, graphNode, model);
         }
         return openRawTraceNodeDetail(traceId, nodeId, model);
+    }
+
+    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
+        List<AppVo> apps = appService.getAppList(projectId);
+        List<ApiEndpointIndex> endpoints = apps.stream()
+                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
+                .collect(Collectors.toList());
+        return new RemoteCallResolver(apps, endpoints);
     }
 
     private Map<String, TraceNode> buildTraceNodeMap(String traceId) {
@@ -773,7 +787,7 @@ public class SnapshotControl {
     @RequestMapping("/detail/graph/{traceId}")
     @ResponseBody
     public GraphView getGraphView(@PathVariable String projectId, @PathVariable String traceId) {
-        return new TraceGraphParse(buildTraceNodeMap(traceId)).getGraphView();
+        return new TraceGraphParse(buildTraceNodeMap(traceId), buildRemoteCallResolver(projectId)).getGraphView();
     }
 
     @RequestMapping("/detail/stack/{traceId}")
@@ -1039,7 +1053,7 @@ public class SnapshotControl {
 
     @RequestMapping("/getTraceGraph")
     @ResponseBody
-    public GraphView getTraceGraph(String traceId, HttpSession session) {
+    public GraphView getTraceGraph(@PathVariable String projectId, String traceId, HttpSession session) {
         HashMap<String, TraceNode> nodes = new HashMap<>();
         Collection<TraceNode> list = snapshotService.getTraceNodes(traceId);
         if (list == null || list.isEmpty()) {
@@ -1048,7 +1062,7 @@ public class SnapshotControl {
         for (TraceNode node : list) {
             nodes.put(node.getTraceNodeId(), node);
         }
-        return new TraceGraphParse(nodes).getGraphView();
+        return new TraceGraphParse(nodes, buildRemoteCallResolver(projectId)).getGraphView();
     }
 
 

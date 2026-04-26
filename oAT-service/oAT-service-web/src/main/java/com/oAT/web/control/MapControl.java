@@ -5,6 +5,7 @@ import com.oAT.agent.model.TraceNode;
 import com.oAT.web.common.ClassStructure;
 import com.oAT.web.common.ClassUtil;
 import com.oAT.web.domain.*;
+import com.oAT.web.esDao.ApiEndpointRepository;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.BusinessException;
@@ -52,6 +53,9 @@ public class MapControl {
 
     @Autowired
     StaticInfoRepository staticInfoRepository;
+
+    @Autowired
+    ApiEndpointRepository apiEndpointRepository;
 
     @Value("${rmi.server.port}")
     private int rmiPort;
@@ -122,7 +126,11 @@ public class MapControl {
                 .filter(snapshot -> StringUtils.hasText(snapshot.getTraceId()))
                 .collect(Collectors.toMap(SystemSnapshot::getId, this::getTraceNodesSafely, (left, right) -> left));
         Collection<Collection<TraceNode>> liveTraceNodeGroups = getRecentLiveTraceNodeGroups(appList);
-        return new AppRelationLayer(appList, snapshots, traceNodesBySnapshotId, liveTraceNodeGroups).elements();
+        List<ApiEndpointIndex> endpoints = appList.stream()
+                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
+                .collect(Collectors.toList());
+        RemoteCallResolver remoteCallResolver = new RemoteCallResolver(appList, endpoints);
+        return new AppRelationLayer(appList, snapshots, traceNodesBySnapshotId, liveTraceNodeGroups, remoteCallResolver).elements();
     }
 
     private Collection<Collection<TraceNode>> getRecentLiveTraceNodeGroups(List<AppVo> appList) {

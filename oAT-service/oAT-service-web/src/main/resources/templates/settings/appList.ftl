@@ -661,7 +661,7 @@
                                     ${app.srcName!'-'}
                                 </td>
                                 <td class="center aligned">
-                                    <a href="/p/${project.id}/app/online?appId=${app.id}">${app.onlineCount!0}</a>
+                                    <a class="project-app-online-count" href="/p/${project.id}/app/online?appId=${app.id}" data-app-id="${app.id}" data-online-count="${app.onlineCount!0}">${app.onlineCount!0}</a>
                                 </td>
 
                                 <td class="center aligned">
@@ -720,6 +720,34 @@
         on: 'hover'
     });
     $('.commit-id').popup();
+
+    function refreshAppOnlineCounts() {
+        $.get('/p/${project.id}/app/online-counts', function (res) {
+            if (!(res && (res.success || res.result) && res.counts)) {
+                return;
+            }
+            $('.project-app-online-count').each(function () {
+                var $count = $(this);
+                var appId = $count.data('app-id');
+                if (!Object.prototype.hasOwnProperty.call(res.counts, appId)) {
+                    return;
+                }
+                var newCount = Number(res.counts[appId]) || 0;
+                var oldCount = Number($count.attr('data-online-count')) || 0;
+                if (newCount === oldCount) {
+                    return;
+                }
+                $count.attr('data-online-count', newCount).text(newCount);
+                $count.closest('td').transition('pulse');
+            });
+        });
+    }
+
+    var appOnlineCountRefreshTimer = setInterval(refreshAppOnlineCounts, 5000);
+    refreshAppOnlineCounts();
+    $(window).on('beforeunload', function () {
+        clearInterval(appOnlineCountRefreshTimer);
+    });
 
     function openDelDialog(appId) {
         // Set up the click handler for the confirmation button
