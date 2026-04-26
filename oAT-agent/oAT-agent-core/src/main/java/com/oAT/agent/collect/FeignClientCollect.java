@@ -18,6 +18,12 @@ import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.*;
 
+/**
+ * Feign HTTP 客户端采集器
+ * <p>
+ * 继承自 HttpCollectBase，属于 HTTP 协议层
+ * 用于追踪 Feign 声明式 HTTP 客户端调用
+ */
 public class FeignClientCollect extends AbstractByteTransformCollect implements ICollect {
     private final static Log logger = LogFactory.getLog(FeignClientCollect.class);
 
@@ -44,10 +50,10 @@ public class FeignClientCollect extends AbstractByteTransformCollect implements 
     }
 
     public FeignTraceNode begin(Object[] params) {
+        if (traceContext.getTraceSession() == null) {
+            return null;
+        }
         try {
-            if (traceContext.getTraceSession() == null) {
-                return null;
-            }
             FeignTraceNode node = new FeignTraceNode();
             InvocationAdapter invocation = new InvocationAdapter(params[0]);
 //        InvokerAdapter invoker = new InvokerAdapter(invocation.getRequestTemplate());

@@ -27,7 +27,12 @@ import java.security.ProtectionDomain;
 import java.util.*;
 import java.util.regex.Pattern;
 
-
+/**
+ * HTTP Servlet 采集器
+ * <p>
+ * 继承自 HttpCollectBase，属于 HTTP 协议层
+ * 用于追踪 HTTP 服务端请求（Servlet）
+ */
 public class HttpServletCollect extends AbstractByteTransformCollect {
     private final static Log logger = LogFactory.getLog(HttpServletCollect.class);
 
