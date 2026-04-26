@@ -562,9 +562,13 @@ public class UsecaseServiceImpl implements UsecaseService {
      */
     @Override
     public void doDeleteUsecase(String projectId, String id) {
+        Assert.hasText(projectId, "projectId不能为空");
+        Assert.hasText(id, "用例ID不能为空");
         Optional<CaseCenterIndex> op = centerRepository.findById(id);
-        Assert.isTrue(op.isPresent(), "not found usecase by id=" + id);
-        Assert.notNull(op.get().getUsecase(), "not found usecase by id=" + id);
+        if (!op.isPresent() || op.get().getUsecase() == null) {
+            logger.warn("删除用例跳过，目标用例已不存在, projectId={}, usecaseId={}", projectId, id);
+            return;
+        }
         Assert.isTrue(op.get().getUsecase().getProjectId().equals(projectId), "the usecase not belong to project Id=" + projectId);
         centerRepository.deleteById(id);
     }

@@ -164,7 +164,7 @@
 
         .my-projects-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
             gap: 12px;
             align-items: stretch;
         }
@@ -191,8 +191,8 @@
         .my-project-card {
             display: flex;
             flex-direction: column;
-            min-height: 226px;
-            border-radius: 16px !important;
+            min-height: 0;
+            border-radius: 14px !important;
             border: 1px solid #e5edf7 !important;
             box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055) !important;
             transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
@@ -215,12 +215,12 @@
             display: flex;
             flex-direction: column;
             flex: 1;
-            padding: 16px 18px 12px;
+            padding: 12px 14px 10px;
         }
 
         .my-project-card-header {
-            margin: -16px -18px 12px;
-            padding: 14px 18px 12px;
+            margin: -12px -14px 10px;
+            padding: 12px 14px 10px;
             background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
             border-bottom: 1px solid #e6eef8;
         }
@@ -230,7 +230,7 @@
             align-items: center;
             justify-content: space-between;
             gap: 8px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .my-project-card-top {
@@ -247,9 +247,9 @@
 
         .my-project-card-title {
             display: block;
-            font-size: 19px;
+            font-size: 17px;
             font-weight: 800;
-            line-height: 1.28;
+            line-height: 1.24;
             color: #172033;
             word-break: break-word;
             overflow-wrap: anywhere;
@@ -258,8 +258,8 @@
         .my-project-card-id {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
-            margin-top: 6px;
+            gap: 5px;
+            margin-top: 4px;
             color: #748294;
             font-size: 12px;
             font-weight: 600;
@@ -280,7 +280,7 @@
             flex-shrink: 0;
             max-width: 48%;
             border-radius: 999px;
-            padding: 6px 11px;
+            padding: 4px 9px;
             background: #eaf4ff;
             color: #1d6fa5;
             font-size: 12px;
@@ -292,13 +292,12 @@
 
         .my-project-card-description {
             color: #5f6f82;
-            line-height: 1.55;
-            min-height: 42px;
-            margin-bottom: 12px;
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
+            line-height: 1.45;
+            min-height: 0;
+            margin-bottom: 10px;
+            font-size: 13px;
+            word-break: break-word;
+            overflow-wrap: anywhere;
         }
 
         .my-project-card-description.is-empty {
@@ -306,23 +305,27 @@
             font-style: italic;
         }
 
+        .my-project-card-description:empty {
+            display: none;
+        }
+
         .my-project-card-meta {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 6px;
             margin-top: auto;
         }
 
         .my-project-meta-item {
             min-width: 0;
-            padding: 9px 11px;
+            padding: 7px 8px;
             background: #f8fafc;
-            border-radius: 10px;
+            border-radius: 9px;
             border: 1px solid #edf2f7;
         }
 
         .my-project-meta-item--wide {
-            grid-column: span 2;
+            grid-column: span 3;
         }
 
         .my-project-meta-item--primary {
@@ -343,14 +346,16 @@
         }
 
         .my-project-meta-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #8b95a1;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
 
         .my-project-meta-value {
             color: #243041;
+            font-size: 13px;
             font-weight: 700;
+            line-height: 1.35;
             word-break: break-word;
             overflow-wrap: anywhere;
         }
@@ -365,7 +370,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 18px 14px;
+            padding: 10px 14px 12px;
             border-top: 1px solid #edf2f7;
             background: #fcfdff;
         }
@@ -378,9 +383,9 @@
         .my-project-quick-note {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             min-width: 0;
-            padding: 6px 10px;
+            padding: 4px 8px;
             border-radius: 999px;
             background: #ecfdf3;
             color: #21824a;
@@ -389,7 +394,7 @@
         }
 
         .my-project-quick-note-placeholder {
-            min-height: 26px;
+            min-height: 22px;
         }
 
         .my-project-card-settings:hover {
@@ -398,7 +403,7 @@
 
         .my-project-enter-btn.ui.button {
             border-radius: 9px;
-            padding: 10px 14px;
+            padding: 8px 12px;
         }
 
         .my-projects-pagination-wrap {
@@ -790,7 +795,7 @@
                             <#if projectDescription?has_content>
                                 ${projectDescription}
                             <#else>
-                                暂无项目描述，建议补充项目目标、使用场景或协作说明。
+暂无项目描述，建议补充项目目标。
                             </#if>
                         </div>
                         <div class="my-project-card-meta">
