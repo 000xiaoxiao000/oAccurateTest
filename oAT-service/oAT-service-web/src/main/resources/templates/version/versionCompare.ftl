@@ -601,12 +601,12 @@
                             <label>比较范围（包名）：</label>
                             <input type="text" name="packageName" placeholder="默认是包的所有范围（例如 com.example）">
                         </div>
-                        <button class="ui button primary" type="submit">开始 Git 比对</button>
+                        <button class="ui button primary" type="submit" id="gitCompareSubmitButton">开始 Git 比对</button>
                     </form>
                 </div>
 
                 <div class="ui tab" data-tab="package">
-                    <form class="ui form" action="compare/start" method="post">
+                    <form class="ui form" action="compare/start" method="post" id="packageCompareForm">
                         <div class="two fields">
                             <div class=" field upload file">
                                 <label>源版本(新)：</label>
@@ -670,7 +670,7 @@
                             <label>比较范围（应用包名）：</label>
                             <input type="text" name="packageName" placeholder="默认是包的所有范围">
                         </div>
-                        <button class="ui button primary" type="submit">开始比对</button>
+                        <button class="ui button primary" type="submit" id="packageCompareSubmitButton">开始比对</button>
                     </form>
                 </div>
             </div>
@@ -1102,7 +1102,34 @@
         });
 
         $('#gitCompareForm').on('submit', function() {
+            var $form = $(this);
+            if (oatIsFormSubmitting($form)) {
+                return false;
+            }
             persistGitInputs();
+            oatSetFormSubmitting($form, true, {
+                submitButton: '#gitCompareSubmitButton',
+                keepFieldsEnabled: true,
+                readonlyFields: true,
+                extraControls: '#gitComparePickBranchButton, #gitComparePickBranchInlineButton, #gitComparePickOldButton, #gitComparePickNewButton, .git-compare-panel .menu .item',
+                message: '正在发起 Git 比对...'
+            });
+            return true;
+        });
+
+        $('#packageCompareForm').on('submit', function() {
+            var $form = $(this);
+            if (oatIsFormSubmitting($form)) {
+                return false;
+            }
+            oatSetFormSubmitting($form, true, {
+                submitButton: '#packageCompareSubmitButton',
+                keepFieldsEnabled: true,
+                readonlyFields: true,
+                extraControls: '.git-compare-panel .menu .item',
+                message: '正在发起制品包比对...'
+            });
+            return true;
         });
 
         renderVersionBasedGitOptions();

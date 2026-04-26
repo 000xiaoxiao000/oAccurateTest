@@ -332,7 +332,10 @@
                 }
                 oatSetFormSubmitting($form, true, {
                     submitButton: $form.find('.ui.primary.button').first(),
-                    keepFieldsEnabled: true
+                    keepFieldsEnabled: true,
+                    readonlyFields: true,
+                    extraControls: '.project-settings-actions .ui.button',
+                    message: '正在更新项目信息...'
                 });
                 return true;
             },

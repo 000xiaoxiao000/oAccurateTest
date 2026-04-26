@@ -1335,4 +1335,62 @@ body {
     }
 }
 
+/* Unified submitting/disabled state */
+.oat-form-submitting {
+    position: relative;
+    opacity: .58;
+    filter: grayscale(.16);
+    user-select: none;
+    transition: opacity .18s ease, filter .18s ease;
+}
+
+.oat-form-submitting input,
+.oat-form-submitting textarea,
+.oat-form-submitting select,
+.oat-form-submitting .ui.dropdown,
+.oat-form-submitting .ui.checkbox,
+.oat-form-submitting .ui.radio.checkbox {
+    cursor: not-allowed !important;
+}
+
+.oat-form-submitting .ui.button.loading {
+    opacity: 1;
+    filter: none;
+}
+
+.oat-form-submitting[data-oat-submitting-message]:after {
+    content: attr(data-oat-submitting-message);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 30;
+    transform: translate(-50%, -50%);
+    padding: 10px 14px;
+    border: 1px solid rgba(33, 133, 208, .2);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .94);
+    color: var(--oat-accent, #2185d0);
+    font-size: 13px;
+    font-weight: 800;
+    box-shadow: 0 14px 30px rgba(15, 23, 42, .14);
+    white-space: nowrap;
+}
+
+.oat-submitting-scope {
+    opacity: .56 !important;
+    filter: grayscale(.16);
+    pointer-events: none !important;
+    user-select: none;
+}
+
+a.disabled[aria-disabled="true"],
+a.ui.button.disabled,
+.ui.button.disabled {
+    cursor: not-allowed !important;
+}
+
+.CodeMirror.disabled {
+    pointer-events: none;
+}
+
 /*流程图dagre-d3 样式 ============end*/

@@ -283,7 +283,7 @@
         </form>
     </div>
     <div class="actions">
-        <div class="ui positive button" onclick="doCreateFolder()">创建</div>
+        <div id="createFolderButton" class="ui positive button" onclick="doCreateFolder()">创建</div>
         <div class="ui cancel button">不</div>
     </div>
 </div>
@@ -298,7 +298,7 @@
         </form>
     </div>
     <div class="actions">
-        <div class="ui positive button" onclick="doSaveFolder()">更新</div>
+        <div id="saveFolderButton" class="ui positive button" onclick="doSaveFolder()">更新</div>
         <div class="ui cancel button">不</div>
     </div>
 </div>
@@ -465,24 +465,40 @@
         renderFolderDeleteDialog(directoryName, impact);
 
         $('#deFolderButton').off('click').on('click', function () {
+            var $scope = $('#delFolder');
+            if (oatIsFormSubmitting($scope)) {
+                return;
+            }
+            var submittingOptions = {
+                submitButton: '#deFolderButton',
+                extraControls: '#delFolder .actions .ui.button',
+                message: '正在删除目录...'
+            };
             var requestUrl = baseUrl + (impact.hasImpact ? '&deleteUsecases=true' : '');
-            var deleteResult = $.ajax({
+            oatSetFormSubmitting($scope, true, submittingOptions);
+            $.ajax({
                 url: requestUrl,
                 type: 'DELETE',
-                async: false
-            }).responseJSON;
-            if (deleteResult && deleteResult.result) {
-                showToast(getResultMessage(deleteResult, '目录删除成功'), 'success');
-                $('#delFolder').modal('hide');
-                var currentDirectory = '${currentDir}';
-                if (currentDirectory === directoryId) {
-                    reloadUsecaseList('${directory!"root"}' === 'root' ? 'root' : $('#parentId').val());
-                    return;
+                success: function(deleteResult) {
+                    if (deleteResult && deleteResult.result) {
+                        showToast(getResultMessage(deleteResult, '目录删除成功'), 'success');
+                        $('#delFolder').modal('hide');
+                        var currentDirectory = '${currentDir}';
+                        if (currentDirectory === directoryId) {
+                            reloadUsecaseList('${directory!"root"}' === 'root' ? 'root' : $('#parentId').val());
+                            return;
+                        }
+                        reloadUsecaseList();
+                    } else {
+                        oatSetFormSubmitting($scope, false, submittingOptions);
+                        showToast(getResultMessage(deleteResult, '目录删除失败'), 'error');
+                    }
+                },
+                error: function() {
+                    oatSetFormSubmitting($scope, false, submittingOptions);
+                    showToast('目录删除失败', 'error');
                 }
-                reloadUsecaseList();
-            } else {
-                showToast(getResultMessage(deleteResult, '目录删除失败'), 'error');
-            }
+            });
         });
 
         $('#delFolder').modal('show');
@@ -491,18 +507,34 @@
     function openDeleteCaseDialog(id, name) {
         $("#deleteUsecaseContent").html(name);
         $("#deleteUsecaseButton").off('click').on('click', function () {
-            var resultInform = $.ajax({
+            var $scope = $('#deleteUsecaseDialog');
+            if (oatIsFormSubmitting($scope)) {
+                return;
+            }
+            var submittingOptions = {
+                submitButton: '#deleteUsecaseButton',
+                extraControls: '#deleteUsecaseDialog .actions .ui.button',
+                message: '正在删除用例...'
+            };
+            oatSetFormSubmitting($scope, true, submittingOptions);
+            $.ajax({
                 url: "/p/${project.id}/usecase/doDelete?id=" + id,
                 type: 'DELETE',
-                async: false
-            }).responseJSON;
-            if (resultInform.result) {
-                showToast(getResultMessage(resultInform, '用例删除成功'), 'success');
-                $("#deleteUsecaseDialog").modal('hide');
-                reloadUsecaseList();
-            } else {
-                showToast(getResultMessage(resultInform, '用例删除失败'), 'error');
-            }
+                success: function(resultInform) {
+                    if (resultInform.result) {
+                        showToast(getResultMessage(resultInform, '用例删除成功'), 'success');
+                        $("#deleteUsecaseDialog").modal('hide');
+                        reloadUsecaseList();
+                    } else {
+                        oatSetFormSubmitting($scope, false, submittingOptions);
+                        showToast(getResultMessage(resultInform, '用例删除失败'), 'error');
+                    }
+                },
+                error: function() {
+                    oatSetFormSubmitting($scope, false, submittingOptions);
+                    showToast('用例删除失败', 'error');
+                }
+            });
         });
         $("#deleteUsecaseDialog").modal('show');
     }
@@ -541,31 +573,65 @@
     });
 
     function doCreateFolder() {
-        var resultInform = $.ajax({
-            url: "/p/${project.id}/usecase/directory/new",
-            data: $("#addFolderForm").serialize(),
-            async: false
-        }).responseJSON;
-        if (resultInform.result) {
-            showToast(getResultMessage(resultInform, '目录创建成功'), 'success');
-            window.location = window.location;
-        } else {
-            showToast(getResultMessage(resultInform, '目录创建失败'), 'error');
+        var $form = $("#addFolderForm");
+        if (oatIsFormSubmitting($form)) {
+            return;
         }
+        var data = $form.serialize();
+        var submittingOptions = {
+            submitButton: '#createFolderButton',
+            extraControls: '#addFolder .actions .ui.button',
+            message: '正在创建目录...'
+        };
+        oatSetFormSubmitting($form, true, submittingOptions);
+        $.ajax({
+            url: "/p/${project.id}/usecase/directory/new",
+            data: data,
+            success: function(resultInform) {
+                if (resultInform.result) {
+                    showToast(getResultMessage(resultInform, '目录创建成功'), 'success');
+                    window.location = window.location;
+                } else {
+                    oatSetFormSubmitting($form, false, submittingOptions);
+                    showToast(getResultMessage(resultInform, '目录创建失败'), 'error');
+                }
+            },
+            error: function() {
+                oatSetFormSubmitting($form, false, submittingOptions);
+                showToast('目录创建失败', 'error');
+            }
+        });
     }
 
     function doSaveFolder() {
-        var resultInform = $.ajax({
-            url: "/p/${project.id}/usecase/directory/save",
-            data: $("#editFolderForm").serialize(),
-            async: false
-        }).responseJSON;
-        if (resultInform.result) {
-            showToast(getResultMessage(resultInform, '目录保存成功'), 'success');
-            window.location = window.location;
-        } else {
-            showToast(getResultMessage(resultInform, '目录保存失败'), 'error');
+        var $form = $("#editFolderForm");
+        if (oatIsFormSubmitting($form)) {
+            return;
         }
+        var data = $form.serialize();
+        var submittingOptions = {
+            submitButton: '#saveFolderButton',
+            extraControls: '#editFolder .actions .ui.button',
+            message: '正在保存目录...'
+        };
+        oatSetFormSubmitting($form, true, submittingOptions);
+        $.ajax({
+            url: "/p/${project.id}/usecase/directory/save",
+            data: data,
+            success: function(resultInform) {
+                if (resultInform.result) {
+                    showToast(getResultMessage(resultInform, '目录保存成功'), 'success');
+                    window.location = window.location;
+                } else {
+                    oatSetFormSubmitting($form, false, submittingOptions);
+                    showToast(getResultMessage(resultInform, '目录保存失败'), 'error');
+                }
+            },
+            error: function() {
+                oatSetFormSubmitting($form, false, submittingOptions);
+                showToast('目录保存失败', 'error');
+            }
+        });
     }
 
     $(function () {

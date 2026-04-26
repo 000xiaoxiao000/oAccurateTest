@@ -29,6 +29,7 @@ body {
 }
 
 body {
+    margin: 0;
     background: var(--oat-bg);
     color: var(--oat-text);
     -webkit-font-smoothing: antialiased;
@@ -173,14 +174,20 @@ a:hover {
     box-shadow: var(--oat-shadow-xs);
 }
 
-.app-header {
+.app-header,
+.app-header.ui.segment,
+.app-header.top.ui.segment {
     position: sticky;
     top: 0;
     z-index: 900;
-    margin: 0;
-    padding: 8px 0;
+    margin: 0 !important;
+    padding: 8px 0 !important;
+    border-top: 0 !important;
+    border-right: 0 !important;
+    border-left: 0 !important;
+    border-bottom: 1px solid rgba(15, 23, 42, .08) !important;
+    border-radius: 0 0 var(--oat-radius-lg) var(--oat-radius-lg) !important;
     background: rgba(255, 255, 255, .92);
-    border-bottom: 1px solid rgba(15, 23, 42, .08);
     box-shadow: 0 6px 20px rgba(15, 23, 42, .05);
     backdrop-filter: blur(14px);
 }

@@ -378,7 +378,8 @@
         oatSetFormSubmitting($form, true, {
             submitButton: '#createAppSubmitButton',
             editor: editor,
-            extraControls: '.project-settings-hero-actions .ui.button'
+            extraControls: '.project-settings-hero-actions .ui.button',
+            message: '正在创建应用...'
         });
         $.post('/p/${project.id}/app/doCreate', data, function (res) {
             if (res.success || res.result) {

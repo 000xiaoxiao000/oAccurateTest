@@ -162,7 +162,13 @@ function oatSetFormSubmitting(form, submitting, options) {
     var $submitButton = settings.submitButton ? $(settings.submitButton) : $form.find('[type="submit"], .ui.primary.button, .ui.secondary.button').last();
 
     $form.data('oatSubmitting', submitting);
-    $form.toggleClass('loading disabled', submitting);
+    $form.toggleClass('loading disabled oat-form-submitting', submitting)
+            .attr('aria-busy', submitting ? 'true' : 'false');
+    if (settings.message) {
+        $form.attr('data-oat-submitting-message', settings.message);
+    } else if (!submitting) {
+        $form.removeAttr('data-oat-submitting-message');
+    }
     if (!settings.keepFieldsEnabled) {
         $form.find('input, textarea, select, button').prop('disabled', submitting);
     }
@@ -188,6 +194,14 @@ function oatSetFormSubmitting(form, submitting, options) {
 function oatIsFormSubmitting(form) {
     return Boolean($(form).data('oatSubmitting'));
 }
+
+$(document).on('click', 'a.disabled, a[aria-disabled="true"], .ui.button.disabled', function(event) {
+    if ($(this).hasClass('disabled') || $(this).attr('aria-disabled') === 'true') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+    }
+});
 
 function dismissToast($toast) {
     if (typeof $toast.transition === 'function') {

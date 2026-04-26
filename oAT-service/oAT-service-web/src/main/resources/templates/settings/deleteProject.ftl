@@ -96,19 +96,23 @@
     });
 
     $('#confirm-delete-btn').click(function() {
-        var $button = $(this);
+        var $form = $('#delete-form');
         var password = $('#password').val();
+        var submittingOptions = {
+            submitButton: '#confirm-delete-btn',
+            extraControls: '#toggle-password, .app-unified-form-actions .ui.button',
+            message: '正在删除项目，请稍候...'
+        };
         if (!password) {
             $('#error-text').text('请输入密码');
             $('#error-message-box').show();
             return;
         }
 
-        if ($button.hasClass('disabled')) {
+        if (oatIsFormSubmitting($form)) {
             return;
         }
-        $button.addClass('loading disabled').prop('disabled', true);
-        $('#password, #toggle-password').prop('disabled', true).addClass('disabled');
+        oatSetFormSubmitting($form, true, submittingOptions);
 
         $.ajax({
             url: '/p/${project.id}/doDelete',
@@ -123,16 +127,14 @@
                         window.location.href = response.data || '/myProjects';
                     }, 1500);
                 } else {
-                    $button.removeClass('loading disabled').prop('disabled', false);
-                    $('#password, #toggle-password').prop('disabled', false).removeClass('disabled');
+                    oatSetFormSubmitting($form, false, submittingOptions);
                     // 显示错误信息
                     $('#error-text').text(response.message || '删除失败');
                     $('#error-message-box').show();
                 }
             },
             error: function() {
-                $button.removeClass('loading disabled').prop('disabled', false);
-                $('#password, #toggle-password').prop('disabled', false).removeClass('disabled');
+                oatSetFormSubmitting($form, false, submittingOptions);
                 $('#error-text').text('请求失败，请稍后重试');
                 $('#error-message-box').show();
             }
