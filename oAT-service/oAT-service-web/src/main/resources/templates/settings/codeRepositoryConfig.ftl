@@ -6,6 +6,7 @@
     <#include "../common.ftl">
     <style>
         .project-settings-page {
+            position: relative;
             margin-top: 18px;
             margin-bottom: 42px;
         }
@@ -36,6 +37,44 @@
 
         .project-settings-main {
             overflow: hidden;
+        }
+
+        .repository-submit-mask {
+            position: absolute;
+            inset: 0;
+            z-index: 30;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 16px;
+            background: rgba(248, 251, 255, 0.72);
+            backdrop-filter: blur(2px);
+        }
+
+        .repository-submit-card {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            border: 1px solid #dbeafe;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.94);
+            color: #1e3a8a;
+            box-shadow: 0 18px 36px rgba(15, 23, 42, 0.14);
+            font-weight: 700;
+        }
+
+        .project-settings-page.repository-submitting .project-settings-breadcrumb,
+        .project-settings-page.repository-submitting .project-settings-layout {
+            opacity: 0.56;
+            filter: grayscale(0.18);
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .project-settings-page.repository-submitting .repository-submit-mask {
+            display: flex;
+            pointer-events: all;
         }
 
         .project-settings-hero {
@@ -149,9 +188,72 @@
             padding-bottom: 12px;
         }
 
+        .repository-form-card {
+            padding: 24px;
+            border: 1px solid #e6eef7;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+        }
+
+        .repository-help-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 22px;
+            padding: 12px 14px;
+            border: 1px solid #dbeafe;
+            border-radius: 12px;
+            background: #eff6ff;
+            color: #476582;
+            line-height: 1.7;
+        }
+
+        .repository-help-card .icon {
+            margin-top: 3px;
+            color: #2185d0;
+        }
+
+        .repository-action-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-top: 8px;
+            padding-top: 18px;
+            border-top: 1px solid #edf2f7;
+        }
+
+        .repository-action-tip {
+            color: #8a97a6;
+            font-size: 13px;
+        }
+
+        .repository-save-button.ui.button {
+            min-width: 128px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #16a085 0%, #2185d0 100%) !important;
+            color: #fff !important;
+            box-shadow: 0 10px 22px rgba(33, 133, 208, 0.22);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .repository-save-button.ui.button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 26px rgba(33, 133, 208, 0.28);
+        }
+
         @media only screen and (max-width: 960px) {
             .project-settings-layout {
                 grid-template-columns: 1fr;
+            }
+
+            .repository-action-bar {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .repository-save-button.ui.button {
+                width: 100%;
             }
         }
 
@@ -168,7 +270,13 @@
 <#assign settingItemActive="active">
 <#include "../projectHeader.ftl">
 
-<div class="ui container project-settings-page">
+<div class="ui container project-settings-page" id="repositoryConfigPage">
+    <div class="repository-submit-mask">
+        <div class="repository-submit-card">
+            <i class="notched circle loading icon"></i>
+            正在保存仓库配置，请稍候...
+        </div>
+    </div>
     <div class="ui small breadcrumb project-settings-breadcrumb">
         <a class="section" href="/p/${project.id}/home">${project.name}</a>
         <span class="divider">/</span>
@@ -212,7 +320,11 @@
                 <h2 class="project-settings-section-title">仓库接入信息</h2>
                 <p class="project-settings-section-desc">支持用户名/密码和 Token 两种认证方式。保存后将跳转回应用与代码管理页。</p>
 
-                <form class="ui form project-settings-form" method="post" action="/p/${project.id}/app/${app.id}/repository/save">
+                <form class="ui form project-settings-form repository-form-card" method="post" action="/p/${project.id}/app/${app.id}/repository/save">
+                    <div class="repository-help-card">
+                        <i class="info circle icon"></i>
+                        <div>建议填写可稳定访问的仓库地址；使用 Token 时无需填写用户名，只需在密码框中填入 Token。</div>
+                    </div>
                     <div class="field">
                         <label>仓库地址</label>
                         <input type="text" name="repoAddress" placeholder="https://github.com/username/repo.git" value="${(app.repoAddress)!''}">
@@ -243,9 +355,12 @@
                         </div>
                     </div>
 
-                    <button id="repositoryConfigSubmitButton" class="ui secondary button" type="button" onclick="submitRepositoryConfig()">
-                        <i class="check icon"></i> 保存配置
-                    </button>
+                    <div class="repository-action-bar">
+                        <div class="repository-action-tip">保存过程中页面会暂时锁定，避免重复提交。</div>
+                        <button id="repositoryConfigSubmitButton" class="ui button repository-save-button" type="button" onclick="submitRepositoryConfig()">
+                            <i class="check icon"></i> 保存配置
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
@@ -253,15 +368,27 @@
 </div>
 <!--初始化UI-->
 <script>
+    function setRepositorySubmitting($form, submitting) {
+        var submittingOptions = {
+            submitButton: '#repositoryConfigSubmitButton',
+            extraControls: '.project-settings-breadcrumb a, .project-settings-side a, .project-settings-side .item'
+        };
+        $('#repositoryConfigPage').toggleClass('repository-submitting', submitting);
+        oatSetFormSubmitting($form, submitting, submittingOptions);
+        if (!submitting) {
+            syncAuthTypeFields($('#authTypeDropdown').dropdown('get value'));
+        }
+    }
+
     function submitRepositoryConfig() {
-        var $form = $('.ui.form');
+        var $form = $('.project-settings-form');
         if (oatIsFormSubmitting($form)) {
             return;
         }
         var action = $form.attr('action');
         var data = $form.serialize();
 
-        oatSetFormSubmitting($form, true, {submitButton: '#repositoryConfigSubmitButton'});
+        setRepositorySubmitting($form, true);
         $.ajax({
             type: 'POST',
             url: action,
@@ -273,12 +400,12 @@
                         window.location.href = "/p/${project.id}/manageAppCode";
                     }, 1000);
                 } else {
-                    oatSetFormSubmitting($form, false, {submitButton: '#repositoryConfigSubmitButton'});
+                    setRepositorySubmitting($form, false);
                     showToast(res.message || '保存失败', 'error');
                 }
             },
             error: function() {
-                oatSetFormSubmitting($form, false, {submitButton: '#repositoryConfigSubmitButton'});
+                setRepositorySubmitting($form, false);
                 showToast('网络请求失败', 'error');
             }
         });
@@ -290,18 +417,22 @@
     });
     $('.poping.up').popup();
 
+    function syncAuthTypeFields(value) {
+        if (value === 'token') {
+            $('#usernameField').hide();
+            $('#repoUserNameInput').prop('disabled', true);
+            $('#passwordLabel').text('Token');
+        } else {
+            $('#usernameField').show();
+            $('#repoUserNameInput').prop('disabled', false);
+            $('#passwordLabel').text('密码');
+        }
+    }
+
     // Init Auth Type Dropdown logic
     $('#authTypeDropdown').dropdown({
         onChange: function(value) {
-            if (value === 'token') {
-                $('#usernameField').hide();
-                $('#repoUserNameInput').prop('disabled', true);
-                $('#passwordLabel').text('Token');
-            } else {
-                $('#usernameField').show();
-                $('#repoUserNameInput').prop('disabled', false);
-                $('#passwordLabel').text('密码');
-            }
+            syncAuthTypeFields(value);
         }
     });
 
