@@ -166,6 +166,10 @@ function oatSetFormSubmitting(form, submitting, options) {
     if (!settings.keepFieldsEnabled) {
         $form.find('input, textarea, select, button').prop('disabled', submitting);
     }
+    if (settings.readonlyFields) {
+        $form.find('input:not([type=hidden]), textarea').prop('readonly', submitting);
+        $form.find('select').prop('disabled', submitting);
+    }
     $form.find('.ui.button, .ui.checkbox, .ui.radio.checkbox, .ui.dropdown').toggleClass('disabled', submitting);
     $form.find('a.ui.button').toggleClass('disabled', submitting).attr('aria-disabled', submitting ? 'true' : 'false');
 

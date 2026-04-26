@@ -182,6 +182,50 @@
             align-items: center;
         }
 
+        .repository-auth-dropdown.ui.selection.dropdown {
+            border-color: #bfdbfe !important;
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            box-shadow: 0 8px 18px rgba(33, 133, 208, 0.08);
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        }
+
+        .repository-auth-dropdown.ui.selection.dropdown.has-selected {
+            border-color: #2185d0 !important;
+            background: #f0f8ff;
+            box-shadow: 0 0 0 3px rgba(33, 133, 208, 0.1);
+        }
+
+        .repository-auth-dropdown.ui.selection.dropdown > .text,
+        .repository-auth-dropdown.ui.selection.dropdown > .default.text {
+            color: #1f2937 !important;
+            font-weight: 800;
+        }
+
+        .repository-auth-dropdown.ui.dropdown .menu > .item.active,
+        .repository-auth-dropdown.ui.dropdown .menu > .item.selected {
+            background: #e8f3ff !important;
+            color: #1d6fa5 !important;
+            font-weight: 800 !important;
+        }
+
+        .repository-auth-selected-hint {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            margin-top: 8px;
+            padding: 7px 11px;
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            background: #eff6ff;
+            color: #1d6fa5;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .repository-auth-selected-hint .icon {
+            margin: 0 !important;
+        }
+
         .project-settings-form .ui.button {
             border-radius: 10px;
             padding-top: 12px;
@@ -331,14 +375,18 @@
                     </div>
                     <div class="field">
                         <label>认证类型</label>
-                        <div class="ui selection dropdown" id="authTypeDropdown">
+                        <div class="ui selection dropdown repository-auth-dropdown" id="authTypeDropdown">
                             <input type="hidden" id="authTypeInput">
                             <i class="dropdown icon"></i>
                             <div class="default text">用户名/密码</div>
                             <div class="menu">
-                                <div class="item" data-value="password">用户名/密码</div>
-                                <div class="item" data-value="token">Token</div>
+                                <div class="item" data-value="password"><i class="user lock icon"></i>用户名/密码</div>
+                                <div class="item" data-value="token"><i class="key icon"></i>Token</div>
                             </div>
+                        </div>
+                        <div class="repository-auth-selected-hint" id="authTypeSelectedHint">
+                            <i class="check circle icon"></i>
+                            已选择：<span>用户名/密码</span>
                         </div>
                     </div>
                     <div class="two fields" id="authFieldsRow">
@@ -418,7 +466,17 @@
     $('.poping.up').popup();
 
     function syncAuthTypeFields(value) {
-        if (value === 'token') {
+        var isToken = value === 'token';
+        var label = isToken ? 'Token' : '用户名/密码';
+
+        $('#authTypeDropdown')
+            .addClass('has-selected')
+            .find('> .text')
+            .removeClass('default')
+            .text(label);
+        $('#authTypeSelectedHint span').text(label);
+
+        if (isToken) {
             $('#usernameField').hide();
             $('#repoUserNameInput').prop('disabled', true);
             $('#passwordLabel').text('Token');

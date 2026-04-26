@@ -11,7 +11,13 @@
 <#include  "../normalHeader.ftl">
 
 <!--内容主体-->
-<div class="ui container app-page-shell account-settings-page page-theme">
+<div class="ui container app-page-shell account-settings-page page-theme" id="passwordPage">
+    <div class="account-submit-mask">
+        <div class="account-submit-card">
+            <i class="notched circle loading icon"></i>
+            正在更改密码，请稍候...
+        </div>
+    </div>
     <div class="account-settings-hero">
         <div>
             <div class="account-settings-eyebrow">Account Settings</div>
@@ -78,7 +84,7 @@
                     </div>
                 </div>
                 <div class="account-settings-actions">
-                    <button class="ui primary button" type="button" onclick="doUpdate();">
+                    <button id="passwordSubmitButton" class="ui primary button" type="button" onclick="doUpdate();">
                         <i class="sync alternate icon"></i>
                         更改密码
                     </button>
@@ -96,25 +102,47 @@
         on: 'click'
     });
 
+    function setPasswordSubmitting(submitting) {
+        var $form = $("#passwordForm");
+        $('#passwordPage').toggleClass('account-submitting', submitting);
+        oatSetFormSubmitting($form, submitting, {
+            submitButton: '#passwordSubmitButton',
+            extraControls: '.account-settings-nav-item'
+        });
+    }
+
     function doUpdate() {
-        if (!$("#passwordForm").form('validate form')) {
+        var $form = $("#passwordForm");
+        if (oatIsFormSubmitting($form)) {
+            return false;
+        }
+        if (!$form.form('validate form')) {
            return false;
         }
-        var response = $.post({
+        var data = $form.serialize();
+        setPasswordSubmitting(true);
+        $.post({
             url: "/user/doUpdatePassword",
             type: "POST",
-            data: $("#passwordForm").serialize(),
-            async: false
-        }).responseJSON;
-
-        if (response.results) {
-            $("#successMessage").show();
-            $("#failMessage").hide();
-        } else {
-            $("#failMessage").show();
-            $("#successMessage").hide();
-            $("#failMessage .message").html(response.errorMessage);
-        }
+            data: data,
+            success: function(response) {
+                if (response.results) {
+                    $("#successMessage").show();
+                    $("#failMessage").hide();
+                } else {
+                    $("#failMessage").show();
+                    $("#successMessage").hide();
+                    $("#failMessage .message").html(response.errorMessage);
+                }
+                setPasswordSubmitting(false);
+            },
+            error: function() {
+                $("#failMessage").show();
+                $("#successMessage").hide();
+                $("#failMessage .message").html('网络请求失败');
+                setPasswordSubmitting(false);
+            }
+        });
     }
 
     $('.ui.form')
