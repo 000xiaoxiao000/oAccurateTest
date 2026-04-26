@@ -110,49 +110,78 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         this.httpDrivers = Arrays.asList(httpDrivers);
     }
 
+    private HttpServletRequestAdapter createRequestAdapter(Object[] params) {
+        if (params == null || params.length == 0 || params[0] == null) {
+            return null;
+        }
+        Object req = params[0];
+        Object resp = params.length > 1 ? params[1] : null;
+        try {
+            HttpServletRequestAdapter requestAdapter = new HttpServletRequestAdapter(req);
+            if (req instanceof JavaxServletRequestWrapper
+                    || req instanceof JavaxHttpServletRequestWrapper
+                    || req instanceof JakartaHttpServletRequestWrapper) {
+                return requestAdapter;
+            }
+            if (req instanceof jakarta.servlet.http.HttpServletRequest) {
+                try {
+                    req = new JakartaHttpServletRequestWrapper((jakarta.servlet.http.HttpServletRequest) req);
+                    params[0] = req;
+                    return new HttpServletRequestAdapter(req);
+                } catch (Throwable ignore) {
+                }
+            }
+            if (req instanceof javax.servlet.http.HttpServletRequest) {
+                try {
+                    req = new JavaxHttpServletRequestWrapper((javax.servlet.http.HttpServletRequest) req);
+                    params[0] = req;
+                    return new HttpServletRequestAdapter(req);
+                } catch (Throwable ignore) {
+                }
+            }
+            if (req instanceof ServletRequest) {
+                try {
+                    if (resp instanceof JavaxServletResponseWrapper) {
+                        req = new JavaxServletRequestWrapper((ServletRequest) req, (JavaxServletResponseWrapper) resp);
+                    } else {
+                        req = new JavaxServletRequestWrapper((ServletRequest) req);
+                    }
+                    params[0] = req;
+                    return new HttpServletRequestAdapter(req);
+                } catch (Throwable ignore) {
+                }
+            }
+            return requestAdapter;
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError]requestAdapter init error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            return null;
+        }
+    }
+
+    private HttpServletResponseAdapter createResponseAdapter(Object[] params) {
+        if (params == null || params.length < 2 || params[1] == null) {
+            return null;
+        }
+        Object resp = params[1];
+        try {
+            if (resp instanceof JavaxServletResponseWrapper
+                    || resp instanceof JavaxHttpServletResponseWrapper
+                    || resp instanceof JakartaHttpServletResponseWrapper) {
+                return new HttpServletResponseAdapter(resp);
+            }
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError]获取响应异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+        }
+        return null;
+    }
+
     public HttpServletTraceNodeWrapper begin(Object[] params) {
         if (traceContext == null) {
             return null;
         }
         TraceSession traceSession = traceContext.getTraceSession();
-        HttpServletRequestAdapter requestAdapter;
-        Object req = params[0];
-        String reqClassName = req.getClass().getName();
-        try {
-            // 兼容所有主流 Servlet 容器和 alibaba 等特殊实现
-            if ("javax.servlet.ServletRequest".equals(reqClassName) || req instanceof ServletRequest) {
-                if (!reqClassName.contains("Wrapper")) {
-                    try {
-                        req = new JavaxServletRequestWrapper((ServletRequest) req);
-                        params[0] = req;
-                    } catch (Throwable ignore) {
-                    }
-                }
-                requestAdapter = new HttpServletRequestAdapter(req);
-            } else if ("jakarta.servlet.http.HttpServletRequest".equals(reqClassName) || req instanceof jakarta.servlet.http.HttpServletRequest) {
-                if (!reqClassName.contains("Wrapper")) {
-                    try {
-                        req = new JakartaHttpServletRequestWrapper((jakarta.servlet.http.HttpServletRequest) req);
-                        params[0] = req;
-                    } catch (Throwable ignore) {
-                    }
-                }
-                requestAdapter = new HttpServletRequestAdapter(req);
-            } else if ("org.eclipse.jetty.server.Request".equals(reqClassName)) {
-                // Jetty
-                requestAdapter = new HttpServletRequestAdapter(req);
-            } else if (reqClassName.startsWith("org.jboss.")) {
-                // JBoss
-                requestAdapter = new HttpServletRequestAdapter(req);
-            } else if (reqClassName.startsWith("com.alipay.sofa.ark.web.embed.tomcat")) {
-                // Alibaba Ark
-                requestAdapter = new HttpServletRequestAdapter(req);
-            } else {
-                // 兼容更多自定义 Servlet 实现
-                requestAdapter = new HttpServletRequestAdapter(req);
-            }
-        } catch (Throwable t) {
-            logger.error("[Agent-EXCError]requestAdapter init error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+        HttpServletRequestAdapter requestAdapter = createRequestAdapter(params);
+        if (requestAdapter == null) {
             return null;
         }
         String urlExcludeRegex = this.traceContext.getConfig("urlExclude", DEFAULT_EXCLUDE);
@@ -312,15 +341,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             long userTime = node.getEndTime() - node.getBeginTime();
             node.setUseTime(userTime);
 
-            HttpServletResponseAdapter responseAdapter = null;
-            try {
-                Object rawResponse = resolveResponseWrapper(params);
-                if (rawResponse != null) {
-                    responseAdapter = new HttpServletResponseAdapter(rawResponse);
-                }
-            } catch (Throwable t) {
-                logger.error("[Agent-EXCError]获取响应异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
-            }
+            HttpServletResponseAdapter responseAdapter = createResponseAdapter(params);
 
             if (responseAdapter != null) {
                 try {
