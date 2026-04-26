@@ -45,10 +45,20 @@
 <script>
     function submitSnapshotUpdate() {
         var $form = $('#newSnapshotForm');
+        var submittingOptions = {
+            submitButton: '#saveSnapshotButton',
+            extraControls: '#snapshotEditDialog .actions .ui.button',
+            message: '正在保存快照...'
+        };
+        if (oatIsFormSubmitting($form)) {
+            return;
+        }
+        var data = $form.serialize();
+        oatSetFormSubmitting($form, true, submittingOptions);
         $.ajax({
             type: "POST",
             url: $form.attr('action'),
-            data: $form.serialize(),
+            data: data,
             success: function(res) {
                 if (res.success || res.result) {
                     $('#snapshotEditDialog').modal('hide');
@@ -58,10 +68,12 @@
                         location.reload();
                     }, 1000);
                 } else {
+                    oatSetFormSubmitting($form, false, submittingOptions);
                     showToast('更新失败: ' + (res.message || '未知错误'), 'error');
                 }
             },
             error: function() {
+                oatSetFormSubmitting($form, false, submittingOptions);
                 showToast('网络请求失败', 'error');
             }
         });

@@ -353,7 +353,7 @@
             return;
         }
 
-        oatSetFormSubmitting($form, true, {submitButton: '#apiEndpointUploadButton'});
+        oatSetFormSubmitting($form, true, {submitButton: '#apiEndpointUploadButton', message: '正在上传并扫描接口...'});
         $.ajax({
             url: '/p/${project.id}/app/${app.id}/api-endpoints/upload',
             type: 'POST',

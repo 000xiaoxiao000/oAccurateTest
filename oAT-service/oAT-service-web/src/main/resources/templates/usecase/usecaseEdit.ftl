@@ -673,7 +673,8 @@
         var submittingOptions = {
             submitButton: '#usecaseSaveButton',
             editor: editor,
-            extraControls: '.editor-actions .ui.button'
+            extraControls: '.editor-actions .ui.button',
+            message: '正在保存用例...'
         };
         oatSetFormSubmitting($form, true, submittingOptions);
         $.ajax({

@@ -259,7 +259,9 @@
             }
             oatSetFormSubmitting($form, true, {
                 submitButton: $form.find('.ui.button[type="submit"]').first(),
-                keepFieldsEnabled: true
+                keepFieldsEnabled: true,
+                readonlyFields: true,
+                message: '正在保存设置...'
             });
             return true;
         });

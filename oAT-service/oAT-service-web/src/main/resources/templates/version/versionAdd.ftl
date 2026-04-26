@@ -488,7 +488,8 @@
                     var data = $form.serialize();
                     var submittingOptions = {
                         submitButton: '#versionCreateButton',
-                        extraControls: '.version-page-actions .ui.button, .version-page-body .ui.menu .item'
+                        extraControls: '.version-page-actions .ui.button, .version-page-body .ui.menu .item',
+                        message: '正在创建版本...'
                     };
 
                     oatSetFormSubmitting($form, true, submittingOptions);

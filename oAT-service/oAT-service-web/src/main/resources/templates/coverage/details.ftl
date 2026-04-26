@@ -118,7 +118,7 @@
                 </div>
                 <div class="two wide field">
                     <label>&nbsp;</label>
-                    <button class="ui primary button" type="submit">搜索</button>
+                    <button class="ui primary button" type="submit" id="coverageSearchSubmitButton">搜索</button>
                 </div>
                 <div class="two wide field">
                     <label>&nbsp;</label>
@@ -300,6 +300,20 @@
 
 <script>
     $('.commit-id').popup();
+
+    $('#searchForm').on('submit', function() {
+        var $form = $(this);
+        if (oatIsFormSubmitting($form)) {
+            return false;
+        }
+        oatSetFormSubmitting($form, true, {
+            submitButton: '#coverageSearchSubmitButton',
+            keepFieldsEnabled: true,
+            readonlyFields: true,
+            message: '正在查询覆盖率...'
+        });
+        return true;
+    });
 
     $(function() {
         if ($("#treeTable").length > 0) {

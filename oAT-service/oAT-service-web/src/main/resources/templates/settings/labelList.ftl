@@ -271,7 +271,7 @@
                         <div class="project-label-empty">暂无用例标签。</div>
                     </#if>
 
-                    <form class="project-label-form" action="/p/${project.id}/label/add">
+                    <form class="ui form project-label-form" action="/p/${project.id}/label/add">
                         <input type="hidden" name="type" value="usecase">
                         <div class="ui small right labeled input">
                             <input type="text" name="name" placeholder="标签名称">
@@ -318,7 +318,7 @@
                         <div class="project-label-empty">暂无快照标签。</div>
                     </#if>
 
-                    <form class="project-label-form" action="/p/${project.id}/label/add">
+                    <form class="ui form project-label-form" action="/p/${project.id}/label/add">
                         <input type="hidden" name="type" value="snapshot">
                         <div class="ui small right labeled input">
                             <input type="text" name="name" placeholder="标签名称">
@@ -355,6 +355,29 @@
 <script>
     $('.project-settings-page .ui.dropdown').dropdown({
         on: 'hover'
+    });
+
+    $('.project-label-form').on('submit', function() {
+        var $form = $(this);
+        if (oatIsFormSubmitting($form)) {
+            return false;
+        }
+        oatSetFormSubmitting($form, true, {
+            keepFieldsEnabled: true,
+            readonlyFields: true,
+            message: '正在添加标签...'
+        });
+        return true;
+    });
+
+    $('.project-label-list a').on('click', function() {
+        var $link = $(this);
+        if ($link.hasClass('disabled')) {
+            return false;
+        }
+        $link.addClass('disabled').attr('aria-disabled', 'true');
+        $link.closest('.ui.label').addClass('oat-submitting-scope');
+        return true;
     });
 </script>
 </body>
