@@ -11,7 +11,13 @@
 <canvas id="login-canvas" class="auth-canvas"></canvas>
 
 <div class="auth-shell auth-shell-wide">
-    <div class="auth-card">
+    <div class="auth-card" id="register-card">
+        <div class="auth-submit-overlay">
+            <div class="auth-submit-card">
+                <i class="notched circle loading icon"></i>
+                正在注册账号，请稍候...
+            </div>
+        </div>
         <div class="auth-brand">
             <canvas id="logo-canvas" width="60" height="60"></canvas>
             <div>
@@ -22,6 +28,10 @@
 
         <form id="register-form" class="ui form auth-form" method="post" action="/doRegister">
             <div class="ui segment">
+                <div class="auth-form-subhint">
+                    <i class="info circle icon"></i>
+                    <div>请确认邮箱和密码无误；点击注册后页面会暂时锁定，避免重复提交。</div>
+                </div>
                 <div class="field required">
                     <label>用户名 <span class="auth-subtitle">只能包含数字、字母、下划线</span></label>
                     <div class="ui left icon input">
@@ -60,7 +70,7 @@
                         <i class="eye slash icon link auth-password-toggle" data-toggle-password="#againPassword" tabindex="0" role="button" aria-label="显示或隐藏确认密码"></i>
                     </div>
                 </div>
-                <input class="ui fluid large teal submit button" type="submit" value="注册">
+                <input id="registerSubmitButton" class="ui fluid large teal submit button" type="submit" value="注册">
                 <a class="ui fluid large basic button auth-secondary-action" href="/login">返回登录</a>
             </div>
             <div class="ui error message"></div>
@@ -90,7 +100,25 @@
             }
         });
 
+        function setRegisterSubmitting(submitting) {
+            var $form = $('#register-form');
+            $('#register-card').toggleClass('auth-submitting', submitting);
+            oatSetFormSubmitting($form, submitting, {
+                submitButton: '#registerSubmitButton',
+                keepFieldsEnabled: true,
+                readonlyFields: true,
+                extraControls: '.auth-secondary-action, [data-toggle-password]'
+            });
+        }
+
         $('#register-form').form({
+            onSuccess: function() {
+                if (oatIsFormSubmitting($('#register-form'))) {
+                    return false;
+                }
+                setRegisterSubmitting(true);
+                return true;
+            },
             fields: {
                 name: {
                     identifier: 'name',

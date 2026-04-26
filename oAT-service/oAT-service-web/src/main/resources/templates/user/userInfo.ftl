@@ -11,7 +11,13 @@
 <#include  "../normalHeader.ftl">
 
 <!--内容主体-->
-<div class="ui container app-page-shell account-settings-page page-theme">
+<div class="ui container app-page-shell account-settings-page page-theme" id="accountInfoPage">
+    <div class="account-submit-mask">
+        <div class="account-submit-card">
+            <i class="notched circle loading icon"></i>
+            正在更新基本信息，请稍候...
+        </div>
+    </div>
     <div class="account-settings-hero">
         <div>
             <div class="account-settings-eyebrow">Account Settings</div>
@@ -43,7 +49,7 @@
                     <p class="account-settings-section-desc">用于登录和展示的账户资料，更新后会立即生效。</p>
                 </div>
             </div>
-            <form class="ui form account-settings-form" action="/user/doUpdateInfo">
+            <form id="accountInfoForm" class="ui form account-settings-form" action="/user/doUpdateInfo">
                 <div class="required field">
                     <label>邮箱地址</label>
                     <div class="ui left icon input">
@@ -59,7 +65,7 @@
                     </div>
                 </div>
                 <div class="account-settings-actions">
-                    <button class="ui primary button" type="submit">
+                    <button id="accountInfoSubmitButton" class="ui primary button" type="submit">
                         <i class="save outline icon"></i>
                         更新基本信息
                     </button>
@@ -77,9 +83,27 @@
         on: 'click'
     });
 
-    $('.ui.form')
+    function setAccountInfoSubmitting(submitting) {
+        var $form = $('#accountInfoForm');
+        $('#accountInfoPage').toggleClass('account-submitting', submitting);
+        oatSetFormSubmitting($form, submitting, {
+            submitButton: '#accountInfoSubmitButton',
+            keepFieldsEnabled: true,
+            readonlyFields: true,
+            extraControls: '.account-settings-nav-item'
+        });
+    }
+
+    $('#accountInfoForm')
                 .form({
                     inline: false, // 关闭行内显示验证异常
+                    onSuccess: function() {
+                        if (oatIsFormSubmitting($('#accountInfoForm'))) {
+                            return false;
+                        }
+                        setAccountInfoSubmitting(true);
+                        return true;
+                    },
                     onFailure: function (formErrors, fields) {
                         if (formErrors && formErrors.length > 0) {
                             showToast(formErrors[0], 'error');

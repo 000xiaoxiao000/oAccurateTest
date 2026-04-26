@@ -9,7 +9,45 @@ body {
 
 /* Account settings pages */
 .account-settings-page {
+    position: relative;
     padding-bottom: 40px;
+}
+
+.account-submit-mask {
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--oat-radius-xl);
+    background: rgba(248, 251, 255, .68);
+    backdrop-filter: blur(2px);
+}
+
+.account-submit-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 18px;
+    border: 1px solid rgba(33, 133, 208, .18);
+    border-radius: var(--oat-radius-md);
+    background: rgba(255, 255, 255, .96);
+    color: var(--oat-accent);
+    font-weight: 800;
+    box-shadow: var(--oat-shadow-sm);
+}
+
+.account-settings-page.account-submitting .account-settings-hero,
+.account-settings-page.account-submitting .account-settings-layout {
+    opacity: .56;
+    filter: grayscale(.18);
+    pointer-events: none;
+    user-select: none;
+}
+
+.account-settings-page.account-submitting .account-submit-mask {
+    display: flex;
 }
 
 .account-settings-hero {

@@ -12,6 +12,12 @@
 
 <div class="auth-shell">
     <div id="login-box" class="auth-card">
+        <div class="auth-submit-overlay">
+            <div class="auth-submit-card">
+                <i class="notched circle loading icon"></i>
+                正在登录，请稍候...
+            </div>
+        </div>
         <div class="auth-brand">
             <canvas id="logo-canvas" width="60" height="60"></canvas>
             <div>
@@ -34,7 +40,7 @@
             </div>
         </#if>
 
-        <form class="ui large form auth-form" action="/doLogin" method="post">
+        <form id="login-form" class="ui large form auth-form" action="/doLogin" method="post">
             <div class="ui segment">
                 <input type="hidden" name="redirect" value="${redirect!''}">
                 <div class="field required">
@@ -52,7 +58,7 @@
                         <i class="eye slash icon link auth-password-toggle" id="toggle-password" tabindex="0" role="button" aria-label="显示或隐藏密码"></i>
                     </div>
                 </div>
-                <input class="ui fluid large teal submit button" type="submit" value="登录">
+                <input id="loginSubmitButton" class="ui fluid large teal submit button" type="submit" value="登录">
             </div>
         </form>
 
@@ -79,6 +85,21 @@
                 event.preventDefault();
                 togglePassword();
             }
+        });
+
+        $('#login-form').on('submit', function() {
+            var $form = $(this);
+            if (oatIsFormSubmitting($form)) {
+                return false;
+            }
+            $('#login-box').addClass('auth-submitting');
+            oatSetFormSubmitting($form, true, {
+                submitButton: '#loginSubmitButton',
+                keepFieldsEnabled: true,
+                readonlyFields: true,
+                extraControls: '#toggle-password, .auth-link-row a'
+            });
+            return true;
         });
 
         <#if errorMessage??>
