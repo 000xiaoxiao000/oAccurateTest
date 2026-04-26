@@ -71,9 +71,15 @@ public class AppServiceImpl implements AppService, StandardDate {
         app.setCurrentVersion(appVo.getCurrentVersion());
         app.setCurrentBranch(appVo.getCurrentBranch());
         app.setCurrentCommitId(appVo.getCurrentCommitId());
-        app.setRepoAddress(appVo.getRepoAddress());
-        app.setRepoUserName(appVo.getRepoUserName());
-        app.setRepoPassword(appVo.getRepoPassword());
+        if (appVo.getRepoAddress() != null) {
+            app.setRepoAddress(appVo.getRepoAddress());
+        }
+        if (appVo.getRepoUserName() != null) {
+            app.setRepoUserName(appVo.getRepoUserName());
+        }
+        if (appVo.getRepoPassword() != null) {
+            app.setRepoPassword(appVo.getRepoPassword());
+        }
         app.setProbeAlertEnabled(Boolean.TRUE.equals(appVo.getProbeAlertEnabled()));
         app.setProbeOfflineThresholdSeconds(normalizeProbeOfflineThresholdSeconds(appVo.getProbeOfflineThresholdSeconds()));
         app.setProbeWebhookUrl(appVo.getProbeWebhookUrl());
