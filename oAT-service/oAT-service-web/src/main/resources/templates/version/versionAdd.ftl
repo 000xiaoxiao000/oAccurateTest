@@ -61,7 +61,7 @@
                 <a class="item" data-tab="upload">上传文件</a>
             </div>
 
-            <form class="ui form" id="versionForm" action="/p/${project.id}/${appId}/version/doAdd" method="post">
+            <form class="ui form version-add-form" id="versionForm" action="/p/${project.id}/${appId}/version/doAdd" method="post">
                 <input type="hidden" name="projectId" value="${project.id}">
                 <input type="hidden" name="appId" value="${appId}">
                 <input type="hidden" name="programFile" id="programFile">
@@ -128,7 +128,10 @@
                         <label class="label">程序文件:</label>
                         <input type="file" id="programFileSelect" readonly="readonly">
                         <div id="programProgress" class="ui bottom attached progress">
-                            <div class="bar"></div>
+                            <div class="bar">
+                                <div class="progress"></div>
+                            </div>
+                            <div class="label">等待选择文件...</div>
                         </div>
                     </div>
                 </div>
@@ -240,10 +243,17 @@
     }
 
     function getPackageCommitVerifyToastType(verify, defaultType) {
-        if (verify && verify.runtimeCommitId && verify.targetCommitId && verify.matched === false) {
+        if (!verify || !verify.runtimeCommitId || !verify.targetCommitId || verify.matched === false) {
             return 'warning';
         }
         return defaultType || 'success';
+    }
+
+    function getPackageCommitVerifyToastDuration(verify) {
+        if (!verify || !verify.runtimeCommitId || !verify.targetCommitId || verify.matched === false) {
+            return 12000;
+        }
+        return 6000;
     }
 
     setCreateButtonEnabled(false);
@@ -254,6 +264,8 @@
             $('#startPullBtn').removeClass('disabled').prop('disabled', false).removeClass('loading');
             $('#deleteCodeBtn').hide().addClass('disabled').prop('disabled', true).removeClass('loading');
             $('#gitProgressField').hide();
+            $('#programProgress').progress({ percent: 0 });
+            $('#programProgress .label').text('等待选择文件...');
         }, 0);
     });
 
@@ -352,7 +364,7 @@
             $(btn).removeClass('loading');
             if(data.result) {
                 var verify = data.data ? data.data.packageCommitVerify : null;
-                showToast(buildGitPullEstimateMessage(data.data) + '；' + buildPackageCommitVerifyMessage(verify), getPackageCommitVerifyToastType(verify, 'success'));
+                showToast(buildGitPullEstimateMessage(data.data) + '；' + buildPackageCommitVerifyMessage(verify), getPackageCommitVerifyToastType(verify, 'success'), getPackageCommitVerifyToastDuration(verify));
             } else {
                 showToast(data.message, 'error');
             }
@@ -453,9 +465,9 @@
                         $.get("/p/${project.id}/${appId}/version/package/verifyCommit?commitId="+encodeURIComponent(job.repoCommitId || $('#repoCommitId').val()), function(verifyData){
                             var verify = verifyData.result ? verifyData.data : null;
                             var verifyMessage = verifyData.result ? buildPackageCommitVerifyMessage(verify) : 'CommitId 校验失败：' + (verifyData.message || '请求失败');
-                            showToast(buildGitPullSuccessMessage(job) + '；' + verifyMessage, getPackageCommitVerifyToastType(verify, verifyData.result ? 'success' : 'warning'));
+                            showToast(buildGitPullSuccessMessage(job) + '；' + verifyMessage, getPackageCommitVerifyToastType(verify, verifyData.result ? 'success' : 'warning'), getPackageCommitVerifyToastDuration(verify));
                         }).fail(function() {
-                            showToast(buildGitPullSuccessMessage(job) + '；CommitId 校验失败：网络请求失败', 'warning');
+                            showToast(buildGitPullSuccessMessage(job) + '；CommitId 校验失败：网络请求失败', 'warning', 12000);
                         });
                         // 拉取成功后：置灰拉取按钮，显示删除按钮
                         setVersionPageBusy(false);
@@ -566,6 +578,7 @@
         setVersionPageBusy(true, '正在上传程序文件...');
         $('#programFileSelect').prop('disabled', false);
         $('#programProgress').progress({ percent: 0 });
+        $('#programProgress .label').text('正在准备上传...');
         uploadFile(this.files[0], "/resource/upload"
                 , function (ev2) {
                     setVersionPageBusy(false);
@@ -580,23 +593,26 @@
                     $("#programFile").val(programFilePath);
 
                     $('#programProgress').progress('complete');
+                    $('#programProgress .label').text('上传完成');
                     setCreateButtonEnabled(true);
                     $.get("/p/${project.id}/${appId}/version/package/verifyCommit?programFile="+encodeURIComponent(programFilePath), function(data) {
                         var verify = data.result ? data.data : null;
                         var verifyMessage = data.result ? buildPackageCommitVerifyMessage(verify) : 'CommitId 校验失败：' + (data.message || '请求失败');
-                        showToast('程序文件上传成功；' + verifyMessage, getPackageCommitVerifyToastType(verify, data.result ? 'success' : 'warning'));
+                        showToast('程序文件上传成功；' + verifyMessage, getPackageCommitVerifyToastType(verify, data.result ? 'success' : 'warning'), getPackageCommitVerifyToastDuration(verify));
                     }).fail(function() {
-                        showToast('程序文件上传成功；CommitId 校验失败：网络请求失败', 'warning');
+                        showToast('程序文件上传成功；CommitId 校验失败：网络请求失败', 'warning', 12000);
                     });
                 }
                 , function (evt) {
                     // 进度条
                     var percent = evt.total ? Math.round(evt.loaded * 100 / evt.total) : 0;
                     $('#programProgress').progress({ percent: percent });
+                    $('#programProgress .label').text('正在上传程序文件（' + percent + '%）');
                 }
                 , function () {
                     setVersionPageBusy(false);
                     setCreateButtonEnabled(false);
+                    $('#programProgress .label').text('上传失败');
                     showToast('程序文件上传失败: 网络请求失败', 'error');
                 });
     });
