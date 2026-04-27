@@ -6,6 +6,8 @@ import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.service.entity.TraceItemSearchParam;
 import com.oAT.web.service.entity.TraceItemVo;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -39,4 +41,10 @@ public interface ClientSessionService {
     void heartbeat(String sessionId, String appId, Long timesTamp);
 
     void saveStaticData(String appId, String data);
+
+    // agent插桩日志根据sessionId存储
+    void putAgentLogs(String sessionId, String readAgentLogs);
+
+    // 将包验证信息存储到ES
+    void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage);
 }
