@@ -138,7 +138,7 @@ public class TraceContext {
                     if (packagePath != null) {
                         logger.info("[Agent-校验包]开始进行读取包的 GitCommitId，包路径: " + packagePath);
 
-                        String gitCommitIdFromJar = PackageVerifier.getGitCommitIdFromPackage(packagePath);
+                        String gitCommitIdFromPackage = PackageVerifier.getGitCommitIdFromPackage(packagePath);
 
                         Map<String, String> data = new HashMap<String, String>();
                         if (clientSession != null) {
@@ -147,13 +147,13 @@ public class TraceContext {
                             data.put("sessionId", "");
                         }
                         data.put("packagePath", packagePath);
-                        data.put("GitCommitIdFromJar", gitCommitIdFromJar);
+                        data.put("gitCommitIdFromPackage", gitCommitIdFromPackage);
 //                    data.put("classFiles", String.valueOf(structureInfo.get("classFiles")));
 //                    data.put("resourceFiles", String.valueOf(structureInfo.get("resourceFiles")));
 //                    data.put("fileHashes", String.valueOf(contentHashes));
 
                         String targetUrl = getRemoteServer() + "/client/packageVerify";
-                        logger.info("[Agent-校验包]准备上送包的 GitCommitId 数据... GitCommitId: " + gitCommitIdFromJar);
+                        logger.info("[Agent-校验包]准备上送包的 GitCommitId 数据... GitCommitId: " + gitCommitIdFromPackage);
                         Boolean b = PackageVerifier.sendVerificationData(targetUrl, data);
                         if (b) {
                             logger.info("[Agent-校验包]包的 GitCommitId 数据上送完成。");
