@@ -140,8 +140,8 @@
         .endpoint-summary .statistic { min-width: 120px; }
         .endpoint-view-switch { display: inline-flex; gap: 8px; align-items: center; margin-left: auto; }
         .endpoint-section-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .endpoint-group-card { border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid #d1d5db; background: #f9fafb; }
-        .endpoint-group-card.endpoint-group-uncovered { background: #fff7f7; border-color: #fca5a5; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.08); }
+        .endpoint-group-card { border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid #e5e7eb; }
+        .endpoint-group-card.endpoint-group-uncovered { background: #f3f4f6; border-color: #d1d5db; box-shadow: none; }
         .endpoint-group-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
         .endpoint-group-children { margin-top: 12px; }
         .endpoint-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
@@ -737,30 +737,34 @@
         var groups = groupEndpointsByInterface(list);
         var pageData = getPageData(groups);
         var html = focusBanner + pageData.items.map(function (group) {
-            var firstItem = group.items[0];
+            var summaryItem = buildGroupSummaryItem(group);
             var uncoveredCount = group.items.filter(function (item) { return !item.covered; }).length;
             var coveredCount = group.items.length - uncoveredCount;
-            var color = uncoveredCount > 0 ? 'red' : 'blue';
+            var color = summaryItem.covered ? 'blue' : 'grey';
             var collapsed = collapsedGroupKeys[group.key] !== false;
-            var childrenHtml = collapsed ? '' : group.items.map(function (item) {
-                return renderEndpointCard(item, true, true);
-            }).join('');
-            var groupUsecases = collectGroupUsecases(group.items);
-            return '<div class="endpoint-group-card ' + (uncoveredCount > 0 ? 'endpoint-group-uncovered' : '') + '">' +
+            var detailHtml = collapsed ? '' : renderGroupSummaryDetails(summaryItem, group) + renderGroupChildren(group);
+            return '<div class="endpoint-card endpoint-group-card ' + (summaryItem.covered ? 'endpoint-covered' : 'endpoint-uncovered endpoint-group-uncovered') + '">' +
                 '<div class="endpoint-group-header">' +
                     '<div>' +
-                        '<div class="endpoint-url">' + escapeHtml(group.url || '-') + '</div>' +
-                        '<div class="endpoint-meta">接口键：' + escapeHtml(buildEndpointKey(firstItem)) + '</div>' +
-                        renderUsecaseLinks(groupUsecases) +
+                        '<div class="endpoint-url" style="color:' + (summaryItem.covered ? '#2563eb' : '#6b7280') + '">' + escapeHtml(group.url || '-') + '</div>' +
+                        '<div class="endpoint-meta">接口键：' + escapeHtml(summaryItem.endpointKey) + '</div>' +
+                        '<div>' +
+                            '<span class="ui ' + color + ' label endpoint-badge">' + escapeHtml(summaryItem.endpointType || '-') + '</span>' +
+                            '<span class="ui basic label endpoint-badge">' + escapeHtml(summaryItem.httpMethod || '-') + '</span>' +
+                            '<span class="ui ' + color + ' basic label endpoint-badge">' + (summaryItem.covered ? '已覆盖' : '未覆盖') + '</span>' +
+                            '<span class="ui basic label endpoint-badge">命中 ' + escapeHtml(String(summaryItem.hitCount || 0)) + '</span>' +
+                            '<span class="ui basic label endpoint-badge">来源 ' + escapeHtml(String(summaryItem.mergedSourceCount || 0)) + '</span>' +
+                            '<span class="ui basic label endpoint-badge">共 ' + escapeHtml(String(group.items.length)) + ' 条</span>' +
+                        '</div>' +
+                        renderUsecaseLinks(summaryItem.linkedUsecases) +
                     '</div>' +
                     '<div>' +
-                        '<span class="ui ' + color + ' label endpoint-badge">共 ' + escapeHtml(String(group.items.length)) + ' 条</span>' +
                         '<span class="ui basic label endpoint-badge">未覆盖 ' + escapeHtml(String(uncoveredCount)) + '</span>' +
                         '<span class="ui basic label endpoint-badge">已覆盖 ' + escapeHtml(String(coveredCount)) + '</span>' +
-                        '<span class="endpoint-group-toggle" onclick="toggleGroup(\'' + escapeJs(group.key) + '\')">' + (collapsed ? '展开明细' : '收起明细') + '</span>' +
+                        '<span class="endpoint-group-toggle" onclick="toggleGroup(' + quoteJs(group.key) + ')">' + (collapsed ? '展开明细' : '收起明细') + '</span>' +
                     '</div>' +
                 '</div>' +
-                '<div class="endpoint-group-children" style="display:' + (collapsed ? 'none' : 'block') + ';">' + childrenHtml + '</div>' +
+                '<div class="endpoint-group-children" style="display:' + (collapsed ? 'none' : 'block') + ';">' + detailHtml + '</div>' +
             '</div>';
         }).join('');
         $('#endpointList').html(html);
@@ -924,7 +928,7 @@
     function groupEndpointsByInterface(list) {
         var groups = {};
         list.forEach(function (item) {
-            var key = buildEndpointKey(item);
+            var key = buildUrlGroupKey(item);
             if (!groups[key]) {
                 groups[key] = {
                     key: key,
@@ -942,6 +946,86 @@
             }
             return (a.url || '').localeCompare(b.url || '');
         });
+    }
+
+    function buildUrlGroupKey(item) {
+        return item.url || buildEndpointKey(item);
+    }
+
+    function buildGroupSummaryItem(group) {
+        var firstItem = group.items[0] || {};
+        var endpointTypes = uniqueNonEmpty(group.items.map(function (item) { return item.endpointType; }));
+        var httpMethods = uniqueNonEmpty(group.items.map(function (item) { return item.httpMethod; }));
+        var hitCount = group.items.reduce(function (sum, item) { return sum + (Number(item.hitCount) || 0); }, 0);
+        var sourceNames = collectGroupValues(group.items, 'sourceNameList', 'sourceName');
+        var covered = group.items.every(function (item) { return item.covered; });
+        return {
+            url: group.url,
+            endpointKey: buildGroupEndpointKey(endpointTypes, httpMethods, group.url),
+            endpointType: endpointTypes.join(' / ') || firstItem.endpointType,
+            httpMethod: httpMethods.join(' / ') || firstItem.httpMethod,
+            covered: covered,
+            hitCount: hitCount,
+            mergedSourceCount: sourceNames.length || group.items.length,
+            linkedUsecases: collectGroupUsecases(group.items),
+            classNameList: collectGroupValues(group.items, 'classNameList', 'className'),
+            methodNameList: collectGroupValues(group.items, 'methodNameList', 'methodName'),
+            methodDescList: collectGroupValues(group.items, 'methodDescList', 'methodDesc'),
+            sourceTypeList: collectGroupValues(group.items, 'sourceTypeList', 'sourceType'),
+            sourceNameList: sourceNames
+        };
+    }
+
+    function buildGroupEndpointKey(endpointTypes, httpMethods, url) {
+        return [(endpointTypes.join(' / ') || '-'), (httpMethods.join(' / ') || '-'), (url || '-')].join(' | ');
+    }
+
+    function renderGroupSummaryDetails(summaryItem, group) {
+        return '<div class="endpoint-copy-actions">' +
+                '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(summaryItem.endpointKey) + ', \'接口键已复制\')">复制接口键</button>' +
+                '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(group.url || '') + ', \'URL 已复制\')">复制 URL</button>' +
+            '</div>' +
+            renderGroupBlock('类', summaryItem.classNameList, '-') +
+            renderGroupBlock('方法', summaryItem.methodNameList, '-') +
+            renderGroupBlock('签名', summaryItem.methodDescList, '-') +
+            renderGroupBlock('来源类型', summaryItem.sourceTypeList, '-') +
+            renderGroupBlock('来源文件', summaryItem.sourceNameList, '-');
+    }
+
+    function renderGroupChildren(group) {
+        if (!group.items || group.items.length <= 1) {
+            return '';
+        }
+        return '<div class="endpoint-meta">合并明细：</div>' + group.items.map(function (item) {
+            return renderEndpointCard(item, true, true);
+        }).join('');
+    }
+
+    function collectGroupValues(items, listField, fallbackField) {
+        var values = [];
+        items.forEach(function (item) {
+            var list = Array.isArray(item[listField]) && item[listField].length ? item[listField] : [item[fallbackField]];
+            list.forEach(function (value) {
+                if (value !== null && value !== undefined && String(value).length) {
+                    values.push(value);
+                }
+            });
+        });
+        return uniqueNonEmpty(values);
+    }
+
+    function uniqueNonEmpty(values) {
+        var map = {};
+        var result = [];
+        values.forEach(function (value) {
+            var text = value == null ? '' : String(value);
+            if (!text || map[text]) {
+                return;
+            }
+            map[text] = true;
+            result.push(text);
+        });
+        return result;
     }
     function buildEndpointKey(item) {
         if (Array.isArray(item.endpointKeyParts) && item.endpointKeyParts.length) {
