@@ -128,6 +128,11 @@ public class ClientSessionControl {
         String packagePath = params.get("packagePath");
         String gitCommitIdFromPackage = params.get("gitCommitIdFromPackage");
 
+        if (StringUtils.isBlank(sessionId)) {
+            logger.warn("[packageVerify]sessionId 为空，忽略包验证信息上送，packagePath={}, gitCommitIdFromPackage={}", packagePath, gitCommitIdFromPackage);
+            return;
+        }
+
         // 存储验证结果到ES
         sessionService.putPackageVerify(sessionId, packagePath, gitCommitIdFromPackage);
 

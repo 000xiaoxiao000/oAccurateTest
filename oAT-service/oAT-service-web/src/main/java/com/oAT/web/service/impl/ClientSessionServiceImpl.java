@@ -415,6 +415,10 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
     // 将包验证信息存储到ES
     @Override
     public void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage) {
+        if (!StringUtils.hasText(sessionId)) {
+            logger.warn("[putPackageVerify]sessionId 为空，跳过写入包验证信息，packagePath: {}, gitCommitIdFromPackage: {}", packagePath, gitCommitIdFromPackage);
+            return;
+        }
         try {
             Optional<ClientIndex> optional = clientRepository.findById(sessionId);
             if (optional.isPresent()) {
@@ -427,6 +431,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
                 session.setPackageVerifyData(
                         String.format("sessionId: %s, packagePath: %s, gitCommitIdFromPackage: %s",
                                 sessionId, packagePath, gitCommitIdFromPackage));
+                clientIndex.setUpdateTime(new Date());
                 clientRepository.save(clientIndex);
             } else {
                 logger.warn("[putPackageVerify]未找到对应的 ClientIndex，sessionId: {}", sessionId);
@@ -437,6 +442,21 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         }
     }
 
+    @Override
+    public String getPackageVerifyData(String sessionId) {
+        if (!StringUtils.hasText(sessionId)) {
+            return null;
+        }
+        try {
+            Optional<ClientIndex> optional = clientRepository.findById(sessionId);
+            if (optional.isPresent() && optional.get().getSession() != null) {
+                return optional.get().getSession().getPackageVerifyData();
+            }
+        } catch (Exception e) {
+            logger.error("[getPackageVerifyData]读取包验证信息失败，sessionId: {}, err: {}", sessionId, e.getMessage(), e);
+        }
+        return null;
+    }
 
     private static final class StaticDataPersistStats {
         private int createdCount;

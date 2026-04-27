@@ -3,6 +3,7 @@ package com.oAT.web.control;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
+import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.StaticInfoRepository;
@@ -20,6 +21,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.nio.file.Path;
@@ -29,6 +31,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,6 +59,9 @@ public class VersionItemControl {
     GitService gitService;
     @Autowired
     ResourceService resourceService;
+
+    @Autowired
+    ClientSessionService clientSessionService;
 
     @Autowired
     SnapshotService snapshotService;
@@ -209,9 +216,22 @@ public class VersionItemControl {
             }
 
             GitPullEstimateVo estimate = gitService.estimateGitPull(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, checkCommitId, excludePaths);
+            estimate.setPackageCommitVerify(verifyRuntimeCommit(appId, checkCommitId));
             return new ResultNotified<>(true, "检测通过", estimate);
         } catch (Exception e) {
             return new ResultNotified<>(false, "检测失败: " + e.getMessage(), null);
+        }
+    }
+
+    @RequestMapping("{appId}/version/package/verifyCommit")
+    @ResponseBody
+    public ResultNotified<PackageCommitVerifyVo> verifyUploadedPackageCommit(@PathVariable String appId, String programFile, String commitId) {
+        try {
+            String targetCommitId = StringUtils.hasText(commitId) ? commitId.trim() : readPackageCommitId(programFile);
+            PackageCommitVerifyVo verify = verifyRuntimeCommit(appId, targetCommitId);
+            return new ResultNotified<>(true, "校验完成", verify);
+        } catch (Exception e) {
+            return new ResultNotified<>(false, "校验失败: " + e.getMessage(), null);
         }
     }
 
@@ -311,6 +331,109 @@ public class VersionItemControl {
             }
         }
         return null;
+    }
+
+    private PackageCommitVerifyVo verifyRuntimeCommit(String appId, String targetCommitId) {
+        String runtimeCommitId = findRuntimePackageCommitId(appId);
+        String normalizedRuntimeCommitId = normalizeCommitId(runtimeCommitId);
+        String normalizedTargetCommitId = normalizeCommitId(targetCommitId);
+        Boolean matched = null;
+        if (StringUtils.hasText(normalizedRuntimeCommitId) && StringUtils.hasText(normalizedTargetCommitId)) {
+            matched = commitIdMatches(normalizedRuntimeCommitId, normalizedTargetCommitId);
+        }
+        return new PackageCommitVerifyVo(runtimeCommitId, targetCommitId, matched);
+    }
+
+    private String findRuntimePackageCommitId(String appId) {
+        List<ClientSessionVo> sessions = clientSessionService.getOnlineSessionsByAppId(appId);
+        for (ClientSessionVo session : sessions) {
+            String commitId = extractCommitIdFromPackageVerifyData(clientSessionService.getPackageVerifyData(session.getSessionId()));
+            if (StringUtils.hasText(commitId)) {
+                return commitId;
+            }
+        }
+        return null;
+    }
+
+    private String extractCommitIdFromPackageVerifyData(String packageVerifyData) {
+        if (!StringUtils.hasText(packageVerifyData)) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("gitCommitIdFromPackage\\s*[:=]\\s*([0-9a-fA-F]{8,40})").matcher(packageVerifyData);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        matcher = Pattern.compile("[0-9a-fA-F]{8,40}").matcher(packageVerifyData);
+        String lastMatch = null;
+        while (matcher.find()) {
+            lastMatch = matcher.group();
+        }
+        return lastMatch;
+    }
+
+    private String readPackageCommitId(String cachePath) throws Exception {
+        if (!StringUtils.hasText(cachePath)) {
+            throw new IllegalArgumentException("程序文件不能为空");
+        }
+        File cacheRoot = new File(resourceService.getCacheRoot()).getCanonicalFile();
+        File packageFile = new File(cacheRoot, cachePath).getCanonicalFile();
+        if (!packageFile.getPath().startsWith(cacheRoot.getPath() + File.separator) || !packageFile.exists() || !packageFile.isFile()) {
+            throw new IllegalArgumentException("程序文件不存在");
+        }
+        try (ZipFile zipFile = new ZipFile(packageFile)) {
+            ZipEntry entry = findBuildInfoEntry(zipFile);
+            if (entry == null) {
+                return null;
+            }
+            Properties props = new Properties();
+            try (InputStream inputStream = zipFile.getInputStream(entry)) {
+                props.load(inputStream);
+            }
+            String commitId = props.getProperty("git.commit.id");
+            if (!StringUtils.hasText(commitId)) {
+                commitId = props.getProperty("git.commit.id.abbrev");
+            }
+            return commitId;
+        }
+    }
+
+    private ZipEntry findBuildInfoEntry(ZipFile zipFile) {
+        String[] buildInfoPaths = {
+                "META-INF/git.properties",
+                "META-INF/build-info.properties",
+                "WEB-INF/classes/META-INF/git.properties",
+                "WEB-INF/classes/META-INF/build-info.properties",
+                "WEB-INF/classes/git.properties",
+                "WEB-INF/classes/build-info.properties"
+        };
+        for (String buildInfoPath : buildInfoPaths) {
+            ZipEntry entry = zipFile.getEntry(buildInfoPath);
+            if (entry != null) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private boolean commitIdMatches(String runtimeCommitId, String targetCommitId) {
+        String runtime = normalizeCommitId(runtimeCommitId);
+        String target = normalizeCommitId(targetCommitId);
+        if (!StringUtils.hasText(runtime) || !StringUtils.hasText(target)) {
+            return false;
+        }
+        return runtime.equals(target) || runtime.startsWith(target) || target.startsWith(runtime);
+    }
+
+    private String normalizeCommitId(String commitId) {
+        if (!StringUtils.hasText(commitId)) {
+            return null;
+        }
+        String normalized = commitId.trim().toLowerCase(Locale.ROOT);
+        Matcher matcher = Pattern.compile("[0-9a-f]{8,40}").matcher(normalized);
+        if (matcher.find()) {
+            return matcher.group();
+        }
+        return normalized;
     }
 
     @RequestMapping("{appId}/version/git/status")

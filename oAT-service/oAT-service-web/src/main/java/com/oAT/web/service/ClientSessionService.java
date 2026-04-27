@@ -47,4 +47,6 @@ public interface ClientSessionService {
 
     // 将包验证信息存储到ES
     void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage);
+
+    String getPackageVerifyData(String sessionId);
 }

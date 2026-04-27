@@ -7,6 +7,7 @@ public class GitPullEstimateVo implements Serializable {
     private Long estimatedPackageSizeBytes;
     private String branch;
     private String commitId;
+    private PackageCommitVerifyVo packageCommitVerify;
 
     public Long getEstimatedDurationMs() {
         return estimatedDurationMs;
@@ -38,5 +39,13 @@ public class GitPullEstimateVo implements Serializable {
 
     public void setCommitId(String commitId) {
         this.commitId = commitId;
+    }
+
+    public PackageCommitVerifyVo getPackageCommitVerify() {
+        return packageCommitVerify;
+    }
+
+    public void setPackageCommitVerify(PackageCommitVerifyVo packageCommitVerify) {
+        this.packageCommitVerify = packageCommitVerify;
     }
 }

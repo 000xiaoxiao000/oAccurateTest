@@ -46,10 +46,11 @@
                     <p class="version-page-desc">从 Git 拉取代码或上传制品包，创建应用版本并用于后续覆盖率和比对分析。</p>
                 </div>
                 <div class="version-page-actions">
-                    <a class="ui button" href="/p/${project.id}/app/${appId}/repository">
+                    <#assign repositoryConfigured=(app.repoAddress?? && app.repoAddress?trim != '')>
+                    <a class="ui <#if repositoryConfigured>button<#else>orange button</#if>" id="repositoryConfigButton" href="/p/${project.id}/app/${appId}/repository">
                         <i class="setting icon"></i>仓库配置
                     </a>
-                    <a class="ui button" href="/p/${project.id}/${appId}/version/list">
+                    <a class="ui button guard-pulled-code" id="backVersionListButton" href="/p/${project.id}/${appId}/version/list">
                         <i class="left arrow icon"></i>返回版本列表
                     </a>
                 </div>
@@ -141,7 +142,7 @@
                 </div>
                 <div class="version-form-actions">
                     <button class="ui button positive" type="submit" id="versionCreateButton">创建新的版本</button>
-                    <button class="ui button" type="reset">重置</button>
+                    <button class="ui button" type="reset" id="versionResetButton">重置</button>
                 </div>
                 <div class="ui error message"></div>
             </form>
@@ -169,6 +170,99 @@
     $('.menu .item').tab({
         onVisible: function(tabPath) {
             $('#sourceType').val(tabPath);
+            resetPackageReadyState();
+        }
+    });
+
+    function setCreateButtonEnabled(enabled) {
+        $('#versionCreateButton').toggleClass('disabled', !enabled).prop('disabled', !enabled);
+    }
+
+    var versionPageBusy = false;
+
+    function setVersionPageBusy(busy, message) {
+        versionPageBusy = busy;
+        var $form = $('#versionForm');
+        $form.data('oatSubmitting', busy);
+        $form.toggleClass('oat-form-submitting', busy)
+                .attr('aria-busy', busy ? 'true' : 'false');
+        if (message) {
+            $form.attr('data-oat-submitting-message', message);
+        } else if (!busy) {
+            $form.removeAttr('data-oat-submitting-message');
+        }
+        $form.find('input, textarea, select, button').prop('disabled', busy);
+        $form.find('.ui.button, .ui.checkbox, .ui.radio.checkbox, .ui.dropdown').toggleClass('disabled', busy);
+        $('.version-page-actions .ui.button, .version-page-body .ui.menu .item, .version-page-side .item')
+                .toggleClass('disabled', busy)
+                .attr('aria-disabled', busy ? 'true' : 'false');
+    }
+
+    $(document).on('click', 'a, button, input, textarea, select, .ui.dropdown, .ui.checkbox, .menu .item', function(event) {
+        if (!versionPageBusy || $(event.target).closest('.toast').length) {
+            return;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+    });
+
+    function hasPulledGitCode() {
+        return $('#sourceType').val() === 'git' && !!$('#programFile').val() && $('#deleteCodeBtn').is(':visible');
+    }
+
+    function resetPackageReadyState() {
+        $('#programFile').val('');
+        setCreateButtonEnabled(false);
+    }
+
+    function formatCommitId(commitId) {
+        if (!commitId) {
+            return '-';
+        }
+        return commitId.length > 12 ? commitId.substring(0, 12) : commitId;
+    }
+
+    function buildPackageCommitVerifyMessage(verify) {
+        if (!verify) {
+            return 'CommitId 校验：未获取到运行时目标系统 CommitId，无法校验';
+        }
+        if (!verify.runtimeCommitId) {
+            return 'CommitId 校验：未获取到运行时目标系统 CommitId，无法校验';
+        }
+        if (!verify.targetCommitId) {
+            return 'CommitId 校验：未获取到代码或上传包 CommitId，无法校验';
+        }
+        if (verify.matched) {
+            return 'CommitId 校验一致：运行时 ' + formatCommitId(verify.runtimeCommitId) + '，目标 ' + formatCommitId(verify.targetCommitId);
+        }
+        return 'CommitId 校验不一致：运行时 ' + formatCommitId(verify.runtimeCommitId) + '，目标 ' + formatCommitId(verify.targetCommitId);
+    }
+
+    function getPackageCommitVerifyToastType(verify, defaultType) {
+        if (verify && verify.runtimeCommitId && verify.targetCommitId && verify.matched === false) {
+            return 'warning';
+        }
+        return defaultType || 'success';
+    }
+
+    setCreateButtonEnabled(false);
+
+    $('#versionResetButton').on('click', function() {
+        setTimeout(function() {
+            resetPackageReadyState();
+            $('#startPullBtn').removeClass('disabled').prop('disabled', false).removeClass('loading');
+            $('#deleteCodeBtn').hide().addClass('disabled').prop('disabled', true).removeClass('loading');
+            $('#gitProgressField').hide();
+        }, 0);
+    });
+
+    $(document).on('click', 'a.guard-pulled-code, a[href*="/version/list"]', function(event) {
+        if (hasPulledGitCode()) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            showToast('已拉取远程代码，请先删除远程拉取的代码再返回版本列表', 'warning');
+            return false;
         }
     });
 
@@ -257,7 +351,8 @@
         $.get("/p/${project.id}/${appId}/version/checkGitPull?branch="+encodeURIComponent(branch)+"&commitId="+encodeURIComponent(commitId)+"&versionNumber="+encodeURIComponent(versionNumber)+"&excludePaths="+encodeURIComponent(excludePaths), function(data){
             $(btn).removeClass('loading');
             if(data.result) {
-                showToast(buildGitPullEstimateMessage(data.data), 'success');
+                var verify = data.data ? data.data.packageCommitVerify : null;
+                showToast(buildGitPullEstimateMessage(data.data) + '；' + buildPackageCommitVerifyMessage(verify), getPackageCommitVerifyToastType(verify, 'success'));
             } else {
                 showToast(data.message, 'error');
             }
@@ -308,6 +403,38 @@
         return parts.join('，');
     }
 
+    function formatGitProgressName(progressName, percent) {
+        if (!progressName) {
+            return '正在处理远程代码...';
+        }
+        var normalized = progressName.replace(/^Git:\s*/i, '').trim();
+        var lower = normalized.toLowerCase();
+        var text = normalized;
+        if (lower.indexOf('counting objects') >= 0) {
+            text = '正在统计远程代码对象';
+        } else if (lower.indexOf('compressing objects') >= 0) {
+            text = '正在压缩传输数据';
+        } else if (lower.indexOf('receiving objects') >= 0) {
+            text = '正在接收远程代码';
+        } else if (lower.indexOf('resolving deltas') >= 0) {
+            text = '正在解析代码差异';
+        } else if (lower.indexOf('checking out files') >= 0 || lower.indexOf('checkout') >= 0) {
+            text = '正在检出代码文件';
+        } else if (lower.indexOf('remote') >= 0) {
+            text = '正在连接远程仓库';
+        } else if (lower.indexOf('切换 commit') >= 0) {
+            text = '正在切换到指定 Commit';
+        } else if (lower.indexOf('排除指定路径') >= 0) {
+            text = '正在处理排除路径';
+        } else if (lower.indexOf('打包') >= 0 || lower.indexOf('zip') >= 0) {
+            text = '正在打包代码文件';
+        }
+        if (percent || percent === 0) {
+            text += '（' + percent + '%）';
+        }
+        return text;
+    }
+
     function checkGitPullStatus(jobId, btn) {
         $.get("/p/${project.id}/${appId}/version/git/status?jobId=" + jobId, function(data){
             if(data.result) {
@@ -316,19 +443,28 @@
                 $('#gitProgress').progress({
                     percent: percent
                 });
-                $('#gitProgress .label').text(job.progressName);
+                $('#gitProgress .label').text(formatGitProgressName(job.progressName, percent));
 
                 if (job.finish) {
                     if (job.success) {
                         $('#gitProgress .bar').addClass('success');
                         $('#gitProgress .label').text("拉取完成");
                         $('#programFile').val(job.cachePath); // Set the hidden file path
-                        showToast(buildGitPullSuccessMessage(job), 'success');
-
+                        $.get("/p/${project.id}/${appId}/version/package/verifyCommit?commitId="+encodeURIComponent(job.repoCommitId || $('#repoCommitId').val()), function(verifyData){
+                            var verify = verifyData.result ? verifyData.data : null;
+                            var verifyMessage = verifyData.result ? buildPackageCommitVerifyMessage(verify) : 'CommitId 校验失败：' + (verifyData.message || '请求失败');
+                            showToast(buildGitPullSuccessMessage(job) + '；' + verifyMessage, getPackageCommitVerifyToastType(verify, verifyData.result ? 'success' : 'warning'));
+                        }).fail(function() {
+                            showToast(buildGitPullSuccessMessage(job) + '；CommitId 校验失败：网络请求失败', 'warning');
+                        });
                         // 拉取成功后：置灰拉取按钮，显示删除按钮
+                        setVersionPageBusy(false);
+                        setCreateButtonEnabled(true);
                         $(btn).addClass('disabled').prop('disabled', true).removeClass('loading');
                         $('#deleteCodeBtn').show().removeClass('disabled').prop('disabled', false);
                     } else {
+                        setVersionPageBusy(false);
+                        setCreateButtonEnabled(false);
                         $(btn).removeClass('loading');
                         $('#gitProgress .bar').addClass('error');
                         $('#gitProgress .label').text("失败: " + job.message);
@@ -339,9 +475,16 @@
                     setTimeout(function() { checkGitPullStatus(jobId, btn); }, 1000);
                 }
             } else {
+                setVersionPageBusy(false);
+                setCreateButtonEnabled(false);
                 $(btn).removeClass('loading');
                 showToast("查询进度失败: " + data.message, 'error');
             }
+        }).fail(function() {
+            setVersionPageBusy(false);
+            setCreateButtonEnabled(false);
+            $(btn).removeClass('loading');
+            showToast('查询进度失败: 网络请求失败', 'error');
         });
     }
 
@@ -360,10 +503,11 @@
             return;
         }
 
-        $(btn).addClass('loading');
+        setVersionPageBusy(true, '正在远程拉取代码...');
+        $(btn).addClass('loading').removeClass('disabled').prop('disabled', false);
         $('#gitProgressField').show();
         $('#gitProgress').progress({ percent: 0 });
-        $('#gitProgress .label').text("正在请求...");
+        $('#gitProgress .label').text("正在连接远程仓库...");
         $('#gitProgress .bar').removeClass('success error');
 
         $.get("/p/${project.id}/${appId}/version/git/pull?branch="+encodeURIComponent(branch)+"&commitId="+encodeURIComponent(commitId)+"&excludePaths="+encodeURIComponent(excludePaths)+"&versionNumber="+encodeURIComponent(versionNumber), function(data){
@@ -372,9 +516,16 @@
                 var jobId = data.data;
                 checkGitPullStatus(jobId, btn);
             } else {
+                setVersionPageBusy(false);
+                setCreateButtonEnabled(false);
                 $(btn).removeClass('loading');
                 showToast(data.message, 'error');
             }
+        }).fail(function() {
+            setVersionPageBusy(false);
+            setCreateButtonEnabled(false);
+            $(btn).removeClass('loading');
+            showToast('远程代码拉取失败: 网络请求失败', 'error');
         });
     }
 
@@ -391,6 +542,7 @@
             if (data.result) {
                 showToast('删除成功', 'success');
                 $('#programFile').val('');
+                setCreateButtonEnabled(false);
                 // 删除成功后：按钮置灰不可点击
                 $(btn).addClass('disabled').prop('disabled', true);
                 // 远程拉取代码亮起可点击
@@ -406,20 +558,46 @@
 
 <script>
     document.getElementById("programFileSelect").addEventListener("change", function (ev1) {
+        if (!this.files || this.files.length === 0) {
+            return;
+        }
         $("#programFile").val(null);
+        setCreateButtonEnabled(false);
+        setVersionPageBusy(true, '正在上传程序文件...');
+        $('#programFileSelect').prop('disabled', false);
+        $('#programProgress').progress({ percent: 0 });
         uploadFile(this.files[0], "/resource/upload"
                 , function (ev2) {
+                    setVersionPageBusy(false);
                     var results = eval("(" + this.responseText + ")");
+                    if (!(results.success || results.result)) {
+                        showToast(results.message || '程序文件上传失败', 'error');
+                        setCreateButtonEnabled(false);
+                        return;
+                    }
                     programFilePath = results.data;
                     console.log(programFilePath);
                     $("#programFile").val(programFilePath);
 
                     $('#programProgress').progress('complete');
+                    setCreateButtonEnabled(true);
+                    $.get("/p/${project.id}/${appId}/version/package/verifyCommit?programFile="+encodeURIComponent(programFilePath), function(data) {
+                        var verify = data.result ? data.data : null;
+                        var verifyMessage = data.result ? buildPackageCommitVerifyMessage(verify) : 'CommitId 校验失败：' + (data.message || '请求失败');
+                        showToast('程序文件上传成功；' + verifyMessage, getPackageCommitVerifyToastType(verify, data.result ? 'success' : 'warning'));
+                    }).fail(function() {
+                        showToast('程序文件上传成功；CommitId 校验失败：网络请求失败', 'warning');
+                    });
                 }
                 , function (evt) {
                     // 进度条
-                    $('#programProgress').progress('set progress', evt.loaded * 75 / 100);
-                    $('#programProgress').progress('set total', evt.total);
+                    var percent = evt.total ? Math.round(evt.loaded * 100 / evt.total) : 0;
+                    $('#programProgress').progress({ percent: percent });
+                }
+                , function () {
+                    setVersionPageBusy(false);
+                    setCreateButtonEnabled(false);
+                    showToast('程序文件上传失败: 网络请求失败', 'error');
                 });
     });
 
@@ -475,6 +653,11 @@
                     // Prevent default form submission
                     event.preventDefault();
 
+                    if ($('#versionCreateButton').prop('disabled')) {
+                        showToast('请先成功拉取代码或上传程序文件', 'error');
+                        return false;
+                    }
+
                     var successMessage = '版本创建成功';
                     if ($('input[name="setAsCurrent"]').is(':checked')) {
                         successMessage += '，并已设为当前版本';
@@ -486,13 +669,9 @@
                     }
                     var action = $form.attr('action');
                     var data = $form.serialize();
-                    var submittingOptions = {
-                        submitButton: '#versionCreateButton',
-                        extraControls: '.version-page-actions .ui.button, .version-page-body .ui.menu .item',
-                        message: '正在创建版本...'
-                    };
 
-                    oatSetFormSubmitting($form, true, submittingOptions);
+                    setVersionPageBusy(true, '正在创建版本...');
+                    $('#versionCreateButton').addClass('loading').removeClass('disabled').prop('disabled', false);
                     $.ajax({
                         type: 'POST',
                         url: action,
@@ -506,12 +685,14 @@
                                     window.location.href = "/p/${project.id}/${appId}/version/list";
                                 }, 1000);
                             } else {
-                                oatSetFormSubmitting($form, false, submittingOptions);
+                                setVersionPageBusy(false);
+                                setCreateButtonEnabled(true);
                                 showToast(res.message || '版本创建失败', 'error');
                             }
                         },
                         error: function() {
-                            oatSetFormSubmitting($form, false, submittingOptions);
+                            setVersionPageBusy(false);
+                            setCreateButtonEnabled(true);
                             showToast('网络请求失败', 'error');
                         }
                     });

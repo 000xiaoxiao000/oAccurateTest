@@ -70,9 +70,6 @@ public class TraceContext {
         this.config = config;
         this.instrumentation = ins;
 
-        // 包校验和上报逻辑
-        verifyAndReportPackage();
-
         // 注册JVM关闭钩子，优雅关闭线程池
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             @Override
@@ -94,6 +91,7 @@ public class TraceContext {
 
         // 客户端未登录或客户端未启动时，代码采集的配置处理
         if (doLogin()) {
+            verifyAndReportPackage();
             if (logger.isDebugEnabled()) {
                 logger.debug("[Agent-debug]登录 server 成功，使用目标应用配置进行初始化采集器. " + getConfigStatus("codeStack.include"));
             }
@@ -121,6 +119,10 @@ public class TraceContext {
             logger.warn("[Agent-warn]<UNK>'server'<UNK>");
             return;
         }
+        if (clientSession == null || clientSession.getSessionId() == null || clientSession.getSessionId().isEmpty()) {
+            logger.warn("[Agent-校验包]sessionId 为空，跳过包 GitCommitId 上送，等待登录成功后再执行。");
+            return;
+        }
         // 为包校验创建独立的一次性单线程执行器，任务完成后关闭，避免线程池长期占用资源
         final ExecutorService verifierExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
             @Override
@@ -141,11 +143,7 @@ public class TraceContext {
                         String gitCommitIdFromPackage = PackageVerifier.getGitCommitIdFromPackage(packagePath);
 
                         Map<String, String> data = new HashMap<String, String>();
-                        if (clientSession != null) {
-                            data.put("sessionId", clientSession.getSessionId());
-                        } else {
-                            data.put("sessionId", "");
-                        }
+                        data.put("sessionId", clientSession.getSessionId());
                         data.put("packagePath", packagePath);
                         data.put("gitCommitIdFromPackage", gitCommitIdFromPackage);
 //                    data.put("classFiles", String.valueOf(structureInfo.get("classFiles")));
