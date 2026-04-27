@@ -352,6 +352,15 @@ public class VersionItemControl {
                 return commitId;
             }
         }
+        for (ClientSessionVo session : sessions) {
+            if (session.getClientInfo() == null || !StringUtils.hasText(session.getClientInfo().getAppKey())) {
+                continue;
+            }
+            String commitId = extractCommitIdFromPackageVerifyData(clientSessionService.getLatestPackageVerifyDataByAppId(session.getClientInfo().getAppKey()));
+            if (StringUtils.hasText(commitId)) {
+                return commitId;
+            }
+        }
         return null;
     }
 
@@ -359,11 +368,12 @@ public class VersionItemControl {
         if (!StringUtils.hasText(packageVerifyData)) {
             return null;
         }
-        Matcher matcher = Pattern.compile("gitCommitIdFromPackage\\s*[:=]\\s*([0-9a-fA-F]{8,40})").matcher(packageVerifyData);
+        Matcher matcher =
+                Pattern.compile("gitCommitIdFromPackage\\s*[:=]\\s*([0-9a-fA-F]{7,40})").matcher(packageVerifyData);
         if (matcher.find()) {
             return matcher.group(1);
         }
-        matcher = Pattern.compile("[0-9a-fA-F]{8,40}").matcher(packageVerifyData);
+        matcher = Pattern.compile("[0-9a-fA-F]{7,40}").matcher(packageVerifyData);
         String lastMatch = null;
         while (matcher.find()) {
             lastMatch = matcher.group();

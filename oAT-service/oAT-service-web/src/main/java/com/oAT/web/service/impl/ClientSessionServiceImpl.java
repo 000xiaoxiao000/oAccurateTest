@@ -458,6 +458,29 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         return null;
     }
 
+    @Override
+    public String getLatestPackageVerifyDataByAppId(String appId) {
+        if (!StringUtils.hasText(appId)) {
+            return null;
+        }
+        ClientIndex latest = null;
+        for (ClientIndex clientIndex : clientRepository.findAll()) {
+            ClientSession session = clientIndex.getSession();
+            if (session == null || !StringUtils.hasText(session.getPackageVerifyData())) {
+                continue;
+            }
+            if (session.getClientInfo() == null || !appId.equalsIgnoreCase(session.getClientInfo().getAppKey())) {
+                continue;
+            }
+            if (latest == null
+                    || latest.getUpdateTime() == null
+                    || (clientIndex.getUpdateTime() != null && clientIndex.getUpdateTime().after(latest.getUpdateTime()))) {
+                latest = clientIndex;
+            }
+        }
+        return latest != null && latest.getSession() != null ? latest.getSession().getPackageVerifyData() : null;
+    }
+
     private static final class StaticDataPersistStats {
         private int createdCount;
         private int updatedCount;
