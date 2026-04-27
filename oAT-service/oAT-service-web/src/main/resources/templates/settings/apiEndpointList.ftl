@@ -743,7 +743,7 @@
             var color = uncoveredCount > 0 ? 'red' : 'blue';
             var collapsed = collapsedGroupKeys[group.key] !== false;
             var childrenHtml = collapsed ? '' : group.items.map(function (item) {
-                return renderEndpointCard(item, true);
+                return renderEndpointCard(item, true, true);
             }).join('');
             var groupUsecases = collectGroupUsecases(group.items);
             return '<div class="endpoint-group-card ' + (uncoveredCount > 0 ? 'endpoint-group-uncovered' : '') + '">' +
@@ -784,9 +784,6 @@
             groupEndpointsByInterface(lastFilteredEndpoints).forEach(function (group) {
                 collapsedGroupKeys[group.key] = false;
             });
-            lastFilteredEndpoints.forEach(function (item) {
-                collapsedDetailKeys[buildEndpointKey(item)] = false;
-            });
         } else {
             lastFilteredEndpoints.forEach(function (item) {
                 collapsedDetailKeys[buildEndpointKey(item)] = false;
@@ -800,9 +797,6 @@
         if (currentViewMode === 'group') {
             groupEndpointsByInterface(lastFilteredEndpoints).forEach(function (group) {
                 collapsedGroupKeys[group.key] = true;
-            });
-            lastFilteredEndpoints.forEach(function (item) {
-                collapsedDetailKeys[buildEndpointKey(item)] = true;
             });
         } else {
             lastFilteredEndpoints.forEach(function (item) {
@@ -857,12 +851,12 @@
         $('html, body').animate({ scrollTop: $('#endpointList').offset().top - 120 }, 150);
     }
 
-    function renderEndpointCard(item, compact) {
+    function renderEndpointCard(item, compact, forceExpanded) {
         var cardClass = item.covered ? 'endpoint-covered' : 'endpoint-uncovered';
         var color = item.covered ? 'blue' : 'grey';
         var extraStyle = compact ? 'margin-bottom:8px;' : '';
         var endpointKey = buildEndpointKey(item);
-        var collapsed = collapsedDetailKeys[endpointKey] === true;
+        var collapsed = !forceExpanded && collapsedDetailKeys[endpointKey] === true;
         var detailsHtml = collapsed ? '' :
             '<div class="endpoint-copy-actions">' +
                 '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(endpointKey) + ', \'接口键已复制\')">复制接口键</button>' +
@@ -888,7 +882,7 @@
                     '</div>' +
                     renderUsecaseLinks(item.linkedUsecases) +
                 '</div>' +
-                '<span class="endpoint-card-toggle" onclick="toggleEndpointDetail(' + quoteJs(endpointKey) + ')">' + (collapsed ? '展开明细' : '收起明细') + '</span>' +
+                (forceExpanded ? '' : '<span class="endpoint-card-toggle" onclick="toggleEndpointDetail(' + quoteJs(endpointKey) + ')">' + (collapsed ? '展开明细' : '收起明细') + '</span>') +
             '</div>' +
             '<div class="endpoint-card-details" style="display:' + (collapsed ? 'none' : 'block') + ';">' + detailsHtml + '</div>' +
         '</div>';
