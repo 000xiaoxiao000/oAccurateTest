@@ -1,6 +1,6 @@
 
 
-function uploadFile(fileObj, url, resultNotify, progress) {
+function uploadFile(fileObj, url, resultNotify, progress, errorNotify) {
     // 计算md5 值
     doMd5(fileObj, function (md5) {
         // FormData 对象
@@ -11,6 +11,10 @@ function uploadFile(fileObj, url, resultNotify, progress) {
         var xhr = new XMLHttpRequest();
         xhr.open("post", url, true);
         xhr.onload =resultNotify;
+        if (errorNotify) {
+            xhr.onerror = errorNotify;
+            xhr.onabort = errorNotify;
+        }
         xhr.upload.addEventListener("progress", progress, false);
         xhr.send(form);
     });
