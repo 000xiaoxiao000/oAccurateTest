@@ -864,7 +864,6 @@
         var endpointKey = buildEndpointKey(item);
         var collapsed = collapsedDetailKeys[endpointKey] === true;
         var detailsHtml = collapsed ? '' :
-            renderUsecaseLinks(item.linkedUsecases) +
             '<div class="endpoint-copy-actions">' +
                 '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(endpointKey) + ', \'接口键已复制\')">复制接口键</button>' +
                 '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(item.url || '') + ', \'URL 已复制\')">复制 URL</button>' +
@@ -887,6 +886,7 @@
                         '<span class="ui basic label endpoint-badge">命中 ' + escapeHtml(String(item.hitCount || 0)) + '</span>' +
                         '<span class="ui basic label endpoint-badge">来源 ' + escapeHtml(String(item.mergedSourceCount || 0)) + '</span>' +
                     '</div>' +
+                    renderUsecaseLinks(item.linkedUsecases) +
                 '</div>' +
                 '<span class="endpoint-card-toggle" onclick="toggleEndpointDetail(' + quoteJs(endpointKey) + ')">' + (collapsed ? '展开明细' : '收起明细') + '</span>' +
             '</div>' +
