@@ -144,6 +144,8 @@
         .endpoint-group-card.endpoint-group-uncovered { background: #fff7f7; border-color: #fca5a5; box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.08); }
         .endpoint-group-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
         .endpoint-group-children { margin-top: 12px; }
+        .endpoint-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+        .endpoint-card-toggle { cursor: pointer; color: #2563eb; font-weight: 600; white-space: nowrap; }
         .endpoint-uncovered-focus { margin-bottom: 12px; border: 1px solid #fecaca; background: #fff1f2; }
         .endpoint-group-toggle { cursor: pointer; color: #2563eb; font-weight: 600; }
         .endpoint-empty { padding: 36px 12px !important; }
@@ -307,6 +309,8 @@
                     <div class="endpoint-quick-actions">
                         <button type="button" class="ui tiny red basic button" id="uncoveredQuickBtn" onclick="toggleUncoveredOnly()">只看未覆盖</button>
                         <button type="button" class="ui tiny button" onclick="resetFilters()">重置筛选</button>
+                        <button type="button" class="ui tiny basic button" onclick="expandAllCurrentView()">全部展开</button>
+                        <button type="button" class="ui tiny basic button" onclick="collapseAllCurrentView()">全部收起</button>
                         <button type="button" class="ui tiny primary basic button" onclick="exportCurrentViewCsv()">导出当前结果 CSV</button>
                     </div>
                     <div class="endpoint-filter-chips" id="activeFilterChips"></div>
@@ -329,6 +333,7 @@
     var allEndpoints = [];
     var currentViewMode = 'detail';
     var collapsedGroupKeys = {};
+    var collapsedDetailKeys = {};
     var endpointStorageKey = 'api-endpoints-view-state-${project.id}-${app.id}';
     var lastFilteredEndpoints = [];
     var currentPage = 1;
@@ -610,7 +615,8 @@
             httpMethod: $('#httpMethodFilter').val() || '',
             hitCountRange: $('#hitCountFilter').val() || '',
             currentViewMode: currentViewMode,
-            collapsedGroupKeys: collapsedGroupKeys
+            collapsedGroupKeys: collapsedGroupKeys,
+            collapsedDetailKeys: collapsedDetailKeys
         };
     }
 
@@ -635,6 +641,7 @@
             $('#hitCountFilter').val(state.hitCountRange || '');
             currentViewMode = state.currentViewMode === 'group' ? 'group' : 'detail';
             collapsedGroupKeys = state.collapsedGroupKeys || {};
+            collapsedDetailKeys = state.collapsedDetailKeys || {};
         } catch (e) {
         }
     }
@@ -738,11 +745,13 @@
             var childrenHtml = collapsed ? '' : group.items.map(function (item) {
                 return renderEndpointCard(item, true);
             }).join('');
+            var groupUsecases = collectGroupUsecases(group.items);
             return '<div class="endpoint-group-card ' + (uncoveredCount > 0 ? 'endpoint-group-uncovered' : '') + '">' +
                 '<div class="endpoint-group-header">' +
                     '<div>' +
                         '<div class="endpoint-url">' + escapeHtml(group.url || '-') + '</div>' +
                         '<div class="endpoint-meta">接口键：' + escapeHtml(buildEndpointKey(firstItem)) + '</div>' +
+                        renderUsecaseLinks(groupUsecases) +
                     '</div>' +
                     '<div>' +
                         '<span class="ui ' + color + ' label endpoint-badge">共 ' + escapeHtml(String(group.items.length)) + ' 条</span>' +
@@ -760,6 +769,47 @@
 
     function toggleGroup(groupKey) {
         collapsedGroupKeys[groupKey] = collapsedGroupKeys[groupKey] === false ? true : false;
+        persistViewState();
+        applyFiltersForCurrentPage();
+    }
+
+    function toggleEndpointDetail(endpointKey) {
+        collapsedDetailKeys[endpointKey] = collapsedDetailKeys[endpointKey] === false ? true : false;
+        persistViewState();
+        applyFiltersForCurrentPage();
+    }
+
+    function expandAllCurrentView() {
+        if (currentViewMode === 'group') {
+            groupEndpointsByInterface(lastFilteredEndpoints).forEach(function (group) {
+                collapsedGroupKeys[group.key] = false;
+            });
+            lastFilteredEndpoints.forEach(function (item) {
+                collapsedDetailKeys[buildEndpointKey(item)] = false;
+            });
+        } else {
+            lastFilteredEndpoints.forEach(function (item) {
+                collapsedDetailKeys[buildEndpointKey(item)] = false;
+            });
+        }
+        persistViewState();
+        applyFiltersForCurrentPage();
+    }
+
+    function collapseAllCurrentView() {
+        if (currentViewMode === 'group') {
+            groupEndpointsByInterface(lastFilteredEndpoints).forEach(function (group) {
+                collapsedGroupKeys[group.key] = true;
+            });
+            lastFilteredEndpoints.forEach(function (item) {
+                collapsedDetailKeys[buildEndpointKey(item)] = true;
+            });
+        } else {
+            lastFilteredEndpoints.forEach(function (item) {
+                collapsedDetailKeys[buildEndpointKey(item)] = true;
+            });
+        }
+        persistViewState();
         applyFiltersForCurrentPage();
     }
 
@@ -811,19 +861,12 @@
         var cardClass = item.covered ? 'endpoint-covered' : 'endpoint-uncovered';
         var color = item.covered ? 'blue' : 'grey';
         var extraStyle = compact ? 'margin-bottom:8px;' : '';
-        return '<div class="endpoint-card ' + cardClass + '" style="' + extraStyle + '">' +
-            '<div class="endpoint-url" style="color:' + (item.covered ? '#2563eb' : '#6b7280') + '">' + escapeHtml(item.url || '-') + '</div>' +
-            '<div class="endpoint-meta">接口键：' + escapeHtml(buildEndpointKey(item)) + '</div>' +
-            '<div>' +
-                '<span class="ui ' + color + ' label endpoint-badge">' + escapeHtml(item.endpointType || '-') + '</span>' +
-                '<span class="ui basic label endpoint-badge">' + escapeHtml(item.httpMethod || '-') + '</span>' +
-                '<span class="ui ' + color + ' basic label endpoint-badge">' + (item.covered ? '已覆盖' : '未覆盖') + '</span>' +
-                '<span class="ui basic label endpoint-badge">命中 ' + escapeHtml(String(item.hitCount || 0)) + '</span>' +
-                '<span class="ui basic label endpoint-badge">来源 ' + escapeHtml(String(item.mergedSourceCount || 0)) + '</span>' +
-            '</div>' +
+        var endpointKey = buildEndpointKey(item);
+        var collapsed = collapsedDetailKeys[endpointKey] === true;
+        var detailsHtml = collapsed ? '' :
             renderUsecaseLinks(item.linkedUsecases) +
             '<div class="endpoint-copy-actions">' +
-                '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(buildEndpointKey(item)) + ', \'接口键已复制\')">复制接口键</button>' +
+                '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(endpointKey) + ', \'接口键已复制\')">复制接口键</button>' +
                 '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(item.url || '') + ', \'URL 已复制\')">复制 URL</button>' +
                 '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(item.methodDesc || '') + ', \'方法签名已复制\')">复制方法签名</button>' +
             '</div>' +
@@ -831,7 +874,23 @@
             renderGroupBlock('方法', item.methodNameList, item.methodName) +
             renderGroupBlock('签名', item.methodDescList, item.methodDesc) +
             renderGroupBlock('来源类型', item.sourceTypeList, item.sourceType) +
-            renderGroupBlock('来源文件', item.sourceNameList, item.sourceName) +
+            renderGroupBlock('来源文件', item.sourceNameList, item.sourceName);
+        return '<div class="endpoint-card ' + cardClass + '" style="' + extraStyle + '">' +
+            '<div class="endpoint-card-header">' +
+                '<div>' +
+                    '<div class="endpoint-url" style="color:' + (item.covered ? '#2563eb' : '#6b7280') + '">' + escapeHtml(item.url || '-') + '</div>' +
+                    '<div class="endpoint-meta">接口键：' + escapeHtml(endpointKey) + '</div>' +
+                    '<div>' +
+                        '<span class="ui ' + color + ' label endpoint-badge">' + escapeHtml(item.endpointType || '-') + '</span>' +
+                        '<span class="ui basic label endpoint-badge">' + escapeHtml(item.httpMethod || '-') + '</span>' +
+                        '<span class="ui ' + color + ' basic label endpoint-badge">' + (item.covered ? '已覆盖' : '未覆盖') + '</span>' +
+                        '<span class="ui basic label endpoint-badge">命中 ' + escapeHtml(String(item.hitCount || 0)) + '</span>' +
+                        '<span class="ui basic label endpoint-badge">来源 ' + escapeHtml(String(item.mergedSourceCount || 0)) + '</span>' +
+                    '</div>' +
+                '</div>' +
+                '<span class="endpoint-card-toggle" onclick="toggleEndpointDetail(' + quoteJs(endpointKey) + ')">' + (collapsed ? '展开明细' : '收起明细') + '</span>' +
+            '</div>' +
+            '<div class="endpoint-card-details" style="display:' + (collapsed ? 'none' : 'block') + ';">' + detailsHtml + '</div>' +
         '</div>';
     }
 
@@ -850,6 +909,22 @@
             '</a>';
         }).join('');
         return '<div class="endpoint-meta">关联用例：' + links + '</div>';
+    }
+
+    function collectGroupUsecases(items) {
+        var map = {};
+        var result = [];
+        (items || []).forEach(function (item) {
+            (item.linkedUsecases || []).forEach(function (usecase) {
+                var id = usecase && usecase.id;
+                if (!id || map[id]) {
+                    return;
+                }
+                map[id] = true;
+                result.push(usecase);
+            });
+        });
+        return result;
     }
 
     function groupEndpointsByInterface(list) {
