@@ -191,7 +191,7 @@
                 .attr('aria-busy', busy ? 'true' : 'false');
         if (message) {
             $form.attr('data-oat-submitting-message', message);
-        } else if (!busy) {
+        } else {
             $form.removeAttr('data-oat-submitting-message');
         }
         $form.find('input, textarea, select, button').prop('disabled', busy);
@@ -515,7 +515,7 @@
             return;
         }
 
-        setVersionPageBusy(true, '正在远程拉取代码...');
+        setVersionPageBusy(true);
         $(btn).addClass('loading').removeClass('disabled').prop('disabled', false);
         $('#gitProgressField').show();
         $('#gitProgress').progress({ percent: 0 });
@@ -575,7 +575,7 @@
         }
         $("#programFile").val(null);
         setCreateButtonEnabled(false);
-        setVersionPageBusy(true, '正在上传程序文件...');
+        setVersionPageBusy(true);
         $('#programFileSelect').prop('disabled', false);
         $('#programProgress').progress({ percent: 0 });
         $('#programProgress .label').text('正在准备上传...');
