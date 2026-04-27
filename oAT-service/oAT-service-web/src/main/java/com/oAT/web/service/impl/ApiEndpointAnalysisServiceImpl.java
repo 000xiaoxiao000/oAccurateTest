@@ -21,8 +21,10 @@ import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
 import com.oAT.web.esDao.entity.ApiEndpointIndex;
 import com.oAT.web.esDao.entity.CaseCenterIndex;
+import com.oAT.web.esDao.entity.Snapshot;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.esDao.entity.TraceNodeIndex;
+import com.oAT.web.esDao.entity.Usecase;
 import com.oAT.web.service.ApiEndpointAnalysisService;
 import com.oAT.web.service.entity.ApiEndpointCoverageVo;
 import com.oAT.web.service.entity.ApiEndpointViewVo;
@@ -96,8 +98,9 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
     @Override
     public List<ApiEndpointViewVo> listByAppId(String appId) {
         refreshCoverage(appId);
+        Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> usecaseLinks = buildUsecaseLinksByCoverageKey(appId);
         return apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(appId)
-                .stream().map(this::toViewVo).collect(Collectors.toList());
+                .stream().map(index -> toViewVo(index, usecaseLinks)).collect(Collectors.toList());
     }
 
     @Override
@@ -512,6 +515,10 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
     }
 
     private ApiEndpointViewVo toViewVo(ApiEndpointIndex index) {
+        return toViewVo(index, Collections.emptyMap());
+    }
+
+    private ApiEndpointViewVo toViewVo(ApiEndpointIndex index, Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> usecaseLinks) {
         ApiEndpointViewVo vo = new ApiEndpointViewVo();
         vo.setId(index.getId());
         vo.setEndpointType(index.getEndpointType());
@@ -536,7 +543,172 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
         vo.setCoverageStatus(index.getCoverageStatus());
         vo.setCovered(Boolean.TRUE.equals(index.getCovered()));
         vo.setHitCount(index.getHitCount() == null ? 0 : index.getHitCount());
+        vo.setLinkedUsecases(resolveLinkedUsecases(index, usecaseLinks));
         return vo;
+    }
+
+    private Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> buildUsecaseLinksByCoverageKey(String appId) {
+        Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> result = new LinkedHashMap<>();
+        Map<String, TraceNodeIndex> traceMap = new LinkedHashMap<>();
+
+        List<CaseCenterIndex> snapshots = caseCenterRepository.findBySnapshot_AppId(appId);
+        for (CaseCenterIndex snapshotIndex : snapshots) {
+            if (snapshotIndex == null || snapshotIndex.getSnapshot() == null || !StringUtils.hasText(snapshotIndex.getId())) {
+                continue;
+            }
+            Snapshot snapshot = snapshotIndex.getSnapshot();
+            if (!StringUtils.hasText(snapshot.getTraceId())) {
+                continue;
+            }
+            List<ApiEndpointViewVo.UsecaseLinkVo> links = findUsecasesBySnapshot(snapshot.getProjectId(), snapshotIndex.getId());
+            if (links.isEmpty()) {
+                continue;
+            }
+            addUsecaseLinksByTraceId(result, traceMap, appId, snapshot.getTraceId(), links);
+        }
+
+        List<SystemSnapshot> systemSnapshots = systemSnapshotRepository.findByAppId(appId);
+        for (SystemSnapshot snapshot : systemSnapshots) {
+            if (snapshot == null || !StringUtils.hasText(snapshot.getId()) || !StringUtils.hasText(snapshot.getTraceId())) {
+                continue;
+            }
+            List<ApiEndpointViewVo.UsecaseLinkVo> links = findUsecasesBySystemSnapshot(snapshot.getProjectId(), snapshot.getId());
+            if (links.isEmpty()) {
+                continue;
+            }
+            addUsecaseLinksByTraceId(result, traceMap, appId, snapshot.getTraceId(), links);
+        }
+        return result;
+    }
+
+    private void addUsecaseLinksByTraceId(Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> result,
+                                          Map<String, TraceNodeIndex> traceMap,
+                                          String appId,
+                                          String traceId,
+                                          List<ApiEndpointViewVo.UsecaseLinkVo> links) {
+        addTraceIndexes(traceMap, traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 10000)), appId);
+        for (TraceNodeIndex item : traceMap.values()) {
+            if (!traceId.equals(item.getTraceId())) {
+                continue;
+            }
+            String key = coverageKey(item);
+            if (StringUtils.hasText(key)) {
+                addUsecaseLinks(result, key, links);
+            }
+        }
+    }
+
+    private String coverageKey(TraceNodeIndex item) {
+        TraceNode node;
+        try {
+            node = item.toTraceNode();
+        } catch (Exception ignored) {
+            return null;
+        }
+        if (node instanceof HttpTraceNode) {
+            HttpTraceNode n = (HttpTraceNode) node;
+            if (!StringUtils.hasText(n.getRequestUrl())) {
+                return null;
+            }
+            return coverageKey("HTTP", n.getRequestMethod(), n.getRequestUrl());
+        }
+        if (node instanceof HttpClientTraceNode) {
+            HttpClientTraceNode n = (HttpClientTraceNode) node;
+            if (!StringUtils.hasText(n.getServiceURL())) {
+                return null;
+            }
+            return coverageKey("HTTP_CLIENT", n.getServiceMethod(), n.getServiceURL());
+        }
+        if (node instanceof FeignTraceNode) {
+            FeignTraceNode n = (FeignTraceNode) node;
+            String target = firstText(n.getServiceURL(), n.getRemoteUrl());
+            if (!StringUtils.hasText(target)) {
+                return null;
+            }
+            return coverageKey("FEIGN", n.getServiceMethod(), target);
+        }
+        if (node instanceof DubboTraceNode) {
+            DubboTraceNode n = (DubboTraceNode) node;
+            if (!StringUtils.hasText(n.getServiceInterface()) || !StringUtils.hasText(n.getServiceMethodName())) {
+                return null;
+            }
+            return coverageKey("RPC", "INVOKE", n.getServiceInterface() + "#" + n.getServiceMethodName());
+        }
+        return null;
+    }
+
+    private void addUsecaseLinks(Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> result,
+                                 String key,
+                                 List<ApiEndpointViewVo.UsecaseLinkVo> links) {
+        List<ApiEndpointViewVo.UsecaseLinkVo> target = result.computeIfAbsent(key, ignored -> new ArrayList<>());
+        Set<String> existingIds = target.stream().map(ApiEndpointViewVo.UsecaseLinkVo::getId).collect(Collectors.toSet());
+        for (ApiEndpointViewVo.UsecaseLinkVo link : links) {
+            if (link != null && StringUtils.hasText(link.getId()) && existingIds.add(link.getId())) {
+                target.add(link);
+            }
+        }
+    }
+
+    private List<ApiEndpointViewVo.UsecaseLinkVo> findUsecasesBySnapshot(String projectId, String snapshotId) {
+        return caseCenterRepository.findByUsecase_SnapshotsContaining(snapshotId).stream()
+                .filter(index -> index != null && index.getUsecase() != null && projectId.equals(index.getUsecase().getProjectId()))
+                .map(this::toUsecaseLinkVo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private List<ApiEndpointViewVo.UsecaseLinkVo> findUsecasesBySystemSnapshot(String projectId, String snapshotId) {
+        return caseCenterRepository.findByUsecase_SystemSnapshotsContaining(snapshotId).stream()
+                .filter(index -> index != null && index.getUsecase() != null && projectId.equals(index.getUsecase().getProjectId()))
+                .map(this::toUsecaseLinkVo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private ApiEndpointViewVo.UsecaseLinkVo toUsecaseLinkVo(CaseCenterIndex index) {
+        Usecase usecase = index.getUsecase();
+        if (usecase == null) {
+            return null;
+        }
+        ApiEndpointViewVo.UsecaseLinkVo link = new ApiEndpointViewVo.UsecaseLinkVo();
+        link.setId(index.getId());
+        link.setTitle(usecase.getTitle());
+        link.setDirectory(usecase.getDirectory());
+        return link;
+    }
+
+    private List<ApiEndpointViewVo.UsecaseLinkVo> resolveLinkedUsecases(ApiEndpointIndex index,
+                                                                         Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> usecaseLinks) {
+        if (usecaseLinks == null || usecaseLinks.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<ApiEndpointViewVo.UsecaseLinkVo> result = new ArrayList<>();
+        Set<String> existingIds = new LinkedHashSet<>();
+        String method = normalizeHttpMethod(index.getHttpMethod());
+        String endpointTarget = "RPC".equals(index.getEndpointType())
+                ? (index.getUrl() == null ? "" : index.getUrl().trim())
+                : simplifyCoverageTarget(index.getUrl());
+        for (Map.Entry<String, List<ApiEndpointViewVo.UsecaseLinkVo>> entry : usecaseLinks.entrySet()) {
+            CoverageKey key = CoverageKey.parse(entry.getKey());
+            if (key == null || !Objects.equals(index.getEndpointType(), key.endpointType)) {
+                continue;
+            }
+            if (!isHttpMethodMatched(method, key.httpMethod)) {
+                continue;
+            }
+            boolean matched = "RPC".equals(index.getEndpointType())
+                    ? Objects.equals(endpointTarget, key.target)
+                    : isPathMatched(endpointTarget, key.target);
+            if (!matched) {
+                continue;
+            }
+            for (ApiEndpointViewVo.UsecaseLinkVo link : entry.getValue()) {
+                if (link != null && StringUtils.hasText(link.getId()) && existingIds.add(link.getId())) {
+                    result.add(link);
+                }
+            }
+        }
+        return result;
     }
 
     private String suffix(String lowerName) {

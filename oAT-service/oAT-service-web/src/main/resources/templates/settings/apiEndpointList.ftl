@@ -821,6 +821,7 @@
                 '<span class="ui basic label endpoint-badge">命中 ' + escapeHtml(String(item.hitCount || 0)) + '</span>' +
                 '<span class="ui basic label endpoint-badge">来源 ' + escapeHtml(String(item.mergedSourceCount || 0)) + '</span>' +
             '</div>' +
+            renderUsecaseLinks(item.linkedUsecases) +
             '<div class="endpoint-copy-actions">' +
                 '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(buildEndpointKey(item)) + ', \'接口键已复制\')">复制接口键</button>' +
                 '<button type="button" class="ui mini basic button" onclick="copyText(' + quoteJs(item.url || '') + ', \'URL 已复制\')">复制 URL</button>' +
@@ -832,6 +833,23 @@
             renderGroupBlock('来源类型', item.sourceTypeList, item.sourceType) +
             renderGroupBlock('来源文件', item.sourceNameList, item.sourceName) +
         '</div>';
+    }
+
+    function renderUsecaseLinks(usecases) {
+        if (!Array.isArray(usecases) || !usecases.length) {
+            return '<div class="endpoint-meta">关联用例：暂无</div>';
+        }
+        var links = usecases.map(function (usecase) {
+            var title = usecase.title || usecase.id || '未命名用例';
+            var href = '/p/${project.id}/usecase/list?usecaseId=' + encodeURIComponent(usecase.id || '');
+            if (usecase.directory) {
+                href += '&directory=' + encodeURIComponent(usecase.directory);
+            }
+            return '<a class="ui teal basic mini label endpoint-badge" href="' + href + '" title="查看关联用例">' +
+                '<i class="file alternate outline icon"></i>' + escapeHtml(title) +
+            '</a>';
+        }).join('');
+        return '<div class="endpoint-meta">关联用例：' + links + '</div>';
     }
 
     function groupEndpointsByInterface(list) {

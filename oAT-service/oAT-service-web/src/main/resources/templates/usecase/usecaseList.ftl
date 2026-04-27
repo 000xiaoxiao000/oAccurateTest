@@ -211,7 +211,7 @@
                 </tr>
             </#list>
             <#list cases as cas>
-                <tr data-usecase-id="${cas.id}">
+                <tr data-usecase-id="${cas.id}" class="<#if usecaseId?? && usecaseId == cas.id>positive</#if>">
                     <td>
                         <a class="usecase-title" href="/p/${project.id}/usecase/detail?id=${cas.id}"><i
                                     class="file outline icon"></i><span>${cas.title}</span></a>
@@ -638,6 +638,14 @@
         $("#filterSort").change(function () {
             $("#filterForm").submit();
         });
+        var focusUsecaseId = '${usecaseId!}';
+        if (focusUsecaseId) {
+            var safeUsecaseId = focusUsecaseId.replace(/"/g, '\\"');
+            var $row = $('[data-usecase-id="' + safeUsecaseId + '"]');
+            if ($row.length) {
+                $('html, body').animate({scrollTop: $row.offset().top - 160}, 180);
+            }
+        }
     });
 </script>
 
