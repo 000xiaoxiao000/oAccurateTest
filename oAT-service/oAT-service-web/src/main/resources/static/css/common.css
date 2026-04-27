@@ -1394,3 +1394,26 @@ a.ui.button.disabled,
 }
 
 /*流程图dagre-d3 样式 ============end*/
+
+/* Keep version add progress readable while the page is locked */
+.version-add-form.oat-form-submitting #gitProgressField,
+.version-add-form.oat-form-submitting #programProgress {
+    position: relative;
+    z-index: 35;
+    opacity: 1 !important;
+    filter: none !important;
+    pointer-events: none;
+}
+
+.version-add-form.oat-form-submitting #gitProgressField label,
+.version-add-form.oat-form-submitting #gitProgress .label,
+.version-add-form.oat-form-submitting #programProgress .label {
+    opacity: 1 !important;
+    color: #334155 !important;
+    font-weight: 700;
+}
+
+.version-add-form.oat-form-submitting[data-oat-submitting-message]:after {
+    top: auto;
+    bottom: 96px;
+}
