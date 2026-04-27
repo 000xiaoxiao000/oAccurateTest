@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 @Service
 public class ClientSessionServiceImpl implements ClientSessionService, InitializingBean, ApplicationContextAware {
     static final Logger logger = LoggerFactory.getLogger(ClientSessionServiceImpl.class);
+    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
     TraceNodeCache nodeCache;
     @Value("${traceNode.cache.capacity:5000}")
@@ -382,6 +383,60 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         }
         return stats;
     }
+
+    // agent插桩日志根据sessionId存储
+    @Override
+    public void putAgentLogs(String sessionId, String readAgentLogs) {
+        if (!StringUtils.hasText(sessionId)) {
+            return;
+        }
+        // 校验 Redis 是否有该 sessionId，避免已过期/离线会话继续写入日志
+        if (!redisTemplate.hasKey(SESSIONS_KEY_PREFIX + sessionId)) {
+            logger.warn("[putAgentLogs]Redis中无session，拒绝写入日志，sessionId: {}", sessionId);
+            return;
+        }
+        clientRepository.findById(sessionId).ifPresent(clientIndex -> {
+            ClientSession session = clientIndex.getSession();
+            if (session == null) {
+                logger.warn("[putAgentLogs]Session为空，拒绝写入日志，sessionId: {}", sessionId);
+                return;
+            }
+            if (ClientSession.Status.active.toString().equals(session.getStatus())) {
+                session.setAgentLogs(readAgentLogs);
+                clientIndex.setUpdateTime(new Date());
+                clientRepository.save(clientIndex);
+                logger.debug("[putAgentLogs]存储 agent 日志，sessionId: {}", sessionId);
+            } else {
+                logger.warn("[putAgentLogs]会话非active状态，拒绝写入日志，sessionId: {}", sessionId);
+            }
+        });
+    }
+
+    // 将包验证信息存储到ES
+    @Override
+    public void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage) {
+        try {
+            Optional<ClientIndex> optional = clientRepository.findById(sessionId);
+            if (optional.isPresent()) {
+                ClientIndex clientIndex = optional.get();
+                ClientSession session = clientIndex.getSession();
+                if (session == null) {
+                    logger.warn("[putPackageVerify]Session 为空，无法写入包的验证信息");
+                    return;
+                }
+                session.setPackageVerifyData(
+                        String.format("sessionId: %s, packagePath: %s, gitCommitIdFromPackage: %s",
+                                sessionId, packagePath, gitCommitIdFromPackage));
+                clientRepository.save(clientIndex);
+            } else {
+                logger.warn("[putPackageVerify]未找到对应的 ClientIndex，sessionId: {}", sessionId);
+            }
+        } catch (Exception e) {
+            logger.error("[putPackageVerify]存储包验证信息失败，sessionId: {}, err: {}",
+                    sessionId, e.getMessage(), e);
+        }
+    }
+
 
     private static final class StaticDataPersistStats {
         private int createdCount;

@@ -37,8 +37,15 @@ public class ClientSession implements Serializable {
      */
     @Field(type = FieldType.Keyword)
     private String status;
+
     @Field(type = FieldType.Long)
     private Long lastHeartbeatTime;
+
+    @Field(type = FieldType.Text)
+    private String agentLogs;
+
+    @Field(type = FieldType.Text)
+    private String packageVerifyData;
 
     public String[] getUploadUrls() {
         return uploadUrls;
@@ -90,6 +97,22 @@ public class ClientSession implements Serializable {
 
     public void setLastHeartbeatTime(Long lastHeartbeatTime) {
         this.lastHeartbeatTime = lastHeartbeatTime;
+    }
+
+    public String getAgentLogs() {
+        return agentLogs;
+    }
+
+    public void setAgentLogs(String agentLogs) {
+        this.agentLogs = agentLogs;
+    }
+
+    public String getPackageVerifyData() {
+        return packageVerifyData;
+    }
+
+    public void setPackageVerifyData(String packageVerifyData) {
+        this.packageVerifyData = packageVerifyData;
     }
 
     public enum Status {

@@ -126,23 +126,10 @@ public class ClientSessionControl {
     public void packageVerify(@RequestParam Map<String, String> params) {
         String sessionId = params.get("sessionId");
         String packagePath = params.get("packagePath");
-        String fileSize = params.get("fileSize");
-        String classCount = params.get("classCount");
+        String gitCommitIdFromPackage = params.get("gitCommitIdFromPackage");
 
-        // 处理 manifest_ 开头的参数
-        Map<String, String> manifestMap = new HashMap<>();
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (entry.getKey().startsWith("manifest_")) {
-                manifestMap.put(entry.getKey().substring("manifest_".length()), entry.getValue());
-            }
-        }
-        try {
-            // 存储验证结果到ES
-            sessionService.putPackageVerify(sessionId, sha256, fileSize, objectMapper.writeValueAsString(manifestMap)
-                    , classCount);
-        } catch (JsonProcessingException e) {
-            logger.error("[packageVerify]包验证失败: ", e);
-            throw new RuntimeException("[packageVerify]包验证失败: " + e.getMessage(), e);
-        }
+        // 存储验证结果到ES
+        sessionService.putPackageVerify(sessionId, packagePath, gitCommitIdFromPackage);
+
     }
 }
