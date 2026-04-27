@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientInfoVo;
@@ -21,6 +22,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 @Controller
 @RequestMapping("/client")
@@ -106,5 +109,40 @@ public class ClientSessionControl {
         Assert.notNull(data, "param 'data' must be not null");
         sessionService.saveStaticData(appId, data);
         return "succeed";
+    }
+
+    @PostMapping("/agentLogs")
+    @ResponseBody
+    public void agentLogs(String sessionId, String logs) {
+        if (StringUtils.isBlank(sessionId)) {
+            logger.error("[agentLogs]sessionId为空");
+            return;
+        }
+        sessionService.putAgentLogs(sessionId, logs);
+    }
+
+    @PostMapping("/packageVerify")
+    @ResponseBody
+    public void packageVerify(@RequestParam Map<String, String> params) {
+        String sessionId = params.get("sessionId");
+        String packagePath = params.get("packagePath");
+        String fileSize = params.get("fileSize");
+        String classCount = params.get("classCount");
+
+        // 处理 manifest_ 开头的参数
+        Map<String, String> manifestMap = new HashMap<>();
+        for (Map.Entry<String, String> entry : params.entrySet()) {
+            if (entry.getKey().startsWith("manifest_")) {
+                manifestMap.put(entry.getKey().substring("manifest_".length()), entry.getValue());
+            }
+        }
+        try {
+            // 存储验证结果到ES
+            sessionService.putPackageVerify(sessionId, sha256, fileSize, objectMapper.writeValueAsString(manifestMap)
+                    , classCount);
+        } catch (JsonProcessingException e) {
+            logger.error("[packageVerify]包验证失败: ", e);
+            throw new RuntimeException("[packageVerify]包验证失败: " + e.getMessage(), e);
+        }
     }
 }
