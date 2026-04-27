@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.instrument.Instrumentation;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -135,39 +136,9 @@ public class TraceContext {
                 try {
                     String packagePath = PackageVerifier.getRunningJarPackagePath();
                     if (packagePath != null) {
-                        logger.info("[Agent-校验包]开始进行包完整性校验和元数据、结构、内容验证，包路径: " + packagePath);
+                        logger.info("[Agent-校验包]开始进行读取包的 GitCommitId，包路径: " + packagePath);
 
-                        File jarPath = new File(packagePath);
-
-                        // 文件级验证
-                        Map<String, Object> fileLevel = PackageVerifier.verifyFileLevel(jarPath);
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("[Agent-校验包]文件级验证完成，文件大小: " + fileLevel.get("size") + " 字节, SHA256: " + fileLevel.get("sha256"));
-                        }
-
-                        // 元数据验证
-                        Map<String, String> manifestAttrs = PackageVerifier.verifyManifest(
-                                jarPath,
-                                Arrays.asList("Manifest-Version", "Main-Class", "Implementation-Version",
-                                        "Implementation" +
-                                        "-Vendor")
-                        );
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("[Agent-校验包]MANIFEST.MF关键属性验证完成: " + manifestAttrs);
-                        }
-
-                        // 结构验证
-                        Map<String, Object> structureInfo = PackageVerifier.verifyStructure(jarPath);
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("[Agent-校验包]结构验证完成"
-                                    + "，classes 目录中类文件数量: " + structureInfo.get("classCount")
-                                    + "，lib 目录中 jar 包文件数量: " + structureInfo.get("jarCount")
-                                    + "，资源文件数量: " + structureInfo.get("resourceCount"));
-                        }
-
-                        // 内容验证
-//                    Map<String, String> contentHashes = PackageVerifier.verifyContent(jarPath);
-//                    logger.debug("[Agent-校验包]内容验证完成，类文件和资源文件哈希已生成");
+                        String gitCommitIdFromJar = PackageVerifier.getGitCommitIdFromPackage(packagePath);
 
                         Map<String, String> data = new HashMap<String, String>();
                         if (clientSession != null) {
@@ -176,29 +147,22 @@ public class TraceContext {
                             data.put("sessionId", "");
                         }
                         data.put("packagePath", packagePath);
-                        data.put("sha256", String.valueOf(fileLevel.get("sha256")));
-                        data.put("fileSize", String.valueOf(fileLevel.get("size")));
-                        for (Map.Entry<String, String> e : manifestAttrs.entrySet()) {
-                            data.put("manifest_" + e.getKey(), e.getValue());
-                        }
-                        data.put("classCount", String.valueOf(structureInfo.get("classCount")));
-                        data.put("jarCount", String.valueOf(structureInfo.get("jarCount")));
-                        data.put("resourceCount", String.valueOf(structureInfo.get("resourceCount")));
+                        data.put("GitCommitIdFromJar", gitCommitIdFromJar);
 //                    data.put("classFiles", String.valueOf(structureInfo.get("classFiles")));
 //                    data.put("resourceFiles", String.valueOf(structureInfo.get("resourceFiles")));
 //                    data.put("fileHashes", String.valueOf(contentHashes));
 
                         String targetUrl = getRemoteServer() + "/client/packageVerify";
-                        logger.info("[Agent-校验包]上报包校验数据... SHA256: " + fileLevel.get("sha256"));
+                        logger.info("[Agent-校验包]准备上送包的 GitCommitId 数据... GitCommitId: " + gitCommitIdFromJar);
                         Boolean b = PackageVerifier.sendVerificationData(targetUrl, data);
                         if (b) {
-                            logger.info("[Agent-校验包]包校验和上报流程完成。");
+                            logger.info("[Agent-校验包]包的 GitCommitId 数据上送完成。");
                         }
                     } else {
-                        logger.warn("[Agent-校验包]未能获取到运行包路径，跳过包校验和上报。");
+                        logger.warn("[Agent-校验包]未能获取到运行包路径，跳过获取包的 GitCommitId 和上送。");
                     }
                 } catch (Throwable e) {
-                    logger.error("[Agent-EXCError]校验包失败: " + e.getMessage());
+                    logger.error("[Agent-EXCError]校验包流程失败: " + StackTraceFormatter.formatExceptionWithAgentMark(e));
                 } finally {
                     // 保证在任务完成后关闭执行器，释放线程
                     try {

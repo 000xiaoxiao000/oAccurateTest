@@ -8,10 +8,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -19,168 +16,20 @@ import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.Manifest;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 public class PackageVerifier {
     private final static Log logger = LogFactory.getLog(PackageVerifier.class);
 
-    // 文件级验证：整体文件大小和SHA256校验和
-    public static Map<String, Object> verifyFileLevel(File jarFile) throws Exception {
-        Map<String, Object> result = new HashMap<String, Object>();
-        long size = jarFile.length();
-        String sha256 = calcSHA256(jarFile);
-        result.put("size", bytesToMB(size));
-        result.put("sha256", sha256);
-        return result;
-    }
-
-    private static String bytesToMB(long bytes) {
-        double mb = (double) bytes / 1024 / 1024;
-        return String.format("%.4f MB", mb);
-    }
-
-    private static String calcSHA256(File file) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        FileInputStream is = null;
-        try {
-            is = new FileInputStream(file);
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = is.read(buf)) > 0) {
-                digest.update(buf, 0, n);
-            }
-        } finally {
-            if (is != null) {
-                try {
-                    is.close();
-                } catch (IOException ignore) {}
-            }
-        }
-        byte[] hash = digest.digest();
-        StringBuilder sb = new StringBuilder();
-        for (byte b : hash) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
-
-    // 元数据验证：MANIFEST.MF中的关键属性
-    public static Map<String, String> verifyManifest(File jarFile, List<String> keyAttrs) throws Exception {
-        Map<String, String> attrs = new HashMap<String, String>();
-        JarFile jar = null;
-        try {
-            jar = new JarFile(jarFile);
-            Manifest manifest = jar.getManifest();
-            if (manifest == null) {
-                return attrs;
-            }
-            Attributes mainAttrs = manifest.getMainAttributes();
-            for (String key : keyAttrs) {
-                String val = mainAttrs.getValue(key);
-                attrs.put(key, val);
-            }
-        } finally {
-            if (jar != null) {
-                try {
-                    jar.close();
-                } catch (IOException ignore) {}
-            }
-        }
-        return attrs;
-    }
-
-    // 结构验证：类文件和资源文件的数量和路径
-    public static Map<String, Object> verifyStructure(File jarFile) throws Exception {
-        int classCount = 0, jarCount = 0, resourceCount = 0;
-        JarFile jar = null;
-        try {
-            jar = new JarFile(jarFile);
-            Enumeration<JarEntry> entries = jar.entries();
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
-                String name = entry.getName();
-
-                if (entry.isDirectory()) {
-                    continue;
-                }
-                // 排除MANIFEST.MF文件
-                if ("META-INF/MANIFEST.MF".equals(name)) {
-                    continue;
-                }
-
-                // 如果指定了根路径，只统计该路径下的文件
-                if (name.startsWith("BOOT-INF/classes") && name.endsWith(".class")) {
-                    classCount++;
-                } else if (name.startsWith("BOOT-INF/lib") && name.endsWith(".jar")) {
-                    // 统计lib目录中的JAR包
-                    jarCount++;
-                } else {
-                    resourceCount++;
-                }
-            }
-        } finally {
-            if (jar != null) {
-                try {
-                    jar.close();
-                } catch (IOException ignore) {}
-            }
-        }
-        Map<String, Object> result = new HashMap<String, Object>();
-        result.put("classCount", classCount);
-        result.put("jarCount", jarCount);
-        result.put("resourceCount", resourceCount);
-        return result;
-    }
-
-    // 内容验证：类文件的简化签名（基于哈希值），资源文件的校验和
-    public static Map<String, String> verifyContent(File jarFile) throws Exception {
-        Map<String, String> fileHashes = new HashMap<String, String>();
-        JarFile jar = null;
-        try {
-            jar = new JarFile(jarFile);
-            Enumeration<JarEntry> entries = jar.entries();
-            while (entries.hasMoreElements()) {
-                JarEntry entry = entries.nextElement();
-                String name = entry.getName();
-                if (entry.isDirectory() || "META-INF/MANIFEST.MF".equals(name)) {
-                    continue;
-                }
-                InputStream is = null;
-                try {
-                    is = jar.getInputStream(entry);
-                    String hash = calcStreamSHA256(is);
-                    fileHashes.put(name, hash);
-                } finally {
-                    if (is != null) {
-                        try {
-                            is.close();
-                        } catch (IOException ignore) {}
-                    }
-                }
-            }
-        } finally {
-            if (jar != null) {
-                try {
-                    jar.close();
-                } catch (IOException ignore) {}
-            }
-        }
-        return fileHashes;
-    }
-
-    private static String calcStreamSHA256(InputStream is) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] buf = new byte[4096];
-        int n;
-        while ((n = is.read(buf)) > 0) {
-            digest.update(buf, 0, n);
-        }
-        byte[] hash = digest.digest();
-        StringBuilder sb = new StringBuilder();
-        for (byte b : hash) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
-    }
+    private static final String[] BUILD_INFO_PATHS = {
+            "META-INF/git.properties",
+            "META-INF/build-info.properties",
+            "WEB-INF/classes/META-INF/git.properties",
+            "WEB-INF/classes/META-INF/build-info.properties",
+            "WEB-INF/classes/git.properties",
+            "WEB-INF/classes/build-info.properties"
+    };
 
     /**
      * 获取当前运行 jar 包的绝对路径（优先使用 java.class.path 和 sun.java.command）
@@ -231,6 +80,43 @@ public class PackageVerifier {
         } else {
             return jarName;
         }
+    }
+
+    /**
+     * 从 Jar/War 包中读取 Git Commit ID
+     */
+    public static String getGitCommitIdFromPackage(String packagePath) {
+        try (ZipFile zipFile = new ZipFile(packagePath)) {
+            ZipEntry entry = findBuildInfoEntry(zipFile);
+            if (entry == null) {
+                return null;
+            }
+
+            Properties props = new Properties();
+            try (InputStream is = zipFile.getInputStream(entry)) {
+                props.load(is);
+            }
+
+            // 优先使用完整 Commit ID
+            String commitId = props.getProperty("git.commit.id");
+            if (commitId == null || commitId.isEmpty()) {
+                commitId = props.getProperty("git.commit.id.abbrev");
+            }
+            return commitId;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static ZipEntry findBuildInfoEntry(ZipFile zipFile) {
+        for (String buildInfoPath : BUILD_INFO_PATHS) {
+            ZipEntry entry = zipFile.getEntry(buildInfoPath);
+            if (entry != null) {
+                return entry;
+            }
+        }
+        return null;
     }
 
     // 发送验证数据到指定URL

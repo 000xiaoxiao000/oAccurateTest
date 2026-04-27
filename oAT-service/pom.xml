@@ -74,7 +74,6 @@
                 </executions>
             </plugin>
 
-
         </plugins>
         <resources>
             <resource>
