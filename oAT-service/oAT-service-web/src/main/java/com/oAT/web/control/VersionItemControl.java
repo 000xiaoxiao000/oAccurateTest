@@ -334,18 +334,29 @@ public class VersionItemControl {
     }
 
     private PackageCommitVerifyVo verifyRuntimeCommit(String appId, String targetCommitId) {
-        String runtimeCommitId = findRuntimePackageCommitId(appId);
+        List<ClientSessionVo> onlineSessions = clientSessionService.getOnlineSessionsByAppId(appId);
+        if (onlineSessions == null || onlineSessions.isEmpty()) {
+            return new PackageCommitVerifyVo(null, targetCommitId, null, false, "探针不在线，无法获取运行时目标系统 CommitId");
+        }
+        String runtimeCommitId = findRuntimePackageCommitId(appId, onlineSessions);
         String normalizedRuntimeCommitId = normalizeCommitId(runtimeCommitId);
         String normalizedTargetCommitId = normalizeCommitId(targetCommitId);
         Boolean matched = null;
         if (StringUtils.hasText(normalizedRuntimeCommitId) && StringUtils.hasText(normalizedTargetCommitId)) {
             matched = commitIdMatches(normalizedRuntimeCommitId, normalizedTargetCommitId);
         }
-        return new PackageCommitVerifyVo(runtimeCommitId, targetCommitId, matched);
+        String unavailableReason = StringUtils.hasText(runtimeCommitId) ? null : "探针在线，但暂未上报运行时目标系统 CommitId";
+        return new PackageCommitVerifyVo(runtimeCommitId, targetCommitId, matched, true, unavailableReason);
     }
 
     private String findRuntimePackageCommitId(String appId) {
-        List<ClientSessionVo> sessions = clientSessionService.getOnlineSessionsByAppId(appId);
+        return findRuntimePackageCommitId(appId, clientSessionService.getOnlineSessionsByAppId(appId));
+    }
+
+    private String findRuntimePackageCommitId(String appId, List<ClientSessionVo> sessions) {
+        if (sessions == null || sessions.isEmpty()) {
+            return null;
+        }
         for (ClientSessionVo session : sessions) {
             String commitId = extractCommitIdFromPackageVerifyData(clientSessionService.getPackageVerifyData(session.getSessionId()));
             if (StringUtils.hasText(commitId)) {

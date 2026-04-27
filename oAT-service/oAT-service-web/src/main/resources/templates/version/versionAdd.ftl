@@ -230,6 +230,12 @@
         if (!verify) {
             return 'CommitId 校验：未获取到运行时目标系统 CommitId，无法校验';
         }
+        if (verify.probeOnline === false) {
+            return 'CommitId 校验：探针不在线，无法获取运行时目标系统 CommitId，请先启动目标系统探针后重试';
+        }
+        if (verify.unavailableReason) {
+            return 'CommitId 校验：' + verify.unavailableReason;
+        }
         if (!verify.runtimeCommitId) {
             return 'CommitId 校验：未获取到运行时目标系统 CommitId，无法校验';
         }
@@ -243,6 +249,9 @@
     }
 
     function getPackageCommitVerifyToastType(verify, defaultType) {
+        if (verify && verify.probeOnline === false) {
+            return 'warning';
+        }
         if (!verify || !verify.runtimeCommitId || !verify.targetCommitId || verify.matched === false) {
             return 'warning';
         }
@@ -250,6 +259,9 @@
     }
 
     function getPackageCommitVerifyToastDuration(verify) {
+        if (verify && verify.probeOnline === false) {
+            return 15000;
+        }
         if (!verify || !verify.runtimeCommitId || !verify.targetCommitId || verify.matched === false) {
             return 12000;
         }
