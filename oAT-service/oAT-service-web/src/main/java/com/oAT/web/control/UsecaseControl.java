@@ -106,7 +106,7 @@ public class UsecaseControl {
             usecase = usecaseService.getUsecase(projectId, id);
         } catch (IllegalArgumentException ex) {
             model.addAttribute("missingUsecaseMessage", "要编辑的用例不存在或已被删除");
-            return openListView(projectId, "root", "updateTime", null, model);
+            return openListView(projectId, "root", "updateTime", null, null, model);
         }
         // 获取当前用户下所有的快照
         List<SnapshotVo> selectedSnapshots = ArrayUtils.isNotEmpty(usecase.getSnapshots())
@@ -206,7 +206,7 @@ public class UsecaseControl {
             usecase = usecaseService.getUsecaseDetail(projectId, id);
         } catch (IllegalArgumentException ex) {
             model.addAttribute("missingUsecaseMessage", "要查看的用例不存在或已被删除");
-            return openListView(projectId, "root", "updateTime", null, model);
+            return openListView(projectId, "root", "updateTime", null, null, model);
         }
 
         model.addAttribute("usecase", usecase);
@@ -300,13 +300,14 @@ public class UsecaseControl {
      * @return
      */
     @RequestMapping("/list")
-    public String openListView(@PathVariable String projectId, String directory, String sort, String keyword, Model model) {
+    public String openListView(@PathVariable String projectId, String directory, String sort, String keyword, String usecaseId, Model model) {
         // 默认root
         directory = directory == null ? "root" : directory;
         sort = sort == null ? "updateTime" : sort;
         model.addAttribute("directory", directory);
         model.addAttribute("sort", sort);
         model.addAttribute("keyword", keyword);
+        model.addAttribute("usecaseId", usecaseId);
         List<UsecaseVo> list = usecaseService.getUsecases(projectId, directory, sort, keyword);
         Map<String, String> maintainerNameMap = buildMaintainerNameMap(list);
         List<UsecaseDirectoryVo> directorys = usecaseService.getDirectory(projectId, directory);

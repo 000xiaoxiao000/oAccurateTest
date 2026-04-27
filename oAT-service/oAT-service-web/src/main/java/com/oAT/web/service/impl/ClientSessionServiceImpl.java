@@ -295,9 +295,28 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
     public void heartbeat(String sessionId, String appId, Long timesTamp) {
         ClientSessionVo vo = getClientSession(sessionId);
         Assert.notNull(vo, "找不到指定客户端session id=" + sessionId);
-        vo.setLastHeartbeatTime(System.currentTimeMillis());
+        long heartbeatTime = System.currentTimeMillis();
+        vo.setLastHeartbeatTime(heartbeatTime);
         redisTemplate.opsForValue().set(SESSIONS_KEY_PREFIX + sessionId, vo, sessionClearValidity, TimeUnit.MILLISECONDS);
+        updateClientHeartbeat(sessionId, heartbeatTime);
         probeStatusService.onHeartbeat(vo);
+    }
+
+    private void updateClientHeartbeat(String sessionId, long heartbeatTime) {
+        try {
+            clientRepository.findById(sessionId).ifPresent(clientIndex -> {
+                ClientSession session = clientIndex.getSession();
+                if (session == null) {
+                    return;
+                }
+                session.setLastHeartbeatTime(heartbeatTime);
+                session.setStatus(ClientSession.Status.active.toString());
+                clientIndex.setUpdateTime(new Date(heartbeatTime));
+                clientRepository.save(clientIndex);
+            });
+        } catch (Exception e) {
+            logger.warn("[heartbeat]同步 client 心跳到 ES 失败, sessionId={}", sessionId, e);
+        }
     }
 
     @Override

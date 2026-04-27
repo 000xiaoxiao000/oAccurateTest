@@ -23,6 +23,7 @@ public class ApiEndpointViewVo implements Serializable {
     private List<String> sourceTypeList;
     private List<String> sourceNameList;
     private List<String> endpointKeyParts;
+    private List<UsecaseLinkVo> linkedUsecases;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -62,4 +63,19 @@ public class ApiEndpointViewVo implements Serializable {
     public void setSourceNameList(List<String> sourceNameList) { this.sourceNameList = sourceNameList; }
     public List<String> getEndpointKeyParts() { return endpointKeyParts; }
     public void setEndpointKeyParts(List<String> endpointKeyParts) { this.endpointKeyParts = endpointKeyParts; }
+    public List<UsecaseLinkVo> getLinkedUsecases() { return linkedUsecases; }
+    public void setLinkedUsecases(List<UsecaseLinkVo> linkedUsecases) { this.linkedUsecases = linkedUsecases; }
+
+    public static class UsecaseLinkVo implements Serializable {
+        private String id;
+        private String title;
+        private String directory;
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getDirectory() { return directory; }
+        public void setDirectory(String directory) { this.directory = directory; }
+    }
 }

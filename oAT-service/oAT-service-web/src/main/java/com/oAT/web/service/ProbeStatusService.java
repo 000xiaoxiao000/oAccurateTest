@@ -2,7 +2,10 @@ package com.oAT.web.service;
 
 import com.oAT.server.model.ClientInfoVo;
 import com.oAT.server.model.ClientSessionVo;
+import com.oAT.web.esDao.ClientRepository;
 import com.oAT.web.esDao.ProbeInstanceStatusRepository;
+import com.oAT.web.esDao.entity.ClientIndex;
+import com.oAT.web.esDao.entity.ClientSession;
 import com.oAT.web.esDao.entity.ProbeAlertEvent;
 import com.oAT.web.esDao.entity.ProbeInstanceStatus;
 import com.oAT.web.service.entity.AppVo;
@@ -30,6 +33,8 @@ public class ProbeStatusService {
     private ProbeAlertEventService probeAlertEventService;
     @Autowired
     private AppService appService;
+    @Autowired
+    private ClientRepository clientRepository;
 
     public void onLogin(ClientSessionVo session) {
         upsertOnlineStatus(session, true);
@@ -88,6 +93,7 @@ public class ProbeStatusService {
                 status.setLastAlertEventType(event.getEventType());
                 status.setLastAlertTime(event.getEventTime());
                 probeInstanceStatusRepository.save(status);
+                updateClientSessionStatus(status.getSessionId(), ClientSession.Status.disable, now);
             } catch (Exception e) {
                 if (isInterrupted(e)) {
                     Thread.currentThread().interrupt();
@@ -122,10 +128,14 @@ public class ProbeStatusService {
         if (optional.isPresent()) {
             ProbeInstanceStatus status = optional.get();
             boolean recovered = ProbeInstanceStatus.Status.OFFLINE.toString().equals(status.getStatus());
+            String previousSessionId = status.getSessionId();
             Long offlineDurationMillis = status.getOfflineSince() == null ? null : now.getTime() - status.getOfflineSince().getTime();
             fillStatus(status, session, app, probeKey, heartbeatTime);
             status.setStatus(ProbeInstanceStatus.Status.ONLINE.toString());
             status.setOfflineSince(null);
+            if (login && StringUtils.hasText(previousSessionId) && !previousSessionId.equals(session.getSessionId())) {
+                updateClientSessionStatus(previousSessionId, ClientSession.Status.disable, now);
+            }
             if (recovered) {
                 status.setOnlineSince(now);
                 status.setLastStatusChangeTime(now);
@@ -134,6 +144,7 @@ public class ProbeStatusService {
                 ProbeAlertEvent event = probeAlertEventService.createRecoveredEvent(status, app, offlineDurationMillis);
                 status.setLastAlertEventType(event.getEventType());
                 status.setLastAlertTime(event.getEventTime());
+                updateClientSessionStatus(status.getSessionId(), ClientSession.Status.active, now);
             } else if (login) {
                 status.setOnlineSince(now);
                 status.setLastStatusChangeTime(now);
@@ -178,6 +189,31 @@ public class ProbeStatusService {
         status.setAgentVersion(clientInfo.getAgentVersion());
         status.setLoginTime(session.getLoginTime());
         status.setLastHeartbeatTime(heartbeatTime);
+    }
+
+    private void updateClientSessionStatus(String sessionId, ClientSession.Status status, Date updateTime) {
+        if (!StringUtils.hasText(sessionId) || status == null) {
+            return;
+        }
+        Optional<ClientIndex> optional = clientRepository.findById(sessionId);
+        if (optional.isEmpty()) {
+            logger.warn("同步 client 会话状态跳过，找不到 sessionId={}", sessionId);
+            return;
+        }
+        ClientIndex clientIndex = optional.get();
+        ClientSession session = clientIndex.getSession();
+        if (session == null) {
+            logger.warn("同步 client 会话状态跳过，session 为空, sessionId={}", sessionId);
+            return;
+        }
+        String targetStatus = status.toString();
+        if (targetStatus.equals(session.getStatus())) {
+            return;
+        }
+        session.setStatus(targetStatus);
+        clientIndex.setUpdateTime(updateTime == null ? new Date() : updateTime);
+        clientRepository.save(clientIndex);
+        logger.info("同步 client 会话状态成功, sessionId={}, status={}", sessionId, targetStatus);
     }
 
     private boolean isInterrupted(Throwable throwable) {
