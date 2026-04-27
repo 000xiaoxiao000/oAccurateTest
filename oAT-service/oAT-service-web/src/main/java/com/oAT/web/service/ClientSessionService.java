@@ -49,4 +49,6 @@ public interface ClientSessionService {
     void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage);
 
     String getPackageVerifyData(String sessionId);
+
+    String getLatestPackageVerifyDataByAppId(String appId);
 }
