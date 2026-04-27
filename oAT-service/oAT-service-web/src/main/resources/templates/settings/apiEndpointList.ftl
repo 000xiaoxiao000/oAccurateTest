@@ -301,7 +301,7 @@
                         <div class="endpoint-view-switch">
                             <span style="color:#6b7280;">视图</span>
                             <div class="ui tiny buttons">
-                                <button type="button" class="ui button active" id="detailViewBtn" onclick="switchViewMode('detail')">按明细</button>
+                                <button type="button" class="ui button active" id="detailViewBtn" onclick="switchViewMode('detail')">按关联用例</button>
                                 <button type="button" class="ui button" id="groupViewBtn" onclick="switchViewMode('group')">按 URL 合并</button>
                             </div>
                         </div>
@@ -531,6 +531,13 @@
 
     function sortEndpoints(list) {
         return list.slice().sort(function (a, b) {
+            if (currentViewMode === 'detail') {
+                var aLinked = hasLinkedUsecases(a);
+                var bLinked = hasLinkedUsecases(b);
+                if (aLinked !== bLinked) {
+                    return aLinked ? -1 : 1;
+                }
+            }
             if (!!a.covered !== !!b.covered) {
                 return a.covered ? 1 : -1;
             }
@@ -547,6 +554,10 @@
             var methodB = (b.httpMethod || '').toLowerCase();
             return methodA.localeCompare(methodB);
         });
+    }
+
+    function hasLinkedUsecases(item) {
+        return Array.isArray(item.linkedUsecases) && item.linkedUsecases.length > 0;
     }
 
     function switchViewMode(mode) {
@@ -585,7 +596,7 @@
         var endpointType = $('#endpointTypeFilter').val() || '';
         var coverage = $('#coverageFilter').val() || '';
         var hitCountRange = $('#hitCountFilter').val() || '';
-        var viewLabel = currentViewMode === 'group' ? '按 URL 合并' : '按明细';
+        var viewLabel = currentViewMode === 'group' ? '按 URL 合并' : '按关联用例';
         if (keyword) {
             chips.push(renderFilterChip('关键字', keyword, "$('#keyword').val('');applyFilters();"));
         }
