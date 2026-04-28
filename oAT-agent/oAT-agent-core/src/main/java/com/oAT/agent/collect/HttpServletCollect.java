@@ -335,8 +335,8 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         node.setParentTraceId(requestAdapter.getHeader("parentTraceId"));
 
         HttpServletTraceNodeWrapper nodeWrapper = new HttpServletTraceNodeWrapper(traceSession, node);
-        if (traceId == null && (StringUtils.hasText(this.traceContext.getConfig("codeStack.include"))
-                || StringUtils.hasText(this.traceContext.getConfig("conf_codeStack.include")))) {
+        if (StringUtils.hasText(this.traceContext.getConfig("codeStack.include"))
+                || StringUtils.hasText(this.traceContext.getConfig("conf_codeStack.include"))) {
             nodeWrapper.coverageCollector = CoverageCollector.begin();
             AgentContext.setCoverageCollector(nodeWrapper.coverageCollector);
             AgentContext.setActiveAsyncTaskCount(new java.util.concurrent.atomic.AtomicInteger(0));
