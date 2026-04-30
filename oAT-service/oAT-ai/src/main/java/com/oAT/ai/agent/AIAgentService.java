@@ -295,7 +295,7 @@ public class AIAgentService {
                     recommendation.primaryTool, recommendation.detectedIntent, recommendation.confidence);
 
             // 3. 构建增强的上下文（包含多轮对话摘要）
-            String enhancedQuestion = buildEnhancedQuestion(context, question);
+            String enhancedQuestion = buildEnhancedQuestion(context, question, recommendation);
 
             long startTime = System.currentTimeMillis();
             String response = aiAgent.chat(enhancedQuestion, context.getProjectId(), context.getUserName());
@@ -341,7 +341,9 @@ public class AIAgentService {
         try {
             context.setPageContext(pageContext);
             AgentContext.setContext(context);
-            String response = aiAgent.chatWithContext(question, context.getProjectId(), context.getUserName(), pageContext);
+            ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
+            String enhancedQuestion = buildEnhancedQuestion(context, question, recommendation);
+            String response = aiAgent.chatWithContext(enhancedQuestion, context.getProjectId(), context.getUserName(), pageContext);
 
             String fallbackResult = tryFallbackToolExecution(response);
             if (fallbackResult != null) {
@@ -372,7 +374,9 @@ public class AIAgentService {
             String truncatedImage = imageData != null && imageData.length() > 680000
                     ? imageData.substring(0, 680000) + "... [图片数据已截断]"
                     : imageData;
-            String response = aiAgent.chatWithImage(question, context.getProjectId(), context.getUserName(),
+            ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
+            String enhancedQuestion = buildEnhancedQuestion(context, question, recommendation);
+            String response = aiAgent.chatWithImage(enhancedQuestion, context.getProjectId(), context.getUserName(),
                     pageContext, truncatedImage);
 
             String fallbackResult = tryFallbackToolExecution(response);
@@ -2168,6 +2172,11 @@ public class AIAgentService {
      * 构建增强的问题（包含多轮对话上下文摘要）
      */
     private String buildEnhancedQuestion(AgentContext context, String question) {
+        return buildEnhancedQuestion(context, question, toolRecommender.recommend(question));
+    }
+
+    private String buildEnhancedQuestion(AgentContext context, String question,
+                                         ToolRecommender.Recommendation recommendation) {
         StringBuilder enhanced = new StringBuilder();
 
         // 尝试获取会话上下文
@@ -2180,6 +2189,11 @@ public class AIAgentService {
             }
         }
 
+        String scenarioGuide = buildScenarioGuide(question, recommendation);
+        if (scenarioGuide != null && !scenarioGuide.isEmpty()) {
+            enhanced.append(scenarioGuide).append("\n\n[当前问题]\n");
+        }
+
         enhanced.append(question);
 
         // 记录到对话记忆（异步）
@@ -2188,6 +2202,100 @@ public class AIAgentService {
                 question);
 
         return enhanced.toString();
+    }
+
+    private String buildScenarioGuide(String question, ToolRecommender.Recommendation recommendation) {
+        if (question == null || question.trim().isEmpty() || recommendation == null) {
+            return "";
+        }
+
+        String normalized = question.toLowerCase(Locale.ROOT);
+        List<String> preferredTools = new ArrayList<>();
+        String scenario = null;
+        String answerFocus = null;
+
+        if (containsAny(normalized, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
+            scenario = "版本上线前的精准回归";
+            preferredTools.addAll(Arrays.asList("getProjectCoverageOverview", "getLowCoverageClasses", "recommendTestcases", "compareCoverage", "searchCodeRelation", "getSnapshots"));
+            answerFocus = "输出变更影响面、覆盖缺口、高风险模块、推荐回归用例、上线前准入风险；缺少版本/应用/接口信息时，先用项目级覆盖率、快照、低覆盖类等数据给出可执行排查路径，不要只回答方法论。";
+        } else if (containsAny(normalized, "线上缺陷", "快速定位", "故障定位", "根因定位", "异常定位")) {
+            scenario = "线上缺陷快速定位";
+            preferredTools.addAll(Arrays.asList("getDefectOverview", "getRecentExceptions", "getAppErrorDetails", "getRecentTraces", "locateRootCause", "analyzeCallChain"));
+            answerFocus = "输出错误现象、异常分布、相关调用链、疑似根因、验证步骤和下一步处置建议；无法拿到成功/失败 TraceID 时，先用最近异常和错误请求缩小范围。";
+        } else if (containsAny(normalized, "低覆盖", "高风险", "补测", "测试盲区", "覆盖缺口")) {
+            scenario = "低覆盖高风险模块补测";
+            preferredTools.addAll(Arrays.asList("getLowCoverageClasses", "recommendTestcases", "getCoverageImprovementSuggestions", "getHighComplexityMethods", "compareCoverage"));
+            answerFocus = "输出模块优先级、风险原因、缺失场景、补测用例建议、预期覆盖提升；优先结合低覆盖、复杂度、调用关系和缺陷数据排序。";
+        } else if (containsAny(normalized, "性能回归", "性能退化", "耗时变慢", "基线对比", "回归分析")) {
+            scenario = "性能回归分析";
+            preferredTools.addAll(Arrays.asList("compareOverTime", "getAppPerformanceOverview", "getSlowEndpoints", "getEndpointCallFrequency", "analyzeUrlCallPattern"));
+            answerFocus = "输出基线对比、退化接口、P95/P99/平均耗时变化、慢链路节点、可能原因和验证建议；缺少接口时先找慢接口和性能概览。";
+        }
+
+        if (scenario == null) {
+            return "[AI工具推荐]\n" + formatToolRecommendation(recommendation)
+                    + "\n请优先调用相关工具获取实时数据，再基于数据回答；如果数据缺失，说明缺失项并给出下一步。";
+        }
+
+        LinkedHashSet<String> tools = new LinkedHashSet<>();
+        tools.add(recommendation.primaryTool);
+        tools.addAll(recommendation.secondaryTools);
+        tools.addAll(preferredTools);
+
+        StringBuilder guide = new StringBuilder();
+        guide.append("[识别到的精准测试场景]\n").append(scenario).append('\n');
+        guide.append("[AI工具推荐]\n").append(formatToolRecommendation(recommendation)).append('\n');
+        guide.append("[建议优先尝试的工具]\n");
+        int count = 0;
+        for (String toolName : tools) {
+            if (toolName == null || toolName.trim().isEmpty()) {
+                continue;
+            }
+            guide.append("- ").append(describeTool(toolName)).append('\n');
+            if (++count >= 6) {
+                break;
+            }
+        }
+        guide.append("[回答要求]\n").append(answerFocus).append('\n');
+        guide.append("请按『结论摘要 / 关键数据 / 风险排序 / 建议动作』组织回答；不要要求用户提供内部ID、JSON或工具参数。");
+        return guide.toString();
+    }
+
+    private String formatToolRecommendation(ToolRecommender.Recommendation recommendation) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("意图=").append(recommendation.detectedIntent)
+                .append("，首选=").append(describeTool(recommendation.primaryTool));
+        if (recommendation.secondaryTools != null && !recommendation.secondaryTools.isEmpty()) {
+            sb.append("，辅助=");
+            for (int i = 0; i < recommendation.secondaryTools.size(); i++) {
+                if (i > 0) {
+                    sb.append("、");
+                }
+                sb.append(describeTool(recommendation.secondaryTools.get(i)));
+            }
+        }
+        if (recommendation.reasoning != null && !recommendation.reasoning.isEmpty()) {
+            sb.append("，原因=").append(recommendation.reasoning);
+        }
+        return sb.toString();
+    }
+
+    private String describeTool(String toolName) {
+        return toolRecommender.getToolMeta(toolName)
+                .map(meta -> meta.getToolName() + "（" + meta.getDisplayName() + "：" + meta.getDescription() + "）")
+                .orElse(toolName);
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        if (text == null) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            if (text.contains(keyword.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String createOrGetSession(AgentContext context) {

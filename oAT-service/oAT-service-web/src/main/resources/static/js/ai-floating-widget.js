@@ -1709,6 +1709,7 @@
             options = options || {};
             var avatar = role === 'assistant' ? 'AI' : '我';
             var contentHtml = options.isHtml ? message : formatMessage(message);
+            var aiActions = options.aiActions || [];
             var html = ''
                 + '<div class="ai-floating-message ' + role + '">'
                 + '  <div class="ai-floating-avatar">' + escapeHtml(avatar) + '</div>'
@@ -1725,11 +1726,23 @@
                 html += '</div>';
             }
 
+            if (aiActions && aiActions.length) {
+                html += '<div class="ai-floating-message-actions">';
+                $.each(aiActions, function (index, action) {
+                    html += '<button class="ai-floating-message-action ai-floating-exec-action" type="button" data-action-index="' + index + '">'
+                        + escapeHtml(action.title || '执行操作') + '</button>';
+                });
+                html += '</div>';
+            }
+
             html += '      </div>'
                 + '  </div>'
                 + '</div>';
 
             $messageList.append(html);
+            if (aiActions && aiActions.length) {
+                $messageList.find('.ai-floating-message').last().data('ai-actions', aiActions);
+            }
             // 绑定复制按钮
             bindCopyButton($messageList.find('.ai-floating-copy-btn').last(), message);
             $('#aiFloatingMessageSection').removeClass('is-collapsed');
@@ -2005,6 +2018,145 @@
             compactQuickLinkLayout();
         }
 
+        function executeAIAction(action) {
+            if (!action || !action.type) {
+                return;
+            }
+            var type = action.type;
+            var url = action.url || '';
+            if (type === 'monitorPageAction' && typeof window.executeMonitorPageAction === 'function') {
+                if (window.executeMonitorPageAction(action.payload || {}, projectId)) {
+                    appendMessage('assistant', 'AI 助手', action.description || '已完成页面操作。', [], { scrollTop: true });
+                    return;
+                }
+            }
+            if (type === 'monitorAutoSaveMySnapshot' || type === 'monitorDisableAutoSaveMySnapshot'
+                || type === 'monitorAutoSaveSystemSnapshot' || type === 'monitorDisableAutoSaveSystemSnapshot') {
+                var isSystemSnapshot = type === 'monitorAutoSaveSystemSnapshot' || type === 'monitorDisableAutoSaveSystemSnapshot';
+                var enableAutoSave = type === 'monitorAutoSaveMySnapshot' || type === 'monitorAutoSaveSystemSnapshot';
+                var targetName = isSystemSnapshot ? '自动保存系统快照' : '自动保存我的快照';
+                if (action.requireConfirm === true) {
+                    var confirmMessage = action.confirmText || action.description || ('确认' + (enableAutoSave ? '开启' : '关闭') + targetName + '？');
+                    if (!window.confirm(confirmMessage)) {
+                        return;
+                    }
+                }
+                var executor = isSystemSnapshot
+                    ? (enableAutoSave ? window.enableMonitorAutoSaveSystemSnapshot : window.disableMonitorAutoSaveSystemSnapshot)
+                    : (enableAutoSave ? window.enableMonitorAutoSaveMySnapshot : window.disableMonitorAutoSaveMySnapshot);
+                if (typeof executor === 'function') {
+                    executor(projectId);
+                    appendMessage('assistant', 'AI 助手', '已为当前项目' + (enableAutoSave ? '开启' : '关闭') + '“' + targetName + '”。', [], { scrollTop: true });
+                    return;
+                }
+                appendMessage('assistant', 'AI 助手', '当前页面没有找到“' + targetName + '”开关执行器，请刷新监控页后重试。', [], { scrollTop: true });
+                return;
+            }
+            if ((type === 'navigate' || type === 'link') && url) {
+                if (action.requireConfirm === true) {
+                    var message = action.confirmText || action.description || ('确认执行：' + (action.title || '操作') + '？');
+                    if (!window.confirm(message)) {
+                        return;
+                    }
+                }
+                window.location.href = url;
+                return;
+            }
+            appendMessage('assistant', 'AI 助手', '这个动作暂时还没有接入执行器，我可以先带你到相关页面处理。', [], { scrollTop: true });
+        }
+
+        function findHeaderAppActionUrl(kind, question) {
+            var targetText = String(question || '').toLowerCase();
+            var fallbackUrl = '';
+            $('#appItem .menu .item').each(function () {
+                var $item = $(this);
+                var itemText = $.trim($item.text()).toLowerCase();
+                var $links = $item.find('.subMenu a');
+                if (!$links.length) {
+                    return;
+                }
+                var matchedApp = itemText && targetText.indexOf(itemText.split(' ')[0]) >= 0;
+                $links.each(function () {
+                    var href = $(this).attr('href') || '';
+                    if (!href) {
+                        return;
+                    }
+                    var isMatch = (kind === 'snapshot' && href.indexOf('/snapshot/list') >= 0)
+                        || (kind === 'version' && href.indexOf('/version/compare') >= 0)
+                        || (kind === 'coverage' && href.indexOf('/version/report/list') >= 0);
+                    if (!isMatch) {
+                        return;
+                    }
+                    fallbackUrl = fallbackUrl || href;
+                    if (matchedApp) {
+                        fallbackUrl = href;
+                        return false;
+                    }
+                });
+                if (matchedApp && fallbackUrl) {
+                    return false;
+                }
+            });
+            return fallbackUrl;
+        }
+
+        function resolveLocalNavigationUrl(question) {
+            var text = String(question || '').toLowerCase();
+            if (!/(跳转|跳到|打开|进入|去|访问|查看)/.test(text)) {
+                return '';
+            }
+            var projectBase = '/p/' + projectId;
+            if (/版本比对|版本比较/.test(text)) return findHeaderAppActionUrl('version', question);
+            if (/覆盖率报告|覆盖率/.test(text)) return findHeaderAppActionUrl('coverage', question);
+            if (/系统快照/.test(text)) return findHeaderAppActionUrl('snapshot', question);
+            if (/应用中心|应用列表/.test(text)) return projectBase + '/app/list';
+            if (/在线应用/.test(text)) return projectBase + '/app/online';
+            if (/监控台|实时监控|监控页/.test(text)) return projectBase + '/monitor';
+            if (/ai\s*interactive|ai工作台|工作台/.test(text)) return projectBase + '/AIInteractive';
+            if (/搜索/.test(text)) return projectBase + '/map/home';
+            if (/项目主页|项目首页|首页/.test(text)) return projectBase + '/home';
+            if (/添加应用|新增应用|创建应用/.test(text)) return projectBase + '/app/create';
+            if (/创建新项目|新建项目|创建项目/.test(text)) return '/project/create';
+            if (/项目设置/.test(text)) return projectBase + '/edit';
+            if (/用户设置|个人设置|账号设置/.test(text)) return '/user/info';
+            if (/我的快照|快照列表/.test(text) && text.indexOf('自动保存') < 0) return projectBase + '/snapshot/my';
+            return '';
+        }
+
+        function tryLocalNavigation(question) {
+            var url = resolveLocalNavigationUrl(question);
+            if (!url) {
+                return false;
+            }
+            appendMessage('assistant', 'AI 助手', '已理解为页面跳转，正在打开目标页面。', [], { scrollTop: true });
+            setTimeout(function () {
+                window.location.href = url;
+            }, 80);
+            return true;
+        }
+
+        function shouldAutoExecuteAIAction(action) {
+            if (!action || !action.type) {
+                return false;
+            }
+            if (action.payload && action.payload.autoExecute === true) {
+                return true;
+            }
+            return action.type === 'monitorPageAction'
+                || action.type === 'monitorAutoSaveMySnapshot'
+                || action.type === 'monitorDisableAutoSaveMySnapshot'
+                || action.type === 'monitorAutoSaveSystemSnapshot'
+                || action.type === 'monitorDisableAutoSaveSystemSnapshot';
+        }
+
+        function autoExecuteAIPageActions(actions) {
+            $.each(actions || [], function (_, action) {
+                if (shouldAutoExecuteAIAction(action)) {
+                    executeAIAction(action);
+                }
+            });
+        }
+
         function saveHistory(entry) {
             var history = readJSON(historyKey, []);
             history.push(entry);
@@ -2016,7 +2168,7 @@
             syncContextUI(currentContext);
             if (history.length) {
                 $.each(history, function (_, item) {
-                    appendMessage(item.role, item.title, item.message, item.actions || [], {scroll: 'none'});
+                    appendMessage(item.role, item.title, item.message, item.actions || [], {scroll: 'none', aiActions: item.aiActions || []});
                     if (item.quickLinks && item.quickLinks.length) {
                         renderQuickLinks(item.quickLinks);
                     }
@@ -2318,6 +2470,11 @@
                 actions: []
             });
 
+            if (!fwUploadedImageData && tryLocalNavigation(question)) {
+                $questionInput.val('');
+                return;
+            }
+
             $questionInput.val('');
             setState('思考中...', true);
 
@@ -2358,14 +2515,17 @@
                 var answer = data.answer || response.message || '已收到你的问题。';
                 var suggestions = data.suggestions || [];
                 var links = data.quickLinks || [];
-                appendMessage('assistant', 'AI 助手', answer, suggestions);
+                var aiActions = data.actions || [];
+                appendMessage('assistant', 'AI 助手', answer, suggestions, { aiActions: aiActions });
                 renderQuickLinks(links);
+                autoExecuteAIPageActions(aiActions);
                 saveHistory({
                     role: 'assistant',
                     title: 'AI 助手',
                     message: answer,
                     actions: suggestions,
-                    quickLinks: links
+                    quickLinks: links,
+                    aiActions: aiActions
                 });
             }).fail(function (jqXHR, textStatus) {
                 hideLoading();
@@ -2521,7 +2681,16 @@
         });
 
         $(document).on('click', '.ai-floating-starter, .ai-floating-message-action, .ai-resume-btn', function () {
+            if ($(this).hasClass('ai-floating-exec-action')) {
+                return;
+            }
             sendQuestion($(this).data('question'));
+        });
+
+        $(document).on('click', '.ai-floating-exec-action', function () {
+            var $message = $(this).closest('.ai-floating-message');
+            var actions = $message.data('ai-actions') || [];
+            executeAIAction(actions[$(this).data('action-index')]);
         });
 
         $(document).on('click', '.ai-floating-chip-close', function (e) {

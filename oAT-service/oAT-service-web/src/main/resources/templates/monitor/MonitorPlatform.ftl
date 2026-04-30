@@ -979,14 +979,24 @@
 
     $(function () {
         initMonitorLayoutResizer();
-        syncMonitorAutoSaveSwitches('${projectId}');
         $('.ui.toggle.checkbox').checkbox();
-        $('#autoSaveMySnapshotToggle').on('change', function () {
-            setMonitorAutoSaveEnabled('${projectId}', 'my', $(this).is(':checked'));
+        $('#autoSaveMySnapshotWrapper').checkbox({
+            onChecked: function () {
+                setMonitorAutoSaveEnabled('${projectId}', 'my', true);
+            },
+            onUnchecked: function () {
+                setMonitorAutoSaveEnabled('${projectId}', 'my', false);
+            }
         });
-        $('#autoSaveSystemSnapshotToggle').on('change', function () {
-            setMonitorAutoSaveEnabled('${projectId}', 'system', $(this).is(':checked'));
+        $('#autoSaveSystemSnapshotWrapper').checkbox({
+            onChecked: function () {
+                setMonitorAutoSaveEnabled('${projectId}', 'system', true);
+            },
+            onUnchecked: function () {
+                setMonitorAutoSaveEnabled('${projectId}', 'system', false);
+            }
         });
+        syncMonitorAutoSaveSwitches('${projectId}');
         $('#saveSnapshotDropdown .item').on('click', function (event) {
             if (!selectTraceId) {
                 event.preventDefault();

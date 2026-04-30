@@ -639,9 +639,182 @@ function setMonitorAutoSaveEnabled(projectId, type, enabled) {
     localStorage.setItem(getMonitorAutoSaveStorageKey(projectId, type), enabled ? 'true' : 'false');
 }
 
+function setMonitorAutoSaveSwitch(projectId, type, enabled, options) {
+    if (!projectId) {
+        projectId = currentProjectId;
+    }
+    if (!projectId) {
+        showToast('无法识别当前项目，自动保存开关设置失败', 'error');
+        return;
+    }
+    currentProjectId = projectId;
+    options = options || {};
+    setMonitorAutoSaveEnabled(projectId, type, enabled);
+
+    var selector = type === 'system' ? '#autoSaveSystemSnapshotWrapper' : '#autoSaveMySnapshotWrapper';
+    var inputSelector = type === 'system' ? '#autoSaveSystemSnapshotToggle' : '#autoSaveMySnapshotToggle';
+    var $wrapper = $(selector);
+    if ($wrapper.length && $wrapper.checkbox) {
+        $wrapper.checkbox(enabled ? 'set checked' : 'set unchecked');
+    }
+    $(inputSelector).prop('checked', enabled);
+    $wrapper.toggleClass('checked', enabled);
+
+    updateMonitorActionAvailability();
+    if (options.toast !== false) {
+        showToast((type === 'system' ? '自动保存系统快照' : '自动保存我的快照') + (enabled ? '已开启' : '已关闭'), 'success');
+    }
+}
+
+function enableMonitorAutoSaveMySnapshot(projectId) {
+    setMonitorAutoSaveSwitch(projectId || currentProjectId, 'my', true);
+}
+
+function disableMonitorAutoSaveMySnapshot(projectId) {
+    setMonitorAutoSaveSwitch(projectId || currentProjectId, 'my', false);
+}
+
+function enableMonitorAutoSaveSystemSnapshot(projectId) {
+    setMonitorAutoSaveSwitch(projectId || currentProjectId, 'system', true);
+}
+
+function disableMonitorAutoSaveSystemSnapshot(projectId) {
+    setMonitorAutoSaveSwitch(projectId || currentProjectId, 'system', false);
+}
+
+function setMonitorAutoRefreshSwitch(projectId, enabled) {
+    currentProjectId = projectId || currentProjectId;
+    monitorAutoRefreshEnabled = enabled;
+    var $wrapper = $('#monitorAutoRefreshToggleWrapper');
+    if ($wrapper.length && $wrapper.checkbox) {
+        $wrapper.checkbox(enabled ? 'set checked' : 'set unchecked');
+    }
+    $('#monitorAutoRefreshToggle').prop('checked', enabled);
+    $wrapper.toggleClass('checked', enabled);
+    if (enabled) {
+        startMonitorAutoRefresh(currentProjectId);
+    } else {
+        stopMonitorAutoRefresh();
+    }
+    showToast('自动刷新' + (enabled ? '已开启' : '已关闭'), 'success');
+}
+
+function executeMonitorPageAction(action, projectId) {
+    var name = action && (action.name || action.action || action.type);
+    if (!name) {
+        return false;
+    }
+    currentProjectId = projectId || currentProjectId;
+    if (name === 'enableAutoSaveMy') {
+        setMonitorAutoSaveSwitch(currentProjectId, 'my', true);
+        return true;
+    }
+    if (name === 'disableAutoSaveMy') {
+        setMonitorAutoSaveSwitch(currentProjectId, 'my', false);
+        return true;
+    }
+    if (name === 'enableAutoSaveSystem') {
+        setMonitorAutoSaveSwitch(currentProjectId, 'system', true);
+        return true;
+    }
+    if (name === 'disableAutoSaveSystem') {
+        setMonitorAutoSaveSwitch(currentProjectId, 'system', false);
+        return true;
+    }
+    if (name === 'enableAutoRefresh') {
+        setMonitorAutoRefreshSwitch(currentProjectId, true);
+        return true;
+    }
+    if (name === 'disableAutoRefresh') {
+        setMonitorAutoRefreshSwitch(currentProjectId, false);
+        return true;
+    }
+    if (name === 'refreshMonitorList') {
+        pullNewItem(currentProjectId);
+        showToast('已刷新监控列表', 'success');
+        return true;
+    }
+    if (name === 'refreshProbeStatus') {
+        refreshProbeStatus(currentProjectId);
+        showToast('已刷新探针状态', 'success');
+        return true;
+    }
+    if (name === 'clearMonitorList') {
+        clearItem();
+        showToast('已清空当前监控列表', 'success');
+        return true;
+    }
+    if (name === 'openCreateMySnapshot') {
+        if (!selectTraceId) {
+            showToast('请先从左侧监控列表选择一条记录', 'warning');
+            return true;
+        }
+        openCreateSnapshot();
+        return true;
+    }
+    if (name === 'openCreateSystemSnapshot') {
+        if (!selectTraceId) {
+            showToast('请先从左侧监控列表选择一条记录', 'warning');
+            return true;
+        }
+        openCreateSystemSnapshot();
+        return true;
+    }
+    if (name === 'setScopeAggregate' || name === 'setScopeCurrent' || name === 'setScopeLanes') {
+        var mode = name === 'setScopeCurrent' ? 'single' : (name === 'setScopeLanes' ? 'lanes' : 'aggregate');
+        setMonitorScopeMode(mode, monitorSelectedProbeIp);
+        if (mode === 'aggregate' || mode === 'lanes') {
+            $('#probeList .probe-card').removeClass('active');
+            $('.ipFilter').dropdown('clear');
+            refreshMonitorList(currentProjectId);
+        } else if (monitorSelectedProbeIp) {
+            $('.ipFilter').dropdown('set selected', monitorSelectedProbeIp);
+            refreshMonitorList(currentProjectId);
+        } else {
+            showToast('请先选择一个在线探针', 'warning');
+        }
+        return true;
+    }
+    if (name === 'setAutoRefreshSeconds') {
+        var seconds = normalizeMonitorAutoRefreshSeconds(action.seconds);
+        $('#monitorAutoRefreshSeconds').val(seconds);
+        syncMonitorAutoRefreshIntervalFromInput();
+        startMonitorAutoRefresh(currentProjectId);
+        showToast('自动刷新间隔已设置为 ' + seconds + ' 秒', 'success');
+        return true;
+    }
+    if (name === 'batchSaveMySnapshots') {
+        batchSaveMonitorSnapshots(currentProjectId, 'my');
+        return true;
+    }
+    if (name === 'batchSaveSystemSnapshots') {
+        batchSaveMonitorSnapshots(currentProjectId, 'system');
+        return true;
+    }
+    if (name === 'openMySnapshots') {
+        window.location.href = '/p/' + currentProjectId + '/snapshot/my';
+        return true;
+    }
+    if (name === 'openMonitor') {
+        window.location.href = '/p/' + currentProjectId + '/monitor';
+        return true;
+    }
+    return false;
+}
+
+window.enableMonitorAutoSaveMySnapshot = enableMonitorAutoSaveMySnapshot;
+window.disableMonitorAutoSaveMySnapshot = disableMonitorAutoSaveMySnapshot;
+window.enableMonitorAutoSaveSystemSnapshot = enableMonitorAutoSaveSystemSnapshot;
+window.disableMonitorAutoSaveSystemSnapshot = disableMonitorAutoSaveSystemSnapshot;
+window.setMonitorAutoSaveSwitch = setMonitorAutoSaveSwitch;
+window.setMonitorAutoRefreshSwitch = setMonitorAutoRefreshSwitch;
+window.executeMonitorPageAction = executeMonitorPageAction;
+window.batchSaveMonitorSnapshots = batchSaveMonitorSnapshots;
+
 function syncMonitorAutoSaveSwitches(projectId) {
-    $('#autoSaveMySnapshotToggle').prop('checked', isMonitorAutoSaveEnabled(projectId, 'my'));
-    $('#autoSaveSystemSnapshotToggle').prop('checked', isMonitorAutoSaveEnabled(projectId, 'system'));
+    currentProjectId = projectId;
+    setMonitorAutoSaveSwitch(projectId, 'my', isMonitorAutoSaveEnabled(projectId, 'my'), {toast: false});
+    setMonitorAutoSaveSwitch(projectId, 'system', isMonitorAutoSaveEnabled(projectId, 'system'), {toast: false});
     updateMonitorActionAvailability();
 }
 
@@ -695,6 +868,68 @@ function doAutoSaveSystemSnapshot(projectid, traceId, title) {
             traceId: traceId,
             title: buildAutoSnapshotName('自动系统快照', title)
         }
+    });
+}
+
+function collectMonitorListTraceItems() {
+    var items = [];
+    var seen = {};
+    $('#monitorListBody tr[data-trace-id]').each(function () {
+        var traceId = $(this).data('trace-id');
+        if (!traceId || seen[traceId]) {
+            return;
+        }
+        seen[traceId] = true;
+        items.push({
+            traceId: traceId,
+            title: $.trim($(this).find('.monitor-primary-text').text()) || '未命名链路'
+        });
+    });
+    return items;
+}
+
+function batchSaveMonitorSnapshots(projectid, type) {
+    projectid = projectid || currentProjectId;
+    if (!projectid) {
+        showToast('无法识别当前项目，批量保存失败', 'error');
+        return $.Deferred().reject().promise();
+    }
+    var items = collectMonitorListTraceItems();
+    if (!items.length) {
+        showToast('当前监控列表没有可保存的请求', 'warning');
+        return $.Deferred().reject().promise();
+    }
+
+    var saveSystem = type === 'system';
+    var summary = {success: 0, skipped: 0, failed: 0};
+    var requests = $.map(items, function (item) {
+        var request = saveSystem
+            ? doAutoSaveSystemSnapshot(projectid, item.traceId, item.title)
+            : doAutoSaveMySnapshot(projectid, item.traceId, item.title);
+        return request.done(function (resultInform) {
+            if (resultInform && resultInform.result) {
+                if (((resultInform.message || '').indexOf('已自动保存过')) >= 0) {
+                    summary.skipped++;
+                } else {
+                    summary.success++;
+                }
+                if (saveSystem) {
+                    autoSavedTraceCache.system[item.traceId] = true;
+                } else {
+                    autoSavedTraceCache.my[item.traceId] = true;
+                }
+            } else {
+                summary.failed++;
+            }
+        }).fail(function () {
+            summary.failed++;
+        });
+    });
+
+    showToast('开始批量保存' + (saveSystem ? '系统快照' : '我的快照') + '，共 ' + items.length + ' 条', 'info');
+    return $.when.apply($, requests).always(function () {
+        showToast('批量保存' + (saveSystem ? '系统快照' : '我的快照') + '完成：成功 ' + summary.success
+            + ' 条，已存在 ' + summary.skipped + ' 条，失败 ' + summary.failed + ' 条', summary.failed > 0 ? 'warning' : 'success');
     });
 }
 

@@ -1,7 +1,5 @@
 package com.oAT.ai.agent;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +43,7 @@ public class ToolRecommender {
 
         public String getToolName() { return toolName; }
         public String getDisplayName() { return displayName; }
+        public String getDescription() { return description; }
     }
 
     /** 推荐结果 */
@@ -75,17 +74,17 @@ public class ToolRecommender {
         INTENT_KEYWORDS.put("coverage", Set.of("覆盖", "coverage", "行覆盖", "分支覆盖",
                 "mcdc", "测试率", "代码覆盖率", "未覆盖"));
         INTENT_KEYWORDS.put("performance", Set.of("性能", "performance", "慢接口",
-                "响应时间", "p50", "p95", "p99", "延迟", "吞吐量", "调用频率"));
+                "响应时间", "p50", "p95", "p99", "延迟", "吞吐量", "调用频率", "回归", "退化", "基线"));
         INTENT_KEYWORDS.put("defect", Set.of("缺陷", "defect", "错误", "error",
-                "异常", "exception", "bug", "故障", "HTTP错误", "5xx", "4xx"));
+                "异常", "exception", "bug", "故障", "HTTP错误", "5xx", "4xx", "定位", "根因", "线上"));
         INTENT_KEYWORDS.put("testcase", Set.of("测试", "test", "用例", " testcase",
-                "测试建议", "补充测试", "覆盖率提升"));
+                "测试建议", "补充测试", "补测", "覆盖率提升", "回归", "精准回归", "高风险"));
         INTENT_KEYWORDS.put("app_status", Set.of("应用", "application", "app",
                 "在线", "offline", "运行状态", "部署", "启动"));
         INTENT_KEYWORDS.put("trace", Set.of("链路", "trace", "调用链", "请求链路",
                 "span", "上下游", "依赖关系"));
         INTENT_KEYWORDS.put("snapshot", Set.of("快照", "snapshot", "版本比对",
-                "历史数据", "快照详情"));
+                "历史数据", "快照详情", "版本", "上线", "发布"));
         INTENT_KEYWORDS.put("code_relation", Set.of("代码", "code", "类依赖",
                 "调用关系", "callgraph", "接口关系", "影响分析"));
         INTENT_KEYWORDS.put("project_info", Set.of("项目", "project", "概览",
@@ -113,6 +112,7 @@ public class ToolRecommender {
 
         String lowerQ = question.toLowerCase();
         Map<String, Double> intentScores = scoreIntents(lowerQ);
+        applyScenarioBoosts(lowerQ, intentScores);
         String topIntent = getTopIntent(intentScores);
 
         if (topIntent == null) {
@@ -121,7 +121,7 @@ public class ToolRecommender {
         }
 
         // 根据意图找最佳工具
-        List<ToolRanking> rankedTools = rankToolsByIntent(topIntent, intentScores.getOrDefault(topIntent, 0.0));
+        List<ToolRanking> rankedTools = rankToolsByIntent(topIntent, intentScores.getOrDefault(topIntent, 0.0), lowerQ);
 
         if (rankedTools.isEmpty()) {
             return new Recommendation("getProjectOverview", Collections.emptyList(),
@@ -139,9 +139,7 @@ public class ToolRecommender {
                       .append(String.format("(相关度%.0f%%)", tr.score * 100));
             } else {
                 secondary.add(tr.meta.getToolName());
-                if (i <= 2) {
-                    reason.append(", 辅助「").append(tr.meta.displayName).append("」");
-                }
+                reason.append(", 辅助「").append(tr.meta.displayName).append("」");
             }
         }
 
@@ -161,7 +159,7 @@ public class ToolRecommender {
             meta.lastCalledTime = System.currentTimeMillis();
             if (success) {
                 // 指数移动平均更新成功率
-                meta.successRate = meta.successRate * 0.9 + 1.0 * 0.1;
+                meta.successRate = meta.successRate * 0.9 + 0.1;
             } else {
                 meta.successRate = meta.successRate * 0.9 + 0.0 * 0.1;
             }
@@ -172,6 +170,10 @@ public class ToolRecommender {
      * 获取所有已注册工具的列表
      */
     public Collection<ToolMeta> getAllTools() { return tools.values(); }
+
+    public Optional<ToolMeta> getToolMeta(String toolName) {
+        return Optional.ofNullable(tools.get(toolName));
+    }
 
     /**
      * 获取推荐器统计信息
@@ -230,6 +232,42 @@ public class ToolRecommender {
         return scores;
     }
 
+    private void applyScenarioBoosts(String lowerQuestion, Map<String, Double> scores) {
+        if (containsAny(lowerQuestion, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
+            boost(scores, "snapshot", 3.0);
+            boost(scores, "coverage", 2.5);
+            boost(scores, "testcase", 2.5);
+            boost(scores, "code_relation", 1.5);
+        }
+        if (containsAny(lowerQuestion, "线上缺陷", "快速定位", "故障定位", "根因定位", "异常定位")) {
+            boost(scores, "defect", 3.5);
+            boost(scores, "trace", 3.0);
+            boost(scores, "performance", 1.0);
+        }
+        if (containsAny(lowerQuestion, "低覆盖", "高风险", "补测", "测试盲区", "覆盖缺口")) {
+            boost(scores, "coverage", 3.0);
+            boost(scores, "testcase", 3.0);
+            boost(scores, "code_quality", 1.5);
+        }
+        if (containsAny(lowerQuestion, "性能回归", "性能退化", "耗时变慢", "基线对比", "回归分析")) {
+            boost(scores, "performance", 3.5);
+            boost(scores, "trace", 2.5);
+        }
+    }
+
+    private void boost(Map<String, Double> scores, String intent, double delta) {
+        scores.merge(intent, delta, Double::sum);
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword.toLowerCase())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 获取得分最高的意图
      */
@@ -243,7 +281,7 @@ public class ToolRecommender {
     /**
      * 根据意图对工具进行排名
      */
-    private List<ToolRanking> rankToolsByIntent(String topIntent, double intentScore) {
+    private List<ToolRanking> rankToolsByIntent(String topIntent, double intentScore, String lowerQuestion) {
         List<ToolRanking> rankings = new ArrayList<>();
 
         for (ToolMeta meta : tools.values()) {
@@ -262,10 +300,15 @@ public class ToolRecommender {
             }
 
             // 基于关键词匹配
-            if (meta.keywords != null && !intentMatched) {
-                // 此处需要原始问题，简化处理：仅基于意图关联
-                score += intentMatched ? 10.0 : 1.0;
+            if (meta.keywords != null) {
+                for (String keyword : meta.keywords) {
+                    if (keyword != null && lowerQuestion.contains(keyword.toLowerCase())) {
+                        score += keyword.length() > 3 ? 2.0 : 1.0;
+                    }
+                }
             }
+
+            score += scenarioToolBoost(meta.toolName, lowerQuestion);
 
             // 基于历史成功率微调
             score *= (0.7 + meta.successRate * 0.3);
@@ -277,6 +320,30 @@ public class ToolRecommender {
 
         rankings.sort((a, b) -> Double.compare(b.score, a.score));
         return rankings;
+    }
+
+    private double scenarioToolBoost(String toolName, String lowerQuestion) {
+        if (containsAny(lowerQuestion, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
+            if (Set.of("getProjectCoverageOverview", "getLowCoverageClasses", "recommendTestcases", "compareCoverage", "searchCodeRelation", "getCallGraph", "getSnapshots").contains(toolName)) {
+                return 8.0;
+            }
+        }
+        if (containsAny(lowerQuestion, "线上缺陷", "快速定位", "故障定位", "根因定位", "异常定位")) {
+            if (Set.of("getDefectOverview", "getRecentExceptions", "getAppErrorDetails", "getRecentTraces", "locateRootCause", "analyzeCallChain").contains(toolName)) {
+                return 8.0;
+            }
+        }
+        if (containsAny(lowerQuestion, "低覆盖", "高风险", "补测", "测试盲区", "覆盖缺口")) {
+            if (Set.of("getLowCoverageClasses", "recommendTestcases", "getCoverageImprovementSuggestions", "compareCoverage", "getHighComplexityMethods").contains(toolName)) {
+                return 8.0;
+            }
+        }
+        if (containsAny(lowerQuestion, "性能回归", "性能退化", "耗时变慢", "基线对比", "回归分析")) {
+            if (Set.of("compareOverTime", "getAppPerformanceOverview", "getSlowEndpoints", "getEndpointCallFrequency", "analyzeUrlCallPattern").contains(toolName)) {
+                return 8.0;
+            }
+        }
+        return 0.0;
     }
 
     private static class ToolRanking {
@@ -375,6 +442,21 @@ public class ToolRecommender {
 
         registerTool(new ToolMeta("getCoverageImprovementSuggestions", "覆盖率提升建议",
                 "系统性提升覆盖率的方案", new String[]{"提升建议", "improvement"}, new String[]{"testcase", "coverage"}));
+
+        registerTool(new ToolMeta("compareOverTime", "性能回归分析",
+                "对比同一接口在不同时间段的调用链，识别性能退化", new String[]{"性能回归", "退化", "基线"}, new String[]{"performance", "trace"}));
+
+        registerTool(new ToolMeta("compareCoverage", "覆盖差异比对",
+                "对比两条调用链的代码覆盖差异，发现测试盲区", new String[]{"覆盖差异", "测试盲区", "精准回归"}, new String[]{"coverage", "testcase", "trace"}));
+
+        registerTool(new ToolMeta("locateRootCause", "异常根因定位",
+                "对比正常和异常调用链，定位线上缺陷根因", new String[]{"根因", "线上缺陷", "异常定位"}, new String[]{"defect", "trace"}));
+
+        registerTool(new ToolMeta("analyzeCallChain", "单链路深度分析",
+                "分析单条调用链的拓扑、性能瓶颈和异常根因", new String[]{"链路分析", "trace", "瓶颈", "根因"}, new String[]{"trace", "defect", "performance"}));
+
+        registerTool(new ToolMeta("analyzeUrlCallPattern", "URL调用模式分析",
+                "分析接口URL的典型路径、慢请求规律和异常情况", new String[]{"URL", "接口", "调用模式", "慢请求"}, new String[]{"trace", "performance"}));
 
         registerTool(new ToolMeta("getCodeQualityReport", "代码质量报告",
                 "评估代码的整体质量状况", new String[]{"质量报告", "quality", "report"}, new String[]{"code_quality"}));
