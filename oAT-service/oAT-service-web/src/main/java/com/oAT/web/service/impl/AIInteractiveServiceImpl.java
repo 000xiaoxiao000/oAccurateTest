@@ -7,6 +7,7 @@ import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.AIAbilityCardVo;
+import com.oAT.web.service.entity.AIActionVo;
 import com.oAT.web.service.entity.AIInteractivePageVo;
 import com.oAT.web.service.entity.AIInteractiveReplyVo;
 import com.oAT.web.service.entity.AIQuickLinkVo;
@@ -119,6 +120,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         reply.setMetadata(metadata);
         reply.setSuggestions(buildFollowUpSuggestions(apps, topic));
         reply.setQuickLinks(buildQuickLinks(projectId, apps, topic));
+        reply.setActions(buildActions(projectId, apps, cleanQuestion, contextSummary, topic));
         reply.setSessionState(loadSessionState(projectId, user));
         return reply;
     }
@@ -185,8 +187,12 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     }
 
     private boolean containsAny(String text, String... keywords) {
+        if (text == null) {
+            return false;
+        }
+        String normalized = text.toLowerCase();
         for (String keyword : keywords) {
-            if (text.contains(keyword)) {
+            if (keyword != null && normalized.contains(keyword.toLowerCase())) {
                 return true;
             }
         }
@@ -275,6 +281,201 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         }
         links.add(new AIQuickLinkVo("快照列表", "浏览项目沉淀的全部快照", "/p/" + projectId + "/snapshot/list"));
         return links;
+    }
+
+    private List<AIActionVo> buildActions(String projectId, List<AppVo> apps, String question, String pageContext, String topic) {
+        List<AIActionVo> actions = new ArrayList<>();
+        String questionText = (question == null ? "" : question).toLowerCase();
+        String text = (questionText + " " + (pageContext == null ? "" : pageContext)).toLowerCase();
+        boolean onMonitorPage = containsAny(pageContext, "监控页助手", "页面类型:监控页", "实时监控", "自动保存我的快照");
+
+        if (containsAny(text, "覆盖率", "覆盖", "coverage", "报告")
+                && containsAny(text, "看", "查看", "打开", "跳转", "链接", "连接", "去")) {
+            String url = buildCoverageUrl(projectId, apps);
+            actions.add(new AIActionVo("navigate", "打开覆盖率报告", "跳转到当前项目的覆盖率报告页面", url, false, null));
+            actions.add(new AIActionVo("link", "查看覆盖率入口", "在快捷入口中保留覆盖率报告链接", url, false, null));
+        }
+
+        actions.addAll(buildHeaderNavigationActions(projectId, apps, questionText));
+
+        if (containsAny(questionText, "自动保存", "自动快照", "保存我的快照", "自动沉淀")
+                && containsAny(questionText, "快照", "snapshot")) {
+            boolean disableAutoSave = containsAny(questionText, "关闭", "取消", "停止", "停用", "禁用", "不要", "不再", "关掉", "取消自动", "关闭自动");
+            boolean systemSnapshot = containsAny(questionText, "系统快照", "system snapshot", "系统");
+            if (onMonitorPage) {
+                actions.add(buildMonitorPageAction(
+                        disableAutoSave
+                                ? (systemSnapshot ? "disableAutoSaveSystem" : "disableAutoSaveMy")
+                                : (systemSnapshot ? "enableAutoSaveSystem" : "enableAutoSaveMy"),
+                        (disableAutoSave ? "关闭" : "开启") + (systemSnapshot ? "自动保存系统快照" : "自动保存我的快照"),
+                        "已" + (disableAutoSave ? "关闭" : "开启") + (systemSnapshot ? "自动保存系统快照" : "自动保存我的快照") + "。"));
+            } else {
+                actions.add(new AIActionVo("navigate", "前往实时监控", "自动保存快照属于监控页能力，请先进入实时监控页面确认采集范围", "/p/" + projectId + "/monitor", true,
+                        disableAutoSave ? "即将跳转到实时监控页面。进入页面后可让我直接关闭对应自动保存开关。" : "即将跳转到实时监控页面。进入页面后可让我直接开启对应自动保存开关。"));
+            }
+            actions.add(new AIActionVo("link", "我的快照", "查看已保存的个人快照", "/p/" + projectId + "/snapshot/my", false, null));
+        }
+
+        if (onMonitorPage && containsAny(questionText, "自动刷新", "刷新列表", "刷新监控", "最新数据", "获取最新")) {
+            boolean disableRefresh = containsAny(questionText, "关闭", "取消", "停止", "停用", "禁用", "不要", "不再", "关掉");
+            Integer refreshSeconds = extractRefreshSeconds(questionText);
+            if (refreshSeconds != null) {
+                actions.add(buildMonitorPageAction("setAutoRefreshSeconds", "设置自动刷新间隔", "已设置自动刷新间隔。", "seconds", refreshSeconds));
+            } else {
+                String actionName = containsAny(questionText, "最新", "刷新列表", "刷新监控", "获取") && !containsAny(questionText, "自动刷新")
+                        ? "refreshMonitorList"
+                        : (disableRefresh ? "disableAutoRefresh" : "enableAutoRefresh");
+                actions.add(buildMonitorPageAction(actionName,
+                        actionName.equals("refreshMonitorList") ? "刷新监控列表" : (disableRefresh ? "关闭自动刷新" : "开启自动刷新"),
+                        actionName.equals("refreshMonitorList") ? "已刷新监控列表。" : "已" + (disableRefresh ? "关闭" : "开启") + "自动刷新。"));
+            }
+        }
+
+        if (onMonitorPage && !containsAny(questionText, "自动保存")
+                && containsAny(questionText, "我的快照", "快照列表")
+                && containsAny(questionText, "打开", "跳转", "去", "查看", "进入")) {
+            actions.add(buildMonitorPageAction("openMySnapshots", "打开我的快照", "正在打开我的快照页面。"));
+        }
+
+        if (onMonitorPage && (containsAny(questionText, "保存快照", "创建快照", "新建快照", "手动保存")
+                || (containsAny(questionText, "保存", "存起来") && containsAny(questionText, "快照"))) && !containsAny(questionText, "自动保存")) {
+            boolean systemSnapshot = containsAny(questionText, "系统快照", "系统");
+            boolean batchSave = containsAny(questionText, "全部", "所有", "都", "批量", "一次性", "一起", "列表里", "当前列表", "当前监控数据", "监控列表");
+            if (batchSave) {
+                actions.add(buildMonitorPageAction(systemSnapshot ? "batchSaveSystemSnapshots" : "batchSaveMySnapshots",
+                        systemSnapshot ? "批量保存系统快照" : "批量保存我的快照",
+                        systemSnapshot ? "已开始批量保存系统快照。" : "已开始批量保存我的快照。"));
+            } else {
+                actions.add(buildMonitorPageAction(systemSnapshot ? "openCreateSystemSnapshot" : "openCreateMySnapshot",
+                        systemSnapshot ? "打开系统快照保存弹窗" : "打开我的快照保存弹窗",
+                        systemSnapshot ? "已尝试打开系统快照保存弹窗。" : "已尝试打开我的快照保存弹窗。"));
+            }
+        }
+
+        if (onMonitorPage && containsAny(text, "清空", "清除") && containsAny(text, "列表", "监控", "请求")) {
+            actions.add(buildMonitorPageAction("clearMonitorList", "清空监控列表", "已清空当前监控列表。"));
+        }
+
+        if (onMonitorPage && containsAny(text, "刷新探针", "探针状态", "在线探针")) {
+            actions.add(buildMonitorPageAction("refreshProbeStatus", "刷新探针状态", "已刷新探针状态。"));
+        }
+
+        if (onMonitorPage && containsAny(text, "全部探针", "聚合", "所有探针")) {
+            actions.add(buildMonitorPageAction("setScopeAggregate", "切换到全部探针", "已切换到全部探针视图。"));
+        } else if (onMonitorPage && containsAny(text, "当前探针", "单探针")) {
+            actions.add(buildMonitorPageAction("setScopeCurrent", "切换到当前探针", "已尝试切换到当前探针视图。"));
+        } else if (onMonitorPage && containsAny(text, "多探针泳道", "泳道")) {
+            actions.add(buildMonitorPageAction("setScopeLanes", "切换到多探针泳道", "已切换到多探针泳道视图。"));
+        }
+
+        if (actions.isEmpty() && containsAny(topic, "coverage")) {
+            actions.add(new AIActionVo("link", "打开覆盖率报告", "查看代码覆盖率详情", buildCoverageUrl(projectId, apps), false, null));
+        }
+        return actions;
+    }
+
+    private AIActionVo buildMonitorPageAction(String actionName, String title, String description) {
+        return buildMonitorPageAction(actionName, title, description, null, null);
+    }
+
+    private AIActionVo buildMonitorPageAction(String actionName, String title, String description, String payloadKey, Object payloadValue) {
+        AIActionVo action = new AIActionVo("monitorPageAction", title, description, null, false, null);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("name", actionName);
+        if (payloadKey != null) {
+            payload.put(payloadKey, payloadValue);
+        }
+        action.setPayload(payload);
+        return action;
+    }
+
+    private Integer extractRefreshSeconds(String text) {
+        if (!containsAny(text, "秒", "s") || !containsAny(text, "自动刷新", "刷新间隔", "间隔")) {
+            return null;
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d{1,3})\\s*(秒|s)").matcher(text);
+        if (!matcher.find()) {
+            return null;
+        }
+        int seconds = Integer.parseInt(matcher.group(1));
+        return Math.max(1, Math.min(120, seconds));
+    }
+
+    private String buildCoverageUrl(String projectId, List<AppVo> apps) {
+        if (apps != null && !apps.isEmpty()) {
+            return "/p/" + projectId + "/coverage/details?appId=" + apps.get(0).getId();
+        }
+        return "/p/" + projectId + "/coverage/overview";
+    }
+
+    private List<AIActionVo> buildHeaderNavigationActions(String projectId, List<AppVo> apps, String questionText) {
+        List<AIActionVo> actions = new ArrayList<>();
+        if (!containsAny(questionText, "跳转", "打开", "进入", "去", "切换到", "访问", "查看")) {
+            return actions;
+        }
+
+        AppVo targetApp = findTargetApp(apps, questionText);
+        String appId = targetApp == null ? null : targetApp.getId();
+
+        if (containsAny(questionText, "项目主页", "首页", "项目首页", "概览")) {
+            actions.add(buildAutoNavigateAction("打开项目主页", "/p/" + projectId + "/home"));
+        } else if (containsAny(questionText, "搜索")) {
+            actions.add(buildAutoNavigateAction("打开搜索", "/p/" + projectId + "/map/home"));
+        } else if (containsAny(questionText, "监控台", "实时监控", "监控页")) {
+            actions.add(buildAutoNavigateAction("打开监控台", "/p/" + projectId + "/monitor"));
+        } else if (containsAny(questionText, "ai interactive", "ai工作台", "ai interactive", "工作台")) {
+            actions.add(buildAutoNavigateAction("打开 AI Interactive", "/p/" + projectId + "/AIInteractive"));
+        } else if (containsAny(questionText, "应用中心", "应用列表")) {
+            actions.add(buildAutoNavigateAction("打开应用中心", "/p/" + projectId + "/app/list"));
+        } else if (containsAny(questionText, "在线应用")) {
+            actions.add(buildAutoNavigateAction("打开在线应用", "/p/" + projectId + "/app/online"));
+        } else if (containsAny(questionText, "添加应用", "新增应用", "创建应用")) {
+            actions.add(buildAutoNavigateAction("打开添加应用", "/p/" + projectId + "/app/create"));
+        } else if (containsAny(questionText, "创建新项目", "新建项目", "创建项目")) {
+            actions.add(buildAutoNavigateAction("打开创建新项目", "/project/create"));
+        } else if (containsAny(questionText, "项目设置", "设置")) {
+            actions.add(buildAutoNavigateAction("打开项目设置", "/p/" + projectId + "/edit"));
+        } else if (containsAny(questionText, "我的项目", "项目列表", "切换项目")) {
+            actions.add(buildAutoNavigateAction("打开我的项目列表", "/myProjects"));
+        } else if (containsAny(questionText, "用户设置", "个人设置", "账号设置")) {
+            actions.add(buildAutoNavigateAction("打开用户设置", "/user/info"));
+        } else if (containsAny(questionText, "注销", "退出登录", "登出")) {
+            actions.add(new AIActionVo("navigate", "注销退出", "即将注销当前账号", "/user/logout", true, "确认要注销退出吗？"));
+        } else if (containsAny(questionText, "我的快照")) {
+            actions.add(buildAutoNavigateAction("打开我的快照", "/p/" + projectId + "/snapshot/my"));
+        } else if (appId != null && containsAny(questionText, "系统快照")) {
+            actions.add(buildAutoNavigateAction("打开系统快照", "/p/" + projectId + "/" + appId + "/snapshot/list"));
+        } else if (appId != null && containsAny(questionText, "版本比对", "版本比较")) {
+            actions.add(buildAutoNavigateAction("打开版本比对", "/p/" + projectId + "/" + appId + "/version/compare"));
+        } else if (appId != null && containsAny(questionText, "覆盖率报告", "覆盖率")) {
+            actions.add(buildAutoNavigateAction("打开覆盖率报告", "/p/" + projectId + "/" + appId + "/version/report/list?tab=coverage"));
+        } else if (appId != null) {
+            actions.add(buildAutoNavigateAction("打开应用系统快照", "/p/" + projectId + "/" + appId + "/snapshot/list"));
+        }
+        return actions;
+    }
+
+    private AIActionVo buildAutoNavigateAction(String title, String url) {
+        AIActionVo action = new AIActionVo("navigate", title, "正在跳转到" + title.replace("打开", "") + "。", url, false, null);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("autoExecute", true);
+        action.setPayload(payload);
+        return action;
+    }
+
+    private AppVo findTargetApp(List<AppVo> apps, String questionText) {
+        if (apps == null || apps.isEmpty()) {
+            return null;
+        }
+        for (AppVo app : apps) {
+            if (app != null && StringUtils.hasText(app.getName()) && questionText.contains(app.getName().toLowerCase())) {
+                return app;
+            }
+        }
+        if (containsAny(questionText, "应用", "系统快照", "版本比对", "覆盖率")) {
+            return apps.get(0);
+        }
+        return null;
     }
 
     private String normalizePageContext(String pageContext) {

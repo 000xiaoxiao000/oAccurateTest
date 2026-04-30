@@ -298,6 +298,7 @@
         function appendMessage(role, title, message, actions, options) {
             options = options || {};
             var avatar = role === 'assistant' ? assistantName.substring(0, 1) : '我';
+            var aiActions = options.aiActions || [];
             var shouldPulseLatest = !!options.pulseLatest;
             var cardContentClass = 'ai-message-content' + (options.collapsible ? ' collapsible expanded' : '');
             var contentHtml = options.animate
@@ -320,9 +321,12 @@
                 + '</div>'
                 + '<div class="ai-message-card" style="position:relative">'
                 + '<div class="' + cardContentClass + '">' + contentHtml + '</div>'
-                + (options.animate ? '' : '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions))
+                + (options.animate ? '' : '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions) + renderAIExecActions(aiActions))
                 + '</div></div></div></div>');
             $messageList.append($node);
+            if (aiActions && aiActions.length) {
+                $node.data('ai-actions', aiActions);
+            }
             if (!options.animate) {
                 U.bindCopyButton($node.find('.ai-message-copy'), message);
             }
@@ -331,9 +335,7 @@
                 var $card = $node.find('.ai-message-card');
                 var $content = $card.find('.ai-message-content');
                 typewriterText($content.find('.ai-message-text'), message, function () {
-                    var extra = actions && actions.length
-                        ? ('<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions))
-                        : '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>';
+                    var extra = '<button class="ai-message-copy" title="复制"><i class="copy icon"></i></button>' + renderActions(actions) + renderAIExecActions(aiActions);
                     $card.append(extra);
                     U.bindCopyButton($card.find('.ai-message-copy'), message);
                     collapseHistoricalQaMessages({ scrollLatest: true });
@@ -351,6 +353,95 @@
                 html += '<button class="ai-action-btn" data-question="' + U.escapeHtml(action) + '">' + U.escapeHtml(action) + '</button>';
             });
             return html + '</div>';
+        }
+
+        function renderAIExecActions(actions) {
+            if (!actions || !actions.length) return '';
+            var html = '<div class="ai-message-actions">';
+            $.each(actions, function (index, action) {
+                html += '<button class="ai-action-btn ai-exec-action-btn" data-action-index="' + index + '">' + U.escapeHtml(action.title || '执行操作') + '</button>';
+            });
+            return html + '</div>';
+        }
+
+        function executeAIAction(action) {
+            if (!action || !action.type) return;
+            if ((action.type === 'navigate' || action.type === 'link') && action.url) {
+                if (action.requireConfirm === true) {
+                    var message = action.confirmText || action.description || ('确认执行：' + (action.title || '操作') + '？');
+                    if (!window.confirm(message)) return;
+                }
+                window.location.href = action.url;
+                return;
+            }
+            appendMessage('assistant', assistantName, '这个动作暂时还没有接入执行器，我可以先带你到相关页面处理。', [], { animate: true });
+        }
+
+        function findHeaderAppActionUrl(kind, question) {
+            var targetText = String(question || '').toLowerCase();
+            var fallbackUrl = '';
+            $('#appItem .menu .item').each(function () {
+                var $item = $(this);
+                var itemText = $.trim($item.text()).toLowerCase();
+                var $links = $item.find('.subMenu a');
+                if (!$links.length) return;
+                var matchedApp = itemText && targetText.indexOf(itemText.split(' ')[0]) >= 0;
+                $links.each(function () {
+                    var href = $(this).attr('href') || '';
+                    var isMatch = (kind === 'snapshot' && href.indexOf('/snapshot/list') >= 0)
+                        || (kind === 'version' && href.indexOf('/version/compare') >= 0)
+                        || (kind === 'coverage' && href.indexOf('/version/report/list') >= 0);
+                    if (!href || !isMatch) return;
+                    fallbackUrl = fallbackUrl || href;
+                    if (matchedApp) {
+                        fallbackUrl = href;
+                        return false;
+                    }
+                });
+                if (matchedApp && fallbackUrl) return false;
+            });
+            return fallbackUrl;
+        }
+
+        function resolveLocalNavigationUrl(question) {
+            var text = String(question || '').toLowerCase();
+            if (!/(跳转|跳到|打开|进入|去|访问|查看)/.test(text)) return '';
+            var projectBase = '/p/' + projectId;
+            if (/版本比对|版本比较/.test(text)) return findHeaderAppActionUrl('version', question);
+            if (/覆盖率报告|覆盖率/.test(text)) return findHeaderAppActionUrl('coverage', question);
+            if (/系统快照/.test(text)) return findHeaderAppActionUrl('snapshot', question);
+            if (/应用中心|应用列表/.test(text)) return projectBase + '/app/list';
+            if (/在线应用/.test(text)) return projectBase + '/app/online';
+            if (/监控台|实时监控|监控页/.test(text)) return projectBase + '/monitor';
+            if (/ai\s*interactive|ai工作台|工作台/.test(text)) return projectBase + '/AIInteractive';
+            if (/搜索/.test(text)) return projectBase + '/map/home';
+            if (/项目主页|项目首页|首页/.test(text)) return projectBase + '/home';
+            if (/添加应用|新增应用|创建应用/.test(text)) return projectBase + '/app/create';
+            if (/创建新项目|新建项目|创建项目/.test(text)) return '/project/create';
+            if (/项目设置/.test(text)) return projectBase + '/edit';
+            if (/用户设置|个人设置|账号设置/.test(text)) return '/user/info';
+            if (/我的快照|快照列表/.test(text) && text.indexOf('自动保存') < 0) return projectBase + '/snapshot/my';
+            return '';
+        }
+
+        function tryLocalNavigation(question) {
+            var url = resolveLocalNavigationUrl(question);
+            if (!url) return false;
+            appendMessage('assistant', assistantName, '已理解为页面跳转，正在打开目标页面。', [], { animate: true });
+            setTimeout(function () { window.location.href = url; }, 80);
+            return true;
+        }
+
+        function shouldAutoExecuteAIAction(action) {
+            return !!(action && action.payload && action.payload.autoExecute === true);
+        }
+
+        function autoExecuteAIPageActions(actions) {
+            $.each(actions || [], function (_, action) {
+                if (shouldAutoExecuteAIAction(action)) {
+                    executeAIAction(action);
+                }
+            });
         }
 
         function createQuestionAnchor(question, index, meta) {
@@ -1450,6 +1541,7 @@
                     messageOptions.isAnchorTarget = true;
                     anchorCursor++;
                 }
+                messageOptions.aiActions = item.aiActions || [];
                 appendMessage(item.role, item.title, item.message, item.actions || [], messageOptions);
             });
             renderChatAnchors(s, { silent: true });
@@ -1569,6 +1661,10 @@
             renderChatAnchors({ history: session.history.concat([{ role: 'user', message: saveMsgText || pendingQuestion }]) });
             updateSessionTitle(session, question || '[图片提问]');
             saveMessage({ role: 'user', title: '你', message: saveMsgText, actions: [] });
+            if (!uploadedImageData && tryLocalNavigation(question)) {
+                $questionInput.val('');
+                return;
+            }
             session.pendingRequest = {
                 status: 'pending',
                 question: saveMsgText || pendingQuestion,
@@ -1607,7 +1703,8 @@
                 }
                 var d = response.data || {};
                 var reply = d.answer || response.message || '已收到你的问题。';
-                appendMessage('assistant', assistantName, reply, d.suggestions || [], { animate: true, collapsible: shouldCollapseMessage(reply) });
+                appendMessage('assistant', assistantName, reply, d.suggestions || [], { animate: true, collapsible: shouldCollapseMessage(reply), aiActions: d.actions || [] });
+                autoExecuteAIPageActions(d.actions || []);
                 session.quickLinks = d.quickLinks || []; session.suggestions = d.suggestions || [];
                 if (d.sessionState) {
                     serverSessionState = d.sessionState;
@@ -1615,7 +1712,7 @@
                     session = getActiveSession() || session;
                 }
                 renderQuickLinks(session.quickLinks); renderFollowUps(session.suggestions);
-                saveMessage({ role: 'assistant', title: assistantName, message: reply, actions: d.suggestions || [], quickLinks: d.quickLinks || [], responseTime: d.metadata && d.metadata.responseTime ? d.metadata.responseTime : 0 });
+                saveMessage({ role: 'assistant', title: assistantName, message: reply, actions: d.suggestions || [], aiActions: d.actions || [], quickLinks: d.quickLinks || [], responseTime: d.metadata && d.metadata.responseTime ? d.metadata.responseTime : 0 });
                 clearPendingRequest(session, 'completed', reply);
                 syncSessionStateToServer({ silent: true });
                 addTimeline('生成回复', d.topic || 'general'); setSignalState('reply');
@@ -1658,7 +1755,14 @@
             if (e.keyCode === 13 && !e.shiftKey) { e.preventDefault(); sendQuestion(); }
         });
 
-        $(document).on('click', '.starter-question, .ai-action-btn', function () { sendQuestion($(this).data('question')); });
+        $(document).on('click', '.starter-question, .ai-action-btn', function () {
+            if ($(this).hasClass('ai-exec-action-btn')) return;
+            sendQuestion($(this).data('question'));
+        });
+        $(document).on('click', '.ai-exec-action-btn', function () {
+            var actions = $(this).closest('.ai-message-section').data('ai-actions') || [];
+            executeAIAction(actions[$(this).data('action-index')]);
+        });
         $(document).on('mousedown', '.ai-floating-anchor-dot', function (event) {
             event.preventDefault();
             event.stopPropagation();

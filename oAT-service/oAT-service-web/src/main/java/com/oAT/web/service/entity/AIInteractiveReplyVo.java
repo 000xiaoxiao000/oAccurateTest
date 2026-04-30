@@ -10,6 +10,7 @@ public class AIInteractiveReplyVo implements Serializable {
     private String topic;
     private List<String> suggestions;
     private List<AIQuickLinkVo> quickLinks;
+    private List<AIActionVo> actions;
 
     /**
      * 数据可视化建议（前端可根据此字段渲染图表）
@@ -80,6 +81,14 @@ public class AIInteractiveReplyVo implements Serializable {
 
     public void setQuickLinks(List<AIQuickLinkVo> quickLinks) {
         this.quickLinks = quickLinks;
+    }
+
+    public List<AIActionVo> getActions() {
+        return actions;
+    }
+
+    public void setActions(List<AIActionVo> actions) {
+        this.actions = actions;
     }
 
     public List<Map<String, Object>> getVisualizationSuggestions() {
