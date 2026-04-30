@@ -94,6 +94,10 @@
         var $newSessionButton = $('#aiNewSessionButton');
         var $sessionSearchInput = $('#aiSessionSearchInput');
         var $sessionSortSelect = $('#aiSessionSortSelect');
+        var $signalsDrawer = $('#aiSignalsDrawer');
+        var $signalsDrawerToggle = $('#aiSignalsDrawerToggle');
+        var $signalsDrawerClose = $('#aiSignalsDrawerClose');
+        var $signalsDrawerBackdrop = $('#aiSignalsDrawerBackdrop');
 
         /* ===== 状态 ===== */
         var sessions = [];
@@ -152,6 +156,7 @@
         renderActiveSession();
         setTimelineExpanded(readTimelineExpanded());
         initWorkbenchAnimation();
+        initSignalsDrawer();
 
         /* ============================================================
          *  工作台独有：环境光 / 粒子 / 波纹特效
@@ -190,6 +195,47 @@
                 });
             }).on('mouseleave', '.ai-dock-chip', function () {
                 $(this).css({ boxShadow: '', borderColor: '' });
+            });
+        }
+
+        function initSignalsDrawer() {
+            if (!$signalsDrawer.length || !$signalsDrawerToggle.length) return;
+
+            function openDrawer() {
+                $signalsDrawer.addClass('is-open');
+                $signalsDrawerBackdrop.addClass('is-open');
+                $signalsDrawerToggle.attr('aria-expanded', 'true');
+                $('body').addClass('ai-signals-drawer-open');
+            }
+
+            function closeDrawer() {
+                $signalsDrawer.removeClass('is-open');
+                $signalsDrawerBackdrop.removeClass('is-open');
+                $signalsDrawerToggle.attr('aria-expanded', 'false');
+                $('body').removeClass('ai-signals-drawer-open');
+            }
+
+            $signalsDrawerToggle.on('click.aiSignalsDrawer', function () {
+                if ($signalsDrawer.hasClass('is-open')) {
+                    closeDrawer();
+                } else {
+                    openDrawer();
+                }
+            });
+
+            $signalsDrawerClose.on('click.aiSignalsDrawer', closeDrawer);
+            $signalsDrawerBackdrop.on('click.aiSignalsDrawer', closeDrawer);
+
+            $(document).on('keydown.aiSignalsDrawer', function (e) {
+                if (e.key === 'Escape' && $signalsDrawer.hasClass('is-open')) {
+                    closeDrawer();
+                }
+            });
+
+            $(window).on('resize.aiSignalsDrawer', function () {
+                if (window.innerWidth > 1400) {
+                    closeDrawer();
+                }
             });
         }
 

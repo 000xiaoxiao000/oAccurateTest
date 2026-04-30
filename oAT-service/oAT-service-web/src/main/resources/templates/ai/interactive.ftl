@@ -134,9 +134,21 @@
             </div>
         </div>
 
+        <button id="aiSignalsDrawerToggle"
+                class="ai-signals-drawer-toggle"
+                type="button"
+                aria-controls="aiSignalsDrawer"
+                aria-expanded="false">
+            <i class="signal icon"></i>
+            <span>项目信号</span>
+            <strong>${onlineAppCount}/${appCount}</strong>
+        </button>
+
+        <div id="aiSignalsDrawerBackdrop" class="ai-signals-drawer-backdrop" aria-hidden="true"></div>
+
         <div class="ui stackable grid ai-workbench-main">
-            <!-- 左侧：会话列表 - 占比增加 -->
-            <div class="five wide column">
+            <!-- 左侧：会话列表 -->
+            <div class="column ai-session-column">
                 <div class="ai-panel ai-session-panel glass">
                     <div class="ai-panel-header compact">
                         <div>
@@ -166,8 +178,8 @@
                 </div>
             </div>
 
-            <!-- 中间：实时交互流 - 占比最大 -->
-            <div class="seven wide column">
+            <!-- 中间：实时交互流 - 核心主舞台 -->
+            <div class="column ai-chat-column">
                 <div class="ai-panel ai-chat-panel glass" id="aiChatPanel">
                     <div class="ai-panel-header">
                         <div>
@@ -248,14 +260,20 @@
                 </div>
             </div>
 
-            <!-- 右侧：动态侧边栏 - 占比减少 -->
-            <div class="four wide column">
+            <!-- 右侧：动态侧边栏 - 辅助状态面板 -->
+            <div class="column ai-capability-column" id="aiSignalsDrawer" aria-label="动态侧边栏">
                 <div class="ai-panel ai-capability-panel glass">
                     <div class="ai-panel-header compact">
                         <div>
                             <div class="ai-eyebrow">Workbench Signals</div>
                             <h3>动态侧边栏</h3>
                         </div>
+                        <button id="aiSignalsDrawerClose"
+                                class="ai-signals-drawer-close"
+                                type="button"
+                                aria-label="关闭动态侧边栏">
+                            <i class="close icon"></i>
+                        </button>
                     </div>
 
                     <div class="ai-mini-stats workbench">
