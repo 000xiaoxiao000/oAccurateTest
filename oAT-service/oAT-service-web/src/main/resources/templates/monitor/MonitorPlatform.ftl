@@ -725,7 +725,8 @@
                             <label for="monitorAutoRefreshToggle">自动刷新</label>
                         </div>
                         <div class="ui mini input">
-                            <input type="number" id="monitorAutoRefreshSeconds" min="3" max="120" step="1" value="10" aria-label="自动刷新间隔秒数">
+                            <input type="number" id="monitorAutoRefreshSeconds" min="1" max="120" step="1" value="3"
+                                   aria-label="自动刷新间隔秒数">
                         </div>
                         <span>秒</span>
                         <span id="monitorAutoRefreshIntervalText">运行中</span>
