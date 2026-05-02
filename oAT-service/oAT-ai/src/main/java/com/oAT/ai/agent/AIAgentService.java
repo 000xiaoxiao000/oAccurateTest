@@ -78,9 +78,6 @@ public class AIAgentService {
     private final AgentDataProvider dataProvider;
     private final String initializationStatus;
 
-    /** 工具实例映射：方法名 → 工具对象 */
-    private final Map<String, Object> toolInstances = new LinkedHashMap<>();
-
     /** 工具方法映射：兼容别名/规范化名称 → 方法绑定 */
     private final Map<String, ToolMethodBinding> toolMethodBindings = new LinkedHashMap<>();
 
@@ -222,7 +219,6 @@ public class AIAgentService {
         }
         toolMethodBindings.put(normalizedAlias, binding);
         toolMethodSchemas.put(normalizedAlias, schema);
-        toolInstances.putIfAbsent(binding.method.getName(), binding.toolInstance);
     }
 
     private ToolMethodSchema buildToolMethodSchema(Method method) {
@@ -273,6 +269,9 @@ public class AIAgentService {
      * 集成语义缓存、智能工具推荐、多轮对话记忆
      */
     public String chat(AgentContext context, String question) {
+        if (isToolCatalogQuestion(question)) {
+            return buildToolCatalogResponse();
+        }
         if (!isAvailable()) {
             return null;
         }
@@ -335,6 +334,9 @@ public class AIAgentService {
      * 带页面上下文的对话（同样带兜底）
      */
     public String chatWithContext(AgentContext context, String question, String pageContext) {
+        if (isToolCatalogQuestion(question)) {
+            return buildToolCatalogResponse();
+        }
         if (!isAvailable()) {
             return null;
         }
@@ -364,6 +366,9 @@ public class AIAgentService {
      * 带图片的多模态对话（同样带兜底）
      */
     public String chatWithImage(AgentContext context, String question, String pageContext, String imageData) {
+        if (isToolCatalogQuestion(question)) {
+            return buildToolCatalogResponse();
+        }
         if (!isAvailable()) {
             return null;
         }
@@ -2282,8 +2287,70 @@ public class AIAgentService {
 
     private String describeTool(String toolName) {
         return toolRecommender.getToolMeta(toolName)
-                .map(meta -> meta.getToolName() + "（" + meta.getDisplayName() + "：" + meta.getDescription() + "）")
+                .map(meta -> meta.getDisplayName() + "：" + meta.getDescription())
                 .orElse(toolName);
+    }
+
+    private boolean isToolCatalogQuestion(String question) {
+        if (question == null || question.trim().isEmpty()) {
+            return false;
+        }
+        String normalized = question.toLowerCase(Locale.ROOT).replaceAll("\\s+", "");
+        return containsAny(normalized,
+                "支持哪些工具", "有哪些工具", "有什么工具", "工具列表", "工具清单",
+                "支持什么工具", "能用哪些工具", "可以用哪些工具", "你有哪些工具",
+                "你有什么工具", "ai助手有哪些工具", "平台助手有哪些工具");
+    }
+
+    private String buildToolCatalogResponse() {
+        Map<String, String> categoryNames = new LinkedHashMap<>();
+        categoryNames.put("project_info", "项目与应用");
+        categoryNames.put("app_status", "项目与应用");
+        categoryNames.put("coverage", "覆盖率分析");
+        categoryNames.put("trace", "调用链路");
+        categoryNames.put("performance", "性能分析");
+        categoryNames.put("defect", "缺陷与异常");
+        categoryNames.put("testcase", "测试推荐");
+        categoryNames.put("code_relation", "代码关系");
+        categoryNames.put("code_quality", "代码质量");
+        categoryNames.put("snapshot", "快照数据");
+        categoryNames.put("bug_detect", "AI Bug检测");
+
+        Map<String, List<String>> groupedTools = new LinkedHashMap<>();
+        for (String category : new LinkedHashSet<>(categoryNames.values())) {
+            groupedTools.put(category, new ArrayList<>());
+        }
+        groupedTools.put("其他能力", new ArrayList<>());
+
+        for (ToolRecommender.ToolMeta meta : toolRecommender.getAllTools()) {
+            String category = "其他能力";
+            if (meta.relatedIntents != null) {
+                for (String intent : meta.relatedIntents) {
+                    if (categoryNames.containsKey(intent)) {
+                        category = categoryNames.get(intent);
+                        break;
+                    }
+                }
+            }
+            String item = meta.getDisplayName() + "：" + meta.getDescription();
+            List<String> items = groupedTools.get(category);
+            if (!items.contains(item)) {
+                items.add(item);
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("我支持以下工具能力（展示的是工具名称，不是内部方法名）：\n");
+        for (Map.Entry<String, List<String>> entry : groupedTools.entrySet()) {
+            if (entry.getValue().isEmpty()) {
+                continue;
+            }
+            sb.append("\n**").append(entry.getKey()).append("**\n");
+            for (String item : entry.getValue()) {
+                sb.append("- ").append(item).append('\n');
+            }
+        }
+        return sb.toString().trim();
     }
 
     private boolean containsAny(String text, String... keywords) {
@@ -2316,10 +2383,8 @@ public class AIAgentService {
 
     // ==================== 公开访问接口 ====================
 
-    public SemanticCacheService getSemanticCacheService() { return semanticCacheService; }
     public com.oAT.ai.agent.ToolRecommender getToolRecommender() { return toolRecommender; }
     public DynamicLLMSwitcher getLlmSwitcher() { return llmSwitcher; }
-    public ConversationMemoryService getConversationMemory() { return conversationMemory; }
 
     /**
      * 获取自主学习服务（懒加载）
@@ -2350,6 +2415,7 @@ public class AIAgentService {
         stats.put("toolRecommender", toolRecommender.getStats());
         stats.put("llmSwitcher", llmSwitcher.getStats());
         stats.put("conversationMemory", conversationMemory.getStats());
+        stats.put("fallbackReports", getRecentFallbackReports(5));
         stats.put("agentAvailable", isAvailable());
         return stats;
     }

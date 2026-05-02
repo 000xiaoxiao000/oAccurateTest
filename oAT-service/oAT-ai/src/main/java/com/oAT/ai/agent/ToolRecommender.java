@@ -464,6 +464,15 @@ public class ToolRecommender {
         registerTool(new ToolMeta("getHighComplexityMethods", "高复杂度方法",
                 "找出圈复杂度过高的方法", new String[]{"复杂度", "complexity", "高复杂"}, new String[]{"code_quality"}));
 
+        registerTool(new ToolMeta("detectBugs", "类级别 Bug 检测",
+                "分析指定 Java 类源码中的空指针、资源泄漏、并发和逻辑风险", new String[]{"Bug检测", "源码缺陷", "空指针"}, new String[]{"bug_detect", "code_quality"}));
+
+        registerTool(new ToolMeta("detectBugsInMethod", "方法级深度 Bug 检测",
+                "对指定方法或代码片段进行逐行级缺陷分析", new String[]{"方法Bug", "代码审查", "逐行分析"}, new String[]{"bug_detect", "code_quality"}));
+
+        registerTool(new ToolMeta("batchDetectBugs", "批量 Bug 检测",
+                "对多个 Java 类进行批量缺陷扫描并生成汇总报告", new String[]{"批量Bug", "批量扫描", "缺陷报告"}, new String[]{"bug_detect", "code_quality"}));
+
         registerTool(new ToolMeta("searchAppByName", "搜索应用",
                 "按名称搜索应用", new String[]{"搜索应用", "searchApp"}, new String[]{"app_status"}));
 
