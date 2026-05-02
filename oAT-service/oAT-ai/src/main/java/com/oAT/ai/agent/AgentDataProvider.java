@@ -140,7 +140,7 @@ public interface AgentDataProvider {
     /**
      * 获取指定类的源码（用于AI代码分析）
      *
-     * @param className 类全限定名（如 com.example.UserService）
+     * @param className 当前项目中的真实类全限定名，也可传入简单类名由实现侧匹配
      * @return 源码文本；如果未找到返回 null
      */
     String getSourceCode(String className);

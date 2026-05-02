@@ -205,6 +205,7 @@ public class AIFeedbackControl {
             if (aiAgentService != null && aiAgentService.isAvailable()) {
                 status.put("available", true);
                 status.put("enhancedStats", aiAgentService.getEnhancedStats());
+                status.put("recentFallbackReports", aiAgentService.getRecentFallbackReports(10));
             } else {
                 status.put("available", false);
             }

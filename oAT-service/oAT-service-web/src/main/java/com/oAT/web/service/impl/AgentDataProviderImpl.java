@@ -624,7 +624,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     /**
      * 从全限定类名中提取简单类名
-     * 例如: "com.example.UserService" -> "UserService"
+     * 例如: "com.oAT.web.service.UserService" -> "UserService"
      */
     private String simpleClassName(String fullClassName) {
         if (fullClassName == null || fullClassName.isEmpty()) return "";
@@ -634,7 +634,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     /**
      * 从全限定类名中提取包名
-     * 例如: "com.example.UserService" -> "com.example"
+     * 例如: "com.oAT.web.service.UserService" -> "com.oAT.web.service"
      */
     private String extractPackageName(String fullClassName) {
         if (fullClassName == null || fullClassName.isEmpty()) return "";

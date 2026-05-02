@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * AI代码Bug检测工具
@@ -28,29 +30,35 @@ public class BugDetectTool {
 
     private static final Logger logger = LoggerFactory.getLogger(BugDetectTool.class);
 
+    private static final Pattern PACKAGE_PATTERN = Pattern.compile("(?m)^\\s*package\\s+([a-zA-Z_$][\\w$]*(?:\\.[a-zA-Z_$][\\w$]*)*)\\s*;");
+    private static final Pattern PRIMARY_TYPE_PATTERN = Pattern.compile("(?m)\\b(?:public\\s+)?(?:class|interface|enum|record)\\s+([a-zA-Z_$][\\w$]*)\\b");
+
     private final AgentDataProvider dataProvider;
 
     public BugDetectTool(AgentDataProvider dataProvider) {
         this.dataProvider = dataProvider;
     }
 
-    @Tool("对指定的Java类进行AI智能Bug检测，分析源码中的潜在缺陷、空指针风险、资源泄漏、并发问题等")
-    public String detectBugs(@P("要检测的Java类全限定名（如com.example.UserService）") String className) {
+    @Tool("对指定的Java类进行AI智能Bug检测；当用户要求检查代码Bug、源码缺陷、空指针、资源泄漏、并发问题时必须优先使用本工具")
+    public String detectBugs(@P("要检测的Java类名，优先传入当前项目覆盖率/静态数据中的真实全限定名，也支持简单类名") String className) {
         if (className == null || className.trim().isEmpty()) {
             return "错误：请提供要检测的类名";
         }
         try {
+            String requestedClassName = className.trim();
             String projectId = AgentContext.getCurrentProjectId();
             if (projectId == null) {
                 return "错误：未找到项目上下文";
             }
 
             // 获取源码
-            String sourceCode = dataProvider.getSourceCode(className);
+            String sourceCode = dataProvider.getSourceCode(requestedClassName);
             if (sourceCode == null || sourceCode.trim().isEmpty()) {
-                return "未找到类 " + className + " 的源码，可能该类未被插桩或不在当前项目中。\n" +
-                       "提示：请确保类名正确（需要完整的包路径），且该类已被 oAT 探针覆盖。";
+                return "未找到类 " + requestedClassName + " 的源码，可能该类未被插桩或不在当前项目中。\n" +
+                       "提示：请从当前项目的覆盖率/静态代码数据中选择真实类名或简单类名，不要使用示例/虚构包路径。";
             }
+
+            String actualClassName = resolveActualClassName(sourceCode, requestedClassName);
 
             // 获取覆盖率数据作为辅助参考
             List<Map<String, Object>> apps = dataProvider.getApps(projectId);
@@ -65,7 +73,7 @@ public class BugDetectTool {
                         if (classes != null) {
                             for (Map<String, Object> cls : classes) {
                                 String cn = (String) cls.getOrDefault("className", "");
-                                if (cn.equals(className) || cn.endsWith("." + className)) {
+                                if (isSameClass(cn, actualClassName) || isSameClass(cn, requestedClassName)) {
                                     Double lineRate = parseDouble(cls.get("lineRate"));
                                     Double branchRate = parseDouble(cls.get("branchRate"));
                                     Object complexityObj = cls.get("complexity");
@@ -85,10 +93,15 @@ public class BugDetectTool {
             // 构建结构化的分析请求（返回给LLM进行分析）
             StringBuilder analysisRequest = new StringBuilder();
             analysisRequest.append("## 请分析以下Java类的源码，检测其中潜在的Bug和代码缺陷\n\n");
-            analysisRequest.append("### 类名：").append(className).append("\n\n");
+            analysisRequest.append("### 类名：").append(actualClassName).append("\n");
+            if (!actualClassName.equals(requestedClassName)) {
+                analysisRequest.append("### 用户输入：").append(requestedClassName).append("\n");
+            }
+            analysisRequest.append("\n");
             analysisRequest.append("```java\n").append(truncateSource(sourceCode)).append("\n```\n");
             analysisRequest.append(coverageInfo);
             analysisRequest.append("\n\n### 分析要求\n");
+            analysisRequest.append("必须只基于上方源码中的真实 package/import/class/method 分析；禁止使用 com.example 等示例或虚构包路径，禁止把不存在于源码的类、方法、调用关系当成事实。\n\n");
             analysisRequest.append("请从以下维度逐一分析，给出具体发现（如果某维度无问题请说明\"未发现明显问题\"）：\n\n");
             analysisRequest.append("**1. 空指针风险** - 变量解引用前是否做了null检查？Optional/集合操作是否安全？\n");
             analysisRequest.append("**2. 资源泄漏** - Stream/Connection/InputStream等是否在finally/try-with-resources中关闭？\n");
@@ -126,11 +139,13 @@ public class BugDetectTool {
 
             String sourceCode = (sourceCodeSnippet != null && !sourceCodeSnippet.trim().isEmpty())
                     ? sourceCodeSnippet
-                    : dataProvider.getSourceCode(className);
+                    : dataProvider.getSourceCode(className.trim());
 
             if (sourceCode == null || sourceCode.trim().isEmpty()) {
                 return "未找到类 " + className + " 的源码";
             }
+
+            String actualClassName = resolveActualClassName(sourceCode, className.trim());
 
             // 如果指定了方法名，尝试提取该方法
             String targetSource = sourceCode;
@@ -145,12 +160,16 @@ public class BugDetectTool {
 
             StringBuilder sb = new StringBuilder();
             sb.append("## 方法级深度Bug检测\n\n");
-            sb.append("**目标**: ").append(className);
+            sb.append("**目标**: ").append(actualClassName);
+            if (!actualClassName.equals(className.trim())) {
+                sb.append("（用户输入：").append(className.trim()).append("）");
+            }
             if (methodName != null) {
                 sb.append(".").append(methodName);
             }
             sb.append("\n\n```java\n").append(truncateSource(targetSource, 3000)).append("\n```\n\n");
             sb.append("### 深度分析要求\n");
+            sb.append("必须只基于上方源码中的真实 package/import/class/method 分析；禁止使用示例或虚构包路径。\n\n");
             sb.append("请对该代码进行逐行级别的深度分析：\n\n");
             sb.append("1. **控制流分析** - if/else/switch分支完整性，循环终止条件正确性\n");
             sb.append("2. **数据流分析** - 变量初始化顺序，未初始化使用，类型转换安全\n");
@@ -178,13 +197,23 @@ public class BugDetectTool {
             sb.append("## 批量代码Bug检测报告\n\n");
             sb.append("待检测类（").append(classes.length).append("个）：\n");
 
-            for (int i = 0; i < classes.length; i++) {
-                String cn = classes[i].trim();
+            int index = 0;
+            for (String clazz : classes) {
+                String cn = clazz.trim();
                 if (!cn.isEmpty()) {
-                    sb.append(i + 1).append(". ").append(cn).append("\n");
+                    index++;
+                    sb.append(index).append(". ").append(cn).append("\n");
                 }
             }
-            sb.append("\n请逐一调用 detectBugs 工具对上述每个类进行检测，最后生成一份汇总报告，包含：\n");
+            sb.append("\n以下内容由 detectBugs 逐类生成，请基于每段源码和真实包路径继续分析，最后生成一份汇总报告。\n");
+            for (String clazz : classes) {
+                String cn = clazz.trim();
+                if (!cn.isEmpty()) {
+                    sb.append("\n---\n\n");
+                    sb.append(detectBugs(cn)).append("\n");
+                }
+            }
+            sb.append("\n汇总报告需包含：\n");
             sb.append("- 各类的问题数量统计（按严重度分类）\n");
             sb.append("- TOP 10 最需关注的问题清单\n");
             sb.append("- 项目整体代码健康评分（满分10分）\n");
@@ -257,5 +286,47 @@ public class BugDetectTool {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    private String resolveActualClassName(String sourceCode, String requestedClassName) {
+        String sourcePackage = extractPackageName(sourceCode);
+        String sourceType = extractPrimaryTypeName(sourceCode);
+        String requestedSimpleName = simpleClassName(requestedClassName);
+
+        String typeName = sourceType != null ? sourceType : requestedSimpleName;
+        if (typeName == null || typeName.isEmpty()) {
+            return requestedClassName;
+        }
+        if (sourcePackage == null || sourcePackage.isEmpty()) {
+            return typeName;
+        }
+        return sourcePackage + "." + typeName;
+    }
+
+    private String extractPackageName(String sourceCode) {
+        if (sourceCode == null) return null;
+        Matcher matcher = PACKAGE_PATTERN.matcher(sourceCode);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private String extractPrimaryTypeName(String sourceCode) {
+        if (sourceCode == null) return null;
+        Matcher matcher = PRIMARY_TYPE_PATTERN.matcher(sourceCode);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    private String simpleClassName(String className) {
+        if (className == null || className.trim().isEmpty()) return "";
+        String trimmed = className.trim();
+        int lastDot = trimmed.lastIndexOf('.');
+        return lastDot >= 0 ? trimmed.substring(lastDot + 1) : trimmed;
+    }
+
+    private boolean isSameClass(String left, String right) {
+        if (left == null || right == null) return false;
+        String a = left.trim();
+        String b = right.trim();
+        if (a.isEmpty() || b.isEmpty()) return false;
+        return a.equals(b) || a.endsWith("." + b) || b.endsWith("." + a);
     }
 }
