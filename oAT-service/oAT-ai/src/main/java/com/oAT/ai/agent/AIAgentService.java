@@ -158,6 +158,7 @@ public class AIAgentService {
         PerformanceAnalysisTool performanceTool = new PerformanceAnalysisTool(dataProvider);
         DefectStatisticsTool defectTool = new DefectStatisticsTool(dataProvider);
         TestcaseRecommendationTool testcaseTool = new TestcaseRecommendationTool(dataProvider);
+        CodeQualityTool codeQualityTool = new CodeQualityTool(dataProvider);
         BugDetectTool bugDetectTool = new BugDetectTool(dataProvider);
         CallChainAnalysisTool callChainAnalysisTool = new CallChainAnalysisTool(dataProvider);
         CallChainCompareTool callChainCompareTool = new CallChainCompareTool(dataProvider);
@@ -171,6 +172,7 @@ public class AIAgentService {
         tools.add(performanceTool);
         tools.add(defectTool);
         tools.add(testcaseTool);
+        tools.add(codeQualityTool);
         tools.add(bugDetectTool);
         tools.add(callChainAnalysisTool);
         tools.add(callChainCompareTool);
@@ -185,6 +187,7 @@ public class AIAgentService {
         registerTool(performanceTool);
         registerTool(defectTool);
         registerTool(testcaseTool);
+        registerTool(codeQualityTool);
         registerTool(bugDetectTool);
         registerTool(callChainAnalysisTool);
         registerTool(callChainCompareTool);
@@ -551,7 +554,6 @@ public class AIAgentService {
         candidates.put(normalizeStaticName("getTracesByApp"), Collections.singletonList("getRecentTraces"));
         candidates.put(normalizeStaticName("getTracesByAppName"), Collections.singletonList("getRecentTraces"));
         candidates.put(normalizeStaticName("getMySnapshots"), Collections.singletonList("getSnapshots"));
-        candidates.put(normalizeStaticName("getClassCallGraph"), Collections.singletonList("getCallGraph"));
         return candidates;
     }
 
@@ -2189,17 +2191,23 @@ public class AIAgentService {
         if (activeSession != null && activeSession.getMessageCount() > 2) {
             String ctxSummary = conversationMemory.buildContextForLLM(activeSession.getSessionId(), 5);
             if (ctxSummary != null && !ctxSummary.isEmpty()) {
-                enhanced.append("[之前的对话上下文]\n").append(ctxSummary).append("\n\n[当前问题]\n");
+                enhanced.append("[之前的对话上下文]\n").append(ctxSummary).append("\n\n");
                 logger.debug("Added conversation context for user {}", context.getUserId());
             }
         }
 
         String scenarioGuide = buildScenarioGuide(question, recommendation);
         if (scenarioGuide != null && !scenarioGuide.isEmpty()) {
-            enhanced.append(scenarioGuide).append("\n\n[当前问题]\n");
+            enhanced.append(scenarioGuide).append("\n\n");
         }
 
-        enhanced.append(question);
+        if (context != null && context.getPageContext() != null && !context.getPageContext().trim().isEmpty()) {
+            enhanced.append("[当前页面上下文]\n").append(context.getPageContext()).append("\n");
+            enhanced.append("[页面上下文使用要求]\n");
+            enhanced.append("如果当前问题只给出方法名或部分类名，必须优先从当前页面上下文、覆盖率详情、代码关系页面或上一轮对话中识别真实类名/方法名；仍无法唯一确定时先说明无法确定，不要使用示例类、示例方法或猜测包名。\n\n");
+        }
+
+        enhanced.append("[当前问题]\n").append(question);
 
         // 记录到对话记忆（异步）
         conversationMemory.addUserMessage(
@@ -2219,10 +2227,35 @@ public class AIAgentService {
         String scenario = null;
         String answerFocus = null;
 
-        if (containsAny(normalized, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
+        if (containsAny(normalized, "业务需求", "业务逻辑", "业务规则", "业务场景", "处理什么业务", "需求分析", "功能逻辑", "方法职责")) {
+            scenario = "源码业务逻辑分析";
+            preferredTools.addAll(Arrays.asList("searchCodeRelation", "analyzeBusinessRequirement", "getClassCallGraph", "detectBugsInMethod", "detectBugs"));
+            answerFocus = "必须先用 searchCodeRelation 定位源码中的真实类/方法；再用 analyzeBusinessRequirement 分析真实源码，必要时用 getClassCallGraph 补充真实上下游。只能基于源码中的真实类名、方法名、参数、分支和返回值分析业务规则。无法从源码确认的需求要明确说明，禁止使用示例类名、示例链接或猜测的业务流程。";
+        } else if (containsAny(normalized, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误")) {
+            scenario = "源码 Bug 检测";
+            preferredTools.addAll(Arrays.asList("searchCodeRelation", "detectBugsInMethod", "batchDetectBugs", "detectBugs", "getCodeQualityReport"));
+            answerFocus = "必须先用 searchCodeRelation 定位源码中的真实类/方法；用户问方法必须优先调用 detectBugsInMethod，用户问多个类/批量扫描必须优先调用 batchDetectBugs，用户问单个类再调用 detectBugs。直接输出潜在 bug、触发条件、影响和修复建议；不要改查调用链，也不要回答“未找到调用链数据”。";
+        } else if (containsAny(normalized, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
             scenario = "版本上线前的精准回归";
             preferredTools.addAll(Arrays.asList("getProjectCoverageOverview", "getLowCoverageClasses", "recommendTestcases", "compareCoverage", "searchCodeRelation", "getSnapshots"));
             answerFocus = "输出变更影响面、覆盖缺口、高风险模块、推荐回归用例、上线前准入风险；缺少版本/应用/接口信息时，先用项目级覆盖率、快照、低覆盖类等数据给出可执行排查路径，不要只回答方法论。";
+        } else if (containsAny(normalized, "调用链", "调用关系", "上下游", "谁调用", "调用了谁", "依赖关系")
+                && containsAny(normalized, "方法", "method", "函数")) {
+            scenario = "方法真实调用关系分析";
+            preferredTools.addAll(Arrays.asList("searchCodeRelation", "getClassCallGraph", "getCallGraph", "analyzeMethodCallChain", "analyzeCallChain"));
+            answerFocus = "必须先用 searchCodeRelation 根据类名/方法名定位真实代码对象；类级调用图优先用 getClassCallGraph，方法级调用关系用 getCallGraph 或 analyzeMethodCallChain。只输出工具返回的真实调用方、被调用方和 Trace 数据；如果工具返回无真实调用关系数据，要明确说明暂无真实数据，禁止生成 example.com 链接、示意图链接、methodA/helperMethod 或任何源码中不存在的方法。";
+        } else if (containsAny(normalized, "覆盖率是多少", "这个项目的代码覆盖率", "项目覆盖率", "整体覆盖率", "代码覆盖情况", "覆盖率概览")) {
+            scenario = "项目覆盖率概览";
+            preferredTools.addAll(Arrays.asList("getProjectCoverageOverview", "getCoverageReports", "getAppCoverageReport", "getAppCoverageTrend"));
+            answerFocus = "直接输出项目总体覆盖率结果、报告时间、行/分支/方法覆盖率；如果用户继续追问模块或类，则切换到低覆盖类或高复杂度分析，不要改答成提升建议。";
+        } else if (containsAny(normalized, "哪个模块的覆盖率最低", "模块覆盖率最低", "覆盖率最低的模块", "低覆盖模块", "低覆盖类", "未覆盖类")) {
+            scenario = "低覆盖模块定位";
+            preferredTools.addAll(Arrays.asList("getLowCoverageClasses", "getClassCoverageList", "recommendTestcases", "getCoverageImprovementSuggestions"));
+            answerFocus = "输出覆盖率最低的模块/类清单、覆盖率数值、风险原因和优先补测建议；不要泛泛给出提升覆盖率的通用方法。";
+        } else if (containsAny(normalized, "复杂度", "高复杂度", "圈复杂度", "代码复杂度", "复杂度高")) {
+            scenario = "高复杂度分析";
+            preferredTools.addAll(Arrays.asList("getHighComplexityMethods", "getCodeQualityReport", "getLowCoverageClasses"));
+            answerFocus = "输出高复杂度模块或方法清单、复杂度值、关联覆盖率和重构优先级；如果用户问的是模块则按模块回答，不要跳成覆盖率提升方法。";
         } else if (containsAny(normalized, "线上缺陷", "快速定位", "故障定位", "根因定位", "异常定位")) {
             scenario = "线上缺陷快速定位";
             preferredTools.addAll(Arrays.asList("getDefectOverview", "getRecentExceptions", "getAppErrorDetails", "getRecentTraces", "locateRootCause", "analyzeCallChain"));
@@ -2315,6 +2348,7 @@ public class AIAgentService {
         categoryNames.put("code_quality", "代码质量");
         categoryNames.put("snapshot", "快照数据");
         categoryNames.put("bug_detect", "AI Bug检测");
+        categoryNames.put("business_logic", "源码业务逻辑");
 
         Map<String, List<String>> groupedTools = new LinkedHashMap<>();
         for (String category : new LinkedHashSet<>(categoryNames.values())) {

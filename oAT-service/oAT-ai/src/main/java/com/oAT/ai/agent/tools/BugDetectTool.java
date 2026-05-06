@@ -226,6 +226,51 @@ public class BugDetectTool {
         }
     }
 
+    @Tool("基于真实源码分析指定类或方法承载的业务逻辑/业务需求；当用户问某个方法相关业务需求、业务规则、业务逻辑时必须优先使用本工具")
+    public String analyzeBusinessRequirement(@P("类全限定名或简单类名") String className,
+                                             @P("方法名称，可选") String methodName) {
+        if (className == null || className.trim().isEmpty()) {
+            return "错误：请提供要分析的类名。不能使用示例类名或猜测类名。";
+        }
+        try {
+            String sourceCode = dataProvider.getSourceCode(className.trim());
+            if (sourceCode == null || sourceCode.trim().isEmpty()) {
+                return "未找到类 " + className + " 的真实源码，无法分析业务需求。请确认类名或源码数据已上传/扫描；不要使用示例类名、示例包名或猜测内容回答。";
+            }
+
+            String actualClassName = resolveActualClassName(sourceCode, className.trim());
+            String targetSource = sourceCode;
+            if (methodName != null && !methodName.trim().isEmpty()) {
+                String extracted = extractMethod(sourceCode, methodName.trim());
+                if (extracted == null) {
+                    return "已找到类 " + actualClassName + " 的源码，但未找到方法 " + methodName + "。请不要猜测该方法业务需求；请确认方法名后再分析。";
+                }
+                targetSource = extracted;
+            }
+
+            StringBuilder sb = new StringBuilder();
+            sb.append("## 基于真实源码的业务逻辑分析\n\n");
+            sb.append("### 分析目标\n");
+            sb.append("- 类：").append(actualClassName).append("\n");
+            if (methodName != null && !methodName.trim().isEmpty()) {
+                sb.append("- 方法：").append(methodName.trim()).append("\n");
+            }
+            sb.append("\n### 真实源码片段\n");
+            sb.append("```java\n").append(truncateSource(targetSource, 5000)).append("\n```\n\n");
+            sb.append("### 分析要求\n");
+            sb.append("必须只基于上方真实源码分析，禁止使用 com.example、WebService、methodA/helperMethod 等示例或虚构类名/方法名。\n");
+            sb.append("请输出：\n");
+            sb.append("1. 该方法/类实际处理的业务输入和前置条件；\n");
+            sb.append("2. 关键分支对应的业务规则；\n");
+            sb.append("3. 返回值/副作用代表的业务结果；\n");
+            sb.append("4. 无法从源码确认的业务需求请明确标注“源码无法确认”，不要猜测。\n");
+            return sb.toString();
+        } catch (Exception e) {
+            logger.error("业务逻辑分析失败", e);
+            return "业务逻辑分析失败：" + e.getMessage();
+        }
+    }
+
     // ========== 内部辅助方法 ==========
 
     /**

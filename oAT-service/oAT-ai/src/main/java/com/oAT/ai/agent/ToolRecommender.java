@@ -72,25 +72,35 @@ public class ToolRecommender {
 
     static {
         INTENT_KEYWORDS.put("coverage", Set.of("覆盖", "coverage", "行覆盖", "分支覆盖",
-                "mcdc", "测试率", "代码覆盖率", "未覆盖"));
+                "mcdc", "测试率", "代码覆盖率", "覆盖率", "未覆盖", "漏测", "覆盖率是多少", "这个项目的代码覆盖率", "项目覆盖率",
+                "整体覆盖率", "覆盖率概览", "覆盖率最低", "哪个模块的覆盖率最低", "低覆盖模块", "低覆盖类", "覆盖率最高",
+                "覆盖率趋势", "历史覆盖率", "最近覆盖率", "覆盖率报告"));
         INTENT_KEYWORDS.put("performance", Set.of("性能", "performance", "慢接口",
-                "响应时间", "p50", "p95", "p99", "延迟", "吞吐量", "调用频率", "回归", "退化", "基线"));
+                "响应时间", "平均响应", "p50", "p95", "p99", "延迟", "耗时", "吞吐量", "调用频率", "回归", "退化", "基线", "性能回归", "性能退化"));
         INTENT_KEYWORDS.put("defect", Set.of("缺陷", "defect", "错误", "error",
-                "异常", "exception", "bug", "故障", "HTTP错误", "5xx", "4xx", "定位", "根因", "线上"));
+                "异常", "exception", "bug", "故障", "HTTP错误", "5xx", "4xx", "定位", "根因", "线上", "异常定位", "根因定位", "线上缺陷"));
+        INTENT_KEYWORDS.put("bug_detect", Set.of("bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷",
+                "源码缺陷", "类bug", "方法bug", "空指针", "资源泄漏", "并发问题", "逻辑错误", "代码风险", "方法风险",
+                "方法可能存在", "方法有什么问题", "这个方法有问题吗", "这个类有问题吗", "批量检测", "批量扫描", "多个类", "这些类"));
         INTENT_KEYWORDS.put("testcase", Set.of("测试", "test", "用例", " testcase",
-                "测试建议", "补充测试", "补测", "覆盖率提升", "回归", "精准回归", "高风险"));
+                "测试建议", "补充测试", "补测", "回归", "回归测试", "精准回归", "高风险", "补测建议", "测试用例推荐"));
         INTENT_KEYWORDS.put("app_status", Set.of("应用", "application", "app",
-                "在线", "offline", "运行状态", "部署", "启动"));
+                "在线", "offline", "运行状态", "状态", "部署", "启动", "应用列表", "在线应用", "应用详情"));
         INTENT_KEYWORDS.put("trace", Set.of("链路", "trace", "调用链", "请求链路",
-                "span", "上下游", "依赖关系"));
+                "span", "上下游", "依赖关系", "最近调用链", "最近链路", "链路详情", "调用链详情", "traceid"));
         INTENT_KEYWORDS.put("snapshot", Set.of("快照", "snapshot", "版本比对",
-                "历史数据", "快照详情", "版本", "上线", "发布"));
+                "历史数据", "快照详情", "我的快照", "个人快照", "版本", "上线", "发布", "发布前", "上线前"));
         INTENT_KEYWORDS.put("code_relation", Set.of("代码", "code", "类依赖",
-                "调用关系", "callgraph", "接口关系", "影响分析"));
+                "调用关系", "callgraph", "接口关系", "影响分析", "类调用图", "方法调用链", "类关系",
+                "调用图", "调用链图", "调用关系图", "类调用关系", "方法调用关系", "上下游",
+                "谁调用", "调用了谁", "引用关系", "依赖关系", "搜索代码", "查找类", "查找方法", "找源码", "找类"));
+        INTENT_KEYWORDS.put("business_logic", Set.of("业务需求", "业务逻辑", "业务规则", "业务场景",
+                "处理什么业务", "需求分析", "功能逻辑", "方法逻辑", "方法职责",
+                "业务含义", "功能需求", "类职责", "实现什么", "干什么", "做什么", "分析业务", "梳理业务"));
         INTENT_KEYWORDS.put("project_info", Set.of("项目", "project", "概览",
-                "overview", "统计", "汇总", "总览"));
+                "overview", "统计", "汇总", "总览", "项目概览", "项目总览"));
         INTENT_KEYWORDS.put("code_quality", Set.of("质量", "quality", "复杂度",
-                "圈复杂度", "代码审查", "规范", "技术债"));
+                "圈复杂度", "代码审查", "规范", "技术债", "高复杂度", "复杂度高", "代码质量", "质量报告"));
     }
 
     /**
@@ -111,6 +121,11 @@ public class ToolRecommender {
         }
 
         String lowerQ = question.toLowerCase();
+
+        Recommendation forcedRecommendation = recommendSourceAnalysisTool(lowerQ);
+        if (forcedRecommendation != null) {
+            return forcedRecommendation;
+        }
         Map<String, Double> intentScores = scoreIntents(lowerQ);
         applyScenarioBoosts(lowerQ, intentScores);
         String topIntent = getTopIntent(intentScores);
@@ -145,6 +160,38 @@ public class ToolRecommender {
 
         double confidence = rankedTools.get(0).score;
         return new Recommendation(primary, secondary, topIntent, confidence, reason.toString());
+    }
+
+    private Recommendation recommendSourceAnalysisTool(String lowerQuestion) {
+        if (containsAny(lowerQuestion, "业务需求", "业务逻辑", "业务规则", "业务场景", "业务含义", "处理什么业务",
+                "需求分析", "功能逻辑", "功能需求", "方法逻辑", "方法职责", "类职责", "实现什么", "干什么", "做什么", "分析业务", "梳理业务")) {
+            return sourceAnalysisRecommendation("analyzeBusinessRequirement",
+                    Arrays.asList("searchCodeRelation", "getClassCallGraph", "detectBugsInMethod"),
+                    "business_logic", "业务需求/业务逻辑问题必须优先使用真实源码业务逻辑分析工具");
+        }
+        if (containsAny(lowerQuestion, "批量", "多个类", "这些类", "一批", "批量检测", "批量扫描", "批量分析" )
+                && containsAny(lowerQuestion, "bug", "缺陷", "问题", "风险", "可能存在", "潜在", "代码缺陷", "源码缺陷")) {
+            return sourceAnalysisRecommendation("batchDetectBugs",
+                    Arrays.asList("searchCodeRelation", "detectBugs", "detectBugsInMethod"),
+                    "bug_detect", "批量 Bug/缺陷问题必须优先使用批量源码检测工具");
+        }
+        if (containsAny(lowerQuestion, "方法", "method", "函数")
+                && containsAny(lowerQuestion, "bug", "缺陷", "问题", "风险", "可能存在", "潜在", "空指针", "npe", "异常", "错误", "逻辑错误")) {
+            return sourceAnalysisRecommendation("detectBugsInMethod",
+                    Arrays.asList("searchCodeRelation", "detectBugs", "getCodeQualityReport"),
+                    "bug_detect", "方法级 Bug/风险问题必须优先使用方法级源码检测工具");
+        }
+        return null;
+    }
+
+    private Recommendation sourceAnalysisRecommendation(String primaryTool, List<String> secondaryTools, String intent, String reason) {
+        List<String> availableSecondary = new ArrayList<>();
+        for (String toolName : secondaryTools) {
+            if (!toolName.equals(primaryTool) && tools.containsKey(toolName)) {
+                availableSecondary.add(toolName);
+            }
+        }
+        return new Recommendation(primaryTool, availableSecondary, intent, 0.95, reason);
     }
 
     /**
@@ -233,6 +280,22 @@ public class ToolRecommender {
     }
 
     private void applyScenarioBoosts(String lowerQuestion, Map<String, Double> scores) {
+        if (containsAny(lowerQuestion, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误")) {
+            boost(scores, "bug_detect", 5.0);
+            boost(scores, "code_quality", 2.0);
+        }
+        if (containsAny(lowerQuestion, "业务需求", "业务逻辑", "业务规则", "业务场景", "处理什么业务", "需求分析", "功能逻辑", "方法职责")) {
+            boost(scores, "business_logic", 5.0);
+            boost(scores, "bug_detect", 2.0);
+            boost(scores, "code_relation", 1.0);
+        }
+        if (containsAny(lowerQuestion, "调用关系", "调用图", "调用链图", "调用关系图", "类调用图", "方法调用链", "方法调用关系", "上下游", "谁调用", "调用了谁", "依赖关系")) {
+            boost(scores, "code_relation", 5.5);
+            boost(scores, "trace", 1.5);
+        }
+        if (containsAny(lowerQuestion, "搜索代码", "查找类", "查找方法", "找源码", "找类", "找方法", "在哪", "在哪里", "定位类", "定位方法")) {
+            boost(scores, "code_relation", 4.0);
+        }
         if (containsAny(lowerQuestion, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
             boost(scores, "snapshot", 3.0);
             boost(scores, "coverage", 2.5);
@@ -288,12 +351,10 @@ public class ToolRecommender {
             double score = 0;
 
             // 基于意图匹配
-            boolean intentMatched = false;
             if (meta.relatedIntents != null) {
                 for (String ri : meta.relatedIntents) {
                     if (ri.equals(topIntent)) {
                         score += 10.0;
-                        intentMatched = true;
                         break;
                     }
                 }
@@ -323,6 +384,35 @@ public class ToolRecommender {
     }
 
     private double scenarioToolBoost(String toolName, String lowerQuestion) {
+        if (containsAny(lowerQuestion, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误")) {
+            if (containsAny(lowerQuestion, "方法", "method", "函数") && "detectBugsInMethod".equals(toolName)) {
+                return 20.0;
+            }
+            if (containsAny(lowerQuestion, "批量", "多个类", "这些类", "一批") && "batchDetectBugs".equals(toolName)) {
+                return 20.0;
+            }
+            if (Set.of("detectBugs", "detectBugsInMethod", "batchDetectBugs", "getCodeQualityReport", "searchCodeRelation").contains(toolName)) {
+                return 12.0;
+            }
+        }
+        if (containsAny(lowerQuestion, "业务需求", "业务逻辑", "业务规则", "业务场景", "处理什么业务", "需求分析", "功能逻辑", "方法职责")) {
+            if (Set.of("analyzeBusinessRequirement", "searchCodeRelation", "getClassCallGraph", "getCallGraph", "detectBugsInMethod", "detectBugs").contains(toolName)) {
+                return 12.0;
+            }
+        }
+        if (containsAny(lowerQuestion, "调用关系", "调用图", "调用链图", "调用关系图", "类调用图", "方法调用链", "方法调用关系", "上下游", "谁调用", "调用了谁", "依赖关系")) {
+            if (Set.of("getClassCallGraph", "getCallGraph", "searchCodeRelation", "analyzeMethodCallChain").contains(toolName)) {
+                return 16.0;
+            }
+        }
+        if (containsAny(lowerQuestion, "搜索代码", "查找类", "查找方法", "找源码", "找类", "找方法", "在哪", "在哪里", "定位类", "定位方法")) {
+            if ("searchCodeRelation".equals(toolName)) {
+                return 16.0;
+            }
+            if (Set.of("getClassCallGraph", "getCallGraph").contains(toolName)) {
+                return 8.0;
+            }
+        }
         if (containsAny(lowerQuestion, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
             if (Set.of("getProjectCoverageOverview", "getLowCoverageClasses", "recommendTestcases", "compareCoverage", "searchCodeRelation", "getCallGraph", "getSnapshots").contains(toolName)) {
                 return 8.0;
@@ -404,8 +494,14 @@ public class ToolRecommender {
         registerTool(new ToolMeta("getTracesByAppName", "按应用查链路",
                 "查询指定应用的调用链", new String[]{"应用链路", "tracesByApp"}, new String[]{"trace", "app_status"}));
 
+        registerTool(new ToolMeta("getTracesByApp", "按应用ID查链路",
+                "按应用ID获取调用链列表", new String[]{"应用ID链路", "appId链路", "trace app"}, new String[]{"trace", "app_status"}));
+
         registerTool(new ToolMeta("getSnapshots", "快照列表",
                 "获取项目下的快照列表", new String[]{"快照", "snapshot", "列表"}, new String[]{"snapshot"}));
+
+        registerTool(new ToolMeta("getMySnapshots", "我的快照",
+                "获取当前用户的快照列表", new String[]{"我的快照", "个人快照"}, new String[]{"snapshot"}));
 
         registerTool(new ToolMeta("getSnapshotDetail", "快照详情",
                 "获取单个快照的详细数据", new String[]{"快照详情", "snapshotDetail"}, new String[]{"snapshot"}));
@@ -449,11 +545,22 @@ public class ToolRecommender {
         registerTool(new ToolMeta("compareCoverage", "覆盖差异比对",
                 "对比两条调用链的代码覆盖差异，发现测试盲区", new String[]{"覆盖差异", "测试盲区", "精准回归"}, new String[]{"coverage", "testcase", "trace"}));
 
+        registerTool(new ToolMeta("compareCallChains", "调用链差异比对",
+                "对比两条调用链的路径、性能和错误差异", new String[]{"链路对比", "调用链差异", "正常异常对比"}, new String[]{"trace", "defect", "performance"}));
+
         registerTool(new ToolMeta("locateRootCause", "异常根因定位",
                 "对比正常和异常调用链，定位线上缺陷根因", new String[]{"根因", "线上缺陷", "异常定位"}, new String[]{"defect", "trace"}));
 
         registerTool(new ToolMeta("analyzeCallChain", "单链路深度分析",
                 "分析单条调用链的拓扑、性能瓶颈和异常根因", new String[]{"链路分析", "trace", "瓶颈", "根因"}, new String[]{"trace", "defect", "performance"}));
+
+        registerTool(new ToolMeta("analyzeRecentCallChains", "最近调用链汇总分析",
+                "对最近多条调用链做汇总分析，发现共性问题和模式", new String[]{"最近链路", "链路汇总", "批量分析"}, new String[]{"trace", "performance", "defect"}));
+
+        registerTool(new ToolMeta("analyzeMethodCallChain", "方法调用链分析",
+                "基于真实调用图/Trace 分析类或方法的上下游调用关系",
+                new String[]{"方法调用链", "类调用链", "调用关系", "调用图", "上下游", "谁调用", "调用了谁"},
+                new String[]{"trace", "code_relation"}));
 
         registerTool(new ToolMeta("analyzeUrlCallPattern", "URL调用模式分析",
                 "分析接口URL的典型路径、慢请求规律和异常情况", new String[]{"URL", "接口", "调用模式", "慢请求"}, new String[]{"trace", "performance"}));
@@ -461,20 +568,40 @@ public class ToolRecommender {
         registerTool(new ToolMeta("getCodeQualityReport", "代码质量报告",
                 "评估代码的整体质量状况", new String[]{"质量报告", "quality", "report"}, new String[]{"code_quality"}));
 
+        registerTool(new ToolMeta("getProjectOverview", "项目概览",
+                "获取项目基本信息、应用状态和覆盖率概览", new String[]{"项目概览", "项目总览", "overview"}, new String[]{"project_info"}));
+
         registerTool(new ToolMeta("getHighComplexityMethods", "高复杂度方法",
                 "找出圈复杂度过高的方法", new String[]{"复杂度", "complexity", "高复杂"}, new String[]{"code_quality"}));
 
         registerTool(new ToolMeta("detectBugs", "类级别 Bug 检测",
-                "分析指定 Java 类源码中的空指针、资源泄漏、并发和逻辑风险", new String[]{"Bug检测", "源码缺陷", "空指针"}, new String[]{"bug_detect", "code_quality"}));
+                "分析指定 Java 类源码中的空指针、资源泄漏、并发和逻辑风险", new String[]{"bug", "可能存在", "Bug检测", "源码缺陷", "代码缺陷", "空指针", "类风险"}, new String[]{"bug_detect", "code_quality"}));
 
         registerTool(new ToolMeta("detectBugsInMethod", "方法级深度 Bug 检测",
-                "对指定方法或代码片段进行逐行级缺陷分析", new String[]{"方法Bug", "代码审查", "逐行分析"}, new String[]{"bug_detect", "code_quality"}));
+                "对指定方法或代码片段进行逐行级缺陷分析；用户问某个方法可能存在的 Bug/风险时优先使用",
+                new String[]{"bug", "可能存在", "方法Bug", "方法风险", "方法可能存在", "这个方法有问题吗", "代码审查", "逐行分析", "空指针", "逻辑错误"},
+                new String[]{"bug_detect", "code_quality", "business_logic"}));
+
+        registerTool(new ToolMeta("analyzeBusinessRequirement", "源码业务逻辑分析",
+                "基于真实源码分析类或方法承载的业务需求和业务规则；用户问业务需求/业务逻辑时优先使用",
+                new String[]{"业务需求", "业务逻辑", "业务规则", "业务场景", "业务含义", "方法职责", "类职责", "需求分析", "功能逻辑", "实现什么", "干什么", "做什么"},
+                new String[]{"business_logic", "bug_detect", "code_quality", "code_relation"}));
 
         registerTool(new ToolMeta("batchDetectBugs", "批量 Bug 检测",
-                "对多个 Java 类进行批量缺陷扫描并生成汇总报告", new String[]{"批量Bug", "批量扫描", "缺陷报告"}, new String[]{"bug_detect", "code_quality"}));
+                "对多个 Java 类进行批量缺陷扫描并生成汇总报告；用户问多个类/批量扫描时优先使用",
+                new String[]{"批量Bug", "批量扫描", "批量检测", "批量分析", "多个类", "这些类", "一批", "缺陷报告"},
+                new String[]{"bug_detect", "code_quality"}));
 
         registerTool(new ToolMeta("searchAppByName", "搜索应用",
                 "按名称搜索应用", new String[]{"搜索应用", "searchApp"}, new String[]{"app_status"}));
+
+        registerTool(new ToolMeta("getCoverageReportDetail", "覆盖率报告详情",
+                "获取单份覆盖率报告的详细信息", new String[]{"覆盖率报告详情", "报告详情"}, new String[]{"coverage"}));
+
+        registerTool(new ToolMeta("getClassCallGraph", "类调用图",
+                "获取类级别的真实调用关系图",
+                new String[]{"类调用图", "类调用关系", "类依赖", "类关系", "调用关系图", "调用图", "上下游"},
+                new String[]{"code_relation", "trace", "business_logic"}));
 
         logger.info("Registered {} built-in tools in recommender", tools.size());
     }

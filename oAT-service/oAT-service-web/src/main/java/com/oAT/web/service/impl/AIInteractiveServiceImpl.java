@@ -14,6 +14,7 @@ import com.oAT.web.service.entity.AIQuickLinkVo;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
+import com.oAT.web.config.AIInteractiveRouteConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +66,9 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     @Autowired(required = false)
     private AIAgentService aiAgentService;
 
+    @Autowired(required = false)
+    private AIInteractiveRouteConfig routeConfig;
+
     @Value("${ai.llm.timeout:300}")
     private int aiTimeout;
 
@@ -85,7 +89,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         page.setAppCount(apps.size());
         page.setAppNames(apps.stream().map(AppVo::getName).collect(Collectors.toList()));
         page.setMascotHint(buildMascotHint(project, apps));
-        page.setQuickLinks(buildQuickLinks(projectId, apps, "overview"));
+        page.setQuickLinks(buildQuickLinks(projectId, apps, new RouteContext("project", "project.overview")));
         page.setSessionState(loadSessionState(projectId, user));
         page.setMascot(mascot);
         page.setAiTimeout(aiTimeout);
@@ -104,11 +108,11 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
             cleanQuestion = "[图片提问] 请分析这张图片";
         }
         String contextSummary = normalizePageContext(pageContext);
-        String topic = detectTopic(cleanQuestion + " " + contextSummary);
+        RouteContext routeContext = detectRoute(cleanQuestion, contextSummary);
 
         AIInteractiveReplyVo reply = new AIInteractiveReplyVo();
         reply.setQuestion(cleanQuestion);
-        reply.setTopic(topic);
+        reply.setTopic(routeContext.topicKey);
 
         String answer = callAIAgent(project, apps, user, cleanQuestion, contextSummary, imageData);
         reply.setAnswer(answer);
@@ -116,11 +120,12 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         long responseTime = System.currentTimeMillis() - startTime;
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("responseTime", responseTime);
-        metadata.put("topic", topic);
+        metadata.put("topic", routeContext.topicKey);
+        metadata.put("route", routeContext.routeKey);
         reply.setMetadata(metadata);
-        reply.setSuggestions(buildFollowUpSuggestions(apps, topic));
-        reply.setQuickLinks(buildQuickLinks(projectId, apps, topic));
-        reply.setActions(buildActions(projectId, apps, cleanQuestion, contextSummary, topic));
+        reply.setSuggestions(buildFollowUpSuggestions(apps, routeContext));
+        reply.setQuickLinks(buildQuickLinks(projectId, apps, routeContext));
+        reply.setActions(buildActions(projectId, apps, cleanQuestion, contextSummary, routeContext));
         reply.setSessionState(loadSessionState(projectId, user));
         return reply;
     }
@@ -269,27 +274,51 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         }
     }
 
-    private List<AIQuickLinkVo> buildQuickLinks(String projectId, List<AppVo> apps, String topic) {
+    private List<AIQuickLinkVo> buildQuickLinks(String projectId, List<AppVo> apps, RouteContext routeContext) {
         List<AIQuickLinkVo> links = new ArrayList<>();
         links.add(new AIQuickLinkVo("项目主页", "回到项目整体概况", "/p/" + projectId + "/home"));
         links.add(new AIQuickLinkVo("监控台", "查看实时请求与调用链", "/p/" + projectId + "/monitor"));
-        if (!apps.isEmpty()) {
+        if (isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
+            links.add(new AIQuickLinkVo("覆盖率概览", "查看项目整体覆盖率", "/p/" + projectId + "/coverage/overview"));
+        }
+        if (!apps.isEmpty() && isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
             String appId = apps.get(0).getId();
             links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage/details?appId=" + appId));
-        } else {
+        } else if (isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
             links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage/overview"));
         }
-        links.add(new AIQuickLinkVo("快照列表", "浏览项目沉淀的全部快照", "/p/" + projectId + "/snapshot/list"));
+        if (isRoute(routeContext, "snapshot", "snapshot.list", "snapshot.detail", "snapshot.my")) {
+            links.add(new AIQuickLinkVo("快照列表", "浏览项目沉淀的全部快照", "/p/" + projectId + "/snapshot/list"));
+        }
+        if (isRoute(routeContext, "snapshot", "snapshot.my")) {
+            links.add(new AIQuickLinkVo("我的快照", "只看当前用户保存的快照", "/p/" + projectId + "/snapshot/my"));
+        }
+        if (isRoute(routeContext, "trace", "trace.recent", "trace.detail", "trace.app")) {
+            links.add(new AIQuickLinkVo("最近调用链", "查看最近的链路数据", "/p/" + projectId + "/monitor"));
+        }
+        if (isRoute(routeContext, "trace", "trace.app")) {
+            links.add(new AIQuickLinkVo("按应用查链路", "查看当前应用相关链路", "/p/" + projectId + "/monitor"));
+        }
+        if (isRoute(routeContext, "quality", "quality.lowComplexity", "quality.report")) {
+            links.add(new AIQuickLinkVo("代码质量", "查看复杂度与质量分析", "/p/" + projectId + "/coverage/overview"));
+        }
         return links;
     }
 
-    private List<AIActionVo> buildActions(String projectId, List<AppVo> apps, String question, String pageContext, String topic) {
+    private List<AIActionVo> buildActions(String projectId, List<AppVo> apps, String question, String pageContext, RouteContext routeContext) {
         List<AIActionVo> actions = new ArrayList<>();
         String questionText = (question == null ? "" : question).toLowerCase();
         String text = (questionText + " " + (pageContext == null ? "" : pageContext)).toLowerCase();
         boolean onMonitorPage = containsAny(pageContext, "监控页助手", "页面类型:监控页", "实时监控", "自动保存我的快照");
+        boolean onCoveragePage = containsAny(pageContext, "覆盖率页", "页面类型:覆盖率页", "覆盖率详情", "coverage", "覆盖率报告");
+        boolean onSnapshotPage = containsAny(pageContext, "快照页", "页面类型:快照页", "snapshot", "我的快照", "快照列表");
 
-        if (containsAny(text, "覆盖率", "覆盖", "coverage", "报告")
+        if (onCoveragePage && !containsAny(text, "快照", "链路", "调用链")
+                && containsAny(text, "看", "查看", "打开", "跳转", "链接", "连接", "去")) {
+            String url = buildCoverageUrl(projectId, apps);
+            actions.add(new AIActionVo("navigate", "打开覆盖率报告", "跳转到当前项目的覆盖率报告页面", url, false, null));
+            actions.add(new AIActionVo("link", "查看覆盖率入口", "在快捷入口中保留覆盖率报告链接", url, false, null));
+        } else if (isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")
                 && containsAny(text, "看", "查看", "打开", "跳转", "链接", "连接", "去")) {
             String url = buildCoverageUrl(projectId, apps);
             actions.add(new AIActionVo("navigate", "打开覆盖率报告", "跳转到当前项目的覆盖率报告页面", url, false, null));
@@ -298,7 +327,8 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
         actions.addAll(buildHeaderNavigationActions(projectId, apps, questionText));
 
-        if (containsAny(questionText, "自动保存", "自动快照", "保存我的快照", "自动沉淀")
+        if ((onSnapshotPage || isRoute(routeContext, "snapshot", "snapshot.my", "snapshot.list", "snapshot.detail"))
+                && containsAny(questionText, "自动保存", "自动快照", "保存我的快照", "自动沉淀")
                 && containsAny(questionText, "快照", "snapshot")) {
             boolean disableAutoSave = containsAny(questionText, "关闭", "取消", "停止", "停用", "禁用", "不要", "不再", "关掉", "取消自动", "关闭自动");
             boolean systemSnapshot = containsAny(questionText, "系统快照", "system snapshot", "系统");
@@ -316,7 +346,8 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
             actions.add(new AIActionVo("link", "我的快照", "查看已保存的个人快照", "/p/" + projectId + "/snapshot/my", false, null));
         }
 
-        if (onMonitorPage && containsAny(questionText, "自动刷新", "刷新列表", "刷新监控", "最新数据", "获取最新")) {
+        if ((onMonitorPage || isRoute(routeContext, "trace", "trace.recent", "trace.app", "trace.detail"))
+                && containsAny(questionText, "自动刷新", "刷新列表", "刷新监控", "最新数据", "获取最新", "刷新链路", "更新链路")) {
             boolean disableRefresh = containsAny(questionText, "关闭", "取消", "停止", "停用", "禁用", "不要", "不再", "关掉");
             Integer refreshSeconds = extractRefreshSeconds(questionText);
             if (refreshSeconds != null) {
@@ -331,13 +362,15 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
             }
         }
 
-        if (onMonitorPage && !containsAny(questionText, "自动保存")
+        if ((onMonitorPage || onSnapshotPage)
+                && !containsAny(questionText, "自动保存")
                 && containsAny(questionText, "我的快照", "快照列表")
                 && containsAny(questionText, "打开", "跳转", "去", "查看", "进入")) {
             actions.add(buildMonitorPageAction("openMySnapshots", "打开我的快照", "正在打开我的快照页面。"));
         }
 
-        if (onMonitorPage && (containsAny(questionText, "保存快照", "创建快照", "新建快照", "手动保存")
+        if ((onMonitorPage || onSnapshotPage)
+                && (containsAny(questionText, "保存快照", "创建快照", "新建快照", "手动保存")
                 || (containsAny(questionText, "保存", "存起来") && containsAny(questionText, "快照"))) && !containsAny(questionText, "自动保存")) {
             boolean systemSnapshot = containsAny(questionText, "系统快照", "系统");
             boolean batchSave = containsAny(questionText, "全部", "所有", "都", "批量", "一次性", "一起", "列表里", "当前列表", "当前监控数据", "监控列表");
@@ -352,7 +385,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
             }
         }
 
-        if (onMonitorPage && containsAny(text, "清空", "清除") && containsAny(text, "列表", "监控", "请求")) {
+        if ((onMonitorPage || onSnapshotPage) && containsAny(text, "清空", "清除") && containsAny(text, "列表", "快照", "监控", "请求")) {
             actions.add(buildMonitorPageAction("clearMonitorList", "清空监控列表", "已清空当前监控列表。"));
         }
 
@@ -368,7 +401,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
             actions.add(buildMonitorPageAction("setScopeLanes", "切换到多探针泳道", "已切换到多探针泳道视图。"));
         }
 
-        if (actions.isEmpty() && containsAny(topic, "coverage")) {
+        if (actions.isEmpty() && (onCoveragePage || isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report"))) {
             actions.add(new AIActionVo("link", "打开覆盖率报告", "查看代码覆盖率详情", buildCoverageUrl(projectId, apps), false, null));
         }
         return actions;
@@ -517,35 +550,283 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         return LEGACY_SESSION_STORE_KEY_PREFIX + projectId + ":" + userId;
     }
 
-    private String detectTopic(String text) {
-        if (containsAny(text, "覆盖", "coverage")) {
-            return "coverage";
-        } else if (containsAny(text, "链路", "trace", "调用")) {
-            return "trace";
-        } else if (containsAny(text, "应用", "app", "在线")) {
-            return "app";
-        } else if (containsAny(text, "测试", "test")) {
-            return "test";
-        } else if (containsAny(text, "快照", "snapshot")) {
-            return "snapshot";
+    private RouteContext detectRoute(String question, String contextSummary) {
+        String text = ((question == null ? "" : question) + " " + (contextSummary == null ? "" : contextSummary)).toLowerCase();
+
+        if (isBugInspectionQuestion(text)) {
+            if (containsAny(text, "方法", "method", "函数")) {
+                return new RouteContext("bug_detect", "bug.method");
+            }
+            return new RouteContext("bug_detect", "bug.class");
         }
-        return "general";
+
+        if (isBusinessLogicQuestion(text)) {
+            if (containsAny(text, "方法", "method", "函数")) {
+                return new RouteContext("business_logic", "business_logic.method");
+            }
+            return new RouteContext("business_logic", "business_logic.class");
+        }
+
+        if (isMethodCallGraphQuestion(text)) {
+            return new RouteContext("code_relation", "code_relation.callGraph");
+        }
+
+        String pageRoute = detectPageRoute(contextSummary);
+
+        if (StringUtils.hasText(pageRoute)) {
+            return routeByPageFirst(pageRoute, text);
+        }
+
+        if (containsAny(text, "覆盖率是多少", "这个项目的代码覆盖率", "项目覆盖率", "整体覆盖率", "覆盖率概览", "代码覆盖情况")) {
+            return new RouteContext("coverage", "coverage.overview");
+        }
+        if (containsAny(text, "哪个模块的覆盖率最低", "模块覆盖率最低", "覆盖率最低的模块", "低覆盖模块", "低覆盖类", "未覆盖类", "漏测")) {
+            return new RouteContext("coverage", "coverage.low");
+        }
+        if (containsAny(text, "覆盖率趋势", "趋势", "最近覆盖率", "历史覆盖率", "变化趋势")) {
+            return new RouteContext("coverage", "coverage.trend");
+        }
+        if (containsAny(text, "应用覆盖率", "某个应用覆盖率", "应用的覆盖率", "app覆盖率")) {
+            return new RouteContext("coverage", "coverage.app");
+        }
+        if (containsAny(text, "高复杂度", "圈复杂度", "复杂度高", "代码复杂度", "复杂度")) {
+            return new RouteContext("quality", "quality.lowComplexity");
+        }
+        if (containsAny(text, "代码质量", "质量报告", "代码质量分析")) {
+            return new RouteContext("quality", "quality.report");
+        }
+        if (containsAny(text, "根因", "异常定位", "线上缺陷", "故障定位", "异常分析", "出错链路")) {
+            return new RouteContext("defect", "defect.rootCause");
+        }
+        if (containsAny(text, "慢接口", "性能回归", "性能退化", "耗时", "p95", "p99", "平均响应", "性能")) {
+            return new RouteContext("performance", "performance.overview");
+        }
+        if (containsAny(text, "调用链", "链路", "trace", "请求链", "上下游")) {
+            if (isMethodCallGraphQuestion(text)) {
+                return new RouteContext("code_relation", "code_relation.callGraph");
+            }
+            if (containsAny(text, "最近", "最新", "列表")) {
+                return new RouteContext("trace", "trace.recent");
+            }
+            if (containsAny(text, "应用", "app")) {
+                return new RouteContext("trace", "trace.app");
+            }
+            return new RouteContext("trace", "trace.detail");
+        }
+        if (containsAny(text, "快照", "snapshot", "版本比对", "版本比较", "发布前", "上线前")) {
+            if (containsAny(text, "我的", "个人")) {
+                return new RouteContext("snapshot", "snapshot.my");
+            }
+            if (containsAny(text, "详情", "明细")) {
+                return new RouteContext("snapshot", "snapshot.detail");
+            }
+            return new RouteContext("snapshot", "snapshot.list");
+        }
+        if (containsAny(text, "应用", "app", "在线", "状态", "列表")) {
+            return new RouteContext("app", "app.status");
+        }
+        if (containsAny(text, "测试", "test", "补测", "回归")) {
+            return new RouteContext("testcase", "testcase.recommend");
+        }
+        if (containsAny(text, "项目", "project", "概览", "统计", "总览")) {
+            return new RouteContext("project", "project.overview");
+        }
+        if (containsAny(text, "代码", "关系", "依赖", "调用关系", "类关系")) {
+            return new RouteContext("code_relation", "code_relation.search");
+        }
+        return new RouteContext("general", "general");
     }
 
-    private List<String> buildFollowUpSuggestions(List<AppVo> apps, String topic) {
+    private boolean isBugInspectionQuestion(String text) {
+        return containsAny(text, "bug", "缺陷", "代码缺陷", "源码缺陷", "潜在问题", "可能存在", "风险", "空指针", "资源泄漏", "并发问题", "逻辑错误")
+                && containsAny(text, "类", "方法", "method", "函数", "源码", "代码", "controller", "service", "branch");
+    }
+
+    private boolean isBusinessLogicQuestion(String text) {
+        return containsAny(text, "业务需求", "业务逻辑", "业务规则", "业务场景", "业务含义", "需求分析",
+                "功能逻辑", "功能需求", "方法职责", "类职责", "实现什么", "干什么", "做什么",
+                "处理什么业务", "分析业务", "梳理业务");
+    }
+
+    private boolean isMethodCallGraphQuestion(String text) {
+        return containsAny(text, "调用链", "调用关系", "上下游", "谁调用", "调用了谁", "依赖关系", "关系图", "调用图")
+                && containsAny(text, "方法", "method", "函数");
+    }
+
+    private String detectPageRoute(String pageContext) {
+        if (!StringUtils.hasText(pageContext)) {
+            return null;
+        }
+        String text = pageContext.toLowerCase();
+        if (matchesRoute(text, routeConfig != null ? routeConfig.getCoverage().getKeywords() : null,
+                "覆盖率页", "页面类型:覆盖率页", "coverage", "覆盖率详情", "覆盖率报告")) {
+            return "coverage";
+        }
+        if (matchesRoute(text, routeConfig != null ? routeConfig.getTrace().getKeywords() : null,
+                "监控页", "页面类型:监控页", "实时监控", "monitor")) {
+            return "trace";
+        }
+        if (matchesRoute(text, routeConfig != null ? routeConfig.getSnapshot().getKeywords() : null,
+                "快照页", "页面类型:快照页", "snapshot", "我的快照", "快照列表")) {
+            return "snapshot";
+        }
+        if (matchesRoute(text, routeConfig != null ? routeConfig.getApp().getKeywords() : null,
+                "应用页", "页面类型:应用页", "应用中心", "app/list", "app/online")) {
+            return "app";
+        }
+        if (matchesRoute(text, routeConfig != null ? routeConfig.getCodeRelation().getKeywords() : null,
+                "代码关系", "类关系", "callgraph", "关系图")) {
+            return "code_relation";
+        }
+        return null;
+    }
+
+    private boolean matchesRoute(String text, List<String> configuredKeywords, String... fallbackKeywords) {
+        if (configuredKeywords != null) {
+            for (String keyword : configuredKeywords) {
+                if (StringUtils.hasText(keyword) && text.contains(keyword.toLowerCase())) {
+                    return true;
+                }
+            }
+        }
+        return containsAny(text, fallbackKeywords);
+    }
+
+    private RouteContext routeByPageFirst(String pageRoute, String text) {
+        if ("coverage".equals(pageRoute)) {
+            if (containsAny(text, "趋势", "历史", "最近")) {
+                return new RouteContext("coverage", "coverage.trend");
+            }
+            if (containsAny(text, "低覆盖", "漏测", "未覆盖")) {
+                return new RouteContext("coverage", "coverage.low");
+            }
+            if (containsAny(text, "应用", "app")) {
+                return new RouteContext("coverage", "coverage.app");
+            }
+            if (containsAny(text, "复杂度", "高复杂度", "代码质量")) {
+                return new RouteContext("quality", "quality.lowComplexity");
+            }
+            return new RouteContext("coverage", "coverage.overview");
+        }
+        if ("trace".equals(pageRoute)) {
+            if (isMethodCallGraphQuestion(text)) {
+                return new RouteContext("code_relation", "code_relation.callGraph");
+            }
+            if (containsAny(text, "最近", "最新", "列表")) {
+                return new RouteContext("trace", "trace.recent");
+            }
+            if (containsAny(text, "应用", "app")) {
+                return new RouteContext("trace", "trace.app");
+            }
+            if (containsAny(text, "对比", "差异", "正常", "异常")) {
+                return new RouteContext("trace", "trace.detail");
+            }
+            return new RouteContext("trace", "trace.detail");
+        }
+        if ("snapshot".equals(pageRoute)) {
+            if (containsAny(text, "我的", "个人")) {
+                return new RouteContext("snapshot", "snapshot.my");
+            }
+            if (containsAny(text, "详情", "明细")) {
+                return new RouteContext("snapshot", "snapshot.detail");
+            }
+            return new RouteContext("snapshot", "snapshot.list");
+        }
+        if ("app".equals(pageRoute)) {
+            if (containsAny(text, "在线", "运行中")) {
+                return new RouteContext("app", "app.status");
+            }
+            if (containsAny(text, "详情")) {
+                return new RouteContext("app", "app.detail");
+            }
+            return new RouteContext("app", "app.status");
+        }
+        if ("code_relation".equals(pageRoute)) {
+            if (isMethodCallGraphQuestion(text)) {
+                return new RouteContext("code_relation", "code_relation.callGraph");
+            }
+            return new RouteContext("code_relation", "code_relation.search");
+        }
+        return new RouteContext("general", "general");
+    }
+
+    private List<String> buildFollowUpSuggestions(List<AppVo> apps, RouteContext routeContext) {
         List<String> suggestions = new ArrayList<>();
-        switch (topic) {
-            case "coverage":
-                suggestions.add("哪个模块的覆盖率最低？");
-                suggestions.add("如何提高覆盖率？");
+        switch (routeContext.routeKey) {
+            case "bug.class":
+                suggestions.add("请分析这个类的空指针和逻辑风险");
+                suggestions.add("继续分析这个类的高风险方法");
                 break;
-            case "trace":
+            case "bug.method":
+                suggestions.add("请逐行分析这个方法的潜在 bug");
+                suggestions.add("给出这个方法的修复建议");
+                break;
+            case "business_logic.class":
+                suggestions.add("继续分析这个类的核心业务规则");
+                suggestions.add("这个类有哪些潜在 bug？");
+                break;
+            case "business_logic.method":
+                suggestions.add("继续分析这个方法的分支含义");
+                suggestions.add("显示这个方法的真实调用关系");
+                break;
+            case "coverage.overview":
+                suggestions.add("哪个模块的覆盖率最低？");
+                suggestions.add("最近覆盖率趋势如何？");
+                break;
+            case "coverage.low":
+                suggestions.add("这些低覆盖模块对应哪些测试用例？");
+                suggestions.add("有没有高复杂度且低覆盖的模块？");
+                break;
+            case "coverage.trend":
+                suggestions.add("这个应用的最新覆盖率如何？");
+                suggestions.add("哪个模块的覆盖率最低？");
+                break;
+            case "coverage.app":
+                suggestions.add("这个应用有哪些低覆盖类？");
+                suggestions.add("这个应用最近覆盖率变化如何？");
+                break;
+            case "quality.lowComplexity":
+                suggestions.add("哪些方法复杂度最高？");
+                suggestions.add("哪些高复杂度类同时覆盖率最低？");
+                break;
+            case "quality.report":
+                suggestions.add("找出高复杂度模块");
+                suggestions.add("查看低覆盖模块");
+                break;
+            case "trace.recent":
+            case "trace.detail":
+                suggestions.add("分析这条链路的慢点和异常根因");
+                suggestions.add("对比最近两条链路差异");
+                break;
+            case "trace.app":
                 suggestions.add("查看最近的调用链路");
                 suggestions.add("分析慢接口");
                 break;
-            case "app":
+            case "snapshot.list":
+            case "snapshot.detail":
+            case "snapshot.my":
+                suggestions.add("查看当前项目的覆盖率报告");
+                suggestions.add("对比两个版本的快照");
+                break;
+            case "app.status":
                 suggestions.add("查看应用详情");
-                suggestions.add("分析应用状态");
+                suggestions.add("分析在线应用状态");
+                break;
+            case "testcase.recommend":
+                suggestions.add("基于低覆盖模块推荐测试用例");
+                suggestions.add("查看覆盖率提升建议");
+                break;
+            case "project.overview":
+                suggestions.add("查看项目覆盖率概览");
+                suggestions.add("有哪些应用在线？");
+                break;
+            case "code_relation.search":
+                suggestions.add("查看这个类的调用关系图");
+                suggestions.add("搜索相关接口或方法");
+                break;
+            case "code_relation.callGraph":
+                suggestions.add("继续分析这个方法的上下游影响面");
+                suggestions.add("分析这个方法可能存在的 bug");
                 break;
             default:
                 suggestions.add("帮我分析项目状态");
@@ -553,5 +834,32 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
                 suggestions.add("有哪些应用在线？");
         }
         return suggestions;
+    }
+
+    private boolean isRoute(RouteContext routeContext, String topicKey, String... routeKeys) {
+        if (routeContext == null) {
+            return false;
+        }
+        if (topicKey != null && topicKey.equals(routeContext.topicKey)) {
+            return true;
+        }
+        if (routeKeys != null) {
+            for (String routeKey : routeKeys) {
+                if (routeKey != null && routeKey.equals(routeContext.routeKey)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static final class RouteContext {
+        private final String topicKey;
+        private final String routeKey;
+
+        private RouteContext(String topicKey, String routeKey) {
+            this.topicKey = topicKey;
+            this.routeKey = routeKey;
+        }
     }
 }

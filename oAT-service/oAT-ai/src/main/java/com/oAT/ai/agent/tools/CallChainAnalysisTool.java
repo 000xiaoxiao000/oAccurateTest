@@ -261,8 +261,27 @@ public class CallChainAnalysisTool {
         try {
             Map<String, Object> graph = dataProvider.getCallGraph(className, methodName);
             if (graph == null || graph.isEmpty()) {
-                return "未找到类 " + className + " 的调用关系数据。" +
-                       "可能原因：该类未被探针覆盖，或无调用记录。";
+                return "未找到类 " + className + " 的真实调用关系数据。请不要使用示例调用链、示例链接或猜测的上下游方法回答。";
+            }
+
+            Boolean classFound = (Boolean) graph.get("classFound");
+            Boolean methodFound = (Boolean) graph.get("methodFound");
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> callers = (List<Map<String, Object>>) graph.get("callers");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> callees = (List<Map<String, Object>>) graph.get("callees");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> relatedTraces = (List<Map<String, Object>>) graph.get("traces");
+            if ((callers == null || callers.isEmpty()) && (callees == null || callees.isEmpty()) && (relatedTraces == null || relatedTraces.isEmpty())) {
+                String target = className + (methodName != null && !methodName.isEmpty() ? ("." + methodName) : "");
+                if (Boolean.FALSE.equals(classFound)) {
+                    return "未找到类 " + className + " 的静态源码/调用关系数据，无法展示真实调用链。请确认类名或先完成静态扫描；禁止使用示例类名、示例链接或猜测调用链。";
+                }
+                if (Boolean.FALSE.equals(methodFound)) {
+                    return "已找到类 " + className + "，但未找到方法 " + methodName + " 的静态信息或真实调用关系数据。请确认方法名；禁止猜测上下游方法。";
+                }
+                return "未找到 " + target + " 的真实调用关系数据。该类/方法可能尚无运行时 trace 或静态调用边数据；请不要使用示例调用链、示例链接或猜测的上下游方法回答。";
             }
 
             StringBuilder sb = new StringBuilder();
@@ -273,8 +292,6 @@ public class CallChainAnalysisTool {
             sb.append(" - 完整调用链路分析\n\n");
 
             // 调用方
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> callers = (List<Map<String, Object>>) graph.get("callers");
             if (callers != null && !callers.isEmpty()) {
                 sb.append("### 上游调用方（谁调用了它）\n\n");
                 sb.append("```mermaid\ngraph LR\n");
@@ -301,8 +318,6 @@ public class CallChainAnalysisTool {
             }
 
             // 被调用方
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> callees = (List<Map<String, Object>>) graph.get("callees");
             if (callees != null && !callees.isEmpty()) {
                 sb.append("\n### 下游被调用方（它调用了谁）\n\n");
                 sb.append("```mermaid\ngraph TD\n");
@@ -330,19 +345,17 @@ public class CallChainAnalysisTool {
             }
 
             // 关联调用链
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> relatedTraces = (List<Map<String, Object>>) graph.get("traces");
             if (relatedTraces != null && !relatedTraces.isEmpty()) {
                 sb.append("\n### 关联调用链（最近").append(relatedTraces.size()).append("条）\n\n");
                 for (Map<String, Object> t : relatedTraces.subList(0, Math.min(10, relatedTraces.size()))) {
                     sb.append("- TraceID: ").append(safeStr(t.get("traceId")));
                     sb.append(" | URL: ").append(safeStr(t.get("url")));
-                    sb.append(" | 时间: ").append(safeStr(t.get("time"))).append("\n");
+                    sb.append(" | 时间: ").append(safeStr(t.get("createTime"))).append("\n");
                 }
             }
 
             sb.append("\n### 智能分析请求\n\n");
-            sb.append("请根据以上调用关系进行分析：\n");
+            sb.append("请只根据以上真实调用关系进行分析；没有数据的位置请明确说暂无真实数据，不要补造调用链、图片链接或源码中不存在的方法。\n");
             sb.append("1. **核心路径** - 这条调用链中的关键路径是什么？哪个环节最重要？\n");
             sb.append("2. **耦合度评估** - 该类的上游/下游依赖是否过多？是否存在循环依赖风险？\n");
             sb.append("3. **变更影响面** - 如果修改这个类/方法，会影响哪些模块？风险评估？\n");
