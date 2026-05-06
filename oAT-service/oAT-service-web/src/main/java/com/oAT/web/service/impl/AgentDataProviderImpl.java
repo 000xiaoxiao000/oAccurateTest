@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 
@@ -270,15 +271,132 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     @Override
     public List<Map<String, Object>> getTraceList(String projectId, String appId, int limit) {
-        // TraceNodeCache不是Spring Bean，无法直接注入
-        // 暂时返回空列表，实际实现需要通过其他方式获取调用链数据
-        return new ArrayList<>();
+        List<Map<String, Object>> result = new ArrayList<>();
+        try {
+            if (limit <= 0) {
+                limit = 20;
+            }
+
+            List<TraceNodeIndex> nodes = new ArrayList<>();
+            if (appId != null && !appId.trim().isEmpty()) {
+                nodes.addAll(traceNodeRepository.findByAppId(appId));
+            } else {
+                List<AppVo> apps = appService.getAppList(projectId);
+                if (apps != null) {
+                    for (AppVo app : apps) {
+                        nodes.addAll(traceNodeRepository.findByAppId(app.getId()));
+                    }
+                }
+            }
+
+            if (nodes.isEmpty()) {
+                return result;
+            }
+
+            nodes.sort((left, right) -> {
+                Date leftTime = left.getCreateTime();
+                Date rightTime = right.getCreateTime();
+                if (leftTime == null && rightTime == null) return 0;
+                if (leftTime == null) return 1;
+                if (rightTime == null) return -1;
+                return rightTime.compareTo(leftTime);
+            });
+
+            Set<String> seenTraceIds = new HashSet<>();
+            for (TraceNodeIndex node : nodes) {
+                if (node == null || !StringUtils.hasText(node.getTraceId())) {
+                    continue;
+                }
+                if (!seenTraceIds.add(node.getTraceId())) {
+                    continue;
+                }
+                Map<String, Object> trace = new HashMap<>();
+                trace.put("traceId", node.getTraceId());
+                trace.put("appId", node.getAppId());
+                trace.put("createTime", node.getCreateTime());
+                trace.put("type", node.getType());
+                Object traceNode = node.toTraceNode();
+                if (traceNode instanceof HttpTraceNode httpNode) {
+                    trace.put("url", httpNode.getRequestUrl());
+                    trace.put("appName", httpNode.getApp() != null ? httpNode.getApp().getAppName() : "");
+                    trace.put("clientIp", httpNode.getClientIp());
+                    trace.put("serverIp", httpNode.getServerIp());
+                    trace.put("nodes", httpNode.getCodeNodes());
+                    trace.put("method", httpNode.getRequestMethod());
+                    trace.put("error", httpNode.getError() != null);
+                }
+                result.add(trace);
+                if (result.size() >= limit) {
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Get trace list failed: projectId={}, appId={}", projectId, appId, e);
+        }
+        return result;
     }
 
     @Override
     public Map<String, Object> getTraceDetail(String traceId) {
         Map<String, Object> result = new HashMap<>();
-        // 暂不实现，需要通过SnapshotService或其他方式获取
+        try {
+            if (traceId == null || traceId.trim().isEmpty()) {
+                return result;
+            }
+
+            List<TraceNodeIndex> nodes = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 50));
+            if (nodes == null || nodes.isEmpty()) {
+                return result;
+            }
+
+            nodes.sort((left, right) -> {
+                Date leftTime = left.getCreateTime();
+                Date rightTime = right.getCreateTime();
+                if (leftTime == null && rightTime == null) return 0;
+                if (leftTime == null) return 1;
+                if (rightTime == null) return -1;
+                return leftTime.compareTo(rightTime);
+            });
+
+            TraceNodeIndex first = nodes.get(0);
+            HttpTraceNode httpNode = first.getHttpNode();
+            result.put("traceId", traceId);
+            result.put("appId", first.getAppId());
+            result.put("createTime", first.getCreateTime());
+            result.put("type", first.getType());
+            result.put("nodes", new ArrayList<>());
+            if (httpNode != null) {
+                result.put("url", httpNode.getRequestUrl());
+                result.put("method", httpNode.getRequestMethod());
+                result.put("clientIp", httpNode.getClientIp());
+                result.put("serverIp", httpNode.getServerIp());
+                result.put("appName", httpNode.getApp() != null ? httpNode.getApp().getAppName() : "");
+                result.put("error", httpNode.getError() != null);
+
+                List<Map<String, Object>> codeNodes = new ArrayList<>();
+                if (httpNode.getCodeNodes() != null) {
+                    for (com.oAT.agent.model.StackNodeVo node : httpNode.getCodeNodes()) {
+                        if (node == null) {
+                            continue;
+                        }
+                        Map<String, Object> codeNode = new HashMap<>();
+                        codeNode.put("id", node.getId());
+                        codeNode.put("name", node.getClassName() + "." + node.getMethodName());
+                        codeNode.put("className", node.getClassName());
+                        codeNode.put("methodName", node.getMethodName());
+                        codeNode.put("type", "method");
+                        codeNode.put("duration", node.getUseTime());
+                        codeNode.put("error", false);
+                        codeNode.put("done", node.isDone());
+                        codeNode.put("complexity", node.getExecCyclo());
+                        codeNodes.add(codeNode);
+                    }
+                }
+                result.put("nodes", codeNodes);
+            }
+        } catch (Exception e) {
+            logger.error("Get trace detail failed: {}", traceId, e);
+        }
         return result;
     }
 
@@ -399,36 +517,34 @@ public class AgentDataProviderImpl implements AgentDataProvider {
         List<Map<String, Object>> traces = new ArrayList<>();
 
         try {
-            // 1. 从静态数据中获取该类的方法信息
+            // 1. 从静态数据中确认类/方法是否存在；静态方法清单不是调用关系，不能当作下游调用方返回
             Map<String, StaticSourceInfo> classStaticMap = findClassStaticInfo(className);
-            if (!classStaticMap.isEmpty()) {
-                // 遍历所有匹配的类，提取方法列表
-                for (Map.Entry<String, StaticSourceInfo> entry : classStaticMap.entrySet()) {
-                    String appId = entry.getKey();
-                    StaticSourceInfo info = entry.getValue();
-                    if (info.getClassInfo() != null && info.getClassInfo().getMethodMaps() != null) {
-                        for (Map.Entry<String, ?> mEntry : info.getClassInfo().getMethodMaps().entrySet()) {
-                            Object methodObj = mEntry.getValue();
-                            if (methodObj instanceof Map) {
-                                @SuppressWarnings("unchecked")
-                                Map<String, Object> methodMap = (Map<String, Object>) methodObj;
-                                String mName = (String) methodMap.get("methodName");
-                                // 如果指定了方法名，只返回匹配的
-                                if (methodName != null && !methodName.isEmpty()
-                                        && !methodName.equalsIgnoreCase(mName)) {
-                                    continue;
-                                }
-                                Map<String, Object> callee = new HashMap<>();
-                                callee.put("className", info.getClassInfo().getClassName());
-                                callee.put("methodName", mName != null ? mName : mEntry.getKey());
-                                callee.put("type", "static-method");
-                                callee.put("appId", appId);
-                                callees.add(callee);
-                            }
+            boolean targetMethodExists = !StringUtils.hasText(methodName);
+            if (!classStaticMap.isEmpty() && StringUtils.hasText(methodName)) {
+                for (StaticSourceInfo info : classStaticMap.values()) {
+                    if (info.getClassInfo() == null || info.getClassInfo().getMethodMaps() == null) {
+                        continue;
+                    }
+                    for (Map.Entry<String, ?> mEntry : info.getClassInfo().getMethodMaps().entrySet()) {
+                        Object methodObj = mEntry.getValue();
+                        if (!(methodObj instanceof Map)) {
+                            continue;
                         }
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> methodMap = (Map<String, Object>) methodObj;
+                        String staticMethodName = (String) methodMap.get("methodName");
+                        if (methodName.equalsIgnoreCase(staticMethodName) || methodName.equalsIgnoreCase(mEntry.getKey())) {
+                            targetMethodExists = true;
+                            break;
+                        }
+                    }
+                    if (targetMethodExists) {
+                        break;
                     }
                 }
             }
+            result.put("classFound", !classStaticMap.isEmpty());
+            result.put("methodFound", targetMethodExists);
 
             // 2. 从 ES trace_node 中搜索包含该类的运行时调用链
             String lowerClassName = className.toLowerCase();
@@ -530,41 +646,24 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             return null;
         }
         try {
-            // 从静态信息中查找该类的源码（遍历所有应用的静态数据）
             String targetClass = className.trim();
+            String normalizedTarget = normalizeClassName(targetClass);
             String simpleName = simpleClassName(targetClass);
 
-            // 尝试获取所有应用的列表进行搜索
             List<AppVo> allApps = appService.getAppList(null);
-            if (allApps == null || allApps.isEmpty()) return null;
+            if (allApps == null || allApps.isEmpty()) {
+                return null;
+            }
 
             for (AppVo app : allApps) {
                 try {
-                    // 先尝试精确匹配
-                    List<StaticSourceInfo> infos = staticInfoRepository.findByAppIdAndClassInfo_ClassName(app.getId()
-                            , targetClass);
-                    if (infos != null && !infos.isEmpty()) {
-                        for (StaticSourceInfo info : infos) {
-                            if (info.getClassInfo() != null && info.getClassInfo().getSourceCode() != null) {
-                                return info.getClassInfo().getSourceCode();
-                            }
-                        }
+                    List<StaticSourceInfo> appInfos = staticInfoRepository.findByAppId(app.getId());
+                    String source = findSourceCodeInAppInfos(appInfos, targetClass, normalizedTarget, simpleName);
+                    if (source != null) {
+                        return source;
                     }
-
-                    // 如果精确匹配未命中且是全限定名，尝试按简单名模糊匹配
-                    if (!simpleName.equals(targetClass)) {
-                        List<StaticSourceInfo> appInfos = staticInfoRepository.findByAppId(app.getId());
-                        if (appInfos != null) {
-                            for (StaticSourceInfo si : appInfos) {
-                                if (si.getClassInfo() != null && si.getClassInfo().getClassName() != null
-                                        && si.getClassInfo().getClassName().endsWith("." + simpleName)
-                                        && si.getClassInfo().getSourceCode() != null) {
-                                    return si.getClassInfo().getSourceCode();
-                                }
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    logger.debug("getSourceCode scan app failed: appId={}, className={}, reason={}", app.getId(), targetClass, e.getMessage());
                 }
             }
 
@@ -590,6 +689,51 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             }
         }
         return result;
+    }
+
+    private String findSourceCodeInAppInfos(List<StaticSourceInfo> appInfos, String targetClass, String normalizedTarget, String simpleName) {
+        if (appInfos == null || appInfos.isEmpty()) {
+            return null;
+        }
+        for (StaticSourceInfo info : appInfos) {
+            StaticSourceClassInfo classInfo = info.getClassInfo();
+            if (classInfo == null || classInfo.getClassName() == null || classInfo.getSourceCode() == null) {
+                continue;
+            }
+            String candidateClassName = classInfo.getClassName().trim();
+            String normalizedCandidate = normalizeClassName(candidateClassName);
+            String candidateSimpleName = simpleClassName(candidateClassName);
+
+            if (matchesClassName(candidateClassName, normalizedCandidate, candidateSimpleName, targetClass, normalizedTarget, simpleName)) {
+                return classInfo.getSourceCode();
+            }
+
+            if (normalizedCandidate.contains(normalizedTarget) || normalizedTarget.contains(normalizedCandidate)) {
+                return classInfo.getSourceCode();
+            }
+        }
+        return null;
+    }
+
+    private boolean matchesClassName(String candidateClassName, String normalizedCandidate, String candidateSimpleName,
+                                     String targetClass, String normalizedTarget, String targetSimpleName) {
+        if (candidateClassName.equals(targetClass) || normalizedCandidate.equals(normalizedTarget)) {
+            return true;
+        }
+        if (candidateSimpleName.equals(targetSimpleName)) {
+            return true;
+        }
+        return candidateClassName.endsWith("." + targetSimpleName)
+                || targetClass.endsWith("." + candidateSimpleName)
+                || normalizedCandidate.endsWith("." + normalizedTarget)
+                || normalizedTarget.endsWith("." + normalizedCandidate);
+    }
+
+    private String normalizeClassName(String className) {
+        if (className == null) {
+            return "";
+        }
+        return className.trim().replace('$', '.').toLowerCase(Locale.ROOT);
     }
 
     private Map<String, Object> convertAppToMap(AppVo app) {
@@ -652,13 +796,36 @@ public class AgentDataProviderImpl implements AgentDataProvider {
         Map<String, StaticSourceInfo> result = new LinkedHashMap<>();
         if (className == null || className.isEmpty()) return result;
 
-        String lowerKeyword = className.toLowerCase();
+        String targetClass = className.trim();
+        String normalizedTarget = normalizeClassName(targetClass);
+        String simpleName = simpleClassName(targetClass);
         try {
-            // 遍历项目下每个应用搜索静态信息（注意：当前接口只传 className，无 projectId）
-            // 通过 staticInfoRepository 全量搜索成本高，这里做有限优化：
-            // 如果有 appId 前缀信息则精确查，否则返回空让调用方处理
-            logger.debug("findClassStaticInfo called with className={}, note: projectId not available in this API",
-                    className);
+            List<AppVo> apps = appService.getAppList(null);
+            if (apps == null || apps.isEmpty()) {
+                return result;
+            }
+            for (AppVo app : apps) {
+                try {
+                    List<StaticSourceInfo> infos = staticInfoRepository.findByAppId(app.getId());
+                    if (infos == null || infos.isEmpty()) {
+                        continue;
+                    }
+                    for (StaticSourceInfo info : infos) {
+                        StaticSourceClassInfo classInfo = info.getClassInfo();
+                        if (classInfo == null || !StringUtils.hasText(classInfo.getClassName())) {
+                            continue;
+                        }
+                        String candidateClassName = classInfo.getClassName().trim();
+                        if (matchesClassName(candidateClassName, normalizeClassName(candidateClassName), simpleClassName(candidateClassName),
+                                targetClass, normalizedTarget, simpleName)) {
+                            result.put(app.getId(), info);
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.debug("findClassStaticInfo scan app failed: appId={}, className={}, reason={}", app.getId(), className, e.getMessage());
+                }
+            }
         } catch (Exception e) {
             logger.warn("findClassStaticInfo failed: {}", e.getMessage());
         }

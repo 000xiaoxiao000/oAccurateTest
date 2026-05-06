@@ -83,6 +83,24 @@ public class CodeRelationTool {
             if (graph == null || graph.isEmpty()) {
                 return "未找到类 " + className + " 的调用关系";
             }
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> callers = (List<Map<String, Object>>) graph.get("callers");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> callees = (List<Map<String, Object>>) graph.get("callees");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> traces = (List<Map<String, Object>>) graph.get("traces");
+            if ((callers == null || callers.isEmpty())
+                    && (callees == null || callees.isEmpty())
+                    && (traces == null || traces.isEmpty())) {
+                StringBuilder empty = new StringBuilder();
+                empty.append("未找到 `").append(className);
+                if (methodName != null && !methodName.isEmpty()) {
+                    empty.append(".").append(methodName);
+                }
+                empty.append("` 的真实调用关系数据。\n\n");
+                empty.append("请不要使用示例链接、示例类名或猜测的调用方法回答；如果需要分析，请先确认该类/方法已有静态扫描数据或运行时调用链数据。\n");
+                return empty.toString();
+            }
             StringBuilder sb = new StringBuilder();
             sb.append("## ").append(className);
             if (methodName != null && !methodName.isEmpty()) {
@@ -91,8 +109,6 @@ public class CodeRelationTool {
             sb.append(" 的调用关系\n\n");
             
             // 调用方（谁调用了这个类/方法）
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> callers = (List<Map<String, Object>>) graph.get("callers");
             if (callers != null && !callers.isEmpty()) {
                 sb.append("### 调用方 (谁调用了它)\n\n");
                 for (Map<String, Object> caller : callers) {
@@ -103,8 +119,6 @@ public class CodeRelationTool {
             }
             
             // 被调用方（这个类/方法调用了谁）
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> callees = (List<Map<String, Object>>) graph.get("callees");
             if (callees != null && !callees.isEmpty()) {
                 sb.append("\n### 被调用方 (它调用了谁)\n\n");
                 for (Map<String, Object> callee : callees) {
@@ -115,8 +129,6 @@ public class CodeRelationTool {
             }
             
             // 关联的调用链
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> traces = (List<Map<String, Object>>) graph.get("traces");
             if (traces != null && !traces.isEmpty()) {
                 sb.append("\n### 关联调用链 (最近").append(traces.size()).append("条)\n\n");
                 for (Map<String, Object> trace : traces) {

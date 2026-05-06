@@ -1978,19 +1978,36 @@
                 e.stopPropagation();
                 var plainText = (text || '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
                 if (!plainText) return;
+                var $copyBtn = $(this);
+                function showCopiedState() {
+                    var oldTimer = $copyBtn.data('copy-reset-timer');
+                    if (oldTimer) {
+                        clearTimeout(oldTimer);
+                    }
+                    $copyBtn
+                        .css({color:'#16a34a','border-color':'rgba(22,163,77,0.4)'})
+                        .html('<i class="check icon"></i>')
+                        .attr('title', '复制成功');
+                    var timer = setTimeout(function () {
+                        $copyBtn
+                            .css({'color':'#94a3b8','border-color':'rgba(203,213,225,0.6)'})
+                            .html('<i class="copy icon"></i>')
+                            .attr('title', '复制')
+                            .removeData('copy-reset-timer');
+                    }, 1500);
+                    $copyBtn.data('copy-reset-timer', timer);
+                }
                 if (navigator.clipboard !== undefined) {
                     navigator.clipboard.writeText(plainText).then(function () {
-                        $(this).css({color:'#16a34a','border-color':'rgba(22,163,77,0.4)'}).html('<i class="check icon"></i>');
-                        setTimeout(function () { $(this).css({'color':'#94a3b8','border-color':'rgba(203,213,225,0.6)'}).html('<i class="copy icon"></i>'); }, 1500);
-                    }.bind(this)).catch(function () {});
+                        showCopiedState();
+                    }).catch(function () {});
                 } else {
                     var ta = document.createElement('textarea');
                     ta.value = plainText;
                     document.body.appendChild(ta); ta.select();
                     try { document.execCommand('copy'); } catch(e2) {}
                     document.body.removeChild(ta);
-                    $(this).css({color:'#16a34a','border-color':'rgba(22,163,77,0.4)'}).html('<i class="check icon"></i>');
-                    setTimeout(function () { $(this).css({'color':'#94a3b8','border-color':'rgba(203,213,225,0.6)'}).html('<i class="copy icon"></i>'); }, 1500);
+                    showCopiedState();
                 }
             });
         }

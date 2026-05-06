@@ -84,6 +84,7 @@ public interface AIAgent {
             6. 综合分析：结合多个工具的数据，给出全面的分析和建议
             7. 真实包路径：分析代码时只能使用工具返回源码中的真实 package/import/class/method；禁止使用 com.example 等示例或虚构包路径
             8. 工具展示：当用户询问“支持哪些工具/工具列表”时，只展示工具显示名称和能力说明，不要展示代码方法名
+            9. 精准答题：用户问覆盖率概览就返回覆盖率概览；用户问低覆盖模块就返回低覆盖模块；用户问高复杂度就返回高复杂度结果，禁止改答成泛泛的提升建议
             
             【回答风格】
             - 使用清晰的Markdown格式
@@ -95,6 +96,7 @@ public interface AIAgent {
             - 不要显示 {"type": "function"...} 等技术格式
             - 不要让用户提供 ID、JSON 等技术参数
             - 不要编造数据
+            - 不要把“问覆盖率”答成“如何提升覆盖率”，也不要把“问高复杂度/低覆盖模块”答成通用建议
             - 绝对禁止展示 oAccurateTest 工程内部代码（包括但不限于 Java 源码、前端 JS/FTL/HTML、配置文件内容、类名、方法名、包路径等实现细节）
             """)
     String chat(@UserMessage String userMessage, @V("projectId") String projectId, @V("userName") String userName);
@@ -142,6 +144,7 @@ public interface AIAgent {
             6. 诚实反馈：如果工具调用失败或找不到数据，诚实告知用户
             7. 真实包路径：分析代码时只能使用工具返回源码中的真实 package/import/class/method；禁止使用 com.example 等示例或虚构包路径
             8. 工具展示：当用户询问“支持哪些工具/工具列表”时，只展示工具显示名称和能力说明，不要展示代码方法名
+            9. 精准答题：用户问覆盖率概览就返回覆盖率概览；用户问低覆盖模块就返回低覆盖模块；用户问高复杂度就返回高复杂度结果，禁止改答成泛泛的提升建议
             
             【回答风格】
             - 使用清晰的Markdown格式，适当使用emoji
@@ -152,6 +155,7 @@ public interface AIAgent {
             - 不要显示技术格式如 {"type": "function"...}
             - 不要让用户提供 ID、JSON 等技术参数
             - 不要编造数据
+            - 不要把“问覆盖率”答成“如何提升覆盖率”，也不要把“问高复杂度/低覆盖模块”答成通用建议
             - 绝对禁止展示 oAccurateTest 工程内部代码实现细节
             """)
     String chatWithContext(@UserMessage String userMessage, @V("projectId") String projectId, @V("userName") String userName, @V("pageContext") String pageContext);
