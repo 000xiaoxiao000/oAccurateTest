@@ -179,6 +179,24 @@
 
         function detectPageContext(pathname) {
             var projectBase = '/p/' + projectId;
+            if (/\/coverage\/(code|details|overview)/.test(pathname)) {
+                return {
+                    eyebrow: 'Coverage View',
+                    title: '覆盖率页助手',
+                    placeholder: '例如：这个类的高风险方法有哪些',
+                    welcome: '你现在在覆盖率页面，我可以帮你看当前类、方法覆盖率、低覆盖点和源码风险。',
+                    starters: [
+                        '这个类的高风险方法有哪些',
+                        '帮我分析当前方法可能存在的 bug',
+                        '显示这个方法的调用链'
+                    ],
+                    quickLinks: [
+                        {title: '覆盖率概览', description: '查看当前应用的覆盖率总览', url: projectBase + '/coverage/overview', icon: 'chart bar', priority: 94},
+                        {title: '详细数据', description: '查看类和方法级覆盖详情', url: projectBase + '/coverage/details', icon: 'list alternate', priority: 84},
+                        {title: '源码视图', description: '进入当前类的源码与方法列表', url: projectBase + '/coverage/code', icon: 'code', priority: 90}
+                    ]
+                };
+            }
             if (/\/monitor/.test(pathname)) {
                 return {
                     eyebrow: 'Monitor View',
@@ -364,7 +382,206 @@
             return results;
         }
 
-        function buildPageContextPayload() {
+        function cleanInlineText(value) {
+            return $.trim(String(value || '').replace(/\s+/g, ' '));
+        }
+
+        function extractCoverageMethodName(signature) {
+            var text = cleanInlineText(signature);
+            if (!text) {
+                return '';
+            }
+            var parenIndex = text.indexOf('(');
+            if (parenIndex > 0) {
+                return cleanInlineText(text.substring(0, parenIndex));
+            }
+            return text;
+        }
+
+        function clipContextText(value, maxLength) {
+            var text = cleanInlineText(value);
+            if (!text || !maxLength || text.length <= maxLength) {
+                return text;
+            }
+            return text.substring(0, maxLength - 1) + '…';
+        }
+
+        function buildCoverageSourceSnippet(anchorName, maxLines) {
+            if (!anchorName) {
+                return '';
+            }
+            var $anchor = $('.source-container a[name="' + anchorName + '"]').first();
+            if (!$anchor.length) {
+                return '';
+            }
+            var lines = [];
+            var $line = $anchor.next('div');
+            var limit = maxLines || 24;
+            while ($line.length && lines.length < limit) {
+                lines.push($.trim(String($line.text() || '').replace(/\u00a0/g, ' ')));
+                $line = $line.next('div');
+            }
+            var snippet = $.trim(lines.join('\n'));
+            if (!snippet) {
+                return '';
+            }
+            return '```java\n' + snippet + '\n```';
+        }
+
+        function collectCoverageMethodSignals(question) {
+            var selectors = '#methodTable tbody tr, .method-table tbody tr';
+            var methods = [];
+            var matchedMethod = '';
+            var normalizedQuestion = cleanInlineText(question).toLowerCase();
+
+            $(selectors).each(function () {
+                var $row = $(this);
+                var methodSignature = cleanInlineText($row.find('.method-name').text());
+                var methodName = extractCoverageMethodName(methodSignature);
+                if (!methodSignature) {
+                    return;
+                }
+                var methodDesc = cleanInlineText($row.find('.method-name').attr('title') || '');
+                var statText = cleanInlineText($row.find('.stat-txt').first().text());
+                var statusText = cleanInlineText($row.find('.label').first().text());
+                var summary = methodSignature;
+                if (methodDesc) {
+                    summary += '（' + methodDesc + '）';
+                }
+                if (statText) {
+                    summary += ' | ' + statText;
+                }
+                if (statusText) {
+                    summary += ' | ' + statusText;
+                }
+                methods.push(summary);
+                if (!matchedMethod && normalizedQuestion) {
+                    var methodTokens = [methodName, methodSignature, methodDesc].filter(Boolean).map(function (item) { return item.toLowerCase(); });
+                    for (var i = 0; i < methodTokens.length; i++) {
+                        if (methodTokens[i] && normalizedQuestion.indexOf(methodTokens[i]) !== -1) {
+                            matchedMethod = summary;
+                            break;
+                        }
+                    }
+                }
+                if (methods.length >= 8) {
+                    return false;
+                }
+            });
+
+            var $selectedMethod = $('#methodTable tbody tr.ai-floating-row-selected, .method-table tbody tr.ai-floating-row-selected').first();
+            if (!matchedMethod && $selectedMethod.length) {
+                matchedMethod = summarizeRow($selectedMethod);
+            }
+
+            return {
+                matchedMethod: matchedMethod,
+                methods: methods
+            };
+        }
+
+        function buildCoveragePageContext(question) {
+            var parts = [];
+            var $coverageRoot = $('#coverageCodeView');
+            if ($coverageRoot.length) {
+                var rawClassName = cleanInlineText($coverageRoot.data('raw-class-name') || $coverageRoot.data('class-name') || '');
+                var displayClassName = cleanInlineText($coverageRoot.data('display-class-name') || '');
+                if (rawClassName) {
+                    parts.push('真实类名:' + rawClassName);
+                }
+                if (displayClassName && displayClassName !== rawClassName) {
+                    parts.push('展示类名:' + displayClassName);
+                }
+                var reportId = cleanInlineText($coverageRoot.data('report-id') || '');
+                var appId = cleanInlineText($coverageRoot.data('app-id') || '');
+                var versionNumber = cleanInlineText($coverageRoot.data('version-number') || '');
+                if (appId || reportId || versionNumber) {
+                    parts.push('定位信息:' + [appId ? ('appId=' + appId) : '', reportId ? ('reportId=' + reportId) : '', versionNumber ? ('version=' + versionNumber) : ''].filter(Boolean).join(', '));
+                }
+            }
+
+            var methodNameList = [];
+            $('#methodTable tbody tr[data-method-name], .method-table tbody tr[data-method-name]').each(function () {
+                var methodName = cleanInlineText($(this).attr('data-method-name') || '');
+                if (methodName && methodNameList.indexOf(methodName) === -1) {
+                    methodNameList.push(methodName);
+                }
+            });
+            if (methodNameList.length) {
+                parts.push('可识别方法:' + methodNameList.slice(0, 8).join('、'));
+            }
+
+            var $headerContent = $('.header-title .content, .ui.header.header-title .content').first();
+            if ($headerContent.length) {
+                var classTitle = cleanInlineText($headerContent.clone().children('.sub.header').remove().end().text());
+                if (classTitle) {
+                    parts.push('当前类:' + classTitle);
+                }
+                var subHeader = cleanInlineText($headerContent.find('.sub.header').first().text());
+                if (subHeader) {
+                    parts.push('类信息:' + subHeader);
+                }
+            }
+
+            var currentHash = (window.location.hash || '').replace(/^#/, '');
+            if (/^method_\d+$/.test(currentHash)) {
+                var anchorIndex = parseInt(currentHash.split('_')[1], 10);
+                var $anchorRow = $('#methodTable tbody tr[data-method-index="' + anchorIndex + '"], .method-table tbody tr[data-method-index="' + anchorIndex + '"]').first();
+                if ($anchorRow.length) {
+                    parts.push('当前锚点方法:' + cleanInlineText($anchorRow.find('.method-name').text()));
+                    var anchorMethodDesc = cleanInlineText($anchorRow.attr('data-method-desc') || '');
+                    if (anchorMethodDesc) {
+                        parts.push('锚点方法说明:' + anchorMethodDesc);
+                    }
+                    var anchorMethodName = cleanInlineText($anchorRow.attr('data-method-name') || '');
+                    if (anchorMethodName) {
+                        parts.push('锚点方法名:' + anchorMethodName);
+                    }
+                }
+                var $sourceAnchor = $('.source-container a[name="' + currentHash + '"]').first();
+                if ($sourceAnchor.length) {
+                    var $sourceLine = $sourceAnchor.next('div');
+                    if ($sourceLine.length) {
+                        parts.push('源码锚点行:' + clipContextText($sourceLine.text(), 180));
+                    }
+                }
+                var anchorSnippet = buildCoverageSourceSnippet(currentHash, 28);
+                if (anchorSnippet) {
+                    parts.push('源码片段:\n' + anchorSnippet);
+                }
+            }
+
+            var methodSignals = collectCoverageMethodSignals(question);
+            if (methodSignals.matchedMethod) {
+                parts.push('匹配方法:' + methodSignals.matchedMethod);
+                var matchedMethodName = extractCoverageMethodName(methodSignals.matchedMethod);
+                if (matchedMethodName) {
+                    var $matchedRow = $('#methodTable tbody tr, .method-table tbody tr').filter(function () {
+                        return extractCoverageMethodName(cleanInlineText($(this).find('.method-name').text())) === matchedMethodName;
+                    }).first();
+                    if ($matchedRow.length) {
+                        var matchedIndex = $matchedRow.attr('data-method-index') || '';
+                        parts.push('方法行号:' + matchedIndex);
+                        var matchedSnippet = buildCoverageSourceSnippet('method_' + matchedIndex, 28);
+                        if (matchedSnippet) {
+                            parts.push('方法源码片段:\n' + matchedSnippet);
+                        }
+                    }
+                }
+            }
+            if (methodSignals.methods.length) {
+                parts.push('方法列表:' + methodSignals.methods.join('；'));
+            }
+
+            var selectedMethodName = cleanInlineText($('#methodTable tbody tr.ai-floating-row-selected .method-name, .method-table tbody tr.ai-floating-row-selected .method-name').first().text());
+            if (selectedMethodName) {
+                parts.push('当前选中方法:' + selectedMethodName);
+            }
+
+            return parts.join('；');
+        }
+
+        function buildPageContextPayload(question) {
             var signals = collectDomSignals();
             var tableHeaders = collectTexts('th, .ui.table thead th', 6);
             var filterLabels = collectTexts('input[placeholder], textarea[placeholder], .ui.dropdown .text, .search.icon.input input[placeholder]', 6);
@@ -393,6 +610,12 @@
             }
             if (liveSignals.tableHover) {
                 parts.push('当前悬停行:' + liveSignals.tableHover);
+            }
+            if (/\/coverage\/(code|details|overview)/.test(window.location.pathname)) {
+                var coverageContext = buildCoveragePageContext(question);
+                if (coverageContext) {
+                    parts.push(coverageContext);
+                }
             }
             return parts.join('；');
         }
@@ -2496,7 +2719,7 @@
             setState('思考中...', true);
 
             // 构建请求数据
-            var requestData = { question: question || '[图片提问]', pageContext: buildPageContextPayload() };
+            var requestData = { question: question || '[图片提问]', pageContext: buildPageContextPayload(question) };
             if (fwUploadedImageData) {
                 requestData.imageData = fwUploadedImageData;
             }

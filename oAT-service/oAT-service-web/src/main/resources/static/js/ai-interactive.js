@@ -35,6 +35,7 @@
         var timelineExpandedKey = 'ai-interactive-timeline-expanded:' + projectId;
         var sessionMigrationMarkerKey = 'ai-interactive-session-migrated:' + projectId;
         var sessionStateUrl = askUrl.replace(/\/ask$/, '/sessionState');
+        var sessionMemoryClearUrl = askUrl.replace(/\/ask$/, '/sessionState/clear');
         var sessionStateSyncInFlight = false;
         var serverSessionState = $root.attr('data-session-state') || '';
 
@@ -105,6 +106,7 @@
         var loadingTimerInterval = null;
         var loadingStartTime = 0;
         var uploadedImageData = null;
+        var requestGeneration = 0;
         var timelineState = {
             expanded: false,
             hasUserPreference: false
@@ -1628,6 +1630,63 @@
             syncSessionStateToServer({ silent: true });
         }
 
+        function resetAllSessionStorage() {
+            sessions = [];
+            activeSessionId = null;
+            serverSessionState = '';
+            sessionStorage.removeItem(activeSessionKey);
+            sessionStorage.removeItem(sessionSortKey);
+            sessionStorage.removeItem(timelineExpandedKey);
+            sessionStorage.removeItem(legacyHistoryKey);
+            localStorage.removeItem(sessionMigrationMarkerKey);
+            U.writeJSON(sessionsKey, []);
+        }
+
+        function createFreshSessionAfterClear() {
+            var fresh = createBaseSession();
+            sessions = [fresh];
+            activeSessionId = fresh.id;
+            persistSessions();
+            renderActiveSession();
+            syncSessionStateToServer({ silent: true, toastMessage: '记忆已清空，已进入新会话' });
+        }
+
+        function clearSessionMemory() {
+            requestGeneration++;
+            if (currentAjaxRequest) {
+                currentAjaxRequest.abort();
+                currentAjaxRequest = null;
+            }
+            hideLoading();
+            resetSendButton();
+            setRequestState('记忆清理中...', true);
+            setSignalState('online');
+
+            return $.ajax({
+                url: sessionMemoryClearUrl,
+                type: 'POST',
+                dataType: 'json',
+                timeout: Math.min(aiTimeout, 15000)
+            }).done(function (response) {
+                resetAllSessionStorage();
+                createFreshSessionAfterClear();
+                if (response && response.message) {
+                    U.showToast(response.message, 'success');
+                } else {
+                    U.showToast('记忆已清空，已开启新会话', 'success');
+                }
+            }).fail(function () {
+                resetAllSessionStorage();
+                createFreshSessionAfterClear();
+                U.showToast('服务端清理失败，但本地已重置为新会话', 'warning');
+            }).always(function () {
+                setTimeout(function () {
+                    setRequestState('就绪', false);
+                    $questionInput.focus();
+                }, 300);
+            });
+        }
+
         function renameSession(sid) {
             var s = findSession(sid); if (!s) return;
             var $item = $('.ai-session-item[data-session-id="' + sid + '"]'); var $titleEl = $item.find('.ai-session-title');
@@ -1691,6 +1750,7 @@
             if (!question && !uploadedImageData) { $questionInput.focus(); return; }
             var session = getActiveSession();
             if (!session) { createNewSession(); session = getActiveSession(); }
+            var currentRequestGeneration = ++requestGeneration;
 
             pendingQuestion = question || '[图片提问]';
             var userMsgHtml = question;
@@ -1738,6 +1798,7 @@
                     timelineExpanded: timelineState.expanded
                 }
             }).done(function (response) {
+                if (currentRequestGeneration !== requestGeneration) { return; }
                 hideLoading();
                 if (!response || response.success === false || response.result === false) {
                     var fail = (response && response.message) || '当前无法完成分析，请稍后重试。';
@@ -1764,6 +1825,7 @@
                 addTimeline('生成回复', d.topic || 'general'); setSignalState('reply');
                 mascotCanvas.setState('done');
             }).fail(function (jqXHR, textStatus) {
+                if (currentRequestGeneration !== requestGeneration) { return; }
                 hideLoading();
                 if (textStatus === 'abort') { showStoppedMessage(pendingQuestion); clearPendingRequest(session, 'aborted', '用户手动停止'); syncSessionStateToServer({ silent: true }); mascotCanvas.setState('idle'); return; }
                 if (textStatus === 'timeout') { showTimeoutMessage(); clearPendingRequest(session, 'timeout', '请求超时'); syncSessionStateToServer({ silent: true }); mascotCanvas.setState('idle'); return; }
@@ -1774,6 +1836,7 @@
                 syncSessionStateToServer({ silent: true });
                 addTimeline('请求异常', textStatus + ' - 请稍后重试或更换问题描述'); setSignalState('online'); mascotCanvas.setState('idle');
             }).always(function () {
+                if (currentRequestGeneration !== requestGeneration) { return; }
                 currentAjaxRequest = null; var s = getActiveSession(); if (s) { s.updatedAt = Date.now(); persistSessions(); renderSessionList(); }
                 resetSendButton(); setRequestState('就绪', false);
                 setTimeout(function () { setSignalState('online'); }, 900); $questionInput.focus();
@@ -1794,6 +1857,7 @@
         });
 
         $newSessionButton.on('click', createNewSession);
+        $(document).on('click', '#aiClearMemoryButton', clearSessionMemory);
         $sessionSearchInput.on('input', renderSessionList);
         $sessionSortSelect.on('change', function () { sessionStorage.setItem(sessionSortKey, $(this).val()); persistSessions(); renderSessionList(); syncSessionStateToServer({ silent: true }); });
 

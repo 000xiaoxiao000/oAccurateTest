@@ -57,6 +57,13 @@ public class AIInteractiveControl {
         return new ResultNotified<>(true, "保存成功", aiInteractiveService.saveSessionState(projectId, user, sessionState));
     }
 
+    @PostMapping("/p/{projectId}/AIInteractive/sessionState/clear")
+    @ResponseBody
+    public ResultNotified<String> clearSessionMemory(@PathVariable String projectId,
+                                                     @SessionAttribute UserVo user) {
+        return new ResultNotified<>(true, "记忆已清空", aiInteractiveService.clearSessionMemory(projectId, user));
+    }
+
     @PostMapping("/p/{projectId}/AIInteractive/ask")
     @ResponseBody
     public ResultNotified<AIInteractiveReplyVo> ask(@PathVariable String projectId,

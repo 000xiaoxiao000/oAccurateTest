@@ -118,7 +118,14 @@
     </style>
 </head>
 <body>
-<div class="ui container" style="width: 95%;">
+<div class="ui container" id="coverageCodeView"
+     data-class-name="${className?html}"
+     data-raw-class-name="${rawClassName?html}"
+     data-display-class-name="${displayClassName?html}"
+     data-app-id="${appId?html}"
+     data-report-id="${reportId?html}"
+     data-version-number="${versionNumber?html}"
+     style="width: 95%;">
     <div class="ui breadcrumb page-breadcrumb">
         <a class="section" href="/p/${project.id}/version/apps">版本中心</a>
         <i class="right angle icon divider"></i>
@@ -220,7 +227,7 @@
                 <#assign branchTotal = m.totalBranchTargets!0>
                 <#assign branchCovered = m.coveredBranchTargets!0>
                 <#assign branchPct = m.branchRate!0>
-                <tr>
+                <tr data-method-index="${m_index}" data-method-name="${m.methodName?html}" data-method-desc="${m.methodDesc!''?html}">
                     <td class="method-name" title="${m.methodDesc!""}">${m.methodName}</td>
                     <td>
                         <span class="stat-txt">${m.coveredLines}/${m.totalLines} (${linePct?string("0.0")}%)</span>
@@ -502,4 +509,3 @@
 
 </body>
 </html>
-

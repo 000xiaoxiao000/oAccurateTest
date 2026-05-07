@@ -11,4 +11,6 @@ public interface AIInteractiveService {
                              String sessionState, String activeSessionId, String sessionSortMode, Boolean timelineExpanded);
 
     String saveSessionState(String projectId, UserVo user, String sessionState);
+
+    String clearSessionMemory(String projectId, UserVo user);
 }

@@ -9,6 +9,7 @@ import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.StaticSourceClassInfo;
 import com.oAT.web.esDao.entity.StaticSourceInfo;
+import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import com.oAT.web.esDao.entity.TraceNodeIndex;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.AppVo;
@@ -517,98 +518,39 @@ public class AgentDataProviderImpl implements AgentDataProvider {
         List<Map<String, Object>> traces = new ArrayList<>();
 
         try {
-            // 1. 从静态数据中确认类/方法是否存在；静态方法清单不是调用关系，不能当作下游调用方返回
-            Map<String, StaticSourceInfo> classStaticMap = findClassStaticInfo(className);
-            boolean targetMethodExists = !StringUtils.hasText(methodName);
-            if (!classStaticMap.isEmpty() && StringUtils.hasText(methodName)) {
-                for (StaticSourceInfo info : classStaticMap.values()) {
-                    if (info.getClassInfo() == null || info.getClassInfo().getMethodMaps() == null) {
-                        continue;
-                    }
-                    for (Map.Entry<String, ?> mEntry : info.getClassInfo().getMethodMaps().entrySet()) {
-                        Object methodObj = mEntry.getValue();
-                        if (!(methodObj instanceof Map)) {
-                            continue;
-                        }
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> methodMap = (Map<String, Object>) methodObj;
-                        String staticMethodName = (String) methodMap.get("methodName");
-                        if (methodName.equalsIgnoreCase(staticMethodName) || methodName.equalsIgnoreCase(mEntry.getKey())) {
-                            targetMethodExists = true;
-                            break;
-                        }
-                    }
-                    if (targetMethodExists) {
-                        break;
-                    }
-                }
-            }
-            result.put("classFound", !classStaticMap.isEmpty());
-            result.put("methodFound", targetMethodExists);
-
-            // 2. 从 ES trace_node 中搜索包含该类的运行时调用链
-            String lowerClassName = className.toLowerCase();
-            int traceLimit = 10;
-
-            // 获取项目下的应用 ID 列表用于搜索
-            Set<String> appIds = classStaticMap.keySet();
-            if (appIds.isEmpty()) {
-                // 如果静态数据没找到，尝试从所有应用的 trace 数据搜索
-                // 通过 TraceNodeRepository 搜索（注意：ES 全文搜索需要用 ElasticsearchTemplate）
-                logger.debug("No static info found for class {}, will search traces by app list", className);
+            boolean classFound = StringUtils.hasText(className) && !findClassStaticInfo(className).isEmpty();
+            boolean methodFound = !StringUtils.hasText(methodName);
+            if (classFound && StringUtils.hasText(methodName)) {
+                methodFound = findTargetMethodInfo(findClassStaticInfo(className).values(), methodName) != null;
             }
 
-            for (String appId : appIds) {
-                if (traces.size() >= traceLimit) break;
-                try {
-                    // 从 ES 查询该应用最近的 trace 节点，筛选含目标类的
-                    List<TraceNodeIndex> nodes = traceNodeRepository.findByAppId(appId);
-                    if (nodes == null || nodes.isEmpty()) continue;
+            result.put("classFound", classFound);
+            result.put("methodFound", methodFound);
+            result.put("callers", callers);
+            result.put("callees", callees);
+            result.put("traces", traces);
 
-                    Set<String> seenTraceIds = new HashSet<>(); // 去重
-                    for (TraceNodeIndex node : nodes) {
-                        if (traces.size() >= traceLimit) break;
-                        HttpTraceNode httpNode = node.getHttpNode();
-                        if (httpNode == null) continue;
-                        String traceId = node.getTraceId();
-
-                        // 检查 HTTP 入口的 codeNodes 是否包含目标类
-                        boolean found = false;
-                        if (httpNode.getCodeNodes() != null) {
-                            for (var codeNode : httpNode.getCodeNodes()) {
-                                if (codeNode.getClassName() != null
-                                        && (codeNode.getClassName().toLowerCase().contains(lowerClassName)
-                                        || lowerClassName.contains(simpleClassName(codeNode.getClassName()).toLowerCase()))) {
-                                    found = true;
-                                    // 提取调用方信息
-                                    extractCallerFromStack(httpNode.getCodeNodes(), codeNode, callers, seenTraceIds);
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (found && !seenTraceIds.contains(traceId)) {
-                            seenTraceIds.add(traceId);
-                            Map<String, Object> traceInfo = new HashMap<>();
-                            traceInfo.put("traceId", traceId);
-                            traceInfo.put("url", httpNode.getRequestUrl() != null ? httpNode.getRequestUrl() : "");
-                            traceInfo.put("appId", appId);
-                            traceInfo.put("createTime", node.getCreateTime());
-                            traces.add(traceInfo);
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.warn("Search call graph traces for app {} failed: {}", appId, e.getMessage());
-                }
+            if (!classFound) {
+                logger.info("No static source info found for call graph: className={}, methodName={}", className, methodName);
+                return result;
             }
+            if (StringUtils.hasText(methodName) && !methodFound) {
+                logger.info("No static method info found for call graph: className={}, methodName={}", className, methodName);
+                return result;
+            }
+
+            logger.info("No real method call graph data available for className={}, methodName={}; current data source only stores method coverage metadata, not invocation edges.",
+                    className, methodName);
+            return result;
         } catch (Exception e) {
             logger.error("Get call graph failed: className={}, methodName={}", className, methodName, e);
+            result.put("classFound", false);
+            result.put("methodFound", false);
+            result.put("callers", callers);
+            result.put("callees", callees);
+            result.put("traces", traces);
+            return result;
         }
-
-        result.put("callers", callers);
-        result.put("callees", callees);
-        result.put("traces", traces);
-        return result;
     }
 
     @Override
@@ -729,6 +671,20 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                 || normalizedTarget.endsWith("." + normalizedCandidate);
     }
 
+    private boolean matchesMethodName(String candidateMethodName, String candidateKey, String normalizedTarget, String targetMethodName) {
+        String normalizedCandidate = normalizeMethodName(candidateMethodName);
+        String normalizedCandidateKey = normalizeMethodName(candidateKey);
+        String normalizedTargetMethod = normalizeMethodName(targetMethodName);
+        return normalizedCandidate.equals(normalizedTargetMethod)
+                || normalizedCandidateKey.equals(normalizedTargetMethod)
+                || normalizedCandidate.contains(normalizedTargetMethod)
+                || normalizedTargetMethod.contains(normalizedCandidate)
+                || normalizedCandidateKey.contains(normalizedTargetMethod)
+                || normalizedTargetMethod.contains(normalizedCandidateKey)
+                || normalizedCandidate.equals(normalizedTarget)
+                || normalizedCandidateKey.equals(normalizedTarget);
+    }
+
     private String normalizeClassName(String className) {
         if (className == null) {
             return "";
@@ -834,12 +790,45 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     /**
      * 从堆栈节点中提取目标节点的直接调用方（父节点即为调用方）
-     *
-     * @param codeNodes    完整的代码堆栈数组
-     * @param targetNode   目标节点（被调用的类/方法所在节点）
-     * @param callers      输出：调用方列表
-     * @param seenTraceIds 已处理的 trace ID 集合（用于去重）
      */
+    private StaticSourceMethodInfo findTargetMethodInfo(Collection<StaticSourceInfo> classInfos, String methodName) {
+        if (classInfos == null || classInfos.isEmpty() || !StringUtils.hasText(methodName)) {
+            return null;
+        }
+        String normalizedTarget = normalizeMethodName(methodName);
+        for (StaticSourceInfo info : classInfos) {
+            if (info == null || info.getClassInfo() == null || info.getClassInfo().getMethodMaps() == null) {
+                continue;
+            }
+            for (Map.Entry<String, StaticSourceMethodInfo> entry : info.getClassInfo().getMethodMaps().entrySet()) {
+                StaticSourceMethodInfo methodInfo = entry.getValue();
+                if (methodInfo == null) {
+                    continue;
+                }
+                if (matchesMethodName(methodInfo.getMethodName(), entry.getKey(), normalizedTarget, methodName)) {
+                    return methodInfo;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String normalizeMethodName(String methodName) {
+        if (!StringUtils.hasText(methodName)) {
+            return "";
+        }
+        String normalized = methodName.trim();
+        int parenIndex = normalized.indexOf('(');
+        if (parenIndex > 0) {
+            normalized = normalized.substring(0, parenIndex);
+        }
+        int lastDot = normalized.lastIndexOf('.');
+        if (lastDot >= 0) {
+            normalized = normalized.substring(lastDot + 1);
+        }
+        return normalized.toLowerCase(Locale.ROOT);
+    }
+
     private void extractCallerFromStack(com.oAT.agent.model.StackNodeVo[] codeNodes,
                                         com.oAT.agent.model.StackNodeVo targetNode,
                                         List<Map<String, Object>> callers,

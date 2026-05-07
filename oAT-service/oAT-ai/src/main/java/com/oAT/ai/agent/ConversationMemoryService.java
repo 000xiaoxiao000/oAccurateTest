@@ -165,6 +165,32 @@ public class ConversationMemoryService {
     }
 
     /**
+     * 清空指定用户在指定项目下的全部会话记忆，并返回新的空会话
+     */
+    public synchronized String clearUserProjectSessions(String userId, String projectId) {
+        if (userId == null || projectId == null) {
+            return null;
+        }
+
+        List<String> sessionIdsToRemove = new ArrayList<>();
+        for (Map.Entry<String, ConversationSession> entry : sessions.entrySet()) {
+            ConversationSession session = entry.getValue();
+            if (session == null) {
+                continue;
+            }
+            if (userId.equals(session.getUserId()) && projectId.equals(session.getProjectId())) {
+                sessionIdsToRemove.add(entry.getKey());
+            }
+        }
+
+        for (String sessionId : sessionIdsToRemove) {
+            deleteSession(sessionId);
+        }
+
+        return createSession(userId, projectId);
+    }
+
+    /**
      * 清理过期会话（超过24小时无活动的）
      */
     public int cleanExpiredSessions(long maxInactiveMs) {
