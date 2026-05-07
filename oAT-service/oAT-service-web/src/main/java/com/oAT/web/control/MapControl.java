@@ -6,6 +6,8 @@ import com.oAT.web.common.ClassStructure;
 import com.oAT.web.common.ClassUtil;
 import com.oAT.web.domain.*;
 import com.oAT.web.esDao.ApiEndpointRepository;
+import com.oAT.web.esDao.ClassCoverageRepository;
+import com.oAT.web.esDao.CoverageReportRepository;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.BusinessException;
@@ -57,6 +59,12 @@ public class MapControl {
 
     @Autowired
     StaticInfoRepository staticInfoRepository;
+
+    @Autowired
+    CoverageReportRepository coverageReportRepository;
+
+    @Autowired
+    ClassCoverageRepository classCoverageRepository;
 
     @Autowired
     ApiEndpointRepository apiEndpointRepository;
@@ -184,7 +192,7 @@ public class MapControl {
             imageData.weight = 40;
             ImageElement element = new ImageElement(imageData);
             element.group = "nodes";
-            element.classes = new String[]{"code_class"};
+            element.classes = new String[]{"code_class", "stack_code", "entry_code"};
             List<ImageElement> imageElements = new ArrayList<>();
             imageElements.add(element);
 
@@ -271,6 +279,7 @@ public class MapControl {
         try {
             List<ImageElement> elements = buildCodeLayer(projectId, appId).elements();
             if (!elements.isEmpty()) {
+                enrichCodeClassMetrics(appId, elements);
                 return elements;
             }
             unavailableMessage = "未解析到版本源码调用关系，已展示快照覆盖类";
@@ -280,6 +289,7 @@ public class MapControl {
         }
         List<ImageElement> runtimeCodeElements = buildRuntimeSnapshotCodeLayerElements(projectId, appId);
         if (!runtimeCodeElements.isEmpty()) {
+            enrichCodeClassMetrics(appId, runtimeCodeElements);
             return runtimeCodeElements;
         }
         return Collections.singletonList(buildNoticeNode("code-layer-unavailable", unavailableMessage));
@@ -316,6 +326,114 @@ public class MapControl {
         element.group = "nodes";
         element.classes = new String[]{"code_class", "runtime-code"};
         return element;
+    }
+
+    private void enrichCodeClassMetrics(String appId, List<ImageElement> elements) {
+        if (!StringUtils.hasText(appId) || elements == null || elements.isEmpty()) {
+            return;
+        }
+        Map<String, ClassMetric> metrics = buildClassMetrics(appId);
+        elements.stream()
+                .filter(element -> element.group != null && element.group.equals("nodes"))
+                .filter(element -> element.classes != null && Arrays.asList(element.classes).contains("code_class"))
+                .forEach(element -> {
+                    ClassMetric metric = metrics.get(normalizeCodeClassName(element.data.id));
+                    if (metric == null) {
+                        metric = metrics.get(normalizeCodeClassName(element.data.describe));
+                    }
+                    if (metric == null) {
+                        return;
+                    }
+                    if (metric.totalLines > 0) {
+                        element.data.lineTotal = new ArrayList<>(Collections.singletonList(metric.totalLines));
+                        element.data.doLines = new ArrayList<>(Collections.singletonList(metric.coveredLines));
+                        element.data.coverageRate = metric.coverageRate;
+                    }
+                    if (metric.complexity > 0) {
+                        element.data.cyclo = metric.complexity;
+                    }
+                    if (metric.totalMethods > 0) {
+                        element.data.executeMethodTotal = new ArrayList<>(Collections.singletonList(metric.coveredMethods));
+                        element.data.methodTotal = new ArrayList<>(Collections.singletonList(metric.totalMethods));
+                    }
+                });
+    }
+
+    private Map<String, ClassMetric> buildClassMetrics(String appId) {
+        Map<String, ClassMetric> metrics = new HashMap<>();
+        enrichStaticClassMetrics(appId, metrics);
+        enrichCoverageClassMetrics(appId, metrics);
+        return metrics;
+    }
+
+    private void enrichStaticClassMetrics(String appId, Map<String, ClassMetric> metrics) {
+        List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
+        for (StaticSourceInfo staticInfo : staticInfos) {
+            if (staticInfo.getClassInfo() == null || !StringUtils.hasText(staticInfo.getClassInfo().getClassName())) {
+                continue;
+            }
+            String className = normalizeCodeClassName(staticInfo.getClassInfo().getClassName());
+            ClassMetric metric = metrics.computeIfAbsent(className, key -> new ClassMetric());
+            if (staticInfo.getClassInfo().getMethodMaps() == null) {
+                continue;
+            }
+            metric.totalMethods = staticInfo.getClassInfo().getMethodMaps().size();
+            Set<Integer> lines = new HashSet<>();
+            int complexity = 0;
+            for (StaticSourceMethodInfo methodInfo : staticInfo.getClassInfo().getMethodMaps().values()) {
+                if (methodInfo.getMethodLineNumberMap() != null) {
+                    lines.addAll(methodInfo.getMethodLineNumberMap());
+                }
+                if (methodInfo.getCyclomaticComplexityMap() != null) {
+                    complexity += methodInfo.getCyclomaticComplexityMap();
+                }
+            }
+            metric.totalLines = Math.max(metric.totalLines, lines.size());
+            metric.complexity = Math.max(metric.complexity, complexity);
+        }
+    }
+
+    private void enrichCoverageClassMetrics(String appId, Map<String, ClassMetric> metrics) {
+        List<CoverageReportIndex> reports = coverageReportRepository.findByAppId(appId);
+        CoverageReportIndex latestReport = reports.stream()
+                .max(Comparator.comparing(CoverageReportIndex::getCreateTime,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .orElse(null);
+        if (latestReport == null || !StringUtils.hasText(latestReport.getId())) {
+            return;
+        }
+        List<ClassCoverageIndex> classCoverages = classCoverageRepository.findByReportId(latestReport.getId());
+        for (ClassCoverageIndex classCoverage : classCoverages) {
+            String className = normalizeCodeClassName(classCoverage.getClassName());
+            if (!StringUtils.hasText(className)) {
+                continue;
+            }
+            ClassMetric metric = metrics.computeIfAbsent(className, key -> new ClassMetric());
+            metric.totalMethods = Math.max(metric.totalMethods, classCoverage.getTotalMethods());
+            metric.coveredMethods = Math.max(metric.coveredMethods, classCoverage.getCoveredMethods());
+            metric.totalLines = Math.max(metric.totalLines, classCoverage.getTotalLines());
+            metric.coveredLines = Math.max(metric.coveredLines, classCoverage.getCoveredLines());
+            metric.complexity = Math.max(metric.complexity, classCoverage.getTotalComplexity());
+            metric.coverageRate = classCoverage.getLineRate() != null
+                    ? classCoverage.getLineRate().floatValue()
+                    : calculateRate(metric.coveredLines, metric.totalLines);
+        }
+    }
+
+    private float calculateRate(int covered, int total) {
+        if (total <= 0) {
+            return 0F;
+        }
+        return Math.round(covered * 10000F / total) / 100F;
+    }
+
+    private static class ClassMetric {
+        private int totalMethods;
+        private int coveredMethods;
+        private int totalLines;
+        private int coveredLines;
+        private int complexity;
+        private float coverageRate;
     }
 
     private ImageElement buildNoticeNode(String id, String message) {

@@ -184,9 +184,6 @@
         }
         return res.json();
     }).then(buildMap).then(function (cy) {
-        if (typeof cy.refreshSnapshotReferenceEdges === 'function') {
-            cy.refreshSnapshotReferenceEdges();
-        }
         fitHomeMapView(cy);
         fitAppMapView(cy);
         // 点击节点显示详情
@@ -233,16 +230,22 @@
                 files[2] = {file: "描述：", value: ele.data('describe')};
             }
             if (ele.data('doLines') != null) {
-                files[3] = {file: "执行到的代码行数：", value: ele.data('doLines')};
+                files[3] = {file: "覆盖代码行数：", value: formatMetricValue(ele.data('doLines'))};
             }
-            if (ele.data('lines') != null) {
-                files[4] = {file: "代码行数：", value: ele.data('lines')};
+            if (ele.data('lineTotal') != null) {
+                files[4] = {file: "总代码行数：", value: formatMetricValue(ele.data('lineTotal'))};
             }
             if (ele.data('coverageRate') != null) {
-                files[5] = {file: "代码覆盖率：", value: ele.data('coverageRate') + "%"};
+                files[5] = {file: "代码覆盖率：", value: formatRateValue(ele.data('coverageRate')) + "%"};
             }
             if (ele.data('cyclo') != null) {
                 files[6] = {file: "圈复杂度V(G)：", value: ele.data('cyclo')};
+            }
+            if (ele.data('executeMethodTotal') != null) {
+                files[7] = {file: "覆盖方法数：", value: formatMetricValue(ele.data('executeMethodTotal'))};
+            }
+            if (ele.data('methodTotal') != null) {
+                files[8] = {file: "方法总数：", value: formatMetricValue(ele.data('methodTotal'))};
             }
         }
         files.forEach(function (a) {
@@ -251,6 +254,21 @@
                     '            <div class="header">' + a.file +
                     '            </div>' + a.value + '</div>');
         });
+    }
+
+    function formatMetricValue(value) {
+        if ($.isArray(value)) {
+            return value.length === 1 ? value[0] : value.join(', ');
+        }
+        return value;
+    }
+
+    function formatRateValue(value) {
+        var numberValue = Number(value);
+        if (isNaN(numberValue)) {
+            return value;
+        }
+        return numberValue.toFixed(2).replace(/\.00$/, '');
     }
 
     // 显示右键菜单
