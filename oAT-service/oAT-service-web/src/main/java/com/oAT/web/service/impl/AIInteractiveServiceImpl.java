@@ -4,6 +4,7 @@ import com.oAT.ai.agent.AgentContext;
 import com.oAT.ai.agent.AIAgentService;
 import com.oAT.web.service.AIInteractiveService;
 import com.oAT.web.service.AppService;
+import com.oAT.web.service.CoverageService;
 import com.oAT.web.service.ClientSessionService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.AIAbilityCardVo;
@@ -15,6 +16,7 @@ import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
 import com.oAT.web.config.AIInteractiveRouteConfig;
+import com.oAT.web.esDao.entity.CoverageReportIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +25,10 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +61,9 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
     @Autowired
     private AppService appService;
+
+    @Autowired
+    private CoverageService coverageService;
 
     @Autowired
     private ClientSessionService clientSessionService;
@@ -298,8 +306,8 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
             links.add(new AIQuickLinkVo("覆盖率概览", "查看项目整体覆盖率", "/p/" + projectId + "/coverage/overview"));
         }
         if (!apps.isEmpty() && isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
-            String appId = apps.get(0).getId();
-            links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage/details?appId=" + appId));
+            String coverageUrl = buildCoverageUrl(projectId, apps);
+            links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", coverageUrl));
         } else if (isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
             links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage/overview"));
         }
@@ -331,12 +339,12 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
         if (onCoveragePage && !containsAny(text, "快照", "链路", "调用链")
                 && containsAny(text, "看", "查看", "打开", "跳转", "链接", "连接", "去")) {
-            String url = buildCoverageUrl(projectId, apps);
+            String url = buildCoverageUrl(projectId, apps, questionText);
             actions.add(new AIActionVo("navigate", "打开覆盖率报告", "跳转到当前项目的覆盖率报告页面", url, false, null));
             actions.add(new AIActionVo("link", "查看覆盖率入口", "在快捷入口中保留覆盖率报告链接", url, false, null));
         } else if (isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")
                 && containsAny(text, "看", "查看", "打开", "跳转", "链接", "连接", "去")) {
-            String url = buildCoverageUrl(projectId, apps);
+            String url = buildCoverageUrl(projectId, apps, questionText);
             actions.add(new AIActionVo("navigate", "打开覆盖率报告", "跳转到当前项目的覆盖率报告页面", url, false, null));
             actions.add(new AIActionVo("link", "查看覆盖率入口", "在快捷入口中保留覆盖率报告链接", url, false, null));
         }
@@ -418,7 +426,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         }
 
         if (actions.isEmpty() && (onCoveragePage || isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report"))) {
-            actions.add(new AIActionVo("link", "打开覆盖率报告", "查看代码覆盖率详情", buildCoverageUrl(projectId, apps), false, null));
+            actions.add(new AIActionVo("link", "打开覆盖率报告", "查看代码覆盖率详情", buildCoverageUrl(projectId, apps, questionText), false, null));
         }
         return actions;
     }
@@ -451,10 +459,108 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     }
 
     private String buildCoverageUrl(String projectId, List<AppVo> apps) {
-        if (apps != null && !apps.isEmpty()) {
-            return "/p/" + projectId + "/coverage/details?appId=" + apps.get(0).getId();
+        return buildCoverageUrl(projectId, apps, null);
+    }
+
+    private String buildCoverageUrl(String projectId, List<AppVo> apps, String questionText) {
+        AppVo targetApp = findCoverageTargetApp(apps, questionText);
+        if (targetApp != null && StringUtils.hasText(targetApp.getId())) {
+            CoverageReportIndex latestReport = findLatestCoverageReport(targetApp.getId());
+            if (latestReport != null && StringUtils.hasText(latestReport.getId())) {
+                return buildCoverageOverviewUrl(projectId, targetApp.getId(), latestReport);
+            }
+            if (StringUtils.hasText(targetApp.getCurrentVersion())) {
+                return "/p/" + projectId + "/coverage/overview?appId=" + encodeQueryParam(targetApp.getId())
+                        + "&versionNumber=" + encodeQueryParam(targetApp.getCurrentVersion());
+            }
         }
         return "/p/" + projectId + "/coverage/overview";
+    }
+
+    private String buildCoverageOverviewUrl(String projectId, String appId, CoverageReportIndex report) {
+        String targetAppId = StringUtils.hasText(report.getAppId()) ? report.getAppId() : appId;
+        StringBuilder url = new StringBuilder("/p/").append(projectId).append("/coverage/overview?appId=")
+                .append(encodeQueryParam(targetAppId));
+        if (StringUtils.hasText(report.getVersionNumber())) {
+            url.append("&versionNumber=").append(encodeQueryParam(report.getVersionNumber()));
+        }
+        url.append("&reportId=").append(encodeQueryParam(report.getId()));
+        if (StringUtils.hasText(report.getRepoCommitId())) {
+            url.append("&commitId=").append(encodeQueryParam(report.getRepoCommitId()));
+        }
+        return url.toString();
+    }
+
+    private String encodeQueryParam(String value) {
+        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
+    }
+
+    private AppVo findCoverageTargetApp(List<AppVo> apps, String questionText) {
+        AppVo targetApp = findExplicitTargetApp(apps, questionText);
+        if (targetApp != null) {
+            return targetApp;
+        }
+        if (apps == null || apps.isEmpty()) {
+            return null;
+        }
+
+        AppVo fallback = apps.get(0);
+        AppVo newestApp = null;
+        CoverageReportIndex newestReport = null;
+        for (AppVo app : apps) {
+            if (app == null || !StringUtils.hasText(app.getId())) {
+                continue;
+            }
+            CoverageReportIndex latestReport = findLatestCoverageReport(app.getId());
+            if (latestReport == null) {
+                continue;
+            }
+            if (newestReport == null || isReportNewer(latestReport, newestReport)) {
+                newestReport = latestReport;
+                newestApp = app;
+            }
+        }
+        return newestApp != null ? newestApp : fallback;
+    }
+
+    private AppVo findExplicitTargetApp(List<AppVo> apps, String questionText) {
+        if (apps == null || apps.isEmpty() || !StringUtils.hasText(questionText)) {
+            return null;
+        }
+        String normalizedQuestion = questionText.toLowerCase();
+        for (AppVo app : apps) {
+            if (app != null && StringUtils.hasText(app.getName()) && normalizedQuestion.contains(app.getName().toLowerCase())) {
+                return app;
+            }
+        }
+        return null;
+    }
+
+    private CoverageReportIndex findLatestCoverageReport(String appId) {
+        List<CoverageReportIndex> reports = coverageService.getReportsByAppId(appId);
+        if (reports == null || reports.isEmpty()) {
+            return null;
+        }
+        return reports.stream()
+                .filter(report -> report != null && StringUtils.hasText(report.getId()))
+                .max(Comparator.comparing(CoverageReportIndex::getCreateTime, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .orElse(null);
+    }
+
+    private boolean isReportNewer(CoverageReportIndex candidate, CoverageReportIndex current) {
+        if (candidate == null) {
+            return false;
+        }
+        if (current == null) {
+            return true;
+        }
+        if (candidate.getCreateTime() == null) {
+            return false;
+        }
+        if (current.getCreateTime() == null) {
+            return true;
+        }
+        return candidate.getCreateTime().after(current.getCreateTime());
     }
 
     private List<AIActionVo> buildHeaderNavigationActions(String projectId, List<AppVo> apps, String questionText) {
@@ -497,7 +603,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         } else if (appId != null && containsAny(questionText, "版本比对", "版本比较")) {
             actions.add(buildAutoNavigateAction("打开版本比对", "/p/" + projectId + "/" + appId + "/version/compare"));
         } else if (appId != null && containsAny(questionText, "覆盖率报告", "覆盖率")) {
-            actions.add(buildAutoNavigateAction("打开覆盖率报告", "/p/" + projectId + "/" + appId + "/version/report/list?tab=coverage"));
+            actions.add(buildAutoNavigateAction("打开覆盖率报告", buildCoverageUrl(projectId, apps, questionText)));
         } else if (appId != null) {
             actions.add(buildAutoNavigateAction("打开应用系统快照", "/p/" + projectId + "/" + appId + "/snapshot/list"));
         }

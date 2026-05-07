@@ -451,12 +451,43 @@
             return fallbackUrl;
         }
 
+        function resolveHeaderCoverageOverviewUrl(question) {
+            var targetText = String(question || '').toLowerCase();
+            var fallback = null;
+            var matched = null;
+            $('#appItem .menu .item').each(function () {
+                var $item = $(this);
+                var itemText = $.trim($item.text());
+                var href = $item.attr('href') || $item.find('.subMenu a[href*="/snapshot/list"]').first().attr('href') || '';
+                var match = href.match(new RegExp('/p/' + projectId + '/([^/]+)/snapshot/list'));
+                if (!match) return;
+                var appId = match[1];
+                var title = $item.find('span[title]').first().attr('title') || '';
+                var versionMatch = title.match(/版本:\s*([^\n]+)/);
+                var versionNumber = versionMatch ? $.trim(versionMatch[1]) : '';
+                if (!versionNumber || versionNumber === '未设置') return;
+                var commitMatch = title.match(/Commit:\s*([^\n]+)/);
+                var url = '/p/' + projectId + '/coverage/overview?appId=' + encodeURIComponent(appId)
+                    + '&versionNumber=' + encodeURIComponent(versionNumber);
+                if (commitMatch && $.trim(commitMatch[1])) {
+                    url += '&commitId=' + encodeURIComponent($.trim(commitMatch[1]));
+                }
+                fallback = fallback || url;
+                var appName = $.trim(itemText.split('(')[0]).toLowerCase();
+                if (appName && targetText.indexOf(appName) >= 0) {
+                    matched = url;
+                    return false;
+                }
+            });
+            return matched || fallback || ('/p/' + projectId + '/coverage/overview');
+        }
+
         function resolveLocalNavigationUrl(question) {
             var text = String(question || '').toLowerCase();
             if (!/(跳转|跳到|打开|进入|去|访问|查看)/.test(text)) return '';
             var projectBase = '/p/' + projectId;
             if (/版本比对|版本比较/.test(text)) return findHeaderAppActionUrl('version', question);
-            if (/覆盖率报告|覆盖率/.test(text)) return findHeaderAppActionUrl('coverage', question);
+            if (/覆盖率报告|覆盖率/.test(text)) return resolveHeaderCoverageOverviewUrl(question);
             if (/系统快照/.test(text)) return findHeaderAppActionUrl('snapshot', question);
             if (/应用中心|应用列表/.test(text)) return projectBase + '/app/list';
             if (/在线应用/.test(text)) return projectBase + '/app/online';
