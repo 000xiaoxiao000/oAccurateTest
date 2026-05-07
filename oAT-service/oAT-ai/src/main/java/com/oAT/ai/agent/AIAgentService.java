@@ -8,8 +8,15 @@ import com.oAT.ai.config.AIConfigProperties;
 import com.oAT.ai.config.AIEnhancedConfig;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.ToolSpecification;
+import dev.langchain4j.agent.tool.ToolSpecifications;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
+import dev.langchain4j.service.tool.DefaultToolExecutor;
+import dev.langchain4j.service.tool.ToolExecutor;
+import dev.langchain4j.service.tool.ToolProviderRequest;
+import dev.langchain4j.service.tool.ToolProviderResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,6 +54,10 @@ public class AIAgentService {
 
     private static final Logger logger = LoggerFactory.getLogger(AIAgentService.class);
 
+    private static final int MAX_SEQUENTIAL_TOOL_INVOCATIONS = 8;
+
+    private static final int MAX_RELEVANT_TOOLS_PER_REQUEST = 8;
+
     private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = Arrays.asList(
             DateTimeFormatter.ISO_LOCAL_DATE,
             DateTimeFormatter.ofPattern("yyyy/MM/dd"),
@@ -83,6 +94,9 @@ public class AIAgentService {
 
     /** 工具 schema 缓存：规范化工具名 → 参数结构信息 */
     private final Map<String, ToolMethodSchema> toolMethodSchemas = new LinkedHashMap<>();
+
+    /** LangChain4j 动态工具提供器缓存：规范化工具名 → 工具定义/执行器 */
+    private final Map<String, ToolProviderEntry> toolProviderEntries = new LinkedHashMap<>();
 
     /** 最近的 fallback 执行报告缓存 */
     private final Deque<FallbackReport> recentFallbackReports = new ArrayDeque<>();
@@ -135,8 +149,8 @@ public class AIAgentService {
             List<Object> tools = createTools();
             this.aiAgent = AiServices.builder(AIAgent.class)
                     .chatModel(chatLanguageModel)
-                    .tools(tools)
-                    .maxSequentialToolsInvocations(20)
+                    .toolProvider(this::provideRelevantTools)
+                    .maxSequentialToolsInvocations(MAX_SEQUENTIAL_TOOL_INVOCATIONS)
                     .build();
             this.initializationStatus = String.format(
                     "AI Agent initialized successfully with LangChain4j %s and %d tools",
@@ -210,9 +224,131 @@ public class AIAgentService {
             ToolMethodSchema schema = buildToolMethodSchema(method);
             registerToolBinding(method.getName(), binding, schema);
             registerToolBinding(toolInstance.getClass().getSimpleName() + "." + method.getName(), binding, schema);
+            registerToolProviderEntry(toolInstance, method);
 
             logger.debug("Registered fallback tool: {} -> {}", method.getName(), toolInstance.getClass().getSimpleName());
         }
+    }
+
+    private void registerToolProviderEntry(Object toolInstance, Method method) {
+        ToolSpecification specification = ToolSpecifications.toolSpecificationFrom(method);
+        ToolExecutor executor = new DefaultToolExecutor(toolInstance, method);
+        ToolProviderEntry entry = new ToolProviderEntry(specification, executor);
+        registerToolProviderEntry(method.getName(), entry);
+        registerToolProviderEntry(specification.name(), entry);
+    }
+
+    private void registerToolProviderEntry(String alias, ToolProviderEntry entry) {
+        String normalizedAlias = normalizeName(alias);
+        if (!normalizedAlias.isEmpty()) {
+            toolProviderEntries.put(normalizedAlias, entry);
+        }
+    }
+
+    private ToolProviderResult provideRelevantTools(ToolProviderRequest request) {
+        String question = extractUserMessageText(request.userMessage());
+        ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
+        LinkedHashSet<String> relevantToolNames = resolveRelevantToolNames(question, recommendation);
+
+        ToolProviderResult.Builder builder = ToolProviderResult.builder();
+        int added = 0;
+        for (String toolName : relevantToolNames) {
+            ToolProviderEntry entry = toolProviderEntries.get(normalizeName(toolName));
+            if (entry == null) {
+                continue;
+            }
+            builder.add(entry.specification, entry.executor);
+            added++;
+            if (added >= MAX_RELEVANT_TOOLS_PER_REQUEST) {
+                break;
+            }
+        }
+
+        if (added == 0) {
+            addToolIfPresent(builder, "getProjectOverview");
+            addToolIfPresent(builder, "getProjectInfo");
+            addToolIfPresent(builder, "getProjectStatistics");
+            added = 3;
+        }
+
+        logger.debug("Provided {} relevant AI tools for intent={}, primary={}, question={}",
+                added, recommendation.detectedIntent, recommendation.primaryTool, abbreviate(question, 80));
+        return builder.build();
+    }
+
+    private void addToolIfPresent(ToolProviderResult.Builder builder, String toolName) {
+        ToolProviderEntry entry = toolProviderEntries.get(normalizeName(toolName));
+        if (entry != null) {
+            builder.add(entry.specification, entry.executor);
+        }
+    }
+
+    private LinkedHashSet<String> resolveRelevantToolNames(String question, ToolRecommender.Recommendation recommendation) {
+        LinkedHashSet<String> toolNames = new LinkedHashSet<>();
+        if (recommendation != null) {
+            addIfNotBlank(toolNames, recommendation.primaryTool);
+            if (recommendation.secondaryTools != null) {
+                recommendation.secondaryTools.forEach(toolName -> addIfNotBlank(toolNames, toolName));
+            }
+        }
+
+        String normalized = question == null ? "" : question.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "业务需求", "业务逻辑", "业务规则", "业务场景", "处理什么业务", "需求分析", "功能逻辑", "方法职责")) {
+            addAll(toolNames, "searchCodeRelation", "analyzeBusinessRequirement", "getClassCallGraph", "detectBugsInMethod");
+        } else if (containsAny(normalized, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误")) {
+            addAll(toolNames, "searchCodeRelation", "detectBugsInMethod", "detectBugs", "batchDetectBugs", "getCodeQualityReport");
+        } else if (containsAny(normalized, "覆盖", "coverage", "低覆盖", "未覆盖", "覆盖率")) {
+            addAll(toolNames, "getProjectCoverageOverview", "getAppCoverageReport", "getLowCoverageClasses", "getCoverageImprovementSuggestions", "getApps", "searchAppByName");
+        } else if (containsAny(normalized, "性能", "performance", "慢接口", "响应时间", "p95", "p99", "耗时", "退化")) {
+            addAll(toolNames, "getAppPerformanceOverview", "getSlowEndpoints", "getEndpointCallFrequency", "compareOverTime", "getApps", "searchAppByName");
+        } else if (containsAny(normalized, "缺陷", "defect", "错误", "error", "异常", "exception", "根因")) {
+            addAll(toolNames, "getDefectOverview", "getRecentExceptions", "getAppErrorDetails", "getRecentTraces", "locateRootCause", "getApps");
+        } else if (containsAny(normalized, "链路", "trace", "调用链", "span", "链路详情")) {
+            addAll(toolNames, "getRecentTraces", "getTracesByAppName", "getTraceDetail", "analyzeCallChain", "getApps", "searchAppByName");
+        } else if (containsAny(normalized, "快照", "snapshot", "版本", "上线", "发布")) {
+            addAll(toolNames, "getSnapshots", "getMySnapshots", "getSnapshotDetail", "getProjectCoverageOverview");
+        } else if (containsAny(normalized, "应用", "app", "在线", "运行状态", "状态")) {
+            addAll(toolNames, "getApps", "getOnlineApps", "searchAppByName", "getAppDetail");
+        } else if (containsAny(normalized, "代码", "类", "方法", "调用关系", "调用图", "上下游", "依赖")) {
+            addAll(toolNames, "searchCodeRelation", "getClassCallGraph", "getCallGraph");
+        } else {
+            addAll(toolNames, "getProjectOverview", "getProjectInfo", "getProjectStatistics", "getApps", "getProjectCoverageOverview");
+        }
+
+        return toolNames;
+    }
+
+    private void addAll(Set<String> target, String... values) {
+        for (String value : values) {
+            addIfNotBlank(target, value);
+        }
+    }
+
+    private void addIfNotBlank(Set<String> target, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            target.add(value.trim());
+        }
+    }
+
+    private String extractUserMessageText(UserMessage userMessage) {
+        if (userMessage == null) {
+            return "";
+        }
+        try {
+            if (userMessage.hasSingleText()) {
+                return userMessage.singleText();
+            }
+        } catch (Exception ignored) {
+        }
+        return userMessage.toString();
+    }
+
+    private String abbreviate(String text, int maxLength) {
+        if (text == null) {
+            return "";
+        }
+        String normalized = text.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength) + "...";
     }
 
     private void registerToolBinding(String alias, ToolMethodBinding binding, ToolMethodSchema schema) {
@@ -326,6 +462,10 @@ public class AIAgentService {
                     responseTime, response != null ? response.length() : 0);
             return response;
         } catch (Exception e) {
+            if (isToolInvocationLoopLimit(e)) {
+                logger.warn("AI Agent stopped because tool invocation loop limit was reached: {}", e.getMessage());
+                return "抱歉，AI 助手连续调用工具次数过多，已自动停止以避免无效循环。请把问题缩小到一个具体目标（例如覆盖率概览、某个应用的慢接口、某条调用链详情），我会重新查询。";
+            }
             logger.error("AI Agent chat failed", e);
             return null;
         } finally {
@@ -358,6 +498,10 @@ public class AIAgentService {
 
             return response;
         } catch (Exception e) {
+            if (isToolInvocationLoopLimit(e)) {
+                logger.warn("AI Agent with context stopped because tool invocation loop limit was reached: {}", e.getMessage());
+                return "抱歉，AI 助手连续调用工具次数过多，已自动停止以避免无效循环。请把问题缩小到当前页面中的一个具体分析目标后重试。";
+            }
             logger.error("AI Agent chat with context failed", e);
             return null;
         } finally {
@@ -395,11 +539,27 @@ public class AIAgentService {
 
             return response;
         } catch (Exception e) {
+            if (isToolInvocationLoopLimit(e)) {
+                logger.warn("AI Agent with image stopped because tool invocation loop limit was reached: {}", e.getMessage());
+                return "抱歉，AI 助手连续调用工具次数过多，已自动停止以避免无效循环。请结合截图指定一个更具体的问题后重试。";
+            }
             logger.error("AI Agent chat with image failed", e);
             return null;
         } finally {
             AgentContext.clearContext();
         }
+    }
+
+    private boolean isToolInvocationLoopLimit(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.contains("exceeded") && message.contains("sequential tool invocations")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     public String getProjectOverview(AgentContext context) {
@@ -2173,6 +2333,16 @@ public class AIAgentService {
         }
     }
 
+    private static final class ToolProviderEntry {
+        private final ToolSpecification specification;
+        private final ToolExecutor executor;
+
+        private ToolProviderEntry(ToolSpecification specification, ToolExecutor executor) {
+            this.specification = specification;
+            this.executor = executor;
+        }
+    }
+
     // ==================== 增强功能方法 ====================
 
     /**
@@ -2272,7 +2442,7 @@ public class AIAgentService {
 
         if (scenario == null) {
             return "[AI工具推荐]\n" + formatToolRecommendation(recommendation)
-                    + "\n请优先调用相关工具获取实时数据，再基于数据回答；如果数据缺失，说明缺失项并给出下一步。";
+                    + "\n请优先调用最相关的1个工具获取实时数据；如果已经足够回答，立即停止工具调用并生成最终答案。最多连续调用3个工具；如果数据缺失，说明缺失项并给出下一步，不要重复调用相同或相似工具。";
         }
 
         LinkedHashSet<String> tools = new LinkedHashSet<>();
@@ -2295,7 +2465,7 @@ public class AIAgentService {
             }
         }
         guide.append("[回答要求]\n").append(answerFocus).append('\n');
-        guide.append("请按『结论摘要 / 关键数据 / 风险排序 / 建议动作』组织回答；不要要求用户提供内部ID、JSON或工具参数。");
+        guide.append("请按『结论摘要 / 关键数据 / 风险排序 / 建议动作』组织回答；优先使用最相关的1个工具，最多连续调用3个工具；拿到足够数据后必须立即停止工具调用并回答；不要要求用户提供内部ID、JSON或工具参数。");
         return guide.toString();
     }
 
