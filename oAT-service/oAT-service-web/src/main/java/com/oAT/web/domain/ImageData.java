@@ -28,6 +28,7 @@ public class ImageData {
     public int cyclo;   //圈复杂度V(G)
     // 关照关联数
     public int unionCount = 0;
+    public String hotName;
 
     public int x = 0;
     public int y = 0;
@@ -74,6 +75,7 @@ public class ImageData {
                 ", branchTotal=" + branchTotal +
                 ", cyclo=" + cyclo +
                 ", unionCount=" + unionCount +
+                ", hotName='" + hotName + '\'' +
                 ", x=" + x +
                 ", y=" + y +
                 '}';

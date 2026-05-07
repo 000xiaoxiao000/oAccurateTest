@@ -19,9 +19,32 @@ public class SnapshotTableLayer implements ImageLayer {
 
     @Override
     public List<ImageElement> elements() {
-        return snapshots.stream().flatMap(snapshot ->
+        List<ImageElement> elements = snapshots.stream().flatMap(snapshot ->
                 Stream.concat(buildNode(snapshot).stream(), buildEdges(snapshot).stream())
         ).collect(Collectors.toList());
+        return mergeDuplicateTableNodeElements(elements);
+    }
+
+    private List<ImageElement> mergeDuplicateTableNodeElements(List<ImageElement> elements) {
+        List<ImageElement> results = new ArrayList<>();
+        elements.stream()
+                .filter(element -> element.group.equals("nodes") && element.data instanceof TableImageData)
+                .map(element -> (TableImageData) element.data)
+                .collect(Collectors.groupingBy(data -> data.id, Collectors.toList()))
+                .values()
+                .stream()
+                .map(this::mergeTableNodes)
+                .map(data -> {
+                    ImageElement element = new ImageElement(data);
+                    element.classes = new String[]{"table"};
+                    element.group = "nodes";
+                    return element;
+                })
+                .forEach(results::add);
+        elements.stream()
+                .filter(element -> !(element.group.equals("nodes") && element.data instanceof TableImageData))
+                .forEach(results::add);
+        return results;
     }
 
     public List<ImageElement> buildNode(SystemSnapshot snapshot) {
@@ -34,13 +57,33 @@ public class SnapshotTableLayer implements ImageLayer {
             data.database = sql.getDatabase();
             data.name = a.getTable();
             data.weight = Weight_init;
+            data.sqlContents = new String[]{formatSqlContent(snapshot.getTitle(), a.getType(), sql.getContent())};
             return data;
-        })).map(d -> {
-            ImageElement element = new ImageElement(d);
-            element.classes = new String[]{"table"};
-            element.group = "nodes";
-            return element;
-        }).collect(Collectors.toList());
+        })).collect(Collectors.groupingBy(d -> d.id, Collectors.toList()))
+                .values()
+                .stream()
+                .map(this::mergeTableNodes)
+                .map(d -> {
+                    ImageElement element = new ImageElement(d);
+                    element.classes = new String[]{"table"};
+                    element.group = "nodes";
+                    return element;
+                }).collect(Collectors.toList());
+    }
+
+    private TableImageData mergeTableNodes(List<TableImageData> tableNodes) {
+        TableImageData first = tableNodes.get(0);
+        first.sqlContents = tableNodes.stream()
+                .flatMap(a -> Arrays.stream(a.sqlContents))
+                .distinct()
+                .toArray(String[]::new);
+        return first;
+    }
+
+    private String formatSqlContent(String snapshotTitle, String actionType, String sqlContent) {
+        String action = actionType == null ? "SQL" : actionType.toUpperCase();
+        String title = snapshotTitle == null || snapshotTitle.trim().isEmpty() ? "未知快照" : snapshotTitle.trim();
+        return "[" + title + "] " + action + "：" + (sqlContent == null || sqlContent.trim().isEmpty() ? "未采集到 SQL 原文" : sqlContent.trim());
     }
 
     public List<ImageElement> buildEdges(SystemSnapshot snapshot) {
