@@ -64,8 +64,39 @@ var appRelationLayoutOptions = Object.assign({}, coseLayoutOptions, {
     initialTemp: 120
 });
 
+var appSnapshotLayoutOptions = {
+    name: 'grid',
+    fit: true,
+    padding: 135,
+    avoidOverlap: true,
+    avoidOverlapPadding: 92,
+    nodeDimensionsIncludeLabels: true,
+    animate: false,
+    condense: false,
+    spacingFactor: 1.55
+};
+
+var codeLayerLayoutOptions = Object.assign({}, coseLayoutOptions, {
+    padding: 140,
+    componentSpacing: 80,
+    nodeRepulsion: 900000,
+    idealEdgeLength: 95,
+    edgeElasticity: 120,
+    gravity: 90,
+    numIter: 700,
+    initialTemp: 80
+});
+
 function getMapLayoutOptions(data) {
     var elements = Array.isArray(data) ? data : ((data && data.elements) || []);
+    var hasCodeLayer = elements.some(function (element) {
+        if (!element || !element.classes) {
+            return false;
+        }
+        return Array.isArray(element.classes)
+            ? element.classes.indexOf('code_class') >= 0
+            : String(element.classes).indexOf('code_class') >= 0;
+    });
     var hasAppRelation = elements.some(function (element) {
         if (!element || element.group !== 'edges' || !element.classes) {
             return false;
@@ -74,7 +105,13 @@ function getMapLayoutOptions(data) {
             ? element.classes.indexOf('app-relation') >= 0
             : String(element.classes).indexOf('app-relation') >= 0;
     });
-    return hasAppRelation ? appRelationLayoutOptions : coseLayoutOptions;
+    if (hasAppRelation) {
+        return appRelationLayoutOptions;
+    }
+    if (hasCodeLayer) {
+        return codeLayerLayoutOptions;
+    }
+    return appSnapshotLayoutOptions;
 }
 
 var breadthfirstLayoutOptions = {
@@ -139,14 +176,18 @@ function buildMap(data) {
             var ele = event.target;
             //  是否显示关联节点
             if (cy.settings.subSelectUnionNode()) {
-                doSubSelectUnionNode(ele);
+                doSubSelectUnionNode(cy.nodes('node.snapshot:selected'));
             }
         });
         // 取消选中 只删除当前取消节点
         cy.on('unselect', 'node.snapshot', function (event) {
-            cy.batch(function () {
-                cy.nodes(".subSelected").removeClass('subSelected');
-            });
+            if (cy.settings.subSelectUnionNode()) {
+                doSubSelectUnionNode(cy.nodes('node.snapshot:selected'));
+            } else {
+                cy.batch(function () {
+                    cy.nodes(".subSelected").removeClass('subSelected');
+                });
+            }
         });
 
         // 双击节点 后
@@ -234,6 +275,8 @@ function buildMap(data) {
             }
         };
         cy.layoutOptions = layoutOptions;
+        cy.applyComfortableFit = applyComfortableFit;
+        cy.refreshSnapshotReferenceEdges = refreshSnapshotReferenceEdges;
         cy.loadElement = loadElement;
         cy.doFind = doFind;
         cy.doRefresh = doRefresh;
@@ -243,38 +286,112 @@ function buildMap(data) {
     }
 }
 
+function refreshSnapshotReferenceEdges() {
+    if (!window.cy) {
+        return;
+    }
+    cy.batch(function () {
+        cy.edges('.snapshot-reference').remove();
+        var edgeIds = {};
+        cy.nodes('.snapshot').forEach(function (snapshotNode) {
+            var references = snapshotNode.data('references') || [];
+            references.forEach(function (referenceId) {
+                var targetNode = findReferenceNode(referenceId);
+                if (targetNode.empty()) {
+                    return;
+                }
+                var edgeId = 'snapshot-reference-' + snapshotNode.id() + '-' + targetNode.id();
+                if (edgeIds[edgeId]) {
+                    return;
+                }
+                edgeIds[edgeId] = true;
+                cy.add({
+                    group: 'edges',
+                    classes: ['snapshot-reference'],
+                    data: {
+                        id: edgeId,
+                        source: snapshotNode.id(),
+                        target: targetNode.id(),
+                        name: '关联'
+                    }
+                });
+            });
+        });
+    });
+}
+
+function findReferenceNode(referenceId) {
+    var directNode = cy.$id(referenceId);
+    if (directNode.nonempty()) {
+        return directNode;
+    }
+    var normalized = normalizeReferenceId(referenceId);
+    return cy.nodes().filter(function (node) {
+        if (node.hasClass('snapshot')) {
+            return false;
+        }
+        return normalizeReferenceId(node.id()) === normalized
+            || normalizeReferenceId(node.data('name')) === normalized;
+    }).first();
+}
+
+function normalizeReferenceId(referenceId) {
+    if (!referenceId) {
+        return '';
+    }
+    var value = String(referenceId).trim().replace(/\\/g, '/');
+    while (value.charAt(0) === '/') {
+        value = value.substring(1);
+    }
+    return value.replace(/\//g, '.').toLowerCase();
+}
+
+function applyComfortableFit(elements) {
+    if (!window.cy) {
+        return;
+    }
+    var target = elements && elements.nonempty && elements.nonempty() ? elements : cy.elements();
+    if (target.empty()) {
+        return;
+    }
+    cy.fit(target, 120);
+    if (cy.zoom() > 1.55) {
+        cy.zoom(1.55);
+        cy.center(target);
+    }
+    if (cy.zoom() < 0.45) {
+        cy.zoom(0.45);
+        cy.center(target);
+    }
+}
+
 function loadElement(url, select, fullLayout, title) {
     fetch(url)   // 加载数据
         .then(function (res) {  //封装json
-            if (res.status !== 200) {
-                return {};
+            if (!res.ok) {
+                return res.text().then(function (text) {
+                    throw new Error(text || ('请求失败：' + res.status));
+                });
             }
             return res.json();
-        }).then(function (data) { // 添加节点
+    }).then(function (data) { // 添加节点
+        if (!Array.isArray(data)) {
+            return cy.collection();
+        }
         return cy.add(data);
     }).then(function (eles) { // 布局
-        if (typeof (fullLayout) != "undefined" || fullLayout === false) {
-            // eles.layout({
-            //     // name: "breadthfirst",
-            //     roots: cy.nodes(':selected'),
-            //     // spacingFactor: 4,
-            //     // animate: true,
-            //     // directed: true,
-            //     // nodeDimensionsIncludeLabels: false,
-            //     // circle: false,
-            //     // grid: true,
-            //     // avoidOverlap: true,
-            //     // maximal: false,
-            //     // fit: true
-            // }).run();
+        refreshSnapshotReferenceEdges();
+        if (fullLayout === false) {
             cy.layout(cy.layoutOptions || coseLayoutOptions).run();
         } else {
             doRefresh();
         }
-        cy.center(eles);
+        if (eles.length > 0) {
+            applyComfortableFit(eles.union(cy.nodes(':selected')));
+        }
         return eles;
     }).then(function (eles) { // 选中
-        if (select) {
+        if (select && eles.length > 0) {
             cy.nodes(':selected').deselect();
             eles.select();
         }
@@ -286,6 +403,9 @@ function loadElement(url, select, fullLayout, title) {
         }
     }).catch(error => {
         console.error("fetch()异常：", error);
+        if (typeof showToast === 'function') {
+            showToast(error.message || '图谱加载失败', 'error');
+        }
     });
 }
 
@@ -295,19 +415,20 @@ function doFind(key) {
         cy.nodes('.find').removeClass('find');
         if (key != "") {
             // 正则匹配
-            key = key.replace(/\*/g, ".*");
-            key = "^" + key + ".*$";
-            key = key.toLowerCase(); //勿略大小写
+            var pattern = key.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, ".*");
+            var regexp = new RegExp("^" + pattern + ".*$", "i");
 
             var findNodes = cy.filter(function (element, i) {
                 if (!element.isNode()) {
                     return false;
                 }
-                var name = element.data('name').trim();
-                return name.toLowerCase().search(key) >= 0;
+                var name = (element.data('name') || element.data('label') || '').trim();
+                return regexp.test(name);
             });
             findNodes.addClass("find");
             $("#find_element label").html(findNodes.length);
+        } else {
+            $("#find_element label").html("0");
         }
         $("#map_body").focus();
     });
@@ -331,14 +452,31 @@ function closeHot() {
 // 子选中关联节点
 function doSubSelectUnionNode(ele) {
     cy.batch(function () {
-        if (typeof (ele.data('references')) != "undefined") {
-            ele.data('references').forEach(function (r) {
-                cy.$id(r).addClass("subSelected");
+        refreshSnapshotReferenceEdges();
+        cy.edges('.snapshot-reference').removeClass('subSelected');
+        cy.nodes(".subSelected").removeClass("subSelected");
+        var matchedCount = 0;
+        ele.forEach(function (node) {
+            var references = node.data('references') || [];
+            references.forEach(function (r) {
+                var referenceNode = findReferenceNode(r);
+                if (referenceNode.nonempty()) {
+                    referenceNode.addClass("subSelected");
+                    matchedCount += referenceNode.length;
+                    node.edgesTo(referenceNode).filter('.snapshot-reference').addClass('subSelected');
+                }
             });
+        });
+        if (matchedCount === 0 && ele.length > 0 && typeof showToast === 'function') {
+            showToast('当前画布没有可高亮的关联节点，请先开启代码或表结构图层', 'info');
         }
     });
 }
 
 function doRefresh() {
-    cy.layout(cy.layoutOptions || coseLayoutOptions).run();
+    var layout = cy.layout(cy.layoutOptions || coseLayoutOptions);
+    layout.one('layoutstop', function () {
+        applyComfortableFit(cy.elements());
+    });
+    layout.run();
 }

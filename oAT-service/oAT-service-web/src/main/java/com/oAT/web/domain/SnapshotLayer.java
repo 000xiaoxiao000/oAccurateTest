@@ -4,6 +4,7 @@ import com.oAT.web.esDao.entity.SystemSnapshot;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 import java.util.stream.Collectors;
 
 public class SnapshotLayer implements ImageLayer {
@@ -34,7 +35,10 @@ public class SnapshotLayer implements ImageLayer {
         data.describe = snapshot.getDescribe();
         data.appId = snapshot.getAppId();
 
-        List<String> codes = snapshot.getCodeToClass().distinct().collect(Collectors.toList());
+        List<String> codes = snapshot.getCodeToClass()
+                .flatMap(this::buildCodeReferenceCandidates)
+                .distinct()
+                .collect(Collectors.toList());
         if (snapshot.getSqls() != null) {
             List<String> sqls =
                     Arrays.stream(snapshot.getSqls()).flatMap(sql -> Arrays.stream(sql.getActions()).map(a -> sql.getDatabase() + "." + a.getTable())).distinct().collect(Collectors.toList());
@@ -50,6 +54,26 @@ public class SnapshotLayer implements ImageLayer {
         element.classes = new String[]{"snapshot"};
         element.group = "nodes";
         return element;
+    }
+
+    private Stream<String> buildCodeReferenceCandidates(String className) {
+        if (className == null) {
+            return Stream.empty();
+        }
+        String normalized = className.trim();
+        if (normalized.isEmpty()) {
+            return Stream.empty();
+        }
+        normalized = normalized.replace('\\', '/');
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        String dotName = normalized.replace('/', '.');
+        String slashName = normalized.replace('.', '/');
+        int simpleNameIndex = dotName.lastIndexOf('.');
+        String simpleName = simpleNameIndex >= 0 ? dotName.substring(simpleNameIndex + 1) : dotName;
+        return Stream.of(className, normalized, dotName, slashName, "/" + slashName, simpleName)
+                .filter(a -> a != null && !a.trim().isEmpty());
     }
 
 

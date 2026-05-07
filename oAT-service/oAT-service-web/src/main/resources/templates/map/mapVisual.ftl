@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>用例中心-表结构搜索</title>
+    <title>用例中心-图谱搜索</title>
      <#include "../common.ftl">
     <script src="/js/cytoscape.min.js"></script>
     <script src="/js/map.js?v=${.now}"></script>
@@ -158,13 +158,37 @@
         setTimeout(applyHomeFit, 0);
     }
 
+    function fitAppMapView(cy) {
+        if ('${visualAngle}' != 'app') {
+            return;
+        }
+        var applyAppFit = function () {
+            if (typeof cy.applyComfortableFit === 'function') {
+                cy.applyComfortableFit(cy.elements());
+            } else {
+                cy.fit(cy.elements(), 150);
+            }
+        };
+        cy.one('layoutstop', applyAppFit);
+        setTimeout(applyAppFit, 0);
+    }
+
     // 初始化画布
     fetch("${dataUrl}").then(function (res) {
         //隐藏节点信息框
         document.getElementById('bottom_nodeInfo').style.display = 'none';
+        if (!res.ok) {
+            return res.text().then(function (text) {
+                throw new Error(text || ('图谱数据加载失败：' + res.status));
+            });
+        }
         return res.json();
     }).then(buildMap).then(function (cy) {
+        if (typeof cy.refreshSnapshotReferenceEdges === 'function') {
+            cy.refreshSnapshotReferenceEdges();
+        }
         fitHomeMapView(cy);
+        fitAppMapView(cy);
         // 点击节点显示详情
         cy.on('select', 'node,edge', showDetail);
         // 设置
@@ -176,6 +200,11 @@
         cy.on('cxttap', showContextMenu);
         // 设置提示框位置
         cy.on('tap cxttap', 'node', setTipPosition);
+    }).catch(function (error) {
+        console.error('图谱初始化失败：', error);
+        if (typeof showToast === 'function') {
+            showToast(error.message || '图谱初始化失败', 'error');
+        }
     });
 
     // 显示概要信息
@@ -335,7 +364,7 @@
         if (type == 'empty') {
             return '<div class="message empty"><div class="header">无结果</div><div class="description">你的搜索没有返回任何结果</div></div>';
         } else {
-            return '<div class="message ' + type + '> ' + message + '</div>'
+            return '<div class="message ' + type + '"> ' + message + '</div>'
         }
     }
     $.fn.search.settings.templates.message = noResultMessage;
@@ -348,6 +377,7 @@
             action: 'search',
             url: '/p/${project.id}/map/search?q={query}',
             onResponse: function (r) {
+                r.results = r.results || [];
                 r.results.forEach(function (results) { // 删除为空的字段
                     for (var key in results) {
                         if (results[key] === '' || results[key] == null) {
@@ -359,6 +389,14 @@
             }
         },
         onSelect: function (results, response) {
+            var currentNode = cy.$id(results.id);
+            if (currentNode.nonempty()) {
+                cy.nodes(':selected').deselect();
+                currentNode.select();
+                cy.center(currentNode);
+                $(this).search('hide results');
+                return false;
+            }
             cy.loadElement("/p/${project.id}/map/layer/snapshot?id=" + results.id, true,true,results.title);
             $(this).search('hide results')
             return false;

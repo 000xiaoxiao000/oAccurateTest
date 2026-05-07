@@ -4,17 +4,15 @@ import com.oAT.web.control.entity.NetworkGraphData;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.SnapshotSearchService;
 import com.oAT.web.service.UsecaseSearchService;
-import com.oAT.web.service.entity.CaseSearchResult;
 import com.oAT.web.service.entity.SearchPage;
 import com.oAT.web.service.entity.SnapshotSearchResult;
-import com.oAT.web.service.entity.TableToUsecase;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.Assert;
-import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.util.Arrays;
@@ -52,27 +50,28 @@ public class SearchControl {
 
     @RequestMapping("/doSearchTable")
     @ResponseBody
-    public NetworkGraphData doSearchTable(@PathVariable String projectId, String database, String table, Model model) {
-        Assert.hasText(database, "param 'DataBase' must be not null");
-        Assert.hasText(table, "param 'table' must be not null");
+    public NetworkGraphData doSearchTable(@PathVariable String projectId,
+                                          @RequestParam(name = "database", required = false) String database,
+                                          @RequestParam(name = "DataBase", required = false) String legacyDatabase,
+                                          String table) {
+        final String queryDatabase = database != null ? database : legacyDatabase;
+        final String queryTable = table;
+        Assert.hasText(queryDatabase, "param 'database' must be not null");
+        Assert.hasText(queryTable, "param 'table' must be not null");
 
-        List<SystemSnapshot> list = snapshotSearchService.searchByTable(projectId, database, table);
-        // 将usecasee转换成节点
+        List<SystemSnapshot> list = snapshotSearchService.searchByTable(projectId, queryDatabase, queryTable);
         List<NetworkGraphData.Node> nodeLists = list.stream()
-                .map(a ->
-                        {
-                            NetworkGraphData.Node node = new NetworkGraphData.Node(a.getId(), "snapshot", a.getTitle());
-                            node.setBackgroundImage("/r/" + a.getTopicImage());
-                            return node;
-                        }
-                )
+                .map(a -> {
+                    NetworkGraphData.Node node = new NetworkGraphData.Node(a.getId(), "snapshot", a.getTitle());
+                    node.setBackgroundImage("/r/" + a.getTopicImage());
+                    return node;
+                })
                 .collect(Collectors.toList());
-        nodeLists.add(new NetworkGraphData.Node(database + "_" + table, "table", database + "." + table));
+        nodeLists.add(new NetworkGraphData.Node(queryDatabase + "_" + queryTable, "table", queryDatabase + "." + queryTable));
         NetworkGraphData.Node[] nodes = nodeLists.toArray(new NetworkGraphData.Node[0]);
-        // 将usecase 转换成边线
         NetworkGraphData.Edge[] edges = list.stream()
-                .map(a->buildEdge(a,database,table))
-                .collect(Collectors.toList())
+                .map(a -> buildEdge(a, queryDatabase, queryTable))
+                .toList()
                 .toArray(new NetworkGraphData.Edge[0]);
         return new NetworkGraphData(nodes, edges);
     }
@@ -86,13 +85,12 @@ public class SearchControl {
                 .filter(a -> a.getDatabase().equalsIgnoreCase(database))
                 .flatMap(a -> Stream.of(a.getActions()))
                 .filter(a -> a.getTable().equalsIgnoreCase(table))
-                .map(a -> jdbcActionToLabel(a.getType()))
+                .map(a -> a.getType())
                 .distinct()
                 .collect(Collectors.toList());
         edge.setType("snapshotToTable");
-
         edge.setAction(actions.stream().collect(Collectors.joining(",")));
-        edge.setLabel(actions.stream().map(a->jdbcActionToLabel(a)).collect(Collectors.joining(",")));
+        edge.setLabel(actions.stream().map(this::jdbcActionToLabel).collect(Collectors.joining(",")));
         return edge;
     }
 
