@@ -246,7 +246,11 @@ public class AIAgentService {
     }
 
     private ToolProviderResult provideRelevantTools(ToolProviderRequest request) {
-        String question = extractUserMessageText(request.userMessage());
+        String userMessage = extractUserMessageText(request.userMessage());
+        String question = extractCurrentQuestionForRouting(userMessage);
+        if (question == null || question.trim().isEmpty()) {
+            question = userMessage;
+        }
         ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
         LinkedHashSet<String> relevantToolNames = resolveRelevantToolNames(question, recommendation);
 
@@ -304,15 +308,27 @@ public class AIAgentService {
         } else if (containsAny(normalized, "缺陷", "defect", "错误", "error", "异常", "exception", "根因")) {
             addAll(toolNames, "getDefectOverview", "getRecentExceptions", "getAppErrorDetails", "getRecentTraces", "locateRootCause", "getApps");
         } else if (containsAny(normalized, "链路", "trace", "调用链", "span", "链路详情")) {
-            addAll(toolNames, "getRecentTraces", "getTracesByAppName", "getTraceDetail", "analyzeCallChain", "getApps", "searchAppByName");
+            addAll(toolNames, "getRecentTraces", "getTracesByAppName", "getTraceDetail", "analyzeCallChain", "analyzeMethodCallChain", "getClassCallGraph", "getCallGraph", "getApps", "searchAppByName");
         } else if (containsAny(normalized, "快照", "snapshot", "版本", "上线", "发布")) {
             addAll(toolNames, "getSnapshots", "getMySnapshots", "getSnapshotDetail", "getProjectCoverageOverview");
         } else if (containsAny(normalized, "应用", "app", "在线", "运行状态", "状态")) {
             addAll(toolNames, "getApps", "getOnlineApps", "searchAppByName", "getAppDetail");
         } else if (containsAny(normalized, "代码", "类", "方法", "调用关系", "调用图", "上下游", "依赖")) {
-            addAll(toolNames, "searchCodeRelation", "getClassCallGraph", "getCallGraph");
+            addAll(toolNames, "searchCodeRelation", "getClassCallGraph", "getCallGraph", "analyzeMethodCallChain");
         } else {
             addAll(toolNames, "getProjectOverview", "getProjectInfo", "getProjectStatistics", "getApps", "getProjectCoverageOverview");
+        }
+
+        if (question != null) {
+            String loweredQuestion = question.toLowerCase(Locale.ROOT);
+            if (containsAny(loweredQuestion, "调用链", "调用关系", "上下游", "调用图", "链路")
+                    && containsAny(loweredQuestion, "方法", "method", "函数")) {
+                addAll(toolNames, "getCallGraph", "analyzeMethodCallChain", "getClassCallGraph");
+            }
+            if (containsAny(loweredQuestion, "bug", "缺陷", "风险", "可能存在", "潜在")
+                    && containsAny(loweredQuestion, "方法", "method", "函数")) {
+                addAll(toolNames, "detectBugsInMethod", "searchCodeRelation");
+            }
         }
 
         return toolNames;
@@ -349,6 +365,18 @@ public class AIAgentService {
         }
         String normalized = text.replaceAll("\\s+", " ").trim();
         return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength) + "...";
+    }
+
+    private String extractCurrentQuestionForRouting(String userMessage) {
+        if (userMessage == null || userMessage.trim().isEmpty()) {
+            return "";
+        }
+        int markerIndex = userMessage.lastIndexOf("[当前问题]");
+        if (markerIndex < 0) {
+            return userMessage.trim();
+        }
+        String question = userMessage.substring(markerIndex + "[当前问题]".length()).trim();
+        return question.isEmpty() ? userMessage.trim() : question;
     }
 
     private void registerToolBinding(String alias, ToolMethodBinding binding, ToolMethodSchema schema) {
@@ -2583,6 +2611,10 @@ public class AIAgentService {
         if (session != null) {
             conversationMemory.addAssistantMessage(session.getSessionId(), answer, null);
         }
+    }
+
+    public String clearConversationMemory(String userId, String projectId) {
+        return conversationMemory.clearUserProjectSessions(userId, projectId);
     }
 
     // ==================== 公开访问接口 ====================

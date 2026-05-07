@@ -155,7 +155,11 @@
                             <div class="ai-eyebrow">Session Memory</div>
                             <h3>会话列表</h3>
                         </div>
-                        <button id="aiNewSessionButton" class="ui mini teal button" type="button">新会话</button>
+                        <div class="ui mini buttons">
+                            <button id="aiClearMemoryButton" class="ui mini basic button" type="button">清空记忆</button>
+                            <div class="or"></div>
+                            <button id="aiNewSessionButton" class="ui mini teal button" type="button">新会话</button>
+                        </div>
                     </div>
 
                     <div class="ai-session-toolbar">

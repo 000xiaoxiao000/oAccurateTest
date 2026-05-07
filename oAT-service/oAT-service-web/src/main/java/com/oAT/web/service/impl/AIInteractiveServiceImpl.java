@@ -145,6 +145,22 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         return sessionState;
     }
 
+    @Override
+    public String clearSessionMemory(String projectId, UserVo user) {
+        if (user == null || !StringUtils.hasText(projectId)) {
+            return "";
+        }
+        if (aiAgentService != null) {
+            aiAgentService.clearConversationMemory(user.getId(), projectId);
+        }
+        String cacheKey = buildSessionStoreKey(projectId, user.getId());
+        String legacyCacheKey = buildLegacySessionStoreKey(projectId, user.getId());
+        redisTemplate.delete(cacheKey);
+        redisTemplate.delete(legacyCacheKey);
+        logger.info("{} action=clear status=success projectId={} userId={}", SESSION_LOG_PREFIX, projectId, user.getId());
+        return "";
+    }
+
     private String callAIAgent(ProjectVo project, List<AppVo> apps, UserVo user,
                                String question, String pageContext, String imageData) {
         if (aiAgentService == null) {
