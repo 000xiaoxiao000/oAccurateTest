@@ -191,6 +191,7 @@
         // 设置
         if (typeof isShowUnion != 'undefined') {
             cy.settings.subSelectUnionNode = isShowUnion;
+            refreshSelectedSnapshotReferenceHighlight(false);
         }
         // cy.on('mousemove', 'node', showDetail);
         // 显示右键菜单

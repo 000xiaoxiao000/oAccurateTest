@@ -263,14 +263,28 @@ edge.snapshot-reference {
   text-background-padding: 2px;
 }
 
+edge.snapshot-reference.hidden-reference {
+  display: none;
+}
+
 edge.snapshot-reference.subSelected {
   z-index: 1200;
   line-style: solid;
   line-color: #0284c7;
   target-arrow-color: #0284c7;
+  target-arrow-shape: triangle;
   width: 4px;
-  opacity: 0.95;
+  opacity: 1;
   color: #075985;
+  font-size: 9px;
+  font-weight: 600;
+  text-background-color: #dbeafe;
+  text-background-opacity: 0.98;
+  text-background-padding: 3px;
+}
+
+edge.snapshot-reference.subSelected[weight] {
+  line-style: solid;
 }
 
 edge.app-relation {

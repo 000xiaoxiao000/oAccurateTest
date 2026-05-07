@@ -173,10 +173,10 @@ function buildMap(data) {
             }
         });
 
-        // 选中节点后，刷新所选快照的关联高亮
-        cy.on('select unselect', 'node.snapshot', function (event) {
+        // 选中节点后，刷新快照与代码/表的双向关联高亮
+        cy.on('select unselect', 'node.snapshot,node.code_class,node.table', function (event) {
             if (cy.settings.subSelectUnionNode()) {
-                doSubSelectUnionNode(cy.nodes('node.snapshot:selected'));
+                refreshSelectedSnapshotReferenceHighlight(false);
             }
         });
 
@@ -192,7 +192,9 @@ function buildMap(data) {
         // 节点，点击节点，根据选中的尾节点，突出显示最长路径中的节点
         cy.on('tap', 'node', function (event) {
             highlightLongestPathFromNode(event.target);
-            refreshSelectedSnapshotReferenceHighlight();
+            if (cy.settings.subSelectUnionNode()) {
+                refreshSelectedSnapshotReferenceHighlight(false);
+            }
         });
 
         // 节点，鼠标按下，节点与边增加高亮
@@ -205,7 +207,9 @@ function buildMap(data) {
             clearNodeOutgoingHighlight();
             eles.select();
             eles.outgoers().select();
-            refreshSelectedSnapshotReferenceHighlight();
+            if (cy.settings.subSelectUnionNode()) {
+                refreshSelectedSnapshotReferenceHighlight(false);
+            }
         });
 
         // 节点，鼠标右键单击，清除所有节点node的边和高亮
@@ -416,6 +420,20 @@ function refreshSnapshotReferenceEdges() {
     });
 }
 
+function showSnapshotReferenceEdges() {
+    if (!window.cy) {
+        return;
+    }
+    cy.edges('.snapshot-reference').removeClass('hidden-reference');
+}
+
+function hideSnapshotReferenceEdges() {
+    if (!window.cy) {
+        return;
+    }
+    cy.edges('.snapshot-reference').addClass('hidden-reference').removeClass('subSelected');
+}
+
 function findReferenceNode(referenceId) {
     var directNode = cy.$id(referenceId);
     if (directNode.nonempty()) {
@@ -588,33 +606,61 @@ function clearNodeOutgoingHighlight() {
     cy.elements('.highlight').removeClass('highlight');
 }
 
-function refreshSelectedSnapshotReferenceHighlight() {
+function refreshSelectedSnapshotReferenceHighlight(showMissingToast) {
     if (window.cy && cy.settings.subSelectUnionNode && cy.settings.subSelectUnionNode()) {
-        doSubSelectUnionNode(cy.nodes('node.snapshot:selected'));
+        showSnapshotReferenceEdges();
+        doSubSelectUnionNode(cy.nodes(':selected'), showMissingToast === true);
+        return;
     }
+    hideSnapshotReferenceEdges();
+    cy.batch(function () {
+        cy.nodes('.subSelected').removeClass('subSelected');
+        cy.edges('.snapshot-reference').removeClass('subSelected');
+    });
 }
 
 // 子选中关联节点
-function doSubSelectUnionNode(ele) {
+function doSubSelectUnionNode(ele, showMissingToast) {
     cy.batch(function () {
         refreshSnapshotReferenceEdges();
+        showSnapshotReferenceEdges();
         cy.edges('.snapshot-reference').removeClass('subSelected');
         cy.nodes(".subSelected").removeClass("subSelected");
-        var matchedCount = 0;
-        ele.forEach(function (node) {
-            var references = node.data('references') || [];
+        var matchedIds = {};
+        var selectedNodes = ele && ele.nonempty && ele.nonempty() ? ele : cy.collection();
+        var selectedSnapshots = selectedNodes.filter('node.snapshot');
+        var selectedReferences = selectedNodes.not('node.snapshot');
+
+        selectedSnapshots.forEach(function (snapshotNode) {
+            var references = snapshotNode.data('references') || [];
             references.forEach(function (r) {
                 var referenceNode = findReferenceNode(r);
                 if (referenceNode.nonempty()) {
-                    referenceNode.addClass("subSelected");
-                    matchedCount += referenceNode.length;
-                    node.edgesTo(referenceNode).filter('.snapshot-reference').addClass('subSelected');
+                    markSnapshotReference(snapshotNode, referenceNode, matchedIds);
                 }
             });
         });
-        if (matchedCount === 0 && ele.length > 0 && typeof showToast === 'function') {
+
+        selectedReferences.forEach(function (referenceNode) {
+            referenceNode.connectedEdges('.snapshot-reference').forEach(function (edge) {
+                var snapshotNode = edge.connectedNodes('node.snapshot').first();
+                if (snapshotNode.nonempty()) {
+                    markSnapshotReference(snapshotNode, referenceNode, matchedIds);
+                }
+            });
+        });
+
+        if (Object.keys(matchedIds).length === 0 && selectedNodes.length > 0 && showMissingToast && typeof showToast === 'function') {
             showToast('当前画布没有可高亮的关联节点，请先开启代码或表结构图层', 'info');
         }
+    });
+}
+
+function markSnapshotReference(snapshotNode, referenceNode, matchedIds) {
+    snapshotNode.addClass("subSelected");
+    referenceNode.addClass("subSelected");
+    snapshotNode.edgesTo(referenceNode).filter('.snapshot-reference').addClass('subSelected').forEach(function (edge) {
+        matchedIds[edge.id()] = true;
     });
 }
 
