@@ -24,6 +24,16 @@
         z-index: 1;
 
     }
+
+    #tableSearchEmpty {
+        position: fixed;
+        top: 190px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2;
+        width: 420px;
+        max-width: calc(100% - 32px);
+    }
 </style>
 <div class="ui container" style="z-index: 2">
     <br>
@@ -46,10 +56,16 @@
                     on: 'hover'
                 });
             </script>
-            <div class="ui blue button" onclick="doSearch();">搜索</div>
+            <button id="tableSearchButton" type="submit" class="ui blue button">搜索</button>
         </div>
 
     </form>
+</div>
+<div id="tableSearchEmpty" class="ui placeholder segment">
+    <div class="ui icon header">
+        <i class="table icon"></i>
+        输入“数据库名 表名”查看表结构关联快照
+    </div>
 </div>
 <#--表结构关系图画布-->
 <div id="cy">
@@ -88,26 +104,39 @@
         if (!$('.ui.form').form('validate form')) {
             return false;
         }
-        database = $('#keyword').val().split(" ")[0];
-        table = $('#keyword').val().split(" ")[1];
+        var parts = $.trim($('#keyword').val()).split(/\s+/);
+        var database = parts[0];
+        var table = parts[1];
+
+        $('#tableSearchButton').addClass('loading disabled');
+        $.ajax({
+            url: "/p/${project.id}/doSearchTable/",
+            data: {database: database, table: table}
+        }).done(function (nodeJson) {
+            renderTableGraph(nodeJson);
+        }).fail(function (xhr) {
+            showToast(xhr.responseText || '表结构搜索失败，请稍后重试', 'error');
+        }).always(function () {
+            $('#tableSearchButton').removeClass('loading disabled');
+        });
+    }
+
+    function renderTableGraph(nodeJson) {
+        nodeJson = nodeJson || {nodes: [], edges: []};
+        nodeJson.nodes = nodeJson.nodes || [];
+        nodeJson.edges = nodeJson.edges || [];
 
         // 开始处理
         cy.startBatch();
-        var nodeJson = $.ajax({
-            url: "/p/${project.id}/doSearchTable/",
-            data: "DataBase=" + database + "&table=" + table,
-            async: false
-        }).responseJSON;
-
         // 基于选择器删除所有
-        cy.remove("");
+        cy.elements().remove();
         nodeJson.nodes.forEach(function (node) {
             cy.add({
                 group: 'nodes', data: node, classes: [node.type]
             });
         });
         nodeJson.edges.forEach(function (edge) {
-            style = "";
+            var style = "";
             if (edge.action.indexOf("delete") != -1) {
                 style = 'red';
             } else if (edge.action.indexOf("update") != -1) {
@@ -120,17 +149,20 @@
             });
         });
 
-        cy.layout({
-            name: 'breadthfirst',
-            fit: true, // whether to fit the viewport to the graph
-            directed: true, // 树节点是否向下
-            padding: 100, // padding on fit
-            circle: false,// put depths in concentric circles if true, put depths top down if false
-            grid: true,
-            spacingFactor: 1,
-        }).run();
+        if (nodeJson.nodes.length > 0) {
+            cy.layout({
+                name: 'breadthfirst',
+                fit: true, // whether to fit the viewport to the graph
+                directed: true, // 树节点是否向下
+                padding: 100, // padding on fit
+                circle: false,// put depths in concentric circles if true, put depths top down if false
+                grid: true,
+                spacingFactor: 1,
+            }).run();
+        }
         // 结束处理
         cy.endBatch();
+        $('#tableSearchEmpty').toggle(nodeJson.nodes.length <= 1);
     }
 
     $('.ui.form').form({
@@ -149,7 +181,7 @@
                     prompt: '搜索关键字不能超过30个字符'
                 },{
                         type: 'regExp',
-                        value: '^\\S+ \\S+$',
+                        value: '^\\S+\\s+\\S+$',
                         prompt: '输入格式为:数据库名 表名'
                 }]
             }

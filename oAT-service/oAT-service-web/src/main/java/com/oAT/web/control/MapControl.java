@@ -13,6 +13,8 @@ import com.oAT.web.service.*;
 import com.oAT.web.service.entity.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.Assert;
@@ -27,6 +29,8 @@ import java.util.stream.Collectors;
 @Controller
 @RequestMapping("/p/{projectId}/map")
 public class MapControl {
+
+    private static final Logger logger = LoggerFactory.getLogger(MapControl.class);
 
     @Autowired
     SystemSnapshotService systemSnapshotService;
@@ -86,7 +90,7 @@ public class MapControl {
         List<ImageElement> results = new ArrayList<>();
         results.addAll(new SnapshotLayer(snapshots).elements());
         if (layerList.contains("code")) {
-            results.addAll(buildCodeLayer(projectId, appId).elements());
+            results.addAll(buildCodeLayerElements(projectId, appId));
         }
         if (layerList.contains("table")) {
             results.addAll(new SnapshotTableLayer(snapshots).elements());
@@ -262,9 +266,71 @@ public class MapControl {
         }
     }
 
+    private List<ImageElement> buildCodeLayerElements(String projectId, String appId) {
+        String unavailableMessage = null;
+        try {
+            List<ImageElement> elements = buildCodeLayer(projectId, appId).elements();
+            if (!elements.isEmpty()) {
+                return elements;
+            }
+            unavailableMessage = "未解析到版本源码调用关系，已展示快照覆盖类";
+        } catch (BusinessException | IllegalStateException e) {
+            logger.warn("源码图层构建失败，已跳过代码图层, projectId={}, appId={}, reason={}", projectId, appId, e.getMessage());
+            unavailableMessage = e.getMessage();
+        }
+        List<ImageElement> runtimeCodeElements = buildRuntimeSnapshotCodeLayerElements(projectId, appId);
+        if (!runtimeCodeElements.isEmpty()) {
+            return runtimeCodeElements;
+        }
+        return Collections.singletonList(buildNoticeNode("code-layer-unavailable", unavailableMessage));
+    }
+
+    private List<ImageElement> buildRuntimeSnapshotCodeLayerElements(String projectId, String appId) {
+        List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId, appId);
+        return snapshots.stream()
+                .flatMap(SystemSnapshot::getCodeToClass)
+                .map(this::normalizeCodeClassName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .map(this::buildRuntimeCodeClassNode)
+                .collect(Collectors.toList());
+    }
+
+    private String normalizeCodeClassName(String className) {
+        if (!StringUtils.hasText(className)) {
+            return null;
+        }
+        String normalized = className.trim().replace('\\', '/');
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return normalized.replace('/', '.');
+    }
+
+    private ImageElement buildRuntimeCodeClassNode(String className) {
+        ImageData data = new ImageData(className);
+        data.name = ClassUtil.getClassSimpleName(className);
+        data.describe = className;
+        data.weight = 20;
+        ImageElement element = new ImageElement(data);
+        element.group = "nodes";
+        element.classes = new String[]{"code_class", "runtime-code"};
+        return element;
+    }
+
+    private ImageElement buildNoticeNode(String id, String message) {
+        ImageData data = new ImageData(id);
+        data.name = message;
+        data.weight = 20;
+        ImageElement element = new ImageElement(data);
+        element.group = "nodes";
+        element.classes = new String[]{"notice"};
+        return element;
+    }
+
     private SourceCodeLayer buildCodeLayer(String projectId, String appId) throws BusinessException {
         VersionItemVo lastVersion = versionService.getLastVersionItem(projectId, appId);
-        if (lastVersion == null) {
+        if (lastVersion == null || !StringUtils.hasText(lastVersion.getProgramFile())) {
             throw new BusinessException("找不到版本程序文件，无法构建源码图层");
         }
         List<ClassStructure> sources;

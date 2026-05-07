@@ -45,7 +45,7 @@
     }
   },
   {
-    "selector": "edge.usecaseToTable",
+    "selector": "edge.usecaseToTable, edge.snapshotToTable",
     "style": {
       "label": "data(label)",
       "target-arrow-shape": "triangle"

@@ -333,7 +333,7 @@
         if (type == 'empty') {
             return '<div class="message empty"><div class="header">无结果</div><div class="description">你的搜索没有返回任何结果</div></div>';
         } else {
-            return '<div class="message ' + type + '> ' + message + '</div>'
+            return '<div class="message ' + type + '"> ' + message + '</div>'
         }
     }
 
@@ -347,6 +347,7 @@
             action: 'search',
             url: '/p/${project.id}/map/search?q={query}',
             onResponse: function (r) {
+                r.results = r.results || [];
                 r.results.forEach(function (results) { // 删除为空的字段
                     for (var key in results) {
                         if (results[key] === '' || results[key] == null) {
@@ -358,6 +359,14 @@
             }
         },
         onSelect: function (results, response) {
+            var currentNode = cy.$id(results.id);
+            if (currentNode.nonempty()) {
+                cy.nodes(':selected').deselect();
+                currentNode.select();
+                cy.center(currentNode);
+                $(this).search('hide results');
+                return false;
+            }
             cy.loadElement("/p/${project.id}/map/layer/snapshot?id=" + results.id, true, false);
             $(this).search('hide results')
             return false;

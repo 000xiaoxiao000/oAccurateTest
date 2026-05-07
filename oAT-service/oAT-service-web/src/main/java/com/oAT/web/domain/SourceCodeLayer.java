@@ -46,7 +46,9 @@ public class SourceCodeLayer implements ImageLayer{
         // 基于包名获取权重
         classData.weight = getWeightByClassName(structure.getClassName());
         classData.name = getClassSimpleName(structure.getClassName());
-        result.add(buildDefaultNode(classData));
+        ImageElement classNode = buildDefaultNode(classData);
+        classNode.classes = new String[]{"code_class"};
+        result.add(classNode);
 
         // 继承关系
       /*  Optional.ofNullable(structure.getSuperName()).map(s -> {
@@ -95,14 +97,18 @@ public class SourceCodeLayer implements ImageLayer{
                 .sorted()
                 //.sorted(Collections.reverseOrder(Comparator.comparingInt(o -> o.split("\\.").length)))
                 .collect(Collectors.toList());
+        if (packages.isEmpty()) {
+            return map;
+        }
+        int bucketSize = Math.max(1, packages.size() / 4);
         for (int i = 0; i < packages.size(); i++) {
-            map.put(packages.get(i), i / (packages.size() / 4) + 1);
+            map.put(packages.get(i), i / bucketSize + 1);
         }
         return map;
     }
 
     private int getWeightByClassName(String packageName) {
-        return weights.get(packageName) * Weight_unit + Weight_start;
+        return weights.getOrDefault(packageName, 1) * Weight_unit + Weight_start;
     }
 
     private static String getClassSimpleName(String className) {

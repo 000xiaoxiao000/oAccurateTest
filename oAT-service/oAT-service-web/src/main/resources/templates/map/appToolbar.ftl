@@ -1,6 +1,12 @@
 <#--地图 应用视角工具栏-->
 <div class="ui text menu" style="margin: 0px">
-    <a class="blue item popup layer toggle ${codeActive!}" value="code" data-content="代码"
+    <a class="blue item popup" href="/p/${project.id}/map/home" data-content="返回项目图谱"
+       data-variation="mini inverted"
+       data-position="bottom center">
+        <i class="arrow left icon"></i>
+    </a>
+    <div class="item" style="font-size: 1.2em">|</div>
+    <a class="blue item popup layer toggle ${codeActive!}" value="code" data-content="源码类调用图层"
        data-variation="mini inverted"
        data-position="bottom center">
         <i class="code icon"></i>
@@ -9,24 +15,24 @@
    data-position="bottom center">
     <i class="th list icon"></i>
 </a>-->
-    <a class="blue item popup layer toggle ${tableActive!}" value="table" data-content="表结构"
+    <a class="blue item popup layer toggle ${tableActive!}" value="table" data-content="表结构图层"
        data-variation="mini inverted"
        data-position="bottom center">
         <i class="table icon"></i>
     </a>
     <div class="item" style="font-size: 1.2em">|</div>
-    <a class="blue item popup hot toggle" data-content="热点" data-variation="mini inverted"
+    <a class="blue item popup hot toggle" data-content="关联热度"
        data-position="bottom center">
         <i class="dot circle outline icon"></i>
     </a>
-    <a class="blue item popup union toggle" data-content="查看关联" data-variation="mini inverted"
+    <a class="blue item popup union toggle" data-content="高亮所选快照关联的代码/表"
        data-position="bottom center">
         <i class="share alternate icon"></i>
     </a>
 </div>
 <script>
     $("#right_toolbar .popup").popup();
-    $("#right_toolbar a.item").click(function (e) {
+    $("#right_toolbar a.item.toggle").click(function (e) {
         $(e.delegateTarget).toggleClass("active");
     })
 </script>
@@ -65,5 +71,15 @@
             });
         }
     });
-</script>
 
+    if ($("#right_toolbar .item.layer.toggle[value='code'].active").length > 0) {
+        $("#right_toolbar .item.union.toggle").addClass("active");
+        $(function () {
+            setTimeout(function () {
+                if (window.cy) {
+                    doSubSelectUnionNode(cy.nodes(".snapshot"));
+                }
+            }, 300);
+        });
+    }
+</script>
