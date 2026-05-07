@@ -189,9 +189,9 @@ function buildMap(data) {
             }
         });
 
-        // 节点，点击节点，根据选中的尾节点，突出显示最长路径中的节点
+        // 节点，点击节点：表节点按表关系高亮快照，其它节点保留原调用链高亮。
         cy.on('tap', 'node', function (event) {
-            highlightLongestPathFromNode(event.target);
+            highlightNodeAssociation(event.target);
             if (cy.settings.subSelectUnionNode()) {
                 refreshSelectedSnapshotReferenceHighlight(false);
             }
@@ -199,14 +199,13 @@ function buildMap(data) {
 
         // 节点，鼠标按下，节点与边增加高亮
         cy.on('mousedown', 'node', function (event) {
-            highlightNodeOutgoingPath(event.target);
+            highlightNodeAssociation(event.target);
         });
-        // 节点，鼠标抬起，取消高亮，节点与边全部选中
+        // 节点，鼠标抬起，取消高亮，节点与边全部选中；表节点按表关系选中关联快照。
         cy.on('mouseup', 'node', function (event) {
             var eles = event.target;
             clearNodeOutgoingHighlight();
-            eles.select();
-            eles.outgoers().select();
+            selectNodeAssociation(eles);
             if (cy.settings.subSelectUnionNode()) {
                 refreshSelectedSnapshotReferenceHighlight(false);
             }
@@ -298,13 +297,13 @@ function prepareInitialMapElements(data) {
 }
 
 function findReferenceElement(referenceId, elements, nodesById) {
-    if (nodesById[referenceId] && !hasClass(nodesById[referenceId], 'snapshot')) {
+    if (nodesById[referenceId] && !hasClass(nodesById[referenceId], 'snapshot') && !hasClass(nodesById[referenceId], 'table')) {
         return nodesById[referenceId];
     }
     var normalized = normalizeReferenceId(referenceId);
     for (var i = 0; i < elements.length; i++) {
         var element = elements[i];
-        if (!element || element.group !== 'nodes' || hasClass(element, 'snapshot') || !element.data) {
+        if (!element || element.group !== 'nodes' || hasClass(element, 'snapshot') || hasClass(element, 'table') || !element.data) {
             continue;
         }
         if (normalizeReferenceId(element.data.id) === normalized || normalizeReferenceId(element.data.name) === normalized) {
@@ -441,7 +440,7 @@ function findReferenceNode(referenceId) {
     }
     var normalized = normalizeReferenceId(referenceId);
     return cy.nodes().filter(function (node) {
-        if (node.hasClass('snapshot')) {
+        if (node.hasClass('snapshot') || node.hasClass('table')) {
             return false;
         }
         return normalizeReferenceId(node.id()) === normalized
@@ -554,17 +553,39 @@ function doFind(key) {
 function showHot() {
     cy.batch(function () {
         cy.filter(function (element, i) {
-            return element.isNode() && !element.hasClass("snapshot");
-        }).addClass('hot');
+            return element.isNode() && !element.hasClass("snapshot") && element.data('unionCount') > 0;
+        }).forEach(function (node) {
+            if (node.data('hotName')) {
+                node.data('normalName', node.data('normalName') || node.data('name'));
+                node.data('name', node.data('hotName'));
+            }
+            node.addClass('hot');
+        });
     });
 }
 
 function closeHot() {
     cy.batch(function () {
-        cy.nodes('.hot').removeClass('hot');
+        cy.nodes('.hot').forEach(function (node) {
+            if (node.data('normalName')) {
+                node.data('name', node.data('normalName'));
+            }
+            node.removeClass('hot');
+        });
     });
 }
 
+
+function highlightNodeAssociation(node) {
+    if (!node || !node.isNode || !node.isNode()) {
+        return;
+    }
+    if (node.hasClass('table')) {
+        highlightTableSnapshotReferences(node);
+        return;
+    }
+    highlightLongestPathFromNode(node);
+}
 
 function highlightLongestPathFromNode(node) {
     if (!node || !node.isNode || !node.isNode()) {
@@ -588,15 +609,28 @@ function highlightLongestPathFromNode(node) {
     });
 }
 
-function highlightNodeOutgoingPath(node) {
-    if (!node || !node.isNode || !node.isNode()) {
-        return;
-    }
+function highlightTableSnapshotReferences(tableNode) {
     cy.batch(function () {
         cy.elements('.highlight').removeClass('highlight');
-        var highlighted = node.union(node.outgoers());
-        highlighted.addClass('highlight');
+        var tableEdges = tableNode.connectedEdges('edge.table');
+        var relatedSnapshots = tableEdges.connectedNodes('node.snapshot');
+        tableNode.union(tableEdges).union(relatedSnapshots).addClass('highlight');
     });
+}
+
+function highlightNodeOutgoingPath(node) {
+    highlightNodeAssociation(node);
+}
+
+function selectNodeAssociation(node) {
+    node.select();
+    if (node.hasClass('table')) {
+        var tableEdges = node.connectedEdges('edge.table');
+        tableEdges.select();
+        tableEdges.connectedNodes('node.snapshot').select();
+        return;
+    }
+    node.outgoers().select();
 }
 
 function clearNodeOutgoingHighlight() {

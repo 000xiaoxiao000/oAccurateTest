@@ -54,12 +54,14 @@ node[weight=60] {
 }
 
 node.hot {
-  content: data(unionCount);
-  text-valign: center;
-  text-margin-y: 0;
-  font-size: 11px;
-  color: #ffffff;
-  text-background-opacity: 0;
+  content: data(name);
+  text-valign: bottom;
+  text-margin-y: 7px;
+  font-size: 10px;
+  color: #0f172a;
+  text-background-color: #fff7ed;
+  text-background-opacity: 0.95;
+  text-background-padding: 3px;
   background-color: mapData(unionCount, 0, 10, #cbd5e1, #ef4444);
 }
 
@@ -102,6 +104,12 @@ node.table {
   font-size: 8px;
   background-color: #60a5fa;
   shape: round-rectangle;
+}
+
+node.table.hot {
+  content: data(name);
+  font-size: 10px;
+  color: #0f172a;
 }
 
 node.table.subSelected {

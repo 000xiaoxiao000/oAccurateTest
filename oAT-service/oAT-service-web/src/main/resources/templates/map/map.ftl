@@ -196,6 +196,7 @@
             if (ele === cy) {
                 ele = cy.$(":selected")[0];
             }
+            var showCodeMetrics = ele.isNode && ele.isNode() && ele.hasClass('code_class') && !ele.hasClass('table');
             var doLineCount = getUniqueCount(ele.data('doLines'));
             var totalLineCount = getUniqueCount(ele.data('lineTotal'));
             var executeBranchCount = getUniqueCount(ele.data('executebranch'));
@@ -209,22 +210,22 @@
             if (ele.data('describe') != null) {
                 files[2] = {file: "描述：", value: ele.data('describe')};
             }
-            if (ele.data('doLines') != null) {
+            if (showCodeMetrics && ele.data('doLines') != null) {
                 files[3] = {file: "执行到的代码行数：", value: doLineCount + " 行"};
             }
-            if (ele.data('lineTotal') != null) {
+            if (showCodeMetrics && ele.data('lineTotal') != null) {
                 files[4] = {file: "代码总行数：", value: totalLineCount + " 行"};
             }
-            if (ele.data('lineTotal') != null || ele.data('doLines') != null) {
+            if (showCodeMetrics && (ele.data('lineTotal') != null || ele.data('doLines') != null)) {
                 files[5] = {file: "代码覆盖率：", value: coverageRate};
             }
-            if (ele.data('executebranch') != null) {
+            if (showCodeMetrics && ele.data('executebranch') != null) {
                 files[6] = {file: "执行分支数：", value: executeBranchCount};
             }
-            if (ele.data('branchTotal') != null) {
+            if (showCodeMetrics && ele.data('branchTotal') != null) {
                 files[7] = {file: "分支总数：", value: totalBranchCount};
             }
-            if (ele.data('cyclo') != null) {
+            if (showCodeMetrics && ele.data('cyclo') != null) {
                 files[8] = {file: "圈复杂度V(G)：", value: ele.data('cyclo')};
             }
         }

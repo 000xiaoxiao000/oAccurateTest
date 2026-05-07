@@ -60,6 +60,18 @@
         display: inline-block;
     }
 
+    #bottom_nodeInfo .sql-detail-list pre {
+        margin: 4px 0 0 0;
+        padding: 6px 8px;
+        max-width: 100%;
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        color: #334155;
+    }
+
     #right_toolbar {
         position: absolute;
         top: 55px;
@@ -223,6 +235,7 @@
             if (ele === cy) {
                 ele = cy.$(":selected")[0];
             }
+            var showCodeMetrics = ele.isNode && ele.isNode() && ele.hasClass('code_class') && !ele.hasClass('table');
             files[0] = {file: "id：", value: ele.id()};
             if (ele.data.hasOwnProperty('name') && ele.data('name') != null) {
                 files[1] = {file: "名称：", value: ele.data('name')};
@@ -230,29 +243,32 @@
             if (ele.data.hasOwnProperty('describe') && ele.data('describe') != null) {
                 files[2] = {file: "描述：", value: ele.data('describe')};
             }
-            if (ele.data('doLines') != null) {
+            if (showCodeMetrics && ele.data('doLines') != null) {
                 files[3] = {file: "覆盖代码行数：", value: formatMetricValue(ele.data('doLines'))};
             }
-            if (ele.data('lineTotal') != null) {
+            if (showCodeMetrics && ele.data('lineTotal') != null) {
                 files[4] = {file: "总代码行数：", value: formatMetricValue(ele.data('lineTotal'))};
             }
-            if (ele.data('coverageRate') != null) {
+            if (showCodeMetrics && ele.data('coverageRate') != null) {
                 files[5] = {file: "代码覆盖率：", value: formatRateValue(ele.data('coverageRate')) + "%"};
             }
-            if (ele.data('cyclo') != null) {
+            if (showCodeMetrics && ele.data('cyclo') != null) {
                 files[6] = {file: "圈复杂度V(G)：", value: ele.data('cyclo')};
             }
-            if (ele.data('executeMethodTotal') != null) {
+            if (showCodeMetrics && ele.data('executeMethodTotal') != null) {
                 files[7] = {file: "覆盖方法数：", value: formatMetricValue(ele.data('executeMethodTotal'))};
             }
-            if (ele.data('methodTotal') != null) {
+            if (showCodeMetrics && ele.data('methodTotal') != null) {
                 files[8] = {file: "方法总数：", value: formatMetricValue(ele.data('methodTotal'))};
+            }
+            if (ele.data('sqlContents') != null) {
+                files[9] = {file: "关联 SQL：", value: formatSqlContents(ele.data('sqlContents'))};
             }
         }
         files.forEach(function (a) {
             $('#bottom_nodeInfo .list').append(
                     '<div class="item">' +
-                    '            <div class="header">' + a.file +
+                    '            <div class="header">' + escapeHtml(a.file) +
                     '            </div>' + a.value + '</div>');
         });
     }
@@ -270,6 +286,22 @@
             return value;
         }
         return numberValue.toFixed(2).replace(/\.00$/, '');
+    }
+
+    function formatSqlContents(value) {
+        var sqls = $.isArray(value) ? value : [value];
+        return '<div class="sql-detail-list">' + sqls.map(function (sql, index) {
+            return '<pre>' + escapeHtml((index + 1) + '. ' + sql) + '</pre>';
+        }).join('') + '</div>';
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
     }
 
     // 显示右键菜单
