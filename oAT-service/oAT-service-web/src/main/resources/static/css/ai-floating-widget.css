@@ -441,6 +441,26 @@
     transition: opacity 0.16s ease, transform 0.16s ease, background 0.16s ease;
 }
 
+.ai-floating-icon-btn:hover {
+    background: rgba(20, 184, 166, 0.12);
+    color: #0f766e;
+    transform: translateY(-1px);
+}
+
+.ai-floating-icon-btn i.icon {
+    margin: 0;
+}
+
+.ai-floating-danger-btn {
+    background: rgba(254, 242, 242, 0.96);
+    color: #b91c1c;
+}
+
+.ai-floating-danger-btn:hover {
+    background: rgba(254, 226, 226, 0.96);
+    color: #991b1b;
+}
+
 .ai-floating-icon-btn.is-disabled,
 .ai-floating-icon-btn:disabled {
     opacity: 0.42;
