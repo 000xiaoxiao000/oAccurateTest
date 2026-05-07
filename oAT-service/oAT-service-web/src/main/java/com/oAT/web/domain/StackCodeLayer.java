@@ -186,7 +186,7 @@ public class StackCodeLayer implements ImageLayer {
         imageData.packageAndClassName = className;
         imageData.methodName = methodName;
         ImageElement element = buildDefaultNode(imageData);
-        element.classes = new String[]{"code_class"};
+        element.classes = new String[]{"code_class", "stack_code"};
         return element;
     }
 

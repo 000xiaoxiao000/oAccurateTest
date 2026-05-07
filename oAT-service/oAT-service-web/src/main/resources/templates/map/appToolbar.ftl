@@ -68,18 +68,12 @@
         } else {
             cy.batch(function () {
                 cy.nodes(".subSelected").removeClass('subSelected');
+                cy.edges(".snapshot-reference").removeClass('subSelected');
             });
         }
     });
 
     if ($("#right_toolbar .item.layer.toggle[value='code'].active").length > 0) {
         $("#right_toolbar .item.union.toggle").addClass("active");
-        $(function () {
-            setTimeout(function () {
-                if (window.cy) {
-                    doSubSelectUnionNode(cy.nodes(".snapshot"));
-                }
-            }, 300);
-        });
     }
 </script>

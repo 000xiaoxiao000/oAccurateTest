@@ -77,14 +77,14 @@ var appSnapshotLayoutOptions = {
 };
 
 var codeLayerLayoutOptions = Object.assign({}, coseLayoutOptions, {
-    padding: 140,
-    componentSpacing: 80,
-    nodeRepulsion: 900000,
-    idealEdgeLength: 95,
-    edgeElasticity: 120,
-    gravity: 90,
-    numIter: 700,
-    initialTemp: 80
+    padding: 95,
+    componentSpacing: 130,
+    nodeRepulsion: 1800000,
+    idealEdgeLength: 150,
+    edgeElasticity: 90,
+    gravity: 55,
+    numIter: 1000,
+    initialTemp: 120
 });
 
 function getMapLayoutOptions(data) {
@@ -141,6 +141,8 @@ var breadthfirstLayoutOptions = {
 
 function buildMap(data) {
     try {
+        data = prepareInitialMapElements(data);
+        seedStableNodePositions(data);
         var layoutOptions = getMapLayoutOptions(data);
         var cy = window.cy = cytoscape({
             container: document.getElementById('map_body'), // 容器id
@@ -148,7 +150,7 @@ function buildMap(data) {
             maxZoom: 6, // 缩放最大比例
             wheelSensitivity: 0.1, boxSelectionEnabled: true,// 是否允许框选 按住ctrl或shift 拖动鼠标框选
             elements: data,
-            style: fetch('/css/map.cycss?v=3').then(function (value) {
+            style: fetch('/css/map.cycss?v=4').then(function (value) {
                 return value.text();
             }),
             layout: layoutOptions
@@ -171,22 +173,10 @@ function buildMap(data) {
             }
         });
 
-        // 选中节点后
-        cy.on('select', 'node.snapshot', function (event) {
-            var ele = event.target;
-            //  是否显示关联节点
+        // 选中节点后，刷新所选快照的关联高亮
+        cy.on('select unselect', 'node.snapshot', function (event) {
             if (cy.settings.subSelectUnionNode()) {
                 doSubSelectUnionNode(cy.nodes('node.snapshot:selected'));
-            }
-        });
-        // 取消选中 只删除当前取消节点
-        cy.on('unselect', 'node.snapshot', function (event) {
-            if (cy.settings.subSelectUnionNode()) {
-                doSubSelectUnionNode(cy.nodes('node.snapshot:selected'));
-            } else {
-                cy.batch(function () {
-                    cy.nodes(".subSelected").removeClass('subSelected');
-                });
             }
         });
 
@@ -201,56 +191,21 @@ function buildMap(data) {
 
         // 节点，点击节点，根据选中的尾节点，突出显示最长路径中的节点
         cy.on('tap', 'node', function (event) {
-            var target = event.target;
-
-            // 从目标节点运行dijkstra算法
-            var dijkstra = cy.elements().dijkstra(target, function (edge) {
-                return edge.data('weight');
-            });
-
-            // 从目标节点获取到每个节点的最短路径
-            var pathsTo = {};
-            cy.nodes().forEach(function (node) {
-                var path = dijkstra.pathTo(node);
-                pathsTo[node.id()] = path;
-            });
-
-            // 通过遍历所有路径获得最长路径
-            var longestPath = null;
-            cy.nodes().forEach(function (node) {
-                var path = pathsTo[node.id()];
-                if (path != null && (longestPath == null || path.distance > longestPath.distance)) {
-                    longestPath = path;
-                }
-            });
-
-            // 突出显示最长路径中的节点
-            cy.elements().removeClass('highlight');
-            if (longestPath != null) {
-                longestPath.forEach(function (node, index) {
-                    setTimeout(function () {
-                        node.addClass('highlight');
-                        node.animate({
-                            duration: 1000
-                        }, index * 1000);
-                    });
-                });
-            }
+            highlightLongestPathFromNode(event.target);
+            refreshSelectedSnapshotReferenceHighlight();
         });
 
         // 节点，鼠标按下，节点与边增加高亮
         cy.on('mousedown', 'node', function (event) {
-            var eles = event.target;
-            cy.elements().difference(eles.outgoers());
-            eles.addClass('highlight').outgoers().addClass('highlight');
+            highlightNodeOutgoingPath(event.target);
         });
         // 节点，鼠标抬起，取消高亮，节点与边全部选中
         cy.on('mouseup', 'node', function (event) {
             var eles = event.target;
-            eles.removeClass('highlight').outgoers().removeClass('highlight');
-
+            clearNodeOutgoingHighlight();
             eles.select();
             eles.outgoers().select();
+            refreshSelectedSnapshotReferenceHighlight();
         });
 
         // 节点，鼠标右键单击，清除所有节点node的边和高亮
@@ -260,7 +215,7 @@ function buildMap(data) {
             for (let i = 0; i < arr.length; i++) {
                 eles.edgesTo(arr[i]).style('label', '');
             }
-            cy.$('.highlight').removeClass('highlight').outgoers().removeClass('highlight');
+            clearNodeOutgoingHighlight();
         });
         // 边,鼠标右键单击，清除edge上的数字
         cy.on('cxttapstart', 'edge', function (event) {
@@ -286,13 +241,155 @@ function buildMap(data) {
     }
 }
 
+function prepareInitialMapElements(data) {
+    var elements = Array.isArray(data) ? data.slice() : [];
+    var nodesById = {};
+    var hasSnapshot = false;
+    elements.forEach(function (element) {
+        if (!element || element.group !== 'nodes' || !element.data || !element.data.id) {
+            return;
+        }
+        nodesById[element.data.id] = element;
+        if (hasClass(element, 'snapshot')) {
+            hasSnapshot = true;
+        }
+    });
+    if (!hasSnapshot) {
+        return elements;
+    }
+    var edgeIds = {};
+    elements.forEach(function (element) {
+        if (!element || element.group !== 'edges' || !element.data || !element.data.id) {
+            return;
+        }
+        edgeIds[element.data.id] = true;
+    });
+    elements.filter(function (element) {
+        return element && element.group === 'nodes' && hasClass(element, 'snapshot');
+    }).forEach(function (snapshotNode) {
+        var references = snapshotNode.data.references || [];
+        references.forEach(function (referenceId) {
+            var targetNode = findReferenceElement(referenceId, elements, nodesById);
+            if (!targetNode || !targetNode.data || !targetNode.data.id) {
+                return;
+            }
+            var edgeId = 'snapshot-reference-' + snapshotNode.data.id + '-' + targetNode.data.id;
+            if (edgeIds[edgeId]) {
+                return;
+            }
+            edgeIds[edgeId] = true;
+            elements.push({
+                group: 'edges',
+                classes: ['snapshot-reference'],
+                data: {
+                    id: edgeId,
+                    source: snapshotNode.data.id,
+                    target: targetNode.data.id,
+                    name: '关联'
+                }
+            });
+        });
+    });
+    return elements;
+}
+
+function findReferenceElement(referenceId, elements, nodesById) {
+    if (nodesById[referenceId] && !hasClass(nodesById[referenceId], 'snapshot')) {
+        return nodesById[referenceId];
+    }
+    var normalized = normalizeReferenceId(referenceId);
+    for (var i = 0; i < elements.length; i++) {
+        var element = elements[i];
+        if (!element || element.group !== 'nodes' || hasClass(element, 'snapshot') || !element.data) {
+            continue;
+        }
+        if (normalizeReferenceId(element.data.id) === normalized || normalizeReferenceId(element.data.name) === normalized) {
+            return element;
+        }
+    }
+    return null;
+}
+
+function hasClass(element, className) {
+    if (!element || !element.classes) {
+        return false;
+    }
+    return Array.isArray(element.classes)
+        ? element.classes.indexOf(className) >= 0
+        : String(element.classes).split(/\s+/).indexOf(className) >= 0;
+}
+
+function seedStableNodePositions(elements) {
+    if (!Array.isArray(elements)) {
+        return;
+    }
+    var nodes = elements.filter(function (element) {
+        return element && element.group === 'nodes' && element.data && element.data.id;
+    }).sort(function (left, right) {
+        return String(left.data.id).localeCompare(String(right.data.id));
+    });
+    var codeNodes = nodes.filter(function (node) {
+        return hasClass(node, 'code_class') && !hasClass(node, 'snapshot');
+    });
+    var snapshotNodes = nodes.filter(function (node) {
+        return hasClass(node, 'snapshot');
+    });
+    var tableNodes = nodes.filter(function (node) {
+        return hasClass(node, 'table');
+    });
+    var otherNodes = nodes.filter(function (node) {
+        return !hasClass(node, 'code_class') && !hasClass(node, 'snapshot') && !hasClass(node, 'table');
+    });
+
+    placeNodesOnRing(snapshotNodes, 0, 0, calculateRingRadius(snapshotNodes.length, 270, 26), -Math.PI / 2);
+    placeNodesOnRing(codeNodes, 0, 0, calculateRingRadius(codeNodes.length, 520, 30), 0);
+    placeNodesOnRing(tableNodes, 0, 0, calculateRingRadius(tableNodes.length, 720, 26), Math.PI / 4);
+    placeNodesOnRing(otherNodes, 0, 0, calculateRingRadius(otherNodes.length, 860, 30), Math.PI / 3);
+}
+
+function placeNodesOnRing(nodes, centerX, centerY, radius, angleOffset) {
+    if (!nodes || nodes.length === 0) {
+        return;
+    }
+    nodes.forEach(function (node, index) {
+        var position = readBackendPosition(node);
+        if (!position) {
+            var angle = angleOffset + (2 * Math.PI * index / Math.max(nodes.length, 1));
+            position = {
+                x: Math.round(centerX + radius * Math.cos(angle)),
+                y: Math.round(centerY + radius * Math.sin(angle))
+            };
+        }
+        node.position = position;
+    });
+}
+
+function readBackendPosition(node) {
+    var x = node.position && Number(node.position.x);
+    var y = node.position && Number(node.position.y);
+    if (!isNaN(x) && !isNaN(y) && (x !== 0 || y !== 0)) {
+        return {x: Math.round(x), y: Math.round(y)};
+    }
+    x = node.data && Number(node.data.x);
+    y = node.data && Number(node.data.y);
+    if (!isNaN(x) && !isNaN(y) && (x !== 0 || y !== 0)) {
+        return {x: Math.round(x), y: Math.round(y)};
+    }
+    return null;
+}
+
+function calculateRingRadius(count, minRadius, nodeGap) {
+    if (count <= 1) {
+        return minRadius;
+    }
+    return Math.max(minRadius, Math.ceil(count * nodeGap / (2 * Math.PI)));
+}
+
 function refreshSnapshotReferenceEdges() {
     if (!window.cy) {
         return;
     }
     cy.batch(function () {
-        cy.edges('.snapshot-reference').remove();
-        var edgeIds = {};
         cy.nodes('.snapshot').forEach(function (snapshotNode) {
             var references = snapshotNode.data('references') || [];
             references.forEach(function (referenceId) {
@@ -301,10 +398,9 @@ function refreshSnapshotReferenceEdges() {
                     return;
                 }
                 var edgeId = 'snapshot-reference-' + snapshotNode.id() + '-' + targetNode.id();
-                if (edgeIds[edgeId]) {
+                if (cy.$id(edgeId).nonempty()) {
                     return;
                 }
-                edgeIds[edgeId] = true;
                 cy.add({
                     group: 'edges',
                     classes: ['snapshot-reference'],
@@ -355,8 +451,10 @@ function applyComfortableFit(elements) {
         return;
     }
     cy.fit(target, 120);
-    if (cy.zoom() > 1.55) {
-        cy.zoom(1.55);
+    var hasStackCode = target.filter && target.filter('.stack_code').nonempty && target.filter('.stack_code').nonempty();
+    var maxZoom = hasStackCode ? 1.9 : 1.55;
+    if (cy.zoom() > maxZoom) {
+        cy.zoom(maxZoom);
         cy.center(target);
     }
     if (cy.zoom() < 0.45) {
@@ -378,6 +476,7 @@ function loadElement(url, select, fullLayout, title) {
         if (!Array.isArray(data)) {
             return cy.collection();
         }
+        seedStableNodePositions(data);
         return cy.add(data);
     }).then(function (eles) { // 布局
         refreshSnapshotReferenceEdges();
@@ -448,6 +547,52 @@ function closeHot() {
     });
 }
 
+
+function highlightLongestPathFromNode(node) {
+    if (!node || !node.isNode || !node.isNode()) {
+        return;
+    }
+    cy.batch(function () {
+        cy.elements('.highlight').removeClass('highlight');
+        var dijkstra = cy.elements().dijkstra(node, function (edge) {
+            return edge.data('weight') || 1;
+        });
+        var longestPath = null;
+        cy.nodes().forEach(function (targetNode) {
+            var path = dijkstra.pathTo(targetNode);
+            if (path != null && (longestPath == null || path.distance > longestPath.distance)) {
+                longestPath = path;
+            }
+        });
+        if (longestPath != null) {
+            longestPath.addClass('highlight');
+        }
+    });
+}
+
+function highlightNodeOutgoingPath(node) {
+    if (!node || !node.isNode || !node.isNode()) {
+        return;
+    }
+    cy.batch(function () {
+        cy.elements('.highlight').removeClass('highlight');
+        var highlighted = node.union(node.outgoers());
+        highlighted.addClass('highlight');
+    });
+}
+
+function clearNodeOutgoingHighlight() {
+    if (!window.cy) {
+        return;
+    }
+    cy.elements('.highlight').removeClass('highlight');
+}
+
+function refreshSelectedSnapshotReferenceHighlight() {
+    if (window.cy && cy.settings.subSelectUnionNode && cy.settings.subSelectUnionNode()) {
+        doSubSelectUnionNode(cy.nodes('node.snapshot:selected'));
+    }
+}
 
 // 子选中关联节点
 function doSubSelectUnionNode(ele) {

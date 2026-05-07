@@ -163,11 +163,14 @@
         cy.on('cxttap', showContextMenu);
         // 设置提示框位置
         cy.on('tap cxttap', 'node', setTipPosition);
+        return cy;
+    }).then(function (cy) {
+        if (typeof cy.applyComfortableFit === 'function') {
+            cy.applyComfortableFit(cy.elements());
+        }
     }).catch(function (error) {
         // 如果有错误发生，这里可以捕获并处理
         console.error('Error fetching data:', error);
-    }).then(function () {
-        doRefresh();
     });
 
     // 显示概要信息

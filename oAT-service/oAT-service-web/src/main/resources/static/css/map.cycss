@@ -79,7 +79,7 @@ node.snapshot[weight=60] {
 }
 
 node.subSelected {
-  z-index: 800;
+  z-index: 1200;
   background-color: #38bdf8;
   border-width: 4px;
   border-color: #0284c7;
@@ -124,6 +124,61 @@ node.code_class {
   color: #334155;
 }
 
+node.stack_code {
+  width: 38px;
+  height: 38px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #111827;
+  text-max-width: 145px;
+  text-wrap: ellipsis;
+  text-background-color: #ffffff;
+  text-background-opacity: 0.92;
+  text-background-padding: 3px;
+  border-width: 1.5px;
+  border-color: #cbd5e1;
+}
+
+node.stack_code[weight=0] {
+  width: 34px;
+  height: 34px;
+  background-color: #64748b;
+}
+
+node.stack_code[weight=10] {
+  width: 34px;
+  height: 34px;
+  background-color: #5e5757;
+}
+
+node.stack_code[weight=20] {
+  width: 42px;
+  height: 42px;
+  background-color: #9233ac;
+}
+
+node.stack_code[weight=30] {
+  width: 50px;
+  height: 50px;
+  background-color: #b87a44;
+}
+
+node.stack_code[weight=40] {
+  width: 58px;
+  height: 58px;
+  background-color: #16a34a;
+}
+
+node.entry_code {
+  width: 66px;
+  height: 66px;
+  background-color: #16a34a;
+  border-width: 4px;
+  border-color: #bbf7d0;
+  color: #064e3b;
+  text-max-width: 190px;
+}
+
 node.notice {
   width: 76px;
   height: 76px;
@@ -153,6 +208,17 @@ node:selected {
   border-color: #020617;
   color: #e11d48;
   text-background-color: #fff1f2;
+  text-background-opacity: 0.95;
+}
+
+node.subSelected:selected,
+node.subSelected.highlight {
+  z-index: 1300;
+  background-color: #38bdf8;
+  border-width: 4px;
+  border-color: #0284c7;
+  color: #075985;
+  text-background-color: #e0f2fe;
   text-background-opacity: 0.95;
 }
 
@@ -198,6 +264,7 @@ edge.snapshot-reference {
 }
 
 edge.snapshot-reference.subSelected {
+  z-index: 1200;
   line-style: solid;
   line-color: #0284c7;
   target-arrow-color: #0284c7;
