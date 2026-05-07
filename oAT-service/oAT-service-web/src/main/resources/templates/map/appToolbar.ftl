@@ -64,12 +64,9 @@
     //  切换 快照关联选项
     $("#right_toolbar .item.union.toggle").click(function (e) {
         if ($(e.currentTarget).hasClass('active')) {
-            doSubSelectUnionNode(cy.nodes(":selected"));
+            refreshSelectedSnapshotReferenceHighlight(true);
         } else {
-            cy.batch(function () {
-                cy.nodes(".subSelected").removeClass('subSelected');
-                cy.edges(".snapshot-reference").removeClass('subSelected');
-            });
+            refreshSelectedSnapshotReferenceHighlight(false);
         }
     });
 
