@@ -262,7 +262,7 @@
                 files[8] = {file: "方法总数：", value: formatMetricValue(ele.data('methodTotal'))};
             }
             if (ele.data('sqlContents') != null) {
-                files[9] = {file: "关联 SQL：", value: formatSqlContents(ele.data('sqlContents'))};
+                files[9] = {file: ele.hasClass && ele.hasClass('snapshot') ? "执行 SQL：" : "关联 SQL：", value: formatSqlContents(ele.data('sqlContents'))};
             }
         }
         files.forEach(function (a) {

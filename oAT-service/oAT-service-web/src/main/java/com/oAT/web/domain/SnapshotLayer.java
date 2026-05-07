@@ -43,6 +43,10 @@ public class SnapshotLayer implements ImageLayer {
             List<String> sqls =
                     Arrays.stream(snapshot.getSqls()).flatMap(sql -> Arrays.stream(sql.getActions()).map(a -> sql.getDatabase() + "." + a.getTable())).distinct().collect(Collectors.toList());
             codes.addAll(sqls);
+            data.sqlContents = Arrays.stream(snapshot.getSqls())
+                    .flatMap(sql -> Arrays.stream(sql.getActions()).map(a -> formatSqlContent(a.getType(), sql.getContent())))
+                    .distinct()
+                    .toArray(String[]::new);
         }
         // 依赖项
         data.references = codes.toArray(new String[codes.size()]);
@@ -74,6 +78,11 @@ public class SnapshotLayer implements ImageLayer {
         String simpleName = simpleNameIndex >= 0 ? dotName.substring(simpleNameIndex + 1) : dotName;
         return Stream.of(className, normalized, dotName, slashName, "/" + slashName, simpleName)
                 .filter(a -> a != null && !a.trim().isEmpty());
+    }
+
+    private String formatSqlContent(String actionType, String sqlContent) {
+        String action = actionType == null ? "SQL" : actionType.toUpperCase();
+        return action + "：" + (sqlContent == null || sqlContent.trim().isEmpty() ? "未采集到 SQL 原文" : sqlContent.trim());
     }
 
 

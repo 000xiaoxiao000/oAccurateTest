@@ -209,6 +209,9 @@ function buildMap(data) {
             if (cy.settings.subSelectUnionNode()) {
                 refreshSelectedSnapshotReferenceHighlight(false);
             }
+            if (typeof showDetail === 'function') {
+                showDetail({target: eles});
+            }
         });
 
         // 节点，鼠标右键单击，清除所有节点node的边和高亮

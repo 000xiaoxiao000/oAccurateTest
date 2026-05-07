@@ -29,6 +29,7 @@ public class ImageData {
     // 关照关联数
     public int unionCount = 0;
     public String hotName;
+    public String[] sqlContents;
 
     public int x = 0;
     public int y = 0;
@@ -76,6 +77,7 @@ public class ImageData {
                 ", cyclo=" + cyclo +
                 ", unionCount=" + unionCount +
                 ", hotName='" + hotName + '\'' +
+                ", sqlContents=" + java.util.Arrays.toString(sqlContents) +
                 ", x=" + x +
                 ", y=" + y +
                 '}';
