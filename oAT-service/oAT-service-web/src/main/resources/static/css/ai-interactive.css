@@ -969,6 +969,42 @@
     flex-shrink: 0;
 }
 
+.ai-session-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.ai-session-clear-btn {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid rgba(20, 184, 166, 0.22);
+    border-radius: 999px;
+    background: rgba(240, 253, 250, 0.9);
+    color: #0f766e;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    transition: all 0.16s ease;
+}
+
+.ai-session-clear-btn:hover {
+    border-color: rgba(239, 68, 68, 0.26);
+    background: rgba(254, 242, 242, 0.96);
+    color: #b91c1c;
+    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.12);
+}
+
+.ai-session-clear-btn i.icon {
+    margin: 0;
+}
+
 .ai-message-list {
     flex: 1;
     min-height: 300px;

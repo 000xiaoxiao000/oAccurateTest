@@ -1,4 +1,6 @@
 (function ($) {
+    var U = window.AiUtils || {};
+
     function escapeHtml(value) {
         return String(value || '')
             .replace(/&/g, '&amp;')
@@ -21,6 +23,7 @@
         var projectId = $root.data('project-id');
         var projectName = $root.data('project-name') || '当前项目';
         var askUrl = $root.data('ask-url');
+        var sessionMemoryClearUrl = askUrl ? askUrl.replace(/\/ask$/, '/sessionState/clear') : '';
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
         var aiTimeout = ($root.data('ai-timeout') || 300) * 1000;
         var storagePrefix = 'ai-floating-widget:' + projectId;
@@ -725,7 +728,7 @@
             }
             var html = '';
             $.each(starters || [], function (_, starter) {
-                html += '<button class="ai-floating-starter" type="button" data-question="' + escapeHtml(starter) + '">' + escapeHtml(starter) + '</button>';
+                html += '<button class="ai-floating-starter" type="button" data-question="' + escapeHtml(starter) + '" title="发送这个快捷提问" data-tooltip="发送这个快捷提问" data-position="top center">' + escapeHtml(starter) + '</button>';
             });
             $starterList.html(html);
             $('#aiFloatingStarterSection').show();
@@ -1939,12 +1942,12 @@
                 + '  <div class="ai-floating-message-body">'
                 + '      <div class="ai-floating-message-name">' + escapeHtml(title) + '</div>'
                 + '      <div class="ai-floating-message-card" style="position:relative">' + contentHtml
-                + '<button class="ai-floating-copy-btn" title="复制"><i class="copy icon"></i></button>';
+                + '<button class="ai-floating-copy-btn" title="复制回复内容" data-tooltip="复制回复内容" data-position="left center"><i class="copy icon"></i></button>';
 
             if (actions && actions.length) {
                 html += '<div class="ai-floating-message-actions">';
                 $.each(actions, function (_, action) {
-                    html += '<button class="ai-floating-message-action" type="button" data-question="' + escapeHtml(action) + '">' + escapeHtml(action) + '</button>';
+                    html += '<button class="ai-floating-message-action" type="button" data-question="' + escapeHtml(action) + '" title="发送这个快捷问题" data-tooltip="发送这个快捷问题" data-position="top center">' + escapeHtml(action) + '</button>';
                 });
                 html += '</div>';
             }
@@ -1952,7 +1955,7 @@
             if (aiActions && aiActions.length) {
                 html += '<div class="ai-floating-message-actions">';
                 $.each(aiActions, function (index, action) {
-                    html += '<button class="ai-floating-message-action ai-floating-exec-action" type="button" data-action-index="' + index + '">'
+                    html += '<button class="ai-floating-message-action ai-floating-exec-action" type="button" data-action-index="' + index + '" title="执行 AI 推荐操作" data-tooltip="执行 AI 推荐操作" data-position="top center">'
                         + escapeHtml(action.title || '执行操作') + '</button>';
                 });
                 html += '</div>';
@@ -2004,7 +2007,7 @@
                 + '    <div class="ai-floating-message-name">AI 助手</div>'
                 + '    <div class="ai-floating-stopped-card">'
                 + '      <span><i class="pause circle icon"></i> 已停止生成</span>'
-                + '      <button class="ai-resume-btn" data-question="' + escapeHtml(questionText) + '">重新发送</button>'
+                + '      <button class="ai-resume-btn" data-question="' + escapeHtml(questionText) + '" title="重新发送刚才的问题" data-tooltip="重新发送刚才的问题" data-position="top center">重新发送</button>'
                 + '    </div>'
                 + '  </div>'
                 + '</div>';
@@ -2245,7 +2248,7 @@
             var html = '';
             $.each(normalizeQuickLinks(links), function (_, link) {
                 var priorityClass = link.priority >= 85 ? 'priority-high' : (link.priority >= 60 ? 'priority-medium' : 'priority-normal');
-                html += '<a class="ai-floating-quick-link ' + priorityClass + '" href="' + escapeHtml(link.url || '#') + '">'
+                html += '<a class="ai-floating-quick-link ' + priorityClass + '" href="' + escapeHtml(link.url || '#') + '" title="打开' + escapeHtml(link.title || '推荐入口') + '" data-tooltip="打开' + escapeHtml(link.title || '推荐入口') + '" data-position="left center">'
                     + '<div class="ai-floating-quick-link-head">'
                     + '<span class="ai-floating-quick-link-icon"><i class="' + escapeHtml(link.icon || 'external') + ' icon"></i></span>'
                     + '<div class="ai-floating-quick-link-title">' + escapeHtml(link.title || '推荐入口') + '</div>'
@@ -2403,6 +2406,70 @@
             writeJSON(historyKey, history);
         }
 
+        function writeWelcomeHistory() {
+            var welcome = buildContextWelcome(currentContext);
+            appendMessage('assistant', 'AI 助手', welcome, currentContext.starters || [], {scrollTop: true});
+            writeJSON(historyKey, [{
+                role: 'assistant',
+                title: 'AI 助手',
+                message: welcome,
+                actions: currentContext.starters || [],
+                quickLinks: currentContext.quickLinks || []
+            }]);
+            renderQuickLinks(currentContext.quickLinks || []);
+        }
+
+        function resetFloatingConversation(options) {
+            options = options || {};
+            if (fwCurrentAjaxRequest) {
+                fwCurrentAjaxRequest.abort();
+                fwCurrentAjaxRequest = null;
+            }
+            hideLoading();
+            fwResetSendButton();
+            fwUploadedImageData = null;
+            $('#aiFloatingImageUploadBtn').removeClass('has-image')
+                .find('.ai-floating-image-preview').hide().attr('src', '');
+            $questionInput.val('');
+            $messageList.empty();
+            sessionStorage.removeItem(lastPageKey);
+            writeWelcomeHistory();
+            sessionStorage.setItem(lastPageKey, window.location.pathname);
+            setState('就绪', false);
+            if (!options.silent && U.showToast) {
+                U.showToast(options.message || 'AI 助手对话已清空，已开启新对话', options.type || 'success');
+            }
+        }
+
+        function clearFloatingConversation() {
+            var runClear = function () {
+                setState('清理中...', true);
+                if (!sessionMemoryClearUrl) {
+                    sessionStorage.removeItem(historyKey);
+                    resetFloatingConversation({ message: 'AI 助手对话已清空' });
+                    return;
+                }
+                $.ajax({
+                    url: sessionMemoryClearUrl,
+                    type: 'POST',
+                    dataType: 'json',
+                    timeout: Math.min(aiTimeout, 15000)
+                }).done(function (response) {
+                    sessionStorage.removeItem(historyKey);
+                    resetFloatingConversation({ message: (response && response.message) || 'AI 助手对话已清空' });
+                }).fail(function () {
+                    sessionStorage.removeItem(historyKey);
+                    resetFloatingConversation({ message: '服务端清理失败，但本地对话已清空', type: 'warning' });
+                });
+            };
+
+            if (U.showConfirm) {
+                U.showConfirm('确认清空 AI 助手的当前对话和上下文记忆吗？', runClear);
+            } else if (window.confirm('确认清空 AI 助手的当前对话和上下文记忆吗？')) {
+                runClear();
+            }
+        }
+
         function initHistory() {
             var history = readJSON(historyKey, []);
             syncContextUI(currentContext);
@@ -2416,14 +2483,7 @@
                 renderQuickLinks(currentContext.quickLinks || []);
                 scrollToBottom();
             } else {
-                appendMessage('assistant', 'AI 助手', buildContextWelcome(currentContext), currentContext.starters || [], {scrollTop: true});
-                writeJSON(historyKey, [{
-                    role: 'assistant',
-                    title: 'AI 助手',
-                    message: buildContextWelcome(currentContext),
-                    actions: currentContext.starters || [],
-                    quickLinks: currentContext.quickLinks || []
-                }]);
+                writeWelcomeHistory();
             }
 
             if (sessionStorage.getItem(lastPageKey) !== window.location.pathname) {
@@ -2864,6 +2924,8 @@
         $('#aiFloatingToggleLayoutLock').on('click', function () {
             setLayoutLocked(!isLayoutLocked());
         });
+
+        $('#aiFloatingClearConversation').on('click', clearFloatingConversation);
 
         $('#aiFloatingCollapse').on('click', function () {
             setPanelOpen(false);

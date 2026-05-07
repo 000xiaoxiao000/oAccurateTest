@@ -1648,10 +1648,16 @@
             activeSessionId = fresh.id;
             persistSessions();
             renderActiveSession();
-            syncSessionStateToServer({ silent: true, toastMessage: '记忆已清空，已进入新会话' });
+            syncSessionStateToServer({ silent: true, toastMessage: '会话已重置，已进入新对话' });
         }
 
         function clearSessionMemory() {
+            U.showConfirm('确认重置 AI 工作台会话吗？这会清空当前项目的上下文记忆和本地会话记录。', function () {
+                doClearSessionMemory();
+            });
+        }
+
+        function doClearSessionMemory() {
             requestGeneration++;
             if (currentAjaxRequest) {
                 currentAjaxRequest.abort();
@@ -1673,7 +1679,7 @@
                 if (response && response.message) {
                     U.showToast(response.message, 'success');
                 } else {
-                    U.showToast('记忆已清空，已开启新会话', 'success');
+                    U.showToast('会话已重置，已开启新对话', 'success');
                 }
             }).fail(function () {
                 resetAllSessionStorage();

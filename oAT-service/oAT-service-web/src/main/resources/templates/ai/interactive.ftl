@@ -155,10 +155,20 @@
                             <div class="ai-eyebrow">Session Memory</div>
                             <h3>会话列表</h3>
                         </div>
-                        <div class="ui mini buttons">
-                            <button id="aiClearMemoryButton" class="ui mini basic button" type="button">清空记忆</button>
-                            <div class="or"></div>
-                            <button id="aiNewSessionButton" class="ui mini teal button" type="button">新会话</button>
+                        <div class="ai-session-header-actions">
+                            <button id="aiClearMemoryButton"
+                                    class="ai-session-clear-btn"
+                                    type="button"
+                                    data-tooltip="清除当前项目的 AI 上下文和本地会话记录"
+                                    data-position="bottom center">
+                                <i class="trash alternate outline icon"></i>
+                                <span>重置会话</span>
+                            </button>
+                            <button id="aiNewSessionButton"
+                                    class="ui mini teal button"
+                                    type="button"
+                                    data-tooltip="创建一个新的提问会话，保留已有历史"
+                                    data-position="bottom center">新会话</button>
                         </div>
                     </div>
 
