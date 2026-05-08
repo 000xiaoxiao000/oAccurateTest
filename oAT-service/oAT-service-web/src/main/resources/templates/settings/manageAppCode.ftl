@@ -299,7 +299,7 @@
 
             <div id="center-content" class="project-settings-content">
                 <h2 class="project-settings-section-title">应用资产入口</h2>
-                <p class="project-settings-section-desc">对于主导应用，可进入仓库配置、版本列表等关键资产入口。</p>
+                <p class="project-settings-section-desc">对于主导应用，可进入仓库配置、版本列表等关键入口。</p>
 
                 <div class="oat-list-toolbar js-list-control" data-table="#manageAppCodeTable" data-page-size="10" data-search-placeholder="搜索应用名称、工程或类型" data-empty-colspan="5"></div>
                 <div class="project-settings-table-wrap">
@@ -315,6 +315,11 @@
                         </thead>
                         <tbody>
                         <#list apps as app >
+                            <#assign repositoryConfigured=(app.repoAddress?? && app.repoAddress?trim != '')>
+                            <#assign repositoryConfigTip = '当前应用尚未配置代码仓库，点击可前往仓库配置完成地址与认证信息设置。'>
+                            <#if repositoryConfigured>
+                                <#assign repositoryConfigTip = '当前应用已配置代码仓库，点击可查看或调整仓库地址、分支与认证信息。'>
+                            </#if>
                             <tr>
                                 <td>
                                     <#if app.createProjectId==project.id>
@@ -337,7 +342,7 @@
                                                     <i class="setting icon"></i>
                                                 </span>
                                                 <div class="left menu">
-                                                    <a class="item" href="/p/${project.id}/app/${app.id}/repository">
+                                                    <a class="item repository-config-menu-item" href="/p/${project.id}/app/${app.id}/repository" data-content="${repositoryConfigTip?html}" data-position="left center" title="${repositoryConfigTip?html}">
                                                         <i class="edit icon"></i>仓库配置
                                                     </a>
                                                     <a class="item" href="/p/${project.id}/${app.id}/version/list">
@@ -364,6 +369,9 @@
 <!--初始化UI-->
 <script>
     $('.project-settings-page .ui.dropdown').dropdown({
+        on: 'hover'
+    });
+    $('.project-settings-page .repository-config-menu-item').popup({
         on: 'hover'
     });
 

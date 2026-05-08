@@ -7,6 +7,19 @@
     <script src="/js/upload.js?version=1"></script>
     <script src="/js/spark-md5.min.js"></script>
 
+
+<style>
+    .repository-config-missing {
+        opacity: 0.58;
+        filter: grayscale(0.18);
+    }
+
+    .repository-config-missing .ui.selection.dropdown,
+    .repository-config-missing input,
+    .repository-config-missing button {
+        pointer-events: none;
+    }
+</style>
 </head>
 <body>
 
@@ -47,7 +60,11 @@
                 </div>
                 <div class="version-page-actions">
                     <#assign repositoryConfigured=(app.repoAddress?? && app.repoAddress?trim != '')>
-                    <a class="ui <#if repositoryConfigured>button<#else>orange button</#if>" id="repositoryConfigButton" href="/p/${project.id}/app/${appId}/repository">
+                    <#assign repositoryConfigTip = '当前应用尚未配置代码仓库，点击可前往仓库配置完成地址与认证信息设置。'>
+                    <#if repositoryConfigured>
+                        <#assign repositoryConfigTip = '当前应用已配置代码仓库，点击可查看或调整仓库地址、分支与认证信息。'>
+                    </#if>
+                    <a class="ui <#if repositoryConfigured>teal basic<#else>orange basic</#if> button repository-config-button" id="repositoryConfigButton" data-content="${repositoryConfigTip?html}" data-position="bottom center" title="${repositoryConfigTip?html}" href="/p/${project.id}/app/${appId}/repository">
                         <i class="setting icon"></i>仓库配置
                     </a>
                     <a class="ui button guard-pulled-code" id="backVersionListButton" href="/p/${project.id}/${appId}/version/list">
@@ -77,20 +94,25 @@
                 </div>
 
                 <!-- Git Tab -->
-                <div class="ui tab segment active" data-tab="git" style="border: none; box-shadow: none; padding: 0;">
+                <div class="ui tab segment active <#if !repositoryConfigured>repository-config-missing</#if>" data-tab="git" style="border: none; box-shadow: none; padding: 0;">
+                    <#if !repositoryConfigured>
+                    <div class="ui tiny warning message" style="margin-bottom: 14px;">
+                        当前应用尚未配置代码仓库，请先完成仓库配置后再使用 Git 拉取。
+                    </div>
+                    </#if>
                     <div class="field required">
                         <label>分支</label>
                         <div class="fields">
                             <div class="twelve wide field">
-                                <div class="ui selection dropdown" id="branchDropdown">
-                                     <input type="hidden" name="repoBranch" id="repoBranch">
+                                <div class="ui selection dropdown <#if !repositoryConfigured>disabled</#if>" id="branchDropdown" <#if !repositoryConfigured>aria-disabled="true"</#if>>
+                                     <input type="hidden" name="repoBranch" id="repoBranch" <#if !repositoryConfigured>disabled</#if>>
                                      <i class="dropdown icon"></i>
                                      <div class="default text">选择分支</div>
                                      <div class="menu"></div>
                                 </div>
                             </div>
                             <div class="four wide field">
-                                <button class="ui button" type="button" onclick="fetchBranches()">
+                                <button class="ui button" type="button" id="refreshBranchesButton" onclick="fetchBranches()" <#if !repositoryConfigured>disabled</#if>>
                                     <i class="sync icon"></i> 刷新分支
                                 </button>
                             </div>
@@ -98,18 +120,18 @@
                     </div>
                     <div class="field">
                         <label>Commit ID (可选)</label>
-                        <input type="text" name="repoCommitId" id="repoCommitId" placeholder="输入 Commit ID">
+                        <input type="text" name="repoCommitId" id="repoCommitId" placeholder="输入 Commit ID" <#if !repositoryConfigured>disabled</#if>>
                     </div>
                     <div class="field">
                         <label>排除路径 (可选, 多个路径用逗号隔开，例如: src/test/,README.md)</label>
-                        <input type="text" name="excludePaths" id="excludePaths" placeholder="输入排除路径">
+                        <input type="text" name="excludePaths" id="excludePaths" placeholder="输入排除路径" <#if !repositoryConfigured>disabled</#if>>
                     </div>
                     <div class="field">
-                         <button class="ui button" type="button" onclick="checkGitConnection(this)"
-                                  style="margin-left: 10px;">检测是否可拉取代码</button>
-                        <button class="ui teal button" type="button" id="startPullBtn" onclick="startPull(this)">远程拉取代码</button>
+                         <button class="ui button" type="button" id="checkGitConnectionButton" onclick="checkGitConnection(this)"
+                                  style="margin-left: 10px;" <#if !repositoryConfigured>disabled</#if>>检测是否可拉取代码</button>
+                        <button class="ui teal button" type="button" id="startPullBtn" onclick="startPull(this)" <#if !repositoryConfigured>disabled</#if>>远程拉取代码</button>
                         <button class="ui orange button" type="button" id="deleteCodeBtn" style="display: none;"
-                                onclick="deletePulledCode(this)">删除远程拉取代码</button>
+                                onclick="deletePulledCode(this)" <#if !repositoryConfigured>disabled</#if>>删除远程拉取代码</button>
                     </div>
                     <div class="field" id="gitProgressField" style="display: none;">
                         <label>拉取进度</label>
@@ -163,6 +185,28 @@
     $('.ui.filter.dropdown').dropdown({
         on: 'click'
     });
+    $('.repository-config-button').popup({
+        on: 'hover'
+    });
+
+    var repositoryConfigured = ${repositoryConfigured?c};
+
+    function ensureRepositoryConfigured() {
+        if (repositoryConfigured) {
+            return true;
+        }
+        showToast('当前应用尚未配置代码仓库，请先完成仓库配置后再使用该功能。', 'warning', 8000);
+        return false;
+    }
+
+    function applyRepositoryConfigurationState() {
+        var disabled = !repositoryConfigured;
+        $('.ui.tab.segment[data-tab="git"]').toggleClass('repository-config-missing', disabled);
+        $('#branchDropdown').toggleClass('disabled', disabled).attr('aria-disabled', disabled ? 'true' : 'false');
+        $('#repoBranch').prop('disabled', disabled);
+        $('#repoCommitId, #excludePaths').prop('disabled', disabled);
+        $('#refreshBranchesButton, #checkGitConnectionButton, #startPullBtn, #deleteCodeBtn').prop('disabled', disabled).toggleClass('disabled', disabled);
+    }
 
     function showDetail(id) {
         <!--显示节点详情-->
@@ -199,6 +243,9 @@
         $('.version-page-actions .ui.button, .version-page-body .ui.menu .item, .version-page-side .item')
                 .toggleClass('disabled', busy)
                 .attr('aria-disabled', busy ? 'true' : 'false');
+        if (!busy) {
+            applyRepositoryConfigurationState();
+        }
     }
 
     $(document).on('click', 'a, button, input, textarea, select, .ui.dropdown, .ui.checkbox, .menu .item', function(event) {
@@ -273,11 +320,12 @@
     $('#versionResetButton').on('click', function() {
         setTimeout(function() {
             resetPackageReadyState();
-            $('#startPullBtn').removeClass('disabled').prop('disabled', false).removeClass('loading');
-            $('#deleteCodeBtn').hide().addClass('disabled').prop('disabled', true).removeClass('loading');
+            $('#startPullBtn').removeClass('loading');
+            $('#deleteCodeBtn').hide().removeClass('loading');
             $('#gitProgressField').hide();
             $('#programProgress').progress({ percent: 0 });
             $('#programProgress .label').text('等待选择文件...');
+            applyRepositoryConfigurationState();
         }, 0);
     });
 
@@ -299,6 +347,9 @@
     });
 
     function fetchBranches() {
+        if (!ensureRepositoryConfigured()) {
+            return;
+        }
         $.get("/p/${project.id}/app/${appId}/git/branches", function(data){
             if(data.success) {
                 var menu = $('#branchDropdown .menu');
@@ -319,6 +370,9 @@
     }
 
     function fetchLatestCommit(branch) {
+        if (!ensureRepositoryConfigured()) {
+            return;
+        }
         if(!branch) return;
         // Optional: show loading on commit input?
         $('#repoCommitId').parent().addClass('loading');
@@ -362,6 +416,9 @@
     }
 
     function checkGitConnection(btn) {
+        if (!ensureRepositoryConfigured()) {
+            return;
+        }
         var branch = $('#repoBranch').val();
         if(!branch) {
             showToast('请先选择分支', 'error');
@@ -513,6 +570,9 @@
     }
 
     function startPull(btn) {
+        if (!ensureRepositoryConfigured()) {
+            return;
+        }
         var branch = $('#repoBranch').val();
         if(!branch) {
             showToast('请先选择分支', 'error');
@@ -554,6 +614,9 @@
     }
 
     function deletePulledCode(btn) {
+        if (!ensureRepositoryConfigured()) {
+            return;
+        }
         var cachePath = $('#programFile').val();
         if (!cachePath) {
             showToast('没有可删除的代码', 'warning');
@@ -576,6 +639,8 @@
             }
         });
     }
+
+    applyRepositoryConfigurationState();
 
     // fetchBranches(); // Manual trigger only
 </script>
@@ -680,6 +745,11 @@
                 onSuccess: function(event, fields) {
                     // Prevent default form submission
                     event.preventDefault();
+
+                    if ($('#sourceType').val() === 'git' && !repositoryConfigured) {
+                        showToast('当前应用尚未配置代码仓库，请先完成仓库配置后再使用 Git 拉取。', 'error');
+                        return false;
+                    }
 
                     if ($('#versionCreateButton').prop('disabled')) {
                         showToast('请先成功拉取代码或上传程序文件', 'error');
