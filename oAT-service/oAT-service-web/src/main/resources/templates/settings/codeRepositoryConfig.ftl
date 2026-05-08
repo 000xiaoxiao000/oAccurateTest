@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <title>设置-仓库配置</title>
     <#include "../common.ftl">
+    <#assign repositoryConfigured=(app.repoAddress?? && app.repoAddress?trim != '')>
+    <#assign repositoryReturnTip = '返回应用与代码管理页，可继续进入版本列表或其它资产入口。'>
+    <#assign repositorySaveTip = '保存成功后将返回应用与代码管理页，并使版本中心使用最新仓库配置。'>
+    <#assign repositoryHelpTip = '当前应用尚未配置代码仓库。请填写仓库地址，并按仓库访问方式选择用户名/密码或 Token。'>
+    <#if repositoryConfigured>
+        <#assign repositorySaveTip = '保存成功后将返回应用与代码管理页，并使版本中心使用最新仓库配置。'>
+        <#assign repositoryHelpTip = '当前应用已配置代码仓库。可在此查看或更新仓库地址、分支与认证信息。'>
+    </#if>
     <style>
         .project-settings-page {
             position: relative;
@@ -137,6 +145,26 @@
             font-weight: 700;
             line-height: 1.4;
             word-break: break-word;
+        }
+
+        .repository-status-value {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 16px;
+        }
+
+        .repository-status-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: #f59e0b;
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.14);
+        }
+
+        .repository-status-dot.configured {
+            background: #10b981;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.14);
         }
 
         .project-settings-content {
@@ -324,7 +352,7 @@
     <div class="ui small breadcrumb project-settings-breadcrumb">
         <a class="section" href="/p/${project.id}/home">${project.name}</a>
         <span class="divider">/</span>
-        <a class="section" href="/p/${project.id}/manageAppCode">应用与代码管理</a>
+        <a class="section repository-return-link" href="/p/${project.id}/manageAppCode" data-content="${repositoryReturnTip?html}" data-position="bottom center" title="${repositoryReturnTip?html}">应用与代码管理</a>
         <span class="divider">/</span>
         <div class="active section">仓库配置</div>
     </div>
@@ -344,7 +372,7 @@
                 </div>
                 <h1 class="project-settings-hero-title">仓库配置</h1>
                 <p class="project-settings-hero-desc">
-                    配置当前应用的代码仓库地址与认证方式，便于后续拉取源码、扫描接口以及维护版本资产。该页面归属于应用与代码管理。
+                    配置当前应用的代码仓库地址与认证方式，用于版本中心的 Git 拉取、Git 差异比对和相关代码资产维护。
                 </p>
                 <div class="project-settings-meta">
                     <div class="project-settings-meta-card">
@@ -359,17 +387,24 @@
                         <div class="project-settings-meta-label">当前权限</div>
                         <div class="project-settings-meta-value"><#if loginNameRole == "visitor">访客<#else>${loginNameRole}</#if></div>
                     </div>
+                    <div class="project-settings-meta-card">
+                        <div class="project-settings-meta-label">仓库状态</div>
+                        <div class="project-settings-meta-value repository-status-value">
+                            <span class="repository-status-dot <#if repositoryConfigured>configured</#if>"></span>
+                            <#if repositoryConfigured>已配置<#else>未配置</#if>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div class="project-settings-content">
                 <h2 class="project-settings-section-title">仓库接入信息</h2>
-                <p class="project-settings-section-desc">支持用户名/密码和 Token 两种认证方式。保存后将跳转回应用与代码管理页。</p>
+                <p class="project-settings-section-desc">支持用户名/密码和 Token 两种认证方式。${repositorySaveTip}</p>
 
                 <form class="ui form project-settings-form repository-form-card" method="post" action="/p/${project.id}/app/${app.id}/repository/save">
                     <div class="repository-help-card">
                         <i class="info circle icon"></i>
-                        <div>建议填写可稳定访问的仓库地址；使用 Token 时无需填写用户名，只需在密码框中填入 Token。</div>
+                        <div>${repositoryHelpTip} 使用 Token 时无需填写用户名，只需在密码框中填入 Token。</div>
                     </div>
                     <div class="field">
                         <label>仓库地址</label>
@@ -406,8 +441,8 @@
                     </div>
 
                     <div class="repository-action-bar">
-                        <div class="repository-action-tip">保存过程中页面会暂时锁定，避免重复提交。</div>
-                        <button id="repositoryConfigSubmitButton" class="ui button repository-save-button" type="button" onclick="submitRepositoryConfig()">
+                        <div class="repository-action-tip">保存过程中页面会暂时锁定，避免重复提交；${repositorySaveTip}</div>
+                        <button id="repositoryConfigSubmitButton" class="ui button repository-save-button repository-save-tip" type="button" data-content="${repositorySaveTip?html}" data-position="top center" title="${repositorySaveTip?html}" onclick="submitRepositoryConfig()">
                             <i class="check icon"></i> 保存配置
                         </button>
                     </div>
@@ -445,7 +480,10 @@
             data: data,
             success: function(res) {
                 if (res.success || res.result) {
-                    showToast(res.message || '保存成功', 'success');
+                    var successMessage = res.message || '仓库配置保存成功，正在返回应用与代码管理页。';
+                    showToast(successMessage, 'success');
+                    sessionStorage.setItem('toastMessage', successMessage);
+                    sessionStorage.setItem('toastMessageType', 'success');
                     setTimeout(function() {
                         window.location.href = "/p/${project.id}/manageAppCode";
                     }, 1000);
@@ -466,6 +504,9 @@
         on: 'click'
     });
     $('.poping.up').popup();
+    $('.repository-return-link, .repository-save-tip').popup({
+        on: 'hover'
+    });
 
     function syncAuthTypeFields(value) {
         var isToken = value === 'token';

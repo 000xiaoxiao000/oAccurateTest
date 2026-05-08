@@ -6,6 +6,11 @@
     <#include "../common.ftl">
     <script src="/js/upload.js?version=1"></script>
     <script src="/js/spark-md5.min.js"></script>
+<#assign repositoryConfigured=(app.repoAddress?? && app.repoAddress?trim != '')>
+<#assign repositoryConfigTip = '当前应用尚未配置代码仓库，点击可前往仓库配置完成地址与认证信息设置。'>
+<#if repositoryConfigured>
+    <#assign repositoryConfigTip = '当前应用已配置代码仓库，点击可查看或调整仓库地址、分支与认证信息。'>
+</#if>
 <style>
     .git-compare-panel .git-entry-shell {
         background: linear-gradient(180deg, #f9fbff 0%, #f4f7fb 100%);
@@ -13,6 +18,23 @@
         border-radius: 12px;
         padding: 16px 16px 12px;
         box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+
+    .git-compare-panel .git-entry-shell.repository-config-missing {
+        opacity: 0.58;
+        filter: grayscale(0.18);
+    }
+
+    .git-compare-panel .git-entry-shell.repository-config-missing .git-entry-card:hover {
+        border-color: #dfe6ee;
+        box-shadow: none;
+        transform: none;
+    }
+
+    .git-compare-panel .git-entry-shell.repository-config-missing .ui.button,
+    .git-compare-panel .git-entry-shell.repository-config-missing .ui.selection.dropdown,
+    .git-compare-panel .git-entry-shell.repository-config-missing input {
+        pointer-events: none;
     }
 
     .git-compare-panel .git-entry-topbar {
@@ -510,6 +532,11 @@
                     <h1 class="version-page-title">版本比对</h1>
                     <p class="version-page-desc">基于 Git 或制品包比对内部文件差异，并分析差异影响范围。</p>
                 </div>
+                <div class="version-page-actions">
+                    <a class="ui <#if repositoryConfigured>teal basic<#else>orange basic</#if> button repository-config-button" id="repositoryConfigButton" data-content="${repositoryConfigTip?html}" data-position="bottom center" title="${repositoryConfigTip?html}" href="/p/${project.id}/app/${app.id}/repository">
+                        <i class="setting icon"></i>仓库配置
+                    </a>
+                </div>
             </div>
             <div class="version-page-body">
 
@@ -521,14 +548,14 @@
             <div class="ui bottom attached segment">
                 <div class="ui tab active" data-tab="git">
                     <form class="ui form" action="/p/${project.id}/${app.id}/version/git/compare" method="get" id="gitCompareForm">
-                        <div class="git-entry-shell">
+                        <div class="git-entry-shell <#if !repositoryConfigured>repository-config-missing</#if>">
                             <div class="git-entry-topbar">
                                 <div>
                                     <div class="git-entry-title">Git 差异比对参数</div>
                                     <div class="git-entry-subtitle">支持直接录入，也支持从已存在的版本记录中快速带入分支与 commit。</div>
                                 </div>
                                 <div class="git-entry-actions">
-                                    <button class="ui small basic button" type="button" id="gitComparePickBranchButton">
+                                    <button class="ui small basic button <#if !repositoryConfigured>disabled</#if>" type="button" id="gitComparePickBranchButton" <#if !repositoryConfigured>disabled</#if>>
                                         <i class="list ul icon"></i>从版本列表选择分支
                                     </button>
                                 </div>
@@ -542,10 +569,10 @@
                                     </div>
                                     <div class="git-card-hint">先确定比对所在分支，可手工输入，也可从已有版本记录中选择。</div>
                                     <div class="ui input git-manual-input">
-                                        <input type="text" name="branch" placeholder="例如: master / release/1.2.x" id="gitCompareBranchInput" list="gitCompareBranchOptions">
+                                        <input type="text" name="branch" placeholder="例如: master / release/1.2.x" id="gitCompareBranchInput" list="gitCompareBranchOptions" <#if !repositoryConfigured>disabled</#if>>
                                     </div>
                                     <div class="git-inline-actions">
-                                        <button class="ui mini basic button" type="button" id="gitComparePickBranchInlineButton">从版本列表选择</button>
+                                        <button class="ui mini basic button <#if !repositoryConfigured>disabled</#if>" type="button" id="gitComparePickBranchInlineButton" <#if !repositoryConfigured>disabled</#if>>从版本列表选择</button>
                                     </div>
                                     <div class="git-selected-preview is-empty" id="gitCompareBranchPreview">尚未选择分支，可直接手工输入。</div>
                                 </div>
@@ -557,10 +584,10 @@
                                     </div>
                                     <div class="git-card-hint">填写旧版本的 commit、分支或 tag，作为比对起点。</div>
                                     <div class="ui input git-manual-input">
-                                        <input type="text" name="oldCommit" placeholder="手工输入旧版本 commit id / 分支 / tag" id="gitCompareOldCommitInput" list="gitCompareOldCommitOptions">
+                                        <input type="text" name="oldCommit" placeholder="手工输入旧版本 commit id / 分支 / tag" id="gitCompareOldCommitInput" list="gitCompareOldCommitOptions" <#if !repositoryConfigured>disabled</#if>>
                                     </div>
                                     <div class="git-inline-actions">
-                                        <button class="ui mini basic orange button" type="button" id="gitComparePickOldButton">从版本列表选择</button>
+                                        <button class="ui mini basic orange button <#if !repositoryConfigured>disabled</#if>" type="button" id="gitComparePickOldButton" <#if !repositoryConfigured>disabled</#if>>从版本列表选择</button>
                                     </div>
                                     <div class="git-selected-preview is-empty" id="gitCompareOldCommitPreview">尚未选择旧版本，可直接手工输入。</div>
                                 </div>
@@ -582,10 +609,10 @@
                                     </div>
                                     <div class="git-card-hint">填写新版本的 commit、分支或 tag，作为本次差异的目标版本。</div>
                                     <div class="ui input git-manual-input">
-                                        <input type="text" name="newCommit" placeholder="手工输入新版本 commit id / 分支 / tag" id="gitCompareNewCommitInput" list="gitCompareNewCommitOptions">
+                                        <input type="text" name="newCommit" placeholder="手工输入新版本 commit id / 分支 / tag" id="gitCompareNewCommitInput" list="gitCompareNewCommitOptions" <#if !repositoryConfigured>disabled</#if>>
                                     </div>
                                     <div class="git-inline-actions">
-                                        <button class="ui mini basic blue button" type="button" id="gitComparePickNewButton">从版本列表选择</button>
+                                        <button class="ui mini basic blue button <#if !repositoryConfigured>disabled</#if>" type="button" id="gitComparePickNewButton" <#if !repositoryConfigured>disabled</#if>>从版本列表选择</button>
                                     </div>
                                     <div class="git-selected-preview is-empty" id="gitCompareNewCommitPreview">尚未选择新版本，可直接手工输入。</div>
                                 </div>
@@ -594,14 +621,18 @@
                         <datalist id="gitCompareBranchOptions"></datalist>
                         <datalist id="gitCompareOldCommitOptions"></datalist>
                         <datalist id="gitCompareNewCommitOptions"></datalist>
-                        <div class="ui mini info message" id="gitCompareCommitTip" style="margin-top: 12px;">
+                        <div class="ui mini <#if repositoryConfigured>info<#else>warning</#if> message" id="gitCompareCommitTip" style="margin-top: 12px;">
+                            <#if repositoryConfigured>
                             分支、旧 Commit / ref、新 Commit / ref 都支持手工输入，也支持从当前版本列表中已有的 branch / commitId 中选择。
+                            <#else>
+                            当前应用尚未配置代码仓库，请先完成仓库配置后再使用 Git 差异比对。
+                            </#if>
                         </div>
                         <div class="field" style="margin-top: 14px;">
                             <label>比较范围（包名）：</label>
                             <input type="text" name="packageName" placeholder="默认是包的所有范围（例如 com.example）">
                         </div>
-                        <button class="ui button primary" type="submit" id="gitCompareSubmitButton">开始 Git 比对</button>
+                        <button class="ui button primary <#if !repositoryConfigured>disabled</#if>" type="submit" id="gitCompareSubmitButton" <#if !repositoryConfigured>disabled</#if>>开始 Git 比对</button>
                     </form>
                 </div>
 
@@ -805,6 +836,7 @@
         var gitOldCommitStorageKey = "oAT_compare_git_old_commit_" + appId;
         var gitNewCommitStorageKey = "oAT_compare_git_new_commit_" + appId;
         var gitCommitList = [];
+        var repositoryConfigured = ${repositoryConfigured?c};
         var gitVersionOptions = [
             <#list versionItems as item>
             {
@@ -815,6 +847,21 @@
             }<#if item_has_next>,</#if>
             </#list>
         ];
+
+        function ensureRepositoryConfigured() {
+            if (repositoryConfigured) {
+                return true;
+            }
+            showToast('当前应用尚未配置代码仓库，请先完成仓库配置后再使用该功能。', 'warning', 8000);
+            return false;
+        }
+
+        function applyRepositoryConfigurationState() {
+            var disabled = !repositoryConfigured;
+            $('.git-compare-panel .git-entry-shell').toggleClass('repository-config-missing', disabled);
+            $('#gitCompareBranchInput, #gitCompareOldCommitInput, #gitCompareNewCommitInput, #gitCompareSubmitButton, #gitComparePickBranchButton, #gitComparePickBranchInlineButton, #gitComparePickOldButton, #gitComparePickNewButton').prop('disabled', disabled).toggleClass('disabled', disabled);
+            $('#gitCompareCommitTip').removeClass('info warning negative').addClass(disabled ? 'warning' : 'info').text(disabled ? '当前应用尚未配置代码仓库，请先完成仓库配置后再使用 Git 差异比对。' : '分支、旧 Commit / ref、新 Commit / ref 都支持手工输入，也支持从当前版本列表中已有的 branch / commitId 中选择。');
+        }
 
         function escapeHtml(text) {
             return $('<div/>').text(text || '').html();
@@ -1081,7 +1128,6 @@
             if (savedNewCommit) {
                 $('#gitCompareNewCommitInput').val(savedNewCommit);
             }
-            $('#gitCompareCommitTip').removeClass('negative warning').addClass('info').text('分支与 commit 支持直接录入；如需复用已有版本记录，可点击下方按钮快速带入。');
             refreshGitSelectionPreviews();
         }
 
@@ -1090,20 +1136,32 @@
         });
 
         $('#gitComparePickBranchButton, #gitComparePickBranchInlineButton').on('click', function() {
+            if (!ensureRepositoryConfigured()) {
+                return;
+            }
             openVersionPicker('branch', $('#gitCompareBranchInput'));
         });
 
         $('#gitComparePickOldButton').on('click', function() {
+            if (!ensureRepositoryConfigured()) {
+                return;
+            }
             openVersionPicker('commit', $('#gitCompareOldCommitInput'));
         });
 
         $('#gitComparePickNewButton').on('click', function() {
+            if (!ensureRepositoryConfigured()) {
+                return;
+            }
             openVersionPicker('commit', $('#gitCompareNewCommitInput'));
         });
 
         $('#gitCompareForm').on('submit', function() {
             var $form = $(this);
             if (oatIsFormSubmitting($form)) {
+                return false;
+            }
+            if (!ensureRepositoryConfigured()) {
                 return false;
             }
             persistGitInputs();
@@ -1134,6 +1192,7 @@
 
         renderVersionBasedGitOptions();
         restoreGitInputs();
+        applyRepositoryConfigurationState();
 
         // 绑定删除事件的辅助函数
         function bindDeleteItemEvents($context) {
@@ -1341,6 +1400,9 @@
     $('.menu .item').tab();
     $('.ui.filter.dropdown').dropdown({
         on: 'click'
+    });
+    $('.repository-config-button').popup({
+        on: 'hover'
     });
 
     function showDetail(id) {
