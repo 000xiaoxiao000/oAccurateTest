@@ -338,7 +338,7 @@ sequenceDiagram
     Svc->>App: getApp(appId)
     Svc->>ES: 查询 static_source_info
     alt 增量模式
-      Svc->>Git: getDiff(baseCommit, commit)
+      Svc->>Git: getDiffDetail(baseCommit, commit)
     end
     Svc->>ES: 查询 system_snapshot 构建快照上下文
     Svc->>ES: 查询 trace_node 聚合覆盖率
@@ -371,4 +371,3 @@ sequenceDiagram
 - 管理评审：优先看“管理视角”5 张图。
 - 技术评审：按“系统 -> 数据 -> 技术 -> UML”顺序讨论。
 - 版本演进：每次覆盖率逻辑变更后，至少同步更新时序图与数据架构图。
-

@@ -119,7 +119,6 @@ public class TraceMethodVisitor extends MethodVisitor{
         super.visitFieldInsn(opcode, owner, name, desc);
     }
 
-    @Deprecated
     @Override
     public void visitMethodInsn(int opcode, String owner, String name,
                                 String desc) {

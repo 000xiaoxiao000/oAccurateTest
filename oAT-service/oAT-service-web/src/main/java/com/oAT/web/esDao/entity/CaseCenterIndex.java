@@ -30,7 +30,6 @@ public class CaseCenterIndex implements StandardDate {
     @Field(type = FieldType.Object)
     UsecaseDirectory directory;
 
-    @Deprecated
     public CaseCenterIndex() {
     }
 

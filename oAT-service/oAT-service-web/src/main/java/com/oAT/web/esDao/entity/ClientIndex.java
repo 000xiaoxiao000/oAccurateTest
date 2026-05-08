@@ -21,7 +21,6 @@ public class ClientIndex implements Serializable, StandardDate {
     @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
 
-    @Deprecated
     public ClientIndex() {
     }
 

@@ -2,7 +2,6 @@ package com.oAT.web.service;
 
 import java.io.File;
 import java.util.List;
-import java.util.Map;
 
 import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitDiffVo;
@@ -33,9 +32,6 @@ public interface GitService {
      * @return List<GitDiffVo>
      */
     List<GitDiffVo> getDiffDetail(String repoUrl, String username, String password, String oldCommit, String newCommit);
-
-    @Deprecated
-    Map<String, List<Integer>> getDiff(String repoUrl, String username, String password, String oldCommit, String newCommit);
 
     /**
      * 获取指定 commit 下某个文件的内容（文本）。

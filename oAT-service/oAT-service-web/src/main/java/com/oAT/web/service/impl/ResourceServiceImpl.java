@@ -1,18 +1,9 @@
 package com.oAT.web.service.impl;
 
-import com.oAT.web.common.EncryptUtil;
-import com.oAT.web.esDao.ResourceRepository;
-import com.oAT.web.esDao.entity.ResourceIndex;
 import com.oAT.web.service.ResourceService;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.document.Document;
-import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
-import org.springframework.data.elasticsearch.core.query.UpdateQuery;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.util.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,81 +17,8 @@ public class ResourceServiceImpl implements ResourceService, InitializingBean{
 
     private static final Logger logger = LoggerFactory.getLogger(ResourceServiceImpl.class);
 
-    @Autowired
-    ResourceRepository resourceRepository;
-    @Autowired
-    ElasticsearchOperations elasticsearchOperations;
-
     @org.springframework.beans.factory.annotation.Value("${oat.data.path:${user.home}/.oAT/cache/}")
     private String cacheRoot;
-
-
-    @Override
-    public String addResource(byte[] content) {
-        Assert.notNull(content, "参数content 不能为空");
-        String md5 = EncryptUtil.MD5(content);
-        if (!existsById(md5)) {
-            _addResource(content, md5);
-        }
-        return md5;
-    }
-
-    private void _addResource(byte[] content, String md5) {
-        ResourceIndex index = new ResourceIndex(content);
-        index.setReferenceCount(0);
-        index.setId(md5);
-        resourceRepository.save(index);
-    }
-
-
-    /**
-     * 增加引用，引用数加1
-     *
-     * @param id
-     */
-    @Override
-    public void reference(String id) {
-        _reference(id, 1);
-    }
-
-    /**
-     * 取消引用，引用数减1
-     *
-     * @param id
-     */
-    @Override
-    public void cancelReference(String id) {
-        _reference(id, -1);
-    }
-
-    private boolean existsById(String id) {
-        return resourceRepository.existsById(id);
-    }
-
-    private void _reference(String id, int count) {
-        synchronized (id.intern()) {
-            // 获取旧的资源
-            ResourceIndex oldResource = resourceRepository.findById(id).orElse(null);
-            Assert.notNull(oldResource, "找不到指定资源:" + id);
-
-            // 修改引用数
-            Document doc = Document.create();
-            doc.put("updateTime", new java.util.Date());
-            doc.put("referenceCount", oldResource.getReferenceCount() + count);
-
-            UpdateQuery updateQuery = UpdateQuery.builder(id)
-                    .withDocument(doc)
-                    .build();
-            elasticsearchOperations.update(updateQuery, IndexCoordinates.of("resources"));
-        }
-    }
-    // 注：并发调用会出现删除两次的情况
-    @Override
-    public void removeResource(String id) {
-        Assert.notNull(id, "参数id 不能为空");
-        Assert.isTrue(existsById(id), "找不到指定资源:" + id);
-        resourceRepository.deleteById(id);
-    }
 
     @Override
     public File createCacheFile(String md5, String fileName) {

@@ -63,7 +63,6 @@ public class TraceNodeIndex implements StandardDate, Serializable {
      * 该构造方法为自动注入保留方法，
      * 应用<span style="color:red">必须使用带参数的构造方法</span>
      */
-    @Deprecated
     public TraceNodeIndex() {}
 
     public TraceNodeIndex(TraceNode node) {

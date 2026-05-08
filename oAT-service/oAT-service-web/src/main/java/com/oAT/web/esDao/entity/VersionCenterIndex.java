@@ -27,7 +27,6 @@ public class VersionCenterIndex implements Serializable, StandardDate {
     @Field(type = FieldType.Object)
     VersionCompareReport compareReport;
 
-    @Deprecated
     public VersionCenterIndex() {
 
     }

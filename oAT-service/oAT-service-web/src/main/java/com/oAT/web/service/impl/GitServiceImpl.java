@@ -1,7 +1,9 @@
 package com.oAT.web.service.impl;
 
 import com.oAT.web.common.CoverageSourceClassUtil;
+import com.oAT.web.common.FriendlyErrorMessageUtil;
 import com.oAT.web.common.Job;
+import com.oAT.web.exceptions.FriendlyException;
 import com.oAT.web.service.GitService;
 import com.oAT.web.service.ResourceService;
 import com.oAT.web.service.entity.GitCommitOptionVo;
@@ -663,35 +665,7 @@ public class GitServiceImpl implements GitService {
     }
 
     private String getFriendlyErrorMessage(Exception e) {
-        String msg = e.getMessage();
-        if (msg == null) msg = e.toString();
-
-        if (msg.contains("401") || msg.contains("Not authorized") || msg.contains("Auth fail") || msg.contains("not authorized")) {
-            return "认证失败: 请检查用户名密码或访问令牌(Token)权限";
-        }
-        if (msg.contains("forbidden") || msg.contains("403")) {
-            return "访问拒绝: 账户权限不足或被服务端拦截";
-        }
-        if (msg.contains("404") || msg.contains("not found") || msg.contains("cannot open")) {
-            return "仓库地址无效或仓库已删除(404)";
-        }
-        if (msg.contains("Transport") || msg.contains("connection") || msg.contains("resolve host") || msg.contains("timeout")) {
-            return "网络错误: 无法连接至远程 Git 服务，请检查网络或防火墙";
-        }
-        if (msg.contains("pre-receive hook declined") || msg.contains("hook-declined")) {
-            return "服务端拒绝: Git Hook 检查不通过";
-        }
-        if (msg.contains("consistency check") || msg.contains("corrupt")) {
-            return "仓库损坏: 远程仓库对象一致性校验失败";
-        }
-        if (msg.contains("No space left") || msg.contains("Disk full")) {
-            return "环境异常: 本地磁盘空间不足";
-        }
-        if (msg.contains("Permission denied") && msg.contains("filesystem")) {
-            return "系统错误: 文件系统访问权限受限";
-        }
-
-        return msg;
+        return FriendlyErrorMessageUtil.git(e);
     }
 
     @Override
@@ -776,102 +750,13 @@ public class GitServiceImpl implements GitService {
                 logger.debug("Failed to set last modified for {}", gitCacheDir);
             }
         } catch (Exception e) {
-            logger.error("Failed to get git diff detail: {}", e.getMessage(), e);
+            String friendlyMessage = getFriendlyErrorMessage(e);
+            logger.error("Failed to get git diff detail: {}", friendlyMessage, e);
+            throw new FriendlyException(friendlyMessage, e);
         } finally {
             lock.unlock();
         }
         return diffList;
-    }
-
-    @Override
-    @Deprecated
-    public Map<String, List<Integer>> getDiff(String repoUrl, String username, String password, String oldCommit, String newCommit) {
-        Map<String, List<Integer>> diffMap = new HashMap<>();
-        if (!StringUtils.hasText(oldCommit) || !StringUtils.hasText(newCommit)) return diffMap;
-
-        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
-        RLock lock = getRepoLock(normalizedRepoUrl);
-        lock.lock();
-        try {
-            String repoHash = com.oAT.web.common.EncryptUtil.MD5(normalizedRepoUrl);
-            File gitCacheDir = new File(resourceService.getGitCacheRoot(), repoHash);
-
-            Git clonedGit;
-            if (new File(gitCacheDir, ".git").exists()) {
-                clonedGit = Git.open(gitCacheDir);
-                Repository repository = clonedGit.getRepository();
-                if (repository.resolve(oldCommit) == null || repository.resolve(newCommit) == null) {
-                    clonedGit.fetch().setCredentialsProvider(getCredentials(username, password)).call();
-                }
-            } else {
-                clonedGit = Git.cloneRepository()
-                        .setURI(normalizedRepoUrl)
-                        .setDirectory(gitCacheDir)
-                        .setCredentialsProvider(getCredentials(username, password))
-                        .setNoCheckout(true)
-                        .call();
-            }
-
-            try (Git git = clonedGit) {
-                Repository repository = git.getRepository();
-                ObjectId oldId = repository.resolve(oldCommit);
-                ObjectId newId = repository.resolve(newCommit);
-
-                if (oldId == null || newId == null) {
-                    logger.warn("Could not resolve commits: {} or {} in {}", oldCommit, newCommit, normalizedRepoUrl);
-                    return diffMap;
-                }
-
-                try (RevWalk walk = new RevWalk(repository)) {
-                    RevCommit oldRev = walk.parseCommit(oldId);
-                    RevCommit newRev = walk.parseCommit(newId);
-
-                    try (DiffFormatter df = new DiffFormatter(DisabledOutputStream.INSTANCE)) {
-                        df.setRepository(repository);
-                        df.setDiffComparator(RawTextComparator.WS_IGNORE_ALL);
-                        df.setDetectRenames(true);
-
-                        List<DiffEntry> diffs = df.scan(oldRev.getTree(), newRev.getTree());
-                        for (DiffEntry entry : diffs) {
-                            String path = entry.getChangeType() == DiffEntry.ChangeType.DELETE ? entry.getOldPath() : entry.getNewPath();
-                            if (path.endsWith(".java")) {
-                                String className = path;
-                                if (path.contains("src/main/java/")) {
-                                    className = path.substring(path.indexOf("src/main/java/") + "src/main/java/".length());
-                                } else if (path.contains("src/test/java/")) {
-                                    className = path.substring(path.indexOf("src/test/java/") + "src/test/java/".length());
-                                }
-                                className = className.replace(".java", "").replace("/", ".");
-
-                                List<Integer> changedLines = new ArrayList<>();
-                                if (entry.getChangeType() != DiffEntry.ChangeType.DELETE) {
-                                    FileHeader fileHeader = df.toFileHeader(entry);
-                                    for (HunkHeader hunk : fileHeader.getHunks()) {
-                                        for (Edit edit : hunk.toEditList()) {
-                                            if (edit.getType() != Edit.Type.DELETE) {
-                                                for (int i = edit.getBeginB(); i < edit.getEndB(); i++) {
-                                                    changedLines.add(i + 1);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                diffMap.put(className + (entry.getChangeType() == DiffEntry.ChangeType.DELETE ? ":DELETED" : ""), changedLines);
-                            }
-                        }
-                    }
-                }
-            }
-            // 更新目录最后修改时间，用于清理策略
-            if (!gitCacheDir.setLastModified(System.currentTimeMillis())) {
-                logger.debug("Failed to set last modified for {}", gitCacheDir);
-            }
-        } catch (Exception e) {
-            logger.error("Failed to get git diff: {}", e.getMessage(), e);
-        } finally {
-            lock.unlock();
-        }
-        return diffMap;
     }
 
     @Override
