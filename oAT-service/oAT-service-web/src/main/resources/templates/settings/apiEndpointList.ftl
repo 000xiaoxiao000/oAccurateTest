@@ -237,7 +237,7 @@
                             <div style="margin-top:8px;color:#6b7280;">如果系统中已存在 Git 拉取后的源码 zip，将优先使用这里的文件进行扫描。</div>
                         </div>
                         <div class="field">
-                            <label>手动上传源码包或制品包（兜底）</label>
+                            <label>手动上传源码包或制品包</label>
                             <input type="file" name="file" id="artifactFile" accept=".zip,.jar,.war">
                         </div>
                         <button id="apiEndpointUploadButton" type="button" class="ui primary button" onclick="uploadArtifact()"><i class="upload icon"></i> 开始扫描</button>
