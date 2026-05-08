@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AI流式输出控制器
@@ -69,6 +70,7 @@ public class AIStreamingControl {
                                    @RequestParam(required = false) String imageData) {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+        AtomicBoolean completed = new AtomicBoolean(false);
 
         // 异步处理
         CompletableFuture.runAsync(() -> {
@@ -84,7 +86,7 @@ public class AIStreamingControl {
                 ProjectVo project = projectService.getProject(projectId);
                 if (project == null) {
                     sendJsonEvent(emitter, "error", Map.of("message", "项目不存在"));
-                    emitter.complete();
+                    completeEmitter(emitter, completed);
                     return;
                 }
 
@@ -156,24 +158,25 @@ public class AIStreamingControl {
                 completeData.put("model", aiAgentService.getLlmSwitcher() != null ?
                         aiAgentService.getLlmSwitcher().getDefaultModelName() : "default");
                 sendJsonEvent(emitter, "complete", completeData);
-                emitter.complete();
+                completeEmitter(emitter, completed);
 
             } catch (Exception e) {
                 logger.error("SSE streaming failed", e);
-                try {
-                    sendJsonEvent(emitter, "error", Map.of("message",
-                            e.getMessage() != null ? e.getMessage() : "内部错误"));
-                    emitter.completeWithError(e);
-                } catch (IOException ioException) {
-                    logger.error("Failed to send error event", ioException);
-                }
+                trySendJsonEvent(emitter, "error", Map.of("message", errorMessage(e)));
+                completeEmitterWithError(emitter, completed, e);
             }
         }, sseExecutor);
 
         // 设置回调
         emitter.onCompletion(() -> logger.debug("SSE connection completed for project: {}", projectId));
-        emitter.onTimeout(() -> logger.warn("SSE connection timeout for project: {}", projectId));
-        emitter.onError(throwable -> logger.error("SSE connection error for project {}: {}", projectId, throwable.getMessage()));
+        emitter.onTimeout(() -> {
+            logger.warn("SSE connection timeout for project: {}", projectId);
+            completeEmitter(emitter, completed);
+        });
+        emitter.onError(throwable -> {
+            logger.error("SSE connection error for project {}: {}", projectId, errorMessage(throwable));
+            completeEmitterWithError(emitter, completed, throwable);
+        });
 
         return emitter;
     }
@@ -191,6 +194,7 @@ public class AIStreamingControl {
                                   @RequestParam(required = false) String sourceCodeSnippet) {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+        AtomicBoolean completed = new AtomicBoolean(false);
 
         CompletableFuture.runAsync(() -> {
             long startTime = System.currentTimeMillis();
@@ -204,7 +208,7 @@ public class AIStreamingControl {
                 ProjectVo project = projectService.getProject(projectId);
                 if (project == null) {
                     sendJsonEvent(emitter, "error", Map.of("message", "项目不存在"));
-                    emitter.complete();
+                    completeEmitter(emitter, completed);
                     return;
                 }
 
@@ -247,17 +251,23 @@ public class AIStreamingControl {
                         "responseLength", response != null ? response.length() : 0,
                         "type", "bug-detect"
                 ));
-                emitter.complete();
+                completeEmitter(emitter, completed);
             } catch (Exception e) {
                 logger.error("Bug detect SSE failed", e);
-                try { sendJsonEvent(emitter, "error", Map.of("message", e.getMessage())); emitter.completeWithError(e); }
-                catch (IOException ignored) {}
+                trySendJsonEvent(emitter, "error", Map.of("message", errorMessage(e)));
+                completeEmitterWithError(emitter, completed, e);
             }
         }, sseExecutor);
 
         emitter.onCompletion(() -> logger.debug("Bug detect completed for: {}", className));
-        emitter.onTimeout(() -> logger.warn("Bug detect timeout for: {}", className));
-        emitter.onError(t -> logger.error("Bug detect error for {}: {}", className, t.getMessage()));
+        emitter.onTimeout(() -> {
+            logger.warn("Bug detect timeout for: {}", className);
+            completeEmitter(emitter, completed);
+        });
+        emitter.onError(t -> {
+            logger.error("Bug detect error for {}: {}", className, errorMessage(t));
+            completeEmitterWithError(emitter, completed, t);
+        });
         return emitter;
     }
 
@@ -272,6 +282,7 @@ public class AIStreamingControl {
                                         @RequestParam String traceId) {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+        AtomicBoolean completed = new AtomicBoolean(false);
 
         CompletableFuture.runAsync(() -> {
             long startTime = System.currentTimeMillis();
@@ -285,7 +296,7 @@ public class AIStreamingControl {
                 ProjectVo project = projectService.getProject(projectId);
                 if (project == null) {
                     sendJsonEvent(emitter, "error", Map.of("message", "项目不存在"));
-                    emitter.complete();
+                    completeEmitter(emitter, completed);
                     return;
                 }
 
@@ -320,17 +331,23 @@ public class AIStreamingControl {
                         "responseLength", response != null ? response.length() : 0,
                         "type", "callchain-analysis"
                 ));
-                emitter.complete();
+                completeEmitter(emitter, completed);
             } catch (Exception e) {
                 logger.error("CallChain analysis SSE failed", e);
-                try { sendJsonEvent(emitter, "error", Map.of("message", e.getMessage())); emitter.completeWithError(e); }
-                catch (IOException ignored) {}
+                trySendJsonEvent(emitter, "error", Map.of("message", errorMessage(e)));
+                completeEmitterWithError(emitter, completed, e);
             }
         }, sseExecutor);
 
         emitter.onCompletion(() -> logger.debug("CallChain analysis completed: {}", traceId));
-        emitter.onTimeout(() -> logger.warn("CallChain analysis timeout: {}", traceId));
-        emitter.onError(t -> logger.error("CallChain analysis error {}: {}", traceId, t.getMessage()));
+        emitter.onTimeout(() -> {
+            logger.warn("CallChain analysis timeout: {}", traceId);
+            completeEmitter(emitter, completed);
+        });
+        emitter.onError(t -> {
+            logger.error("CallChain analysis error {}: {}", traceId, errorMessage(t));
+            completeEmitterWithError(emitter, completed, t);
+        });
         return emitter;
     }
 
@@ -347,6 +364,7 @@ public class AIStreamingControl {
                                         @RequestParam(defaultValue = "diff") String mode) {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
+        AtomicBoolean completed = new AtomicBoolean(false);
 
         CompletableFuture.runAsync(() -> {
             long startTime = System.currentTimeMillis();
@@ -362,7 +380,7 @@ public class AIStreamingControl {
                 ProjectVo project = projectService.getProject(projectId);
                 if (project == null) {
                     sendJsonEvent(emitter, "error", Map.of("message", "项目不存在"));
-                    emitter.complete();
+                    completeEmitter(emitter, completed);
                     return;
                 }
 
@@ -426,18 +444,59 @@ public class AIStreamingControl {
                         "type", "callchain-compare",
                         "mode", mode
                 ));
-                emitter.complete();
+                completeEmitter(emitter, completed);
             } catch (Exception e) {
                 logger.error("CallChain compare SSE failed", e);
-                try { sendJsonEvent(emitter, "error", Map.of("message", e.getMessage())); emitter.completeWithError(e); }
-                catch (IOException ignored) {}
+                trySendJsonEvent(emitter, "error", Map.of("message", errorMessage(e)));
+                completeEmitterWithError(emitter, completed, e);
             }
         }, sseExecutor);
 
         emitter.onCompletion(() -> logger.debug("CallChain compare completed"));
-        emitter.onTimeout(() -> logger.warn("CallChain compare timeout"));
-        emitter.onError(t -> logger.error("CallChain compare error: {}", t.getMessage()));
+        emitter.onTimeout(() -> {
+            logger.warn("CallChain compare timeout");
+            completeEmitter(emitter, completed);
+        });
+        emitter.onError(t -> {
+            logger.error("CallChain compare error: {}", errorMessage(t));
+            completeEmitterWithError(emitter, completed, t);
+        });
         return emitter;
+    }
+
+    private void trySendJsonEvent(SseEmitter emitter, String event, Object data) {
+        try {
+            sendJsonEvent(emitter, event, data);
+        } catch (Exception e) {
+            logger.debug("Failed to send SSE {} event: {}", event, errorMessage(e));
+        }
+    }
+
+    private void completeEmitter(SseEmitter emitter, AtomicBoolean completed) {
+        if (completed.compareAndSet(false, true)) {
+            try {
+                emitter.complete();
+            } catch (Exception e) {
+                logger.debug("SSE complete ignored: {}", errorMessage(e));
+            }
+        }
+    }
+
+    private void completeEmitterWithError(SseEmitter emitter, AtomicBoolean completed, Throwable error) {
+        if (completed.compareAndSet(false, true)) {
+            try {
+                emitter.completeWithError(error);
+            } catch (Exception e) {
+                logger.debug("SSE completeWithError ignored: {}", errorMessage(e));
+            }
+        }
+    }
+
+    private String errorMessage(Throwable error) {
+        if (error == null) {
+            return "内部错误";
+        }
+        return error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
     }
 
     /**

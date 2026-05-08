@@ -444,6 +444,7 @@
             </div>
 
             <div class="compare-content">
+                <textarea id="initialCompareLogSource" style="display:none;">${compareJob.log!''?html}</textarea>
                 <div class="progress-panel">
                     <div class="top-row">
                         <div>
@@ -646,7 +647,8 @@
     });
     $('.commit-id').popup();
 
-    $('#compareLogger').html(renderCompareLogs(${compareJob.log?json_string}));
+    var initialCompareLog = $('#initialCompareLogSource').val() || '';
+    $('#compareLogger').html(renderCompareLogs(initialCompareLog));
     updateSummaryCards({
         addClassCount: ${compareJob.addClassCount!0},
         updateClassCount: ${compareJob.updateClassCount!0},
@@ -695,13 +697,12 @@
     }
 
     $(function () {
-        var future = setInterval(function () {
-            var results = refreshJob();
-            if (!results || !results.data) {
-                return;
-            }
-            if (results.data.finish) {
-                clearInterval(future);
+        pollCompareJob();
+    });
+
+    function pollCompareJob() {
+        refreshJob().done(function (results) {
+            if (results && results.data && results.data.finish) {
                 $("#compareProgress").removeClass("active warning").addClass("success");
                 $("#compareProgressName").html("比对已完成，正在等待报告可打开...");
                 var reportUrl = buildReportUrl(results.data.id);
@@ -710,41 +711,48 @@
                     $("#compareProgressName").html("报告已生成，正在跳转...");
                     window.location.href = readyUrl;
                 });
+                return;
             }
-        }, 500);
-    });
+            setTimeout(pollCompareJob, 500);
+        }).fail(function () {
+            $("#compareProgress").removeClass("active").addClass("warning");
+            $("#compareProgressName").html("比对状态获取失败，稍后重试...");
+            setTimeout(pollCompareJob, 1500);
+        });
+    }
 
     function refreshJob() {
-        var results = $.ajax({
+        return $.ajax({
             url: "/p/${project.id}/version/compare/get?jobId=${compareJob.id}",
-            async: false
-        }).responseJSON;
+            method: "GET",
+            cache: false
+        }).done(function (results) {
 
-        if (!results || !results.data) {
-            $("#compareProgressName").html("正在生成报告，请稍候...");
-            return results;
-        }
+            if (!results || !results.data) {
+                $("#compareProgressName").html("正在生成报告，请稍候...");
+                return;
+            }
 
-        var data = results.data;
-        var $progress = $("#compareProgress");
-        $progress.progress('set percent', data.progress || 0);
-        $("#compareProgressName").html(data.progressName || "等待结果");
+            var data = results.data;
+            var $progress = $("#compareProgress");
+            $progress.progress('set percent', data.progress || 0);
+            $("#compareProgressName").html(data.progressName || "等待结果");
 
-        if (data.finish) {
-            $progress.removeClass("active warning").addClass("success");
-        } else {
-            $progress.addClass("active").removeClass("success warning");
-        }
+            if (data.finish) {
+                $progress.removeClass("active warning").addClass("success");
+            } else {
+                $progress.addClass("active").removeClass("success warning");
+            }
 
-        $("#classAdd").text(data.addClassCount || 0);
-        $("#classUpdate").text(data.updateClassCount || 0);
-        $("#classDelete").text(data.deleteClassCount || 0);
-        $("#methodAdd").text(data.addMethodCount || 0);
-        $("#methodUpdate").text(data.updateMethodCount || 0);
-        $("#methodDelete").text(data.deleteMethodCount || 0);
-        updateSummaryCards(data);
-        $("#compareLogger").html(renderCompareLogs(data.log || ''));
-        return results;
+            $("#classAdd").text(data.addClassCount || 0);
+            $("#classUpdate").text(data.updateClassCount || 0);
+            $("#classDelete").text(data.deleteClassCount || 0);
+            $("#methodAdd").text(data.addMethodCount || 0);
+            $("#methodUpdate").text(data.updateMethodCount || 0);
+            $("#methodDelete").text(data.deleteMethodCount || 0);
+            updateSummaryCards(data);
+            $("#compareLogger").html(renderCompareLogs(data.log || ''));
+        });
     }
 </script>
 </body>

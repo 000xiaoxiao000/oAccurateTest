@@ -140,10 +140,15 @@ public class ProjectControl {
     @RequestMapping("/p/{projectId}/doEdit")
     @ResponseBody
     public ResultNotified doUpdateProject(@PathVariable String projectId, @SessionAttribute UserVo user, ProjectVo projectVo) {
-        projectVo.setId(projectId);
-        projectVo = projectService.updateProject(projectVo);
-        doLog(SystemLogService.Action.addProject, "修改了新应用", user, projectVo);
-        return new ResultNotified(true, "项目信息修改成功", "/p/" + projectVo.getId() + "/edit");
+        try {
+            projectVo.setId(projectId);
+            projectVo = projectService.updateProject(projectVo);
+            doLog(SystemLogService.Action.addProject, "修改了新应用", user, projectVo);
+            return new ResultNotified(true, "项目信息修改成功", "/p/" + projectVo.getId() + "/edit");
+        } catch (Exception e) {
+            logger.warn("更新项目信息失败, projectId={}", projectId, e);
+            return new ResultNotified(false, e.getMessage() == null ? "项目信息修改失败" : e.getMessage());
+        }
     }
 
     private void doLog(SystemLogService.Action action, String actionMessage, UserVo user, ProjectVo vo) {
