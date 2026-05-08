@@ -268,7 +268,7 @@
                 <h2 class="project-settings-form-title">编辑基本信息</h2>
                 <p class="project-settings-form-desc">建议项目名称简洁明确，项目描述重点说明测试对象、适用场景或协作说明。</p>
 
-                <form class="ui form project-settings-form" method="post" action="doEdit">
+                <form id="editProjectForm" class="ui form project-settings-form" method="post" action="doEdit" onsubmit="return false;">
                     <div class="field required">
                         <label>项目名称</label>
                         <div class="ui input">
@@ -292,7 +292,7 @@
                     <#if loginNameRole != "visitor">
                         <div class="project-settings-actions">
                             <a class="ui button" href="/p/${project.id}/home">返回项目首页</a>
-                            <button class="ui primary button" type="submit">
+                            <button id="editProjectSubmitButton" class="ui primary button" type="button" onclick="submitEditProject()">
                                 <i class="save outline icon"></i>
                                 更新基本信息
                             </button>
@@ -316,28 +316,54 @@
         $('#editDescribeCount').text(($('textarea[name="describe"]').val() || '').length);
     }
 
-    $('.ui.form')
+    function setEditProjectSubmitting(submitting) {
+        oatSetFormSubmitting($('#editProjectForm'), submitting, {
+            submitButton: '#editProjectSubmitButton',
+            keepFieldsEnabled: true,
+            readonlyFields: true,
+            extraControls: '.project-settings-actions .ui.button',
+            message: '正在更新项目信息...'
+        });
+    }
+
+    function submitEditProject() {
+        var $form = $('#editProjectForm');
+        if (oatIsFormSubmitting($form)) {
+            return false;
+        }
+        if (!$form.form('validate form')) {
+            return false;
+        }
+
+        setEditProjectSubmitting(true);
+        $.post('/p/${project.id}/doEdit', $form.serialize(), function (res) {
+            if (res.success || res.result) {
+                sessionStorage.setItem('toastMessage', res.message || '项目信息修改成功');
+                sessionStorage.setItem('toastMessageType', 'success');
+                location.href = res.data || '/p/${project.id}/edit';
+            } else {
+                setEditProjectSubmitting(false);
+                showToast((res && (res.errorMessage || res.message)) || '项目信息修改失败', 'error');
+            }
+        }).fail(function (xhr) {
+            setEditProjectSubmitting(false);
+            var message = (xhr.responseJSON && (xhr.responseJSON.errorMessage || xhr.responseJSON.message)) || '网络请求失败';
+            showToast(message, 'error');
+        });
+
+        return false;
+    }
+
+    $('#editProjectForm')
         .form({
             inline: false,
+            keyboardShortcuts: false,
+            on: 'blur',
             onFailure: function (formErrors) {
                 if (formErrors && formErrors.length > 0) {
                     showToast(formErrors[0], 'error');
                 }
                 return false;
-            },
-            onSuccess: function () {
-                var $form = $(this);
-                if (oatIsFormSubmitting($form)) {
-                    return false;
-                }
-                oatSetFormSubmitting($form, true, {
-                    submitButton: $form.find('.ui.primary.button').first(),
-                    keepFieldsEnabled: true,
-                    readonlyFields: true,
-                    extraControls: '.project-settings-actions .ui.button',
-                    message: '正在更新项目信息...'
-                });
-                return true;
             },
             fields: {
                 name: {

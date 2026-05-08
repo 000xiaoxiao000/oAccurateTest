@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class ProbeAlertSseService implements DisposableBean {
@@ -28,6 +29,7 @@ public class ProbeAlertSseService implements DisposableBean {
 
     public SseEmitter subscribe(String projectId) {
         SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MILLIS);
+        AtomicBoolean completed = new AtomicBoolean(false);
         if (!StringUtils.hasText(projectId)) {
             emitter.complete();
             return emitter;
@@ -35,12 +37,12 @@ public class ProbeAlertSseService implements DisposableBean {
         emittersByProject.computeIfAbsent(projectId, key -> new CopyOnWriteArrayList<>()).add(emitter);
         logger.debug("探针告警 SSE 已连接, projectId={}, activeConnections={}", projectId, countProjectEmitters(projectId));
         emitter.onCompletion(() -> removeEmitter(projectId, emitter));
-        emitter.onTimeout(() -> removeEmitter(projectId, emitter));
-        emitter.onError(error -> removeEmitter(projectId, emitter));
+        emitter.onTimeout(() -> completeEmitter(projectId, emitter, completed));
+        emitter.onError(error -> completeEmitter(projectId, emitter, completed));
         try {
             emitter.send(SseEmitter.event().name("connected").data("ok", MediaType.TEXT_PLAIN));
         } catch (Throwable e) {
-            removeEmitter(projectId, emitter);
+            completeEmitter(projectId, emitter, completed);
         }
         return emitter;
     }
@@ -64,7 +66,7 @@ public class ProbeAlertSseService implements DisposableBean {
                         .name("probe-alert")
                         .data(item, MediaType.APPLICATION_JSON));
             } catch (Throwable e) {
-                removeEmitter(event.getProjectId(), emitter);
+                completeEmitter(event.getProjectId(), emitter, new AtomicBoolean(false));
                 logger.debug("探针告警 SSE 连接已移除, projectId={}, eventId={}, error={}", event.getProjectId(), event.getId(), e.getMessage());
             }
         }
@@ -78,7 +80,7 @@ public class ProbeAlertSseService implements DisposableBean {
                 try {
                     emitter.send(SseEmitter.event().name("heartbeat").data(String.valueOf(System.currentTimeMillis()), MediaType.TEXT_PLAIN));
                 } catch (Throwable e) {
-                    removeEmitter(projectId, emitter);
+                    completeEmitter(projectId, emitter, new AtomicBoolean(false));
                 }
             }
         }
@@ -97,6 +99,17 @@ public class ProbeAlertSseService implements DisposableBean {
         emitters.remove(emitter);
         if (emitters.isEmpty()) {
             emittersByProject.remove(projectId);
+        }
+    }
+
+    private void completeEmitter(String projectId, SseEmitter emitter, AtomicBoolean completed) {
+        removeEmitter(projectId, emitter);
+        if (completed.compareAndSet(false, true)) {
+            try {
+                emitter.complete();
+            } catch (Exception e) {
+                logger.debug("探针告警 SSE 连接结束时忽略异常, projectId={}, error={}", projectId, e.getMessage());
+            }
         }
     }
 
