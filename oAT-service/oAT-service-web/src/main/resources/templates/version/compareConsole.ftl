@@ -700,8 +700,14 @@
         pollCompareJob();
     });
 
+    var compareJobErrorShown = false;
+
     function pollCompareJob() {
         refreshJob().done(function (results) {
+            if (results && results.data && results.data.error) {
+                handleCompareJobError(results.data);
+                return;
+            }
             if (results && results.data && results.data.finish) {
                 $("#compareProgress").removeClass("active warning").addClass("success");
                 $("#compareProgressName").html("比对已完成，正在等待报告可打开...");
@@ -729,11 +735,16 @@
         }).done(function (results) {
 
             if (!results || !results.data) {
-                $("#compareProgressName").html("正在生成报告，请稍候...");
+                var missingMessage = (results && (results.errorMessage || results.message)) || '比对任务不存在或已过期，请重新发起比对。';
+                handleCompareJobError({ errorMessage: missingMessage, log: missingMessage });
                 return;
             }
 
             var data = results.data;
+            if (data.error) {
+                handleCompareJobError(data);
+                return;
+            }
             var $progress = $("#compareProgress");
             $progress.progress('set percent', data.progress || 0);
             $("#compareProgressName").html(data.progressName || "等待结果");
@@ -753,6 +764,17 @@
             updateSummaryCards(data);
             $("#compareLogger").html(renderCompareLogs(data.log || ''));
         });
+    }
+
+    function handleCompareJobError(data) {
+        var message = (data && data.errorMessage) || '比对失败，请检查配置后重试。';
+        $("#compareProgress").removeClass("active success").addClass("error");
+        $("#compareProgressName").html(escapeHtml(message));
+        $("#compareLogger").html(renderCompareLogs((data && data.log) || message));
+        if (!compareJobErrorShown) {
+            compareJobErrorShown = true;
+            showToast(message, 'error', 12000);
+        }
     }
 </script>
 </body>

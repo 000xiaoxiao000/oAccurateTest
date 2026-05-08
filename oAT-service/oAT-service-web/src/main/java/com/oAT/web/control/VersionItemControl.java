@@ -615,6 +615,9 @@ public class VersionItemControl {
     @ResponseBody
     public ResultNotified<CompareJobVo> getCompareJob(String jobId) {
         CompareJobVo job = versionService.getCompareJob(jobId);
+        if (job == null) {
+            return new ResultNotified<>(false, "比对任务不存在或已过期，请重新发起比对。", null);
+        }
         return new ResultNotified<>(true, null, job);
     }
 

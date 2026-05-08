@@ -19,6 +19,7 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
+import com.oAT.web.common.FriendlyErrorMessageUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.common.compare.CompareUtils;
@@ -28,6 +29,7 @@ import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.esDao.entity.VersionCenterIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
 import com.oAT.web.esDao.entity.VersionItem;
+import com.oAT.web.exceptions.FriendlyException;
 import com.oAT.web.service.ResourceService;
 import com.oAT.web.service.SnapshotSearchService;
 import com.oAT.web.service.SystemSnapshotService;
@@ -311,11 +313,14 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             try {
                 startCompareJobInternal(packageName, job);
             } catch (Exception e) {
-                job.getLogger().error(e);
+                markCompareJobError(job, e, "版本文件比对失败，请检查选择的文件后重试。");
                 job.state = Job.JobState.error;
                 logger.error("版本文件比对失败:{}", job.getData(), e);
             } finally {
-                job.state = Job.JobState.finish;
+                if (job.state != Job.JobState.error) {
+                    job.state = Job.JobState.finish;
+                    jobInfo.setFinish(true);
+                }
                 new Thread(() -> {
                     try {
                         Thread.sleep(5000);
@@ -360,15 +365,8 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 job.setProgress(new Job.JobProgress());
                 job.getProgress().next("获取Git差异", 50);
 
-                List<GitDiffVo> diffs;
-                try {
-                    diffs = gitService.getDiffDetail(appinfo.getRepoAddress(), appinfo.getRepoUserName(),
-                            appinfo.getRepoPassword(), oldCommit, newCommit);
-                } catch (Exception e) {
-                    job.getLogger().error(e);
-                    job.state = Job.JobState.error;
-                    return;
-                }
+                List<GitDiffVo> diffs = gitService.getDiffDetail(appinfo.getRepoAddress(), appinfo.getRepoUserName(),
+                        appinfo.getRepoPassword(), oldCommit, newCommit);
 
                 job.getProgress().next("生成差异结果", 40);
                 List<CompareResult> differences = new ArrayList<>();
@@ -562,10 +560,12 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 job.getProgress().finish("比对完成");
                 job.state = Job.JobState.finish;
             } catch (Exception e) {
-                job.getLogger().error(e);
+                markCompareJobError(job, e, "版本比对失败，请检查仓库配置或稍后重试。");
                 job.state = Job.JobState.error;
             } finally {
-                jobInfo.setFinish(true);
+                if (job.state != Job.JobState.error) {
+                    jobInfo.setFinish(true);
+                }
                 new Thread(() -> {
                     try {
                         Thread.sleep(15000);
@@ -606,7 +606,29 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             result.setProgressName(job.getProgress().getName());
         }
         result.setFinish(job.state == Job.JobState.finish);
+        result.setError(job.state == Job.JobState.error);
         return result;
+    }
+
+    private void markCompareJobError(Job<CompareJobVo> job, Exception e, String fallbackMessage) {
+        String message = e instanceof FriendlyException ? e.getMessage() : fallbackMessage;
+        if (e instanceof FriendlyException && !StringUtils.hasText(message)) {
+            message = FriendlyErrorMessageUtil.git(e);
+        }
+        if (!StringUtils.hasText(message)) {
+            message = fallbackMessage;
+        }
+        CompareJobVo jobData = job.getData();
+        if (jobData != null) {
+            jobData.setError(true);
+            jobData.setFinish(false);
+            jobData.setErrorMessage(message);
+            jobData.setProgressName("比对失败");
+        }
+        if (job.getProgress() != null) {
+            job.getProgress().updateName("比对失败");
+        }
+        job.getLogger().error(message);
     }
 
     private void startCompareJobInternal(String packageName, Job<CompareJobVo> job) {
@@ -624,7 +646,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             difference = compareUtils.compareWar(packageName, sourceFile, targetFile);
             countJobInfo(difference, job.getData());
         } catch (IOException e) {
-            job.getLogger().error(e);
+            markCompareJobError(job, e, "版本文件比对失败，请检查选择的文件后重试。");
             job.state = Job.JobState.error;
             logger.error("版本文件比对失败:{}", job.getData(), e);
             return;

@@ -6,6 +6,7 @@ import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.CoverageSourceClassUtil;
+import com.oAT.web.common.FriendlyErrorMessageUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.esDao.*;
 import com.oAT.web.esDao.entity.*;
@@ -16,6 +17,7 @@ import com.oAT.web.service.GitService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.CoverageComparisonVo;
 import com.oAT.web.service.entity.CoverageTreeNode;
+import com.oAT.web.service.entity.GitDiffVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -155,16 +157,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     }
 
     private String toFriendlyError(String msg) {
-        if (msg == null) {
-            return "未知错误";
-        }
-        if (msg.contains("search_phase_execution_exception") || msg.contains("all shards failed")) {
-            return "数据底座(Elasticsearch)查询异常，请检查索引是否存在或服务是否正常。";
-        }
-        if (msg.contains("Connection refused") || msg.contains("Connection timed out")) {
-            return "网络连接失败，请检查相关服务(Git/ES)是否在线。";
-        }
-        return msg;
+        return FriendlyErrorMessageUtil.general(new RuntimeException(msg));
     }
 
     /**
@@ -191,7 +184,6 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         return coverageReportRepository.findById(reportId).orElse(null);
     }
 
-    @SuppressWarnings("deprecation")
     private String generateReportInternal(String appId, String versionNumber, String branch, String commitId,
                                         Integer reportType, String baseVersionNumber, String baseCommitId, Job<String> job) {
         if (job != null) job.getLogger().info("正在获取应用配置信息...");
@@ -251,8 +243,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         Map<String, List<Integer>> incrementalDiffMap = null;
         if (reportType == 1 && StringUtils.hasText(baseCommitId)) {
             if (job != null) job.getLogger().info("正在获取基准 Commit [" + baseCommitId + "] 的差异对比...");
-            incrementalDiffMap = gitService.getDiff(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(),
-                    baseCommitId, commitId);
+            incrementalDiffMap = toDiffMap(gitService.getDiffDetail(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(),
+                    baseCommitId, commitId));
             if (incrementalDiffMap == null || incrementalDiffMap.isEmpty()) {
                 throw new RuntimeException("两个版本间没有代码差异，无法生成增量报告。");
             }
@@ -1178,12 +1170,29 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         }
     }
 
-    @SuppressWarnings("deprecation")
     private Map<String, List<Integer>> getCachedDiff(AppVo app, String oldCommit, String newCommit) {
         String cacheKey = app.getId() + ":" + oldCommit + ":" + newCommit;
         return diffCache.computeIfAbsent(cacheKey, k ->
-                gitService.getDiff(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), oldCommit, newCommit)
+                toDiffMap(gitService.getDiffDetail(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), oldCommit, newCommit))
         );
+    }
+
+    private Map<String, List<Integer>> toDiffMap(List<GitDiffVo> diffs) {
+        Map<String, List<Integer>> diffMap = new HashMap<>();
+        if (diffs == null || diffs.isEmpty()) {
+            return diffMap;
+        }
+        for (GitDiffVo diff : diffs) {
+            if (diff == null || !StringUtils.hasText(diff.getClassName())) {
+                continue;
+            }
+            String key = diff.getClassName();
+            if ("DELETE".equals(diff.getChangeType())) {
+                key += ":DELETED";
+            }
+            diffMap.put(key, diff.getChangedLines() == null ? Collections.emptyList() : diff.getChangedLines());
+        }
+        return diffMap;
     }
 
     private Map<String, List<Integer>> copyBranchTargetProbeMap(Map<String, List<Integer>> source) {

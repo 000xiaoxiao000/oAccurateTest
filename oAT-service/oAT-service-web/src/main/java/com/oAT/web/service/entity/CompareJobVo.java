@@ -23,6 +23,8 @@ public class CompareJobVo implements Serializable {
     private String log;
     //private Job.JobState state;
     private boolean finish;
+    private boolean error;
+    private String errorMessage;
 
     // Git metadata (optional)
     private String gitBranch;
@@ -224,6 +226,22 @@ public class CompareJobVo implements Serializable {
 
     public void setFinish(boolean finish) {
         this.finish = finish;
+    }
+
+    public boolean isError() {
+        return error;
+    }
+
+    public void setError(boolean error) {
+        this.error = error;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 
     public Integer getAppSnapshotCount() {

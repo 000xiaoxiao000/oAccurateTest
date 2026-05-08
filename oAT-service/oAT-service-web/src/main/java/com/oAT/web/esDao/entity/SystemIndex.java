@@ -46,9 +46,8 @@ public class SystemIndex implements java.io.Serializable, StandardDate {
     private SystemLog systemLog;
 
     /**
-     * 不能使用该构造函数
+     * 框架反序列化使用。
      */
-    @Deprecated
     public SystemIndex() {
     }
 
