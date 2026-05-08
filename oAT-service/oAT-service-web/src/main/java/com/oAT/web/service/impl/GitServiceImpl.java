@@ -81,6 +81,46 @@ public class GitServiceImpl implements GitService {
         return null;
     }
 
+    private String normalizeGitRemoteUrl(String repoUrl) {
+        if (!StringUtils.hasText(repoUrl)) {
+            return repoUrl;
+        }
+
+        String normalized = repoUrl.trim();
+        int fragmentIndex = normalized.indexOf('#');
+        if (fragmentIndex >= 0) {
+            normalized = normalized.substring(0, fragmentIndex);
+        }
+        int queryIndex = normalized.indexOf('?');
+        if (queryIndex >= 0) {
+            normalized = normalized.substring(0, queryIndex);
+        }
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+
+        String[] gitWebMarkers = {
+                "/-/commits/", "/-/commit/", "/-/tree/", "/-/blob/", "/-/branches/",
+                "/commits/", "/commit/", "/tree/", "/blob/", "/branches/"
+        };
+        for (String marker : gitWebMarkers) {
+            int markerIndex = normalized.indexOf(marker);
+            if (markerIndex > 0) {
+                normalized = normalized.substring(0, markerIndex);
+                break;
+            }
+        }
+        if (normalized.endsWith("/-/branches")) {
+            normalized = normalized.substring(0, normalized.length() - "/-/branches".length());
+        }
+
+        if (!normalized.equals(repoUrl.trim())) {
+            logger.debug("Normalized Git remote URL from {} to {}", repoUrl.trim(), normalized);
+        }
+
+        return normalized;
+    }
+
     private RLock getRepoLock(String repoUrl) {
         String lockKey = "oAT:lock:repo:" + com.oAT.web.common.EncryptUtil.MD5(repoUrl);
         return redissonClient.getLock(lockKey);
@@ -89,9 +129,10 @@ public class GitServiceImpl implements GitService {
     @Override
     public List<String> getRemoteBranches(String repoUrl, String username, String password) {
         List<String> branches = new ArrayList<>();
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         try {
             LsRemoteCommand lsRemoteCommand = Git.lsRemoteRepository()
-                    .setRemote(repoUrl)
+                    .setRemote(normalizedRepoUrl)
                     .setHeads(true)
                     .setTags(false);
 
@@ -111,7 +152,7 @@ public class GitServiceImpl implements GitService {
             }
             Collections.sort(branches);
         } catch (Exception e) {
-            logger.error("Failed to fetch branches for repo: {}", repoUrl, e);
+            logger.error("Failed to fetch branches for repo: {}", normalizedRepoUrl, e);
             throw new RuntimeException("获取远程分支失败: " + getFriendlyErrorMessage(e));
         }
         return branches;
@@ -119,9 +160,10 @@ public class GitServiceImpl implements GitService {
 
     @Override
     public void checkGitPull(String repoUrl, String username, String password, String branch, String commitId) {
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         try {
             LsRemoteCommand lsRemoteCommand = Git.lsRemoteRepository()
-                    .setRemote(repoUrl)
+                    .setRemote(normalizedRepoUrl)
                     .setHeads(true)
                     .setTags(true);
 
@@ -152,7 +194,7 @@ public class GitServiceImpl implements GitService {
 
             // Depth validation for Commit ID if it's not the branch HEAD
             if (StringUtils.hasText(commitId)) {
-                checkCommitIdExists(repoUrl, username, password, commitId);
+                checkCommitIdExists(normalizedRepoUrl, username, password, commitId);
             }
 
         } catch (Exception e) {
@@ -197,9 +239,10 @@ public class GitServiceImpl implements GitService {
 
     @Override
     public String getLatestCommitId(String repoUrl, String username, String password, String branch) {
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         try {
             LsRemoteCommand lsRemoteCommand = Git.lsRemoteRepository()
-                    .setRemote(repoUrl)
+                    .setRemote(normalizedRepoUrl)
                     .setHeads(true)
                     .setTags(false);
 
@@ -231,10 +274,11 @@ public class GitServiceImpl implements GitService {
             return commits;
         }
 
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         int finalLimit = limit > 0 ? limit : 20;
         try {
             Collection<Ref> refs = Git.lsRemoteRepository()
-                    .setRemote(repoUrl)
+                    .setRemote(normalizedRepoUrl)
                     .setHeads(true)
                     .setTags(false)
                     .setCredentialsProvider(getCredentials(username, password))
@@ -251,7 +295,7 @@ public class GitServiceImpl implements GitService {
                 throw new RuntimeException("分支 " + branch + " 不存在");
             }
 
-            try (InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription(repoUrl + "#" + branch));
+            try (InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription(normalizedRepoUrl + "#" + branch));
                  RevWalk revWalk = new RevWalk(repository)) {
                 RevCommit startCommit = revWalk.parseCommit(targetRef.getObjectId());
                 revWalk.markStart(startCommit);
@@ -271,7 +315,7 @@ public class GitServiceImpl implements GitService {
                 }
             }
         } catch (Exception e) {
-            logger.error("Failed to get recent commits for repo: {} branch: {}", repoUrl, branch, e);
+            logger.error("Failed to get recent commits for repo: {} branch: {}", normalizedRepoUrl, branch, e);
             throw new RuntimeException("获取 Commit 列表失败: " + getFriendlyErrorMessage(e));
         }
         return commits;
@@ -283,9 +327,10 @@ public class GitServiceImpl implements GitService {
         estimate.setBranch(branch);
         estimate.setCommitId(commitId);
 
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         String finalBranch = branch != null ? branch.trim() : "";
         String finalCommitId = commitId != null ? commitId.trim() : "";
-        String taskKey = repoUrl + "#" + finalBranch + "#" + finalCommitId + (StringUtils.hasText(excludePaths) ? "#" + excludePaths : "");
+        String taskKey = normalizedRepoUrl + "#" + finalBranch + "#" + finalCommitId + (StringUtils.hasText(excludePaths) ? "#" + excludePaths : "");
         String existingJobId = runningTaskMap.get(taskKey);
         if (existingJobId != null) {
             Job<GitJobVo> existingJob = jobs.get(existingJobId);
@@ -312,10 +357,11 @@ public class GitServiceImpl implements GitService {
     @Override
     public void downloadAndPackage(String repoUrl, String username, String password, String branch, String commitId, File targetZipFile) {
         Path tempDir = null;
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         try {
             tempDir = Files.createTempDirectory("oAT_git_clone");
             try (Git git = Git.cloneRepository()
-                    .setURI(repoUrl)
+                    .setURI(normalizedRepoUrl)
                     .setDirectory(tempDir.toFile())
                     .setCredentialsProvider(new UsernamePasswordCredentialsProvider((username != null && !username.isEmpty()) ? username : "git", password))
                     .setBranch(branch)
@@ -378,9 +424,10 @@ public class GitServiceImpl implements GitService {
 
     @Override
     public String startGitPullJob(String repoUrl, String username, String password, String branch, String commitId, String excludePaths) {
+        final String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         final String finalBranch = branch != null ? branch.trim() : "";
         final String finalCommitId = commitId != null ? commitId.trim() : "";
-        String taskKey = repoUrl + "#" + finalBranch + "#" + finalCommitId + (StringUtils.hasText(excludePaths) ? "#" + excludePaths : "");
+        String taskKey = normalizedRepoUrl + "#" + finalBranch + "#" + finalCommitId + (StringUtils.hasText(excludePaths) ? "#" + excludePaths : "");
         String existingJobId = runningTaskMap.get(taskKey);
         if (existingJobId != null) {
             Job<GitJobVo> existingJob = jobs.get(existingJobId);
@@ -415,7 +462,7 @@ public class GitServiceImpl implements GitService {
                 File cloneDir = tempDir.toFile();
 
                 try (Git git = Git.cloneRepository()
-                        .setURI(repoUrl)
+                        .setURI(normalizedRepoUrl)
                         .setDirectory(cloneDir)
                         .setCredentialsProvider(new UsernamePasswordCredentialsProvider((username != null && !username.isEmpty()) ? username : "git", password))
                         .setBranch(finalBranch)
@@ -652,10 +699,11 @@ public class GitServiceImpl implements GitService {
         List<GitDiffVo> diffList = new ArrayList<>();
         if (!StringUtils.hasText(newCommit)) return diffList;
 
-        RLock lock = getRepoLock(repoUrl);
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
+        RLock lock = getRepoLock(normalizedRepoUrl);
         lock.lock();
         try {
-            String repoHash = com.oAT.web.common.EncryptUtil.MD5(repoUrl);
+            String repoHash = com.oAT.web.common.EncryptUtil.MD5(normalizedRepoUrl);
             File gitCacheDir = new File(resourceService.getGitCacheRoot(), repoHash);
 
             Git clonedGit;
@@ -667,7 +715,7 @@ public class GitServiceImpl implements GitService {
                 }
             } else {
                 clonedGit = Git.cloneRepository()
-                        .setURI(repoUrl)
+                        .setURI(normalizedRepoUrl)
                         .setDirectory(gitCacheDir)
                         .setCredentialsProvider(getCredentials(username, password))
                         .setNoCheckout(true)
@@ -680,7 +728,7 @@ public class GitServiceImpl implements GitService {
                 ObjectId newId = repository.resolve(newCommit);
 
                 if (newId == null) {
-                    logger.warn("Could not resolve new commit: {} in {}", newCommit, repoUrl);
+                    logger.warn("Could not resolve new commit: {} in {}", newCommit, normalizedRepoUrl);
                     return diffList;
                 }
 
@@ -741,10 +789,11 @@ public class GitServiceImpl implements GitService {
         Map<String, List<Integer>> diffMap = new HashMap<>();
         if (!StringUtils.hasText(oldCommit) || !StringUtils.hasText(newCommit)) return diffMap;
 
-        RLock lock = getRepoLock(repoUrl);
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
+        RLock lock = getRepoLock(normalizedRepoUrl);
         lock.lock();
         try {
-            String repoHash = com.oAT.web.common.EncryptUtil.MD5(repoUrl);
+            String repoHash = com.oAT.web.common.EncryptUtil.MD5(normalizedRepoUrl);
             File gitCacheDir = new File(resourceService.getGitCacheRoot(), repoHash);
 
             Git clonedGit;
@@ -756,7 +805,7 @@ public class GitServiceImpl implements GitService {
                 }
             } else {
                 clonedGit = Git.cloneRepository()
-                        .setURI(repoUrl)
+                        .setURI(normalizedRepoUrl)
                         .setDirectory(gitCacheDir)
                         .setCredentialsProvider(getCredentials(username, password))
                         .setNoCheckout(true)
@@ -769,7 +818,7 @@ public class GitServiceImpl implements GitService {
                 ObjectId newId = repository.resolve(newCommit);
 
                 if (oldId == null || newId == null) {
-                    logger.warn("Could not resolve commits: {} or {} in {}", oldCommit, newCommit, repoUrl);
+                    logger.warn("Could not resolve commits: {} or {} in {}", oldCommit, newCommit, normalizedRepoUrl);
                     return diffMap;
                 }
 
@@ -828,10 +877,11 @@ public class GitServiceImpl implements GitService {
     @Override
     public String getFileContent(String repoUrl, String username, String password, String commitId, String filePath) {
         if (!StringUtils.hasText(commitId) || !StringUtils.hasText(filePath)) return null;
-        RLock lock = getRepoLock(repoUrl);
+        String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
+        RLock lock = getRepoLock(normalizedRepoUrl);
         lock.lock();
         try {
-            String repoHash = com.oAT.web.common.EncryptUtil.MD5(repoUrl);
+            String repoHash = com.oAT.web.common.EncryptUtil.MD5(normalizedRepoUrl);
             File gitCacheDir = new File(resourceService.getGitCacheRoot(), repoHash);
 
             Git clonedGit;
@@ -845,7 +895,7 @@ public class GitServiceImpl implements GitService {
                 }
             } else {
                 clonedGit = Git.cloneRepository()
-                        .setURI(repoUrl)
+                        .setURI(normalizedRepoUrl)
                         .setDirectory(gitCacheDir)
                         .setCredentialsProvider(getCredentials(username, password))
                         .setNoCheckout(true)
@@ -856,7 +906,7 @@ public class GitServiceImpl implements GitService {
                 Repository repository = git.getRepository();
                 ObjectId commitObj = repository.resolve(commitId);
                 if (commitObj == null) {
-                    logger.warn("Could not resolve commit {} in {}", commitId, repoUrl);
+                    logger.warn("Could not resolve commit {} in {}", commitId, normalizedRepoUrl);
                     return null;
                 }
                 try (RevWalk revWalk = new RevWalk(repository)) {
