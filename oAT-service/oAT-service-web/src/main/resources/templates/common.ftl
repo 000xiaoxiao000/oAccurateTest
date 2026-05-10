@@ -164,8 +164,15 @@
             root.style.setProperty('--ai-common-' + name + '-rgb', rgb);
             root.style.setProperty('--oat-' + name, color);
             root.style.setProperty('--oat-' + name + '-rgb', rgb);
+            root.style.setProperty('--ai-theme-' + name, color);
+            root.style.setProperty('--ai-theme-' + name + '-rgb', rgb);
             if (name === 'primary') {
-                root.style.setProperty('--oat-primary-dark', 'rgb(' + darkRgbString(rgb, 0.55) + ')');
+                var primaryDark = 'rgb(' + darkRgbString(rgb, 0.55) + ')';
+                root.style.setProperty('--oat-primary-dark', primaryDark);
+                root.style.setProperty('--ai-primary', color);
+                root.style.setProperty('--ai-primary-rgb', rgb);
+                root.style.setProperty('--ai-primary-dark', primaryDark);
+                root.style.setProperty('--ai-theme-primary-dark', primaryDark);
             }
         }
 
@@ -174,6 +181,17 @@
         setThemeColor('success', palette.primary[9]);
         setThemeColor('warning', palette.primary[10]);
         setThemeColor('danger', palette.primary[3]);
+        var haloHex = (palette.halo && palette.halo[0]) || palette.primary[0];
+        var haloRgb = hexToRgb(haloHex);
+        if (haloRgb) {
+            root.style.setProperty('--ai-halo', 'rgba(' + haloRgb + ', 0.18)');
+            root.style.setProperty('--ai-theme-halo', 'rgba(' + haloRgb + ', 0.18)');
+        }
+        root.style.setProperty('--ai-theme-warning-contrast', 'var(--oat-warning-contrast)');
+        root.style.setProperty('--ai-theme-success-contrast', 'var(--oat-success-contrast)');
+        root.style.setProperty('--ai-theme-danger-contrast', 'var(--oat-danger-contrast)');
+        root.style.setProperty('--ai-accent', palette.primary[4] || palette.accent[0]);
+        root.style.setProperty('--ai-accent-rgb', hexToRgb(palette.primary[4] || palette.accent[0]));
     })(window, document);
 </script>
 <#if aiLlmEnabled!true>

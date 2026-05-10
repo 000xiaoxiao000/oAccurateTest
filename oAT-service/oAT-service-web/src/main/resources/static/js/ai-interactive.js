@@ -66,6 +66,10 @@
             var pendingHalo = U.hexToRgba(mascotPrimary, 0.10);
             var accentSoft = U.hexToRgba(accentColor, 0.12);
             var accentBorder = U.hexToRgba(accentColor, 0.22);
+            var rootComputed = window.getComputedStyle(document.documentElement);
+            var warningContrast = (rootComputed && rootComputed.getPropertyValue('--oat-warning-contrast').trim()) || '#9a6a00';
+            var successContrast = (rootComputed && rootComputed.getPropertyValue('--oat-success-contrast').trim()) || '#138a34';
+            var dangerContrast = (rootComputed && rootComputed.getPropertyValue('--oat-danger-contrast').trim()) || '#9f3a38';
             var styleId = 'aiInteractiveThemeStyle';
             var styleBlock = document.getElementById(styleId);
             if (!styleBlock) {
@@ -89,6 +93,12 @@
                 '.ai-chat-anchor-item.active, .ai-chat-anchor-item.keyboard-focus { border-color: ' + accentColor + ' !important; box-shadow: 0 0 0 3px ' + accentSoft + ' !important; }'
             ].join('\n');
 
+            $root[0].style.setProperty('--ai-primary', mascotPrimary);
+            $root[0].style.setProperty('--ai-primary-rgb', primaryRgb);
+            $root[0].style.setProperty('--ai-primary-dark', primaryDarkColor);
+            $root[0].style.setProperty('--ai-accent', accentColor);
+            $root[0].style.setProperty('--ai-accent-rgb', accentRgb);
+            $root[0].style.setProperty('--ai-halo', haloColor);
             $root[0].style.setProperty('--ai-theme-primary', mascotPrimary);
             $root[0].style.setProperty('--ai-theme-primary-rgb', primaryRgb);
             $root[0].style.setProperty('--ai-theme-primary-dark', primaryDarkColor);
@@ -97,10 +107,13 @@
             $root[0].style.setProperty('--ai-theme-halo', haloColor);
             $root[0].style.setProperty('--ai-theme-warning', warningColor);
             $root[0].style.setProperty('--ai-theme-warning-rgb', warningRgb);
+            $root[0].style.setProperty('--ai-theme-warning-contrast', warningContrast);
             $root[0].style.setProperty('--ai-theme-success', successColor);
             $root[0].style.setProperty('--ai-theme-success-rgb', successRgb);
+            $root[0].style.setProperty('--ai-theme-success-contrast', successContrast);
             $root[0].style.setProperty('--ai-theme-danger', dangerColor);
             $root[0].style.setProperty('--ai-theme-danger-rgb', dangerRgb);
+            $root[0].style.setProperty('--ai-theme-danger-contrast', dangerContrast);
 
             return {
                 accentColor: accentColor,
@@ -429,7 +442,6 @@
             options = options || {};
             var avatar = role === 'assistant' ? assistantName.substring(0, 1) : '我';
             var aiActions = options.aiActions || [];
-            var shouldPulseLatest = !!options.pulseLatest;
             var cardContentClass = 'ai-message-content' + (options.collapsible ? ' collapsible expanded' : '');
             var contentHtml = options.animate
                 ? '<div class="ai-message-text"></div>'

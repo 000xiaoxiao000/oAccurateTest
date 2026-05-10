@@ -30,6 +30,27 @@
     --oat-shadow-xs: 0 1px 2px rgba(15, 23, 42, .04);
     --oat-shadow-sm: 0 6px 18px rgba(15, 23, 42, .06);
     --oat-shadow-md: 0 14px 36px rgba(15, 23, 42, .1);
+    --ai-primary: var(--oat-primary);
+    --ai-primary-rgb: var(--oat-primary-rgb);
+    --ai-primary-dark: var(--oat-primary-dark);
+    --ai-accent: var(--oat-accent);
+    --ai-accent-rgb: var(--oat-accent-rgb);
+    --ai-halo: rgba(var(--oat-primary-rgb), .18);
+    --ai-theme-primary: var(--oat-primary);
+    --ai-theme-primary-rgb: var(--oat-primary-rgb);
+    --ai-theme-primary-dark: var(--oat-primary-dark);
+    --ai-theme-accent: var(--oat-accent);
+    --ai-theme-accent-rgb: var(--oat-accent-rgb);
+    --ai-theme-halo: var(--ai-halo);
+    --ai-theme-warning: var(--oat-warning);
+    --ai-theme-warning-rgb: var(--oat-warning-rgb);
+    --ai-theme-warning-contrast: var(--oat-warning-contrast);
+    --ai-theme-success: var(--oat-success);
+    --ai-theme-success-rgb: var(--oat-success-rgb);
+    --ai-theme-success-contrast: var(--oat-success-contrast);
+    --ai-theme-danger: var(--oat-danger);
+    --ai-theme-danger-rgb: var(--oat-danger-rgb);
+    --ai-theme-danger-contrast: var(--oat-danger-contrast);
 }
 
 html,
