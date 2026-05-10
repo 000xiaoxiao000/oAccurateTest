@@ -35,9 +35,9 @@ public class ProjectInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler)
             throws Exception {
-        String projectId = null;
-        UserVo user = null;
-        ProjectVo project = null;
+        String projectId;
+        UserVo user;
+        ProjectVo project;
         Assert.isTrue(request.getRequestURI().startsWith("/p/"), "url must matching  start with  '/p/{projectId}'");
         projectId = request.getRequestURI().split("/")[2];
         Assert.isTrue(!projectId.trim().isEmpty(), "url must matching  start with '/p/{projectId}'");
