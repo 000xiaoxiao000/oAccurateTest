@@ -19,8 +19,8 @@
 }
 
 .oat-list-search.ui.input > input:focus {
-    border-color: rgba(0, 181, 173, .65) !important;
-    box-shadow: 0 0 0 3px rgba(0, 181, 173, .12) !important;
+    border-color: rgba(var(--oat-primary-rgb), .65) !important;
+    box-shadow: 0 0 0 3px rgba(var(--oat-primary-rgb), .12) !important;
 }
 
 .oat-list-tools {

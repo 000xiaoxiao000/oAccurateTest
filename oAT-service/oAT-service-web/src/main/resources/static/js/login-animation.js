@@ -26,6 +26,21 @@ const colors = (window.OatPalette && window.OatPalette.primary) ? window.OatPale
 
 const accessoryColor = '#6b7280';
 
+function pickWeightedIndex(weights) {
+    let total = 0;
+    for (let i = 0; i < weights.length; i++) {
+        total += weights[i];
+    }
+    let roll = Math.random() * total;
+    for (let j = 0; j < weights.length; j++) {
+        roll -= weights[j];
+        if (roll <= 0) {
+            return j;
+        }
+    }
+    return Math.max(0, weights.length - 1);
+}
+
 function init() {
     resize();
     for (let i = 0; i < characterCount; i++) {
@@ -52,7 +67,10 @@ class Character {
         this.radius = 30 + Math.random() * 20; // 显著放大基础半径
         this.color = colors[Math.floor(Math.random() * colors.length)];
         this.angle = 0;
-        this.type = Math.floor(Math.random() * 3);
+        this.type = pickWeightedIndex([40, 22, 18, 20]);
+        this.bowtieStyle = Math.floor(Math.random() * 3);
+        this.hatStyle = Math.floor(Math.random() * 3);
+        this.glassesStyle = Math.floor(Math.random() * 3);
         this.floatOffset = Math.random() * Math.PI * 2;
         // 瞳孔平滑偏移值（在局部坐标系中）
         this.pupilOffsetX = 0;
@@ -90,44 +108,22 @@ class Character {
         ctx.fillStyle = this.color;
         ctx.fill();
 
+        // 眼睛参数（装饰物和眼睛共用，保证眼镜与眼睛对齐）
+        const eyeOffsetX = this.radius * 0.35;
+        const eyeOffsetY = -this.radius * 0.15;
+        const eyeSize = this.radius * 0.25;
+
         // 装饰物（与身体一起旋转/移动）
         if (this.type === 1) { // 领结：在脖子位置
-            ctx.fillStyle = accessoryColor;
-            const bowWidth = Math.max(10, this.radius * 0.35);
-            const bowHeight = Math.max(6, this.radius * 0.2);
-            const yOffset = this.radius * 0.9; // 更靠近身体下方，作为脖子/胸前装饰
-
-            ctx.beginPath();
-            // 左侧三角形
-            ctx.moveTo(-bowWidth, yOffset - bowHeight/2);
-            ctx.lineTo(0, yOffset);
-            ctx.lineTo(-bowWidth, yOffset + bowHeight/2);
-            ctx.fill();
-
-            // 右侧三角形
-            ctx.beginPath();
-            ctx.moveTo(bowWidth, yOffset - bowHeight/2);
-            ctx.lineTo(0, yOffset);
-            ctx.lineTo(bowWidth, yOffset + bowHeight/2);
-            ctx.fill();
-
-            // 中间小圆点
-            ctx.beginPath();
-            ctx.arc(0, yOffset, Math.max(2, this.radius * 0.06), 0, Math.PI * 2);
-            ctx.fill();
+            drawBowtie(ctx, this.radius, accessoryColor, this.bowtieStyle);
         } else if (this.type === 2) { // 小帽子：在头顶
-            ctx.fillStyle = accessoryColor;
-            const hatY = -this.radius * 1.05; // 稍微更靠上
-            // 帽檐和帽顶按比例扩大一些
-            ctx.fillRect(-this.radius * 0.6, hatY - 4, this.radius * 1.2, 6); // 帽檐
-            ctx.fillRect(-this.radius * 0.35, hatY - 16, this.radius * 0.7, 12); // 帽顶
+            drawHat(ctx, this.radius, accessoryColor, this.hatStyle);
+        } else if (this.type === 3) { // 眼镜：盖住眼睛
+            drawGlasses(ctx, eyeOffsetX, eyeOffsetY, this.radius, accessoryColor, this.glassesStyle);
         }
 
         // 眼睛（在同一变换下绘制，保证与身体与装饰物一致）
         ctx.fillStyle = 'white';
-        const eyeOffsetX = this.radius * 0.35;
-        const eyeOffsetY = -this.radius * 0.15; // 眼睛稍微靠上
-        const eyeSize = this.radius * 0.25; // 稍微缩小，和身体比例更和谐
 
         // 计算鼠标在角色局部坐标系内的向量：world -> local (旋转 -angle)
         const cosA = Math.cos(this.angle);
@@ -194,6 +190,172 @@ class Character {
         if (this.y < -100) this.y = height + 100;
         if (this.y > height + 100) this.y = -100;
     }
+}
+
+function drawGlasses(ctx, eyeOffsetX, eyeOffsetY, radius, color, styleIndex) {
+    const style = styleIndex % 3;
+    const lensRadius = Math.max(5, radius * 0.18);
+    const frameWidth = Math.max(2, radius * 0.08);
+    const bridgeWidth = Math.max(2, radius * 0.05);
+    const armWidth = Math.max(2, radius * 0.045);
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = frameWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (style === 0) {
+        ctx.beginPath();
+        ctx.arc(-eyeOffsetX, eyeOffsetY, lensRadius, 0, Math.PI * 2);
+        ctx.arc(eyeOffsetX, eyeOffsetY, lensRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-eyeOffsetX + lensRadius, eyeOffsetY);
+        ctx.lineTo(-bridgeWidth / 2, eyeOffsetY);
+        ctx.moveTo(bridgeWidth / 2, eyeOffsetY);
+        ctx.lineTo(eyeOffsetX - lensRadius, eyeOffsetY);
+        ctx.stroke();
+    } else if (style === 1) {
+        const w = lensRadius * 1.25;
+        const h = lensRadius * 1.08;
+        ctx.strokeRect(-eyeOffsetX - w, eyeOffsetY - h, w * 2, h * 2);
+        ctx.strokeRect(eyeOffsetX - w, eyeOffsetY - h, w * 2, h * 2);
+        ctx.beginPath();
+        ctx.moveTo(-eyeOffsetX + w, eyeOffsetY);
+        ctx.lineTo(-bridgeWidth / 2, eyeOffsetY);
+        ctx.moveTo(bridgeWidth / 2, eyeOffsetY);
+        ctx.lineTo(eyeOffsetX - w, eyeOffsetY);
+        ctx.stroke();
+    } else {
+        const w = lensRadius * 1.2;
+        const h = lensRadius * 1.02;
+        ctx.beginPath();
+        ctx.moveTo(-eyeOffsetX - w, eyeOffsetY - h);
+        ctx.lineTo(-eyeOffsetX + w, eyeOffsetY - h);
+        ctx.lineTo(-eyeOffsetX + w, eyeOffsetY + h * 0.1);
+        ctx.lineTo(-eyeOffsetX - w, eyeOffsetY + h * 0.1);
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(eyeOffsetX - w, eyeOffsetY - h);
+        ctx.lineTo(eyeOffsetX + w, eyeOffsetY - h);
+        ctx.lineTo(eyeOffsetX + w, eyeOffsetY + h * 0.1);
+        ctx.lineTo(eyeOffsetX - w, eyeOffsetY + h * 0.1);
+        ctx.closePath();
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-eyeOffsetX + w, eyeOffsetY);
+        ctx.lineTo(-bridgeWidth / 2, eyeOffsetY);
+        ctx.moveTo(bridgeWidth / 2, eyeOffsetY);
+        ctx.lineTo(eyeOffsetX - w, eyeOffsetY);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(-eyeOffsetX - w, eyeOffsetY - h * 0.45);
+        ctx.lineTo(-eyeOffsetX - w - armWidth * 4, eyeOffsetY - h * 0.2);
+        ctx.moveTo(eyeOffsetX + w, eyeOffsetY - h * 0.45);
+        ctx.lineTo(eyeOffsetX + w + armWidth * 4, eyeOffsetY - h * 0.2);
+        ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(-eyeOffsetX - lensRadius * 0.8, eyeOffsetY - lensRadius * 0.6);
+    ctx.lineTo(-eyeOffsetX - lensRadius * 1.5, eyeOffsetY - lensRadius * 0.25);
+    ctx.moveTo(eyeOffsetX + lensRadius * 0.8, eyeOffsetY - lensRadius * 0.6);
+    ctx.lineTo(eyeOffsetX + lensRadius * 1.5, eyeOffsetY - lensRadius * 0.25);
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawBowtie(ctx, radius, color, styleIndex) {
+    const style = styleIndex % 3;
+    const bowWidth = Math.max(10, radius * 0.35);
+    const bowHeight = Math.max(6, radius * 0.2);
+    const yOffset = radius * 0.9;
+    const knotSize = Math.max(2, radius * 0.06);
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (style === 0) {
+        ctx.beginPath();
+        ctx.moveTo(-bowWidth, yOffset - bowHeight / 2);
+        ctx.lineTo(0, yOffset);
+        ctx.lineTo(-bowWidth, yOffset + bowHeight / 2);
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(bowWidth, yOffset - bowHeight / 2);
+        ctx.lineTo(0, yOffset);
+        ctx.lineTo(bowWidth, yOffset + bowHeight / 2);
+        ctx.fill();
+    } else if (style === 1) {
+        ctx.beginPath();
+        ctx.ellipse(-bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, -0.25, 0, Math.PI * 2);
+        ctx.ellipse(bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, 0.25, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(-bowWidth * 0.95, yOffset);
+        ctx.lineTo(-bowWidth * 0.2, yOffset - bowHeight * 0.55);
+        ctx.lineTo(-bowWidth * 0.05, yOffset);
+        ctx.lineTo(-bowWidth * 0.2, yOffset + bowHeight * 0.55);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(bowWidth * 0.95, yOffset);
+        ctx.lineTo(bowWidth * 0.2, yOffset - bowHeight * 0.55);
+        ctx.lineTo(bowWidth * 0.05, yOffset);
+        ctx.lineTo(bowWidth * 0.2, yOffset + bowHeight * 0.55);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(0, yOffset, knotSize, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawHat(ctx, radius, color, styleIndex) {
+    const style = styleIndex % 3;
+    const hatY = -radius * 1.05;
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (style === 0) {
+        ctx.fillRect(-radius * 0.6, hatY - 4, radius * 1.2, 6);
+        ctx.fillRect(-radius * 0.35, hatY - 16, radius * 0.7, 12);
+    } else if (style === 1) {
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.55, hatY + 2);
+        ctx.lineTo(0, hatY - 14);
+        ctx.lineTo(radius * 0.55, hatY + 2);
+        ctx.quadraticCurveTo(0, hatY + 10, -radius * 0.55, hatY + 2);
+        ctx.fill();
+        ctx.fillRect(-radius * 0.5, hatY + 2, radius * 1.0, 5);
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.5, hatY + 5);
+        ctx.quadraticCurveTo(0, hatY - 18, radius * 0.5, hatY + 5);
+        ctx.quadraticCurveTo(0, hatY + 12, -radius * 0.5, hatY + 5);
+        ctx.fill();
+        ctx.fillRect(-radius * 0.52, hatY + 4, radius * 1.04, 4);
+    }
+
+    ctx.restore();
 }
 
 function animate() {

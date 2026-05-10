@@ -378,8 +378,8 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
                         ? "refreshMonitorList"
                         : (disableRefresh ? "disableAutoRefresh" : "enableAutoRefresh");
                 actions.add(buildMonitorPageAction(actionName,
-                        actionName.equals("refreshMonitorList") ? "刷新监控列表" : (disableRefresh ? "关闭自动刷新" : "开启自动刷新"),
-                        actionName.equals("refreshMonitorList") ? "已刷新监控列表。" : "已" + (disableRefresh ? "关闭" : "开启") + "自动刷新。"));
+                        "refreshMonitorList".equals(actionName) ? "刷新监控列表" : (disableRefresh ? "关闭自动刷新" : "开启自动刷新"),
+                        "refreshMonitorList".equals(actionName) ? "已刷新监控列表。" : "已" + (disableRefresh ? "关闭" : "开启") + "自动刷新。"));
             }
         }
 

@@ -6,6 +6,7 @@ import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -31,7 +32,8 @@ public class ProjectInterceptor implements HandlerInterceptor {
     @Value("${ai.llm.timeout:120}")
     private int aiTimeout;
 
-    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+    @Override
+    public boolean preHandle(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler)
             throws Exception {
         String projectId = null;
         UserVo user = null;
