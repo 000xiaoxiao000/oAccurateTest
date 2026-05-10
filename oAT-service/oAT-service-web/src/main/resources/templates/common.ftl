@@ -5,11 +5,28 @@
 <script src="/js/semantic.min.js"></script>
 <script src="/js/jquery.form.min.js"></script>
 <script src="/js/common.js?version=1"></script>
+<script src="/js/palette-colors.js?version=1"></script>
 <link href="/css/common.css?version=1" rel="stylesheet">
 <link href="/css/theme.css?version=1" rel="stylesheet">
 <link href="/css/list-controls.css?version=1" rel="stylesheet">
 <script src="/js/list-controls.js?version=1"></script>
 <style>
+    :root {
+        --ai-common-text: var(--oat-text);
+        --ai-common-text-secondary: var(--oat-text-secondary);
+        --ai-common-text-muted: var(--oat-text-muted);
+        --ai-common-surface-soft: var(--oat-bg-soft);
+        --ai-common-border: var(--oat-border);
+        --ai-common-accent: var(--oat-accent);
+        --ai-common-warning: var(--oat-warning);
+        --ai-common-accent-rgb: 33, 133, 208;
+        --ai-common-warning-rgb: 242, 192, 55;
+        --ai-common-accent-soft: rgba(var(--ai-common-accent-rgb), .08);
+        --ai-common-accent-border: rgba(var(--ai-common-accent-rgb), .20);
+        --ai-common-warning-soft: rgba(var(--ai-common-warning-rgb), .12);
+        --ai-common-warning-border: rgba(var(--ai-common-warning-rgb), .26);
+    }
+
     .compare-empty-state {
         min-height: 180px;
     }
@@ -26,12 +43,12 @@
     .compare-record-stats {
         margin-top: 6px;
         font-size: 0.85em;
-        color: #666;
+        color: var(--ai-common-text-secondary);
     }
 
     .compare-record-meta {
         font-size: 0.9em;
-        color: #666;
+        color: var(--ai-common-text-secondary);
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -49,15 +66,15 @@
     }
 
     .compare-record-meta-label {
-        color: #999;
+        color: var(--ai-common-text-muted);
     }
 
     .compare-record-meta-label-old {
-        color: #c97a1f;
+        color: var(--ai-common-warning);
     }
 
     .compare-record-meta-label-new {
-        color: #2185d0;
+        color: var(--ai-common-accent);
     }
 
     .compare-record-meta .meta-chip {
@@ -66,9 +83,9 @@
         gap: 4px;
         padding: 2px 8px;
         border-radius: 999px;
-        border: 1px solid #dde3ea;
-        background: #f7f8fa;
-        color: #4b5563;
+        border: 1px solid var(--ai-common-border);
+        background: var(--ai-common-surface-soft);
+        color: var(--ai-common-text-secondary);
         line-height: 1.4;
     }
 
@@ -76,22 +93,22 @@
         display: inline-block;
         padding: 2px 8px;
         border-radius: 999px;
-        border: 1px solid #dde3ea;
-        color: #34495e;
+        border: 1px solid var(--ai-common-border);
+        color: var(--ai-common-text);
         font-size: 12px;
         line-height: 1.4;
     }
 
     .compare-record-meta .commit-id-old {
-        background: #fff4e8;
-        border-color: #f0d2b4;
-        color: #9a5b16;
+        background: var(--ai-common-warning-soft);
+        border-color: var(--ai-common-warning-border);
+        color: var(--ai-common-warning);
     }
 
     .compare-record-meta .commit-id-new {
-        background: #edf6ff;
-        border-color: #c8ddf4;
-        color: #1f5f96;
+        background: var(--ai-common-accent-soft);
+        border-color: var(--ai-common-accent-border);
+        color: var(--ai-common-accent);
     }
 
     .compare-record-action-group {

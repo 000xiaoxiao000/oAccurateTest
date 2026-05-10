@@ -25,6 +25,22 @@
         var askUrl = $root.data('ask-url');
         var sessionMemoryClearUrl = askUrl ? askUrl.replace(/\/ask$/, '/sessionState/clear') : '';
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
+        var palette = window.OatPalette || {};
+        var theme = {
+            primary: mascotPrimary,
+            accent: (palette.accent && palette.accent[0]) || mascotPrimary,
+            success: (palette.primary && palette.primary[9]) || '#21ba45',
+            warning: (palette.primary && palette.primary[10]) || '#f2c037',
+            muted: (palette.accent && palette.accent[8]) || '#94a3b8',
+            ring: (palette.halo && palette.halo[0]) || 'rgba(0,181,173,0.18)',
+            surface: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.06)',
+            surfaceBorder: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.16)',
+            panelShadow: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.12)',
+            lightboxBackdrop: 'rgba(0,0,0,0.75)',
+            lightboxShadow: 'rgba(0,0,0,0.4)',
+            lightboxHintBg: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.12)',
+            lightboxHintText: 'rgb(' + U.hexToRgb(mascotPrimary) + ')'
+        };
         var aiTimeout = ($root.data('ai-timeout') || 300) * 1000;
         var storagePrefix = 'ai-floating-widget:' + projectId;
         var historyKey = storagePrefix + ':history';
@@ -2073,10 +2089,10 @@
             e.preventDefault();
             var src = $(this).attr('src');
             if (!src) return;
-            var $overlay = $('<div class="ai-lightbox-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s ease;">'
-                + '<img src="' + escapeHtml(src) + '" style="max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.4);object-fit:contain;" alt="图片预览">'
+            var $overlay = $('<div class="ai-lightbox-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:' + theme.lightboxBackdrop + ';display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity 0.2s ease;">'
+                + '<img src="' + escapeHtml(src) + '" style="max-width:90vw;max-height:90vh;border-radius:12px;box-shadow:0 16px 48px ' + theme.lightboxShadow + ';object-fit:contain;" alt="图片预览">'
                 + '<div style="position:absolute;top:16px;right:16px;">'
-                + '<span class="ai-lightbox-hint" style="color:rgba(255,255,255,0.6);font-size:12px;background:rgba(0,0,0,0.5);padding:4px 10px;border-radius:999px;pointer-events:none;">点击任意处关闭</span>'
+                + '<span class="ai-lightbox-hint" style="color:' + theme.lightboxHintText + ';font-size:12px;background:' + theme.lightboxHintBg + ';padding:4px 10px;border-radius:999px;pointer-events:none;">点击任意处关闭</span>'
                 + '</div></div>');
             $('body').append($overlay);
             requestAnimationFrame(function () { $overlay.css({opacity: '1'}); });
@@ -2155,10 +2171,10 @@
             hideLoading();
             fwLoadingStartTime = Date.now();
             var $loading = $('<div class="ai-floating-loading" id="aiFloatingLoading">'
-                + '<div style="display:flex;align-items:center;gap:10px;padding:14px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;">'
-                + '<span class="fw-loading-dots"><i class="spinner loading icon" style="color:#14b8a6;font-size:16px;"></i></span>'
-                + '<span class="fw-loading-text" style="font-size:13px;color:#64748b;">正在思考中...</span>'
-                + '<span class="fw-loading-timer" style="font-size:11px;color:#94a3b8;margin-left:auto;white-space:nowrap;"></span>'
+                + '<div style="display:flex;align-items:center;gap:10px;padding:14px;border-radius:12px;background:rgba(' + U.hexToRgb(theme.primary) + ',0.06);border:1px solid rgba(' + U.hexToRgb(theme.primary) + ',0.16);">'
+                + '<span class="fw-loading-dots"><i class="spinner loading icon" style="color:' + theme.accent + ';font-size:16px;"></i></span>'
+                + '<span class="fw-loading-text" style="font-size:13px;color:rgb(' + U.hexToRgb(theme.primary) + ');">正在思考中...</span>'
+                + '<span class="fw-loading-timer" style="font-size:11px;color:' + theme.muted + ';margin-left:auto;white-space:nowrap;"></span>'
                 + '</div></div>');
             $messageList.append($loading);
             $('#aiFloatingMessageSection').removeClass('is-collapsed');
@@ -2168,6 +2184,10 @@
                 $loading.find('.fw-loading-timer').text(elapsed + 's');
                 if (elapsed >= 30 && elapsed % 10 === 0) {
                     $loading.find('.fw-loading-text').text('AI 正在深入分析，请稍候...');
+                }
+                if (elapsed >= 60) {
+                    $loading.find('.fw-loading-text').text('响应时间较长，AI 可能遇到了复杂问题...');
+                    $loading.find('.fw-loading-timer').css('color', theme.warning);
                 }
             }, 1000);
         }
@@ -2211,12 +2231,12 @@
                         clearTimeout(oldTimer);
                     }
                     $copyBtn
-                        .css({color:'#16a34a','border-color':'rgba(22,163,77,0.4)'})
+                        .css({color:theme.success,'border-color':'rgba(' + U.hexToRgb(theme.success) + ',0.4)'})
                         .html('<i class="check icon"></i>')
                         .attr('title', '复制成功');
                     var timer = setTimeout(function () {
                         $copyBtn
-                            .css({'color':'#94a3b8','border-color':'rgba(203,213,225,0.6)'})
+                            .css({'color':theme.muted,'border-color':'rgba(' + U.hexToRgb(theme.muted) + ',0.6)'})
                             .html('<i class="copy icon"></i>')
                             .attr('title', '复制')
                             .removeData('copy-reset-timer');
@@ -2502,7 +2522,7 @@
         }
 
         function applyMascotTheme() {
-            var primary = mascotPrimary || '#00b5ad';
+            var primary = mascotPrimary || theme.primary || '#00b5ad';
             var r = parseInt(primary.slice(1, 3), 16) || 0;
             var g = parseInt(primary.slice(3, 5), 16) || 181;
             var b = parseInt(primary.slice(5, 7), 16) || 173;
@@ -2589,7 +2609,7 @@
 
                 // Dashed orbital rings
                 ctx.save();
-                ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+                ctx.strokeStyle = theme.ring;
                 ctx.setLineDash([4, 4]);
                 ctx.lineWidth = 1;
                 ctx.beginPath();
@@ -2614,7 +2634,7 @@
                 // Shadow platform
                 ctx.beginPath();
                 ctx.ellipse(0, 30, 28, 6, 0, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.07)';
+                ctx.fillStyle = 'rgba(' + U.hexToRgb(theme.primary) + ',0.07)';
                 ctx.fill();
 
                 // Body
@@ -2626,7 +2646,7 @@
                 // Face highlight
                 ctx.beginPath();
                 ctx.arc(-mascot.radius * 0.48, -mascot.radius * 0.52, mascot.radius * 0.16, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.fillStyle = 'rgba(' + U.hexToRgb(theme.accent) + ',0.2)';
                 ctx.fill();
 
                 // Eyes
@@ -2654,7 +2674,7 @@
                 ctx.fill();
 
                 // Mouth
-                ctx.strokeStyle = 'rgba(0,0,0,0.38)';
+                ctx.strokeStyle = 'rgba(' + U.hexToRgb(theme.primary) + ',0.38)';
                 ctx.lineWidth = 1.8;
                 ctx.lineCap = 'round';
                 ctx.beginPath();
@@ -2669,7 +2689,7 @@
                 ctx.moveTo(7, 24);
                 ctx.lineTo(3, 31);
                 ctx.lineTo(1, 24);
-                ctx.strokeStyle = 'rgba(15,23,42,0.18)';
+                ctx.strokeStyle = 'rgba(' + U.hexToRgb(theme.primary) + ',0.18)';
                 ctx.lineWidth = 2.8;
                 ctx.lineCap = 'round';
                 ctx.stroke();

@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.common.PaletteColors;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.AppVo;
@@ -18,8 +19,6 @@ import java.util.List;
 
 @Component
 public class ProjectInterceptor implements HandlerInterceptor {
-
-    private static final String[] PRIMARY_COLORS = {"#5865f2", "#00b5ad", "#ff8a65", "#7e57c2", "#26a69a", "#42a5f5"};
 
     @Autowired
     ProjectService projectService;
@@ -81,7 +80,7 @@ public class ProjectInterceptor implements HandlerInterceptor {
 
     private String computeMascotPrimary(String projectId, String projectName) {
         int seed = positiveHash(projectId + ":" + projectName);
-        return pick(PRIMARY_COLORS, seed / 5 + 13);
+        return PaletteColors.pickPrimary(seed / 5 + 13);
     }
 
     private int positiveHash(String value) {
@@ -92,10 +91,4 @@ public class ProjectInterceptor implements HandlerInterceptor {
         return Math.abs(hash);
     }
 
-    private String pick(String[] values, int seed) {
-        if (values.length == 0) {
-            return "";
-        }
-        return values[seed % values.length];
-    }
 }

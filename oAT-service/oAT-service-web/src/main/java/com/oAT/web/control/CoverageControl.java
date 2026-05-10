@@ -1,6 +1,7 @@
 package com.oAT.web.control;
 
 import com.oAT.web.common.CoverageSourceClassUtil;
+import com.oAT.web.common.PaletteColors;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.SystemLog;
@@ -31,8 +32,6 @@ import java.io.IOException;
 public class CoverageControl {
 
     private static final Logger logger = LoggerFactory.getLogger(CoverageControl.class);
-
-    private static final String[] PRIMARY_COLORS = {"#5865f2", "#00b5ad", "#ff8a65", "#7e57c2", "#26a69a", "#42a5f5"};
 
     @Autowired
     private CoverageService coverageService;
@@ -356,7 +355,7 @@ public class CoverageControl {
 
     private String computeMascotPrimary(String projectId, String projectName) {
         int seed = positiveHash(projectId + ":" + projectName);
-        return pick(PRIMARY_COLORS, seed / 5 + 13);
+        return PaletteColors.pickPrimary(seed / 5 + 13);
     }
 
     private int positiveHash(String value) {
@@ -365,13 +364,6 @@ public class CoverageControl {
             return 0;
         }
         return Math.abs(hash);
-    }
-
-    private String pick(String[] values, int seed) {
-        if (values.length == 0) {
-            return "";
-        }
-        return values[seed % values.length];
     }
 
     /**

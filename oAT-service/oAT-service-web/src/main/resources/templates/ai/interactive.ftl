@@ -5,6 +5,7 @@
     <title>${projectName?html} - AI Interactive</title>
     <#include "../common.ftl">
     <link href="/css/ai-interactive.css?v=${.now}" rel="stylesheet">
+    <script src="/js/palette-colors.js?version=1"></script>
     <script src="/js/ai-interactive.js?v=${.now}"></script>
 </head>
 <body>
