@@ -401,6 +401,7 @@
         var radius = Math.min(w, h) * 0.42;
         var palette = window.OatPalette || {};
         var primaryColor = opts.primaryColor || '#00b5ad';
+        var accessoryColor = '#6b7280';
         var particleCount = opts.particleCount || 8;
         var orbitRadius = opts.orbitRadius || 52;
         var rgb = {
@@ -879,13 +880,13 @@
                 // ===== 帽子/眼镜 =====
                 if (currentState !== STATE_DONE || eyeP.type !== 'squint') {
                     if (accessoryKind === 1) {
-                        drawHat(radius, 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.92)', hatStyle);
+                        drawHat(radius, accessoryColor, hatStyle);
                     }
                 }
 
                 // ===== 眼镜 =====
                 if ((accessoryKind === 3) && (currentState !== STATE_THINKING || eyeP.type === 'open')) {
-                    drawGlasses(0, ey, radius, 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.82)', currentState === STATE_DONE ? 0.95 : 0.8, glassesStyle);
+                    drawGlasses(0, ey, radius, accessoryColor, currentState === STATE_DONE ? 0.95 : 0.8, glassesStyle);
                 }
 
                 // ===== 嘴巴 =====
@@ -909,13 +910,6 @@
                     ctx.beginPath(); ctx.arc(-radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
                     ctx.beginPath(); ctx.arc(radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
                 }
-
-                // ===== 小脚 =====
-                var legSwing = (currentState === STATE_THINKING) ? Math.sin(now / 100) * 3 : 0;
-                ctx.beginPath();
-                ctx.moveTo(-18, 70); ctx.lineTo(-8 + legSwing, 88); ctx.lineTo(-2, 70);
-                ctx.moveTo(18, 70); ctx.lineTo(8 - legSwing, 88); ctx.lineTo(2, 70);
-                ctx.strokeStyle = 'rgba(15,23,42,0.22)'; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.stroke();
 
                 // ===== 庆祝粒子 =====
                 if (currentState === STATE_DONE) {

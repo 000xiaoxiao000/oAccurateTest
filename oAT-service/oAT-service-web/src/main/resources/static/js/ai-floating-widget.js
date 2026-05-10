@@ -40,6 +40,7 @@
         var palette = window.OatPalette || {};
         var primaryRgb = U.hexToRgb(mascotPrimary);
         var accentRgb = U.hexToRgb((palette.accent && palette.accent[0]) || mascotPrimary);
+        var accessoryColor = '#6b7280';
         var successRgb = U.hexToRgb((palette.primary && palette.primary[9]) || '#21ba45');
         var mutedRgb = U.hexToRgb((palette.accent && palette.accent[8]) || '#94a3b8');
         var primaryDarkRgb = darkRgbString(primaryRgb, 0.55);
@@ -2657,11 +2658,12 @@
             function drawGlasses(eyeOffsetX, eyeOffsetY, eyeSize, styleIndex) {
                 var style = styleIndex % 3;
                 var lensRadius = eyeSize * 0.72;
-                var bridgeWidth = Math.max(2, eyeSize * 0.18);
+                var bridgeWidth = Math.max(2, mascot.radius * 0.05);
+                var armWidth = Math.max(2, mascot.radius * 0.045);
                 ctx.save();
-                ctx.strokeStyle = theme.primaryStroke82;
-                ctx.fillStyle = ctx.strokeStyle;
-                ctx.lineWidth = Math.max(1.6, mascot.radius * 0.07);
+                ctx.strokeStyle = accessoryColor;
+                ctx.fillStyle = accessoryColor;
+                ctx.lineWidth = Math.max(2, mascot.radius * 0.08);
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
 
@@ -2710,7 +2712,20 @@
                     ctx.moveTo(bridgeWidth / 2, eyeOffsetY);
                     ctx.lineTo(eyeOffsetX - halfW, eyeOffsetY);
                     ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(-eyeOffsetX - halfW, eyeOffsetY - halfH * 0.45);
+                    ctx.lineTo(-eyeOffsetX - halfW - armWidth * 4, eyeOffsetY - halfH * 0.2);
+                    ctx.moveTo(eyeOffsetX + halfW, eyeOffsetY - halfH * 0.45);
+                    ctx.lineTo(eyeOffsetX + halfW + armWidth * 4, eyeOffsetY - halfH * 0.2);
+                    ctx.stroke();
                 }
+
+                ctx.beginPath();
+                ctx.moveTo(-eyeOffsetX - lensRadius * 0.8, eyeOffsetY - lensRadius * 0.6);
+                ctx.lineTo(-eyeOffsetX - lensRadius * 1.5, eyeOffsetY - lensRadius * 0.25);
+                ctx.moveTo(eyeOffsetX + lensRadius * 0.8, eyeOffsetY - lensRadius * 0.6);
+                ctx.lineTo(eyeOffsetX + lensRadius * 1.5, eyeOffsetY - lensRadius * 0.25);
+                ctx.stroke();
                 ctx.restore();
             }
 
@@ -2718,7 +2733,7 @@
                 var style = hatStyle % 3;
                 var hatY = -mascot.radius * 1.05;
                 ctx.save();
-                ctx.fillStyle = theme.primaryFill92;
+                ctx.fillStyle = accessoryColor;
                 ctx.strokeStyle = ctx.fillStyle;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
@@ -2782,12 +2797,6 @@
                     ctx.fill();
                 });
 
-                // Shadow platform
-                ctx.beginPath();
-                ctx.ellipse(0, 30, 28, 6, 0, 0, Math.PI * 2);
-                ctx.fillStyle = theme.primaryFill07;
-                ctx.fill();
-
                 // Body
                 ctx.beginPath();
                 ctx.ellipse(0, 0, mascot.radius, mascot.radius * 0.9, 0, 0, Math.PI * 2);
@@ -2799,16 +2808,10 @@
                     drawHat();
                 }
 
-                // Face highlight
-                ctx.beginPath();
-                ctx.arc(-mascot.radius * 0.48, -mascot.radius * 0.52, mascot.radius * 0.16, 0, Math.PI * 2);
-                ctx.fillStyle = theme.accentFill20;
-                ctx.fill();
-
                 // Eyes
                 var eyeOffsetX = mascot.radius * 0.35;
-                var eyeOffsetY = -mascot.radius * 0.2;
-                var eyeSize = mascot.radius * 0.3;
+                var eyeOffsetY = -mascot.radius * 0.15;
+                var eyeSize = mascot.radius * 0.25;
 
                 ctx.fillStyle = 'white';
                 ctx.beginPath();
@@ -2835,24 +2838,10 @@
                 }
 
                 // Mouth
-                ctx.strokeStyle = theme.primaryStroke38;
-                ctx.lineWidth = 1.8;
-                ctx.lineCap = 'round';
+                ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+                ctx.lineWidth = 2.5;
                 ctx.beginPath();
-                ctx.arc(0, 4, 7, 0.2, Math.PI - 0.2);
-                ctx.stroke();
-
-                // Legs
-                ctx.beginPath();
-                ctx.moveTo(-7, 24);
-                ctx.lineTo(-3, 31);
-                ctx.lineTo(-1, 24);
-                ctx.moveTo(7, 24);
-                ctx.lineTo(3, 31);
-                ctx.lineTo(1, 24);
-                ctx.strokeStyle = theme.primaryStroke18;
-                ctx.lineWidth = 2.8;
-                ctx.lineCap = 'round';
+                ctx.arc(0, 4, 8, 0.2, Math.PI - 0.2);
                 ctx.stroke();
 
                 ctx.restore();
