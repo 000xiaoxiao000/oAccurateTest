@@ -67,8 +67,7 @@ class Character {
         this.radius = 30 + Math.random() * 20; // 显著放大基础半径
         this.color = colors[Math.floor(Math.random() * colors.length)];
         this.angle = 0;
-        this.type = pickWeightedIndex([40, 22, 18, 20]);
-        this.bowtieStyle = Math.floor(Math.random() * 3);
+        this.type = pickWeightedIndex([42, 29, 0, 29]);
         this.hatStyle = Math.floor(Math.random() * 3);
         this.glassesStyle = Math.floor(Math.random() * 3);
         this.floatOffset = Math.random() * Math.PI * 2;
@@ -114,9 +113,7 @@ class Character {
         const eyeSize = this.radius * 0.25;
 
         // 装饰物（与身体一起旋转/移动）
-        if (this.type === 1) { // 领结：在脖子位置
-            drawBowtie(ctx, this.radius, accessoryColor, this.bowtieStyle);
-        } else if (this.type === 2) { // 小帽子：在头顶
+        if (this.type === 1) { // 小帽子：在头顶
             drawHat(ctx, this.radius, accessoryColor, this.hatStyle);
         } else if (this.type === 3) { // 眼镜：盖住眼睛
             drawGlasses(ctx, eyeOffsetX, eyeOffsetY, this.radius, accessoryColor, this.glassesStyle);
@@ -268,60 +265,6 @@ function drawGlasses(ctx, eyeOffsetX, eyeOffsetY, radius, color, styleIndex) {
     ctx.moveTo(eyeOffsetX + lensRadius * 0.8, eyeOffsetY - lensRadius * 0.6);
     ctx.lineTo(eyeOffsetX + lensRadius * 1.5, eyeOffsetY - lensRadius * 0.25);
     ctx.stroke();
-    ctx.restore();
-}
-
-function drawBowtie(ctx, radius, color, styleIndex) {
-    const style = styleIndex % 3;
-    const bowWidth = Math.max(10, radius * 0.35);
-    const bowHeight = Math.max(6, radius * 0.2);
-    const yOffset = radius * 0.9;
-    const knotSize = Math.max(2, radius * 0.06);
-
-    ctx.save();
-    ctx.fillStyle = color;
-    ctx.strokeStyle = color;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    if (style === 0) {
-        ctx.beginPath();
-        ctx.moveTo(-bowWidth, yOffset - bowHeight / 2);
-        ctx.lineTo(0, yOffset);
-        ctx.lineTo(-bowWidth, yOffset + bowHeight / 2);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(bowWidth, yOffset - bowHeight / 2);
-        ctx.lineTo(0, yOffset);
-        ctx.lineTo(bowWidth, yOffset + bowHeight / 2);
-        ctx.fill();
-    } else if (style === 1) {
-        ctx.beginPath();
-        ctx.ellipse(-bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, -0.25, 0, Math.PI * 2);
-        ctx.ellipse(bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, 0.25, 0, Math.PI * 2);
-        ctx.fill();
-    } else {
-        ctx.beginPath();
-        ctx.moveTo(-bowWidth * 0.95, yOffset);
-        ctx.lineTo(-bowWidth * 0.2, yOffset - bowHeight * 0.55);
-        ctx.lineTo(-bowWidth * 0.05, yOffset);
-        ctx.lineTo(-bowWidth * 0.2, yOffset + bowHeight * 0.55);
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.moveTo(bowWidth * 0.95, yOffset);
-        ctx.lineTo(bowWidth * 0.2, yOffset - bowHeight * 0.55);
-        ctx.lineTo(bowWidth * 0.05, yOffset);
-        ctx.lineTo(bowWidth * 0.2, yOffset + bowHeight * 0.55);
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    ctx.beginPath();
-    ctx.arc(0, yOffset, knotSize, 0, Math.PI * 2);
-    ctx.fill();
     ctx.restore();
 }
 

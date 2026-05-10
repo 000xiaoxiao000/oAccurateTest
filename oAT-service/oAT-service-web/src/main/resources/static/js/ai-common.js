@@ -550,64 +550,9 @@
             return Math.max(0, weights.length - 1);
         }
 
-        var accessoryKind = pickWeightedIndex([42, 20, 18, 20]);
-        var bowtieStyle = Math.floor(Math.random() * 3);
+        var accessoryKind = pickWeightedIndex([42, 29, 0, 29]);
         var hatStyle = Math.floor(Math.random() * 3);
         var glassesStyle = Math.floor(Math.random() * 3);
-
-        function drawBowtie(radius, color, styleIndex) {
-            var style = styleIndex % 3;
-            var bowWidth = Math.max(10, radius * 0.35);
-            var bowHeight = Math.max(6, radius * 0.2);
-            var yOffset = radius * 0.9;
-            var knotSize = Math.max(2, radius * 0.06);
-
-            ctx.save();
-            ctx.fillStyle = color;
-            ctx.strokeStyle = color;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-
-            if (style === 0) {
-                ctx.beginPath();
-                ctx.moveTo(-bowWidth, yOffset - bowHeight / 2);
-                ctx.lineTo(0, yOffset);
-                ctx.lineTo(-bowWidth, yOffset + bowHeight / 2);
-                ctx.fill();
-
-                ctx.beginPath();
-                ctx.moveTo(bowWidth, yOffset - bowHeight / 2);
-                ctx.lineTo(0, yOffset);
-                ctx.lineTo(bowWidth, yOffset + bowHeight / 2);
-                ctx.fill();
-            } else if (style === 1) {
-                ctx.beginPath();
-                ctx.ellipse(-bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, -0.25, 0, Math.PI * 2);
-                ctx.ellipse(bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, 0.25, 0, Math.PI * 2);
-                ctx.fill();
-            } else {
-                ctx.beginPath();
-                ctx.moveTo(-bowWidth * 0.95, yOffset);
-                ctx.lineTo(-bowWidth * 0.2, yOffset - bowHeight * 0.55);
-                ctx.lineTo(-bowWidth * 0.05, yOffset);
-                ctx.lineTo(-bowWidth * 0.2, yOffset + bowHeight * 0.55);
-                ctx.closePath();
-                ctx.fill();
-
-                ctx.beginPath();
-                ctx.moveTo(bowWidth * 0.95, yOffset);
-                ctx.lineTo(bowWidth * 0.2, yOffset - bowHeight * 0.55);
-                ctx.lineTo(bowWidth * 0.05, yOffset);
-                ctx.lineTo(bowWidth * 0.2, yOffset + bowHeight * 0.55);
-                ctx.closePath();
-                ctx.fill();
-            }
-
-            ctx.beginPath();
-            ctx.arc(0, yOffset, knotSize, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
 
         function drawHat(radius, color, styleIndex) {
             var style = styleIndex % 3;
@@ -931,12 +876,10 @@
                     }
                 }
 
-                // ===== 帽子/领结/眼镜 =====
+                // ===== 帽子/眼镜 =====
                 if (currentState !== STATE_DONE || eyeP.type !== 'squint') {
                     if (accessoryKind === 1) {
                         drawHat(radius, 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.92)', hatStyle);
-                    } else if (accessoryKind === 2) {
-                        drawBowtie(radius, 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.92)', bowtieStyle);
                     }
                 }
 

@@ -47,11 +47,18 @@
             var accentColor = (computed && computed.getPropertyValue('--ai-accent').trim()) || (palette.accent && palette.accent[0]) || mascotPrimary;
             var haloColor = (computed && computed.getPropertyValue('--ai-halo').trim()) || (palette.halo && palette.halo[0]) || U.hexToRgba(mascotPrimary, 0.18);
             var warningColor = (palette.primary && palette.primary[10]) || '#f2c037';
+            var successColor = (palette.primary && palette.primary[9]) || '#21ba45';
+            var dangerColor = (palette.primary && palette.primary[3]) || '#db2828';
+            var primaryRgb = U.hexToRgb(mascotPrimary);
+            var accentRgb = U.hexToRgb(accentColor);
+            var successRgb = U.hexToRgb(successColor);
+            var warningRgb = U.hexToRgb(warningColor);
+            var dangerRgb = U.hexToRgb(dangerColor);
+            var darkPrimary = primaryRgb;
+            var primaryDarkColor = 'rgb(' + darkPrimary + ')';
             var softPrimary = U.hexToRgba(mascotPrimary, 0.12);
             var strongPrimary = U.hexToRgba(mascotPrimary, 0.22);
             var borderPrimary = U.hexToRgba(mascotPrimary, 0.34);
-            var primaryRgb = U.hexToRgb(mascotPrimary);
-            var darkPrimary = primaryRgb;
             var ambientGlow = U.hexToRgba(mascotPrimary, 0.08);
             var rippleGlow = U.hexToRgba(mascotPrimary, 0.25);
             var chipShadow = U.hexToRgba(mascotPrimary, 0.25);
@@ -83,9 +90,17 @@
             ].join('\n');
 
             $root[0].style.setProperty('--ai-theme-primary', mascotPrimary);
+            $root[0].style.setProperty('--ai-theme-primary-rgb', primaryRgb);
+            $root[0].style.setProperty('--ai-theme-primary-dark', primaryDarkColor);
             $root[0].style.setProperty('--ai-theme-accent', accentColor);
+            $root[0].style.setProperty('--ai-theme-accent-rgb', accentRgb);
             $root[0].style.setProperty('--ai-theme-halo', haloColor);
             $root[0].style.setProperty('--ai-theme-warning', warningColor);
+            $root[0].style.setProperty('--ai-theme-warning-rgb', warningRgb);
+            $root[0].style.setProperty('--ai-theme-success', successColor);
+            $root[0].style.setProperty('--ai-theme-success-rgb', successRgb);
+            $root[0].style.setProperty('--ai-theme-danger', dangerColor);
+            $root[0].style.setProperty('--ai-theme-danger-rgb', dangerRgb);
 
             return {
                 accentColor: accentColor,

@@ -2619,8 +2619,7 @@
                 g: parseInt(mascotPrimary.slice(3,5), 16) || 181,
                 b: parseInt(mascotPrimary.slice(5,7), 16) || 173
             };
-            var accessoryKind = pickWeightedIndex([42, 20, 18, 20]);
-            var bowtieStyle = Math.floor(Math.random() * 3);
+            var accessoryKind = pickWeightedIndex([42, 29, 0, 29]);
             var hatStyle = Math.floor(Math.random() * 3);
             var glassesStyle = Math.floor(Math.random() * 3);
             var particles = [];
@@ -2712,56 +2711,6 @@
                     ctx.lineTo(eyeOffsetX - halfW, eyeOffsetY);
                     ctx.stroke();
                 }
-                ctx.restore();
-            }
-
-            function drawBowtie(yOffset, styleIndex) {
-                var style = styleIndex % 3;
-                var bowWidth = 10;
-                var bowHeight = 6;
-                var knotSize = 2.5;
-                ctx.save();
-                ctx.fillStyle = theme.primaryFill92;
-                ctx.strokeStyle = ctx.fillStyle;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-
-                if (style === 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(-bowWidth, yOffset - bowHeight / 2);
-                    ctx.lineTo(0, yOffset);
-                    ctx.lineTo(-bowWidth, yOffset + bowHeight / 2);
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(bowWidth, yOffset - bowHeight / 2);
-                    ctx.lineTo(0, yOffset);
-                    ctx.lineTo(bowWidth, yOffset + bowHeight / 2);
-                    ctx.fill();
-                } else if (style === 1) {
-                    ctx.beginPath();
-                    ctx.ellipse(-bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, -0.25, 0, Math.PI * 2);
-                    ctx.ellipse(bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, 0.25, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    ctx.beginPath();
-                    ctx.moveTo(-bowWidth * 0.95, yOffset);
-                    ctx.lineTo(-bowWidth * 0.2, yOffset - bowHeight * 0.55);
-                    ctx.lineTo(-bowWidth * 0.05, yOffset);
-                    ctx.lineTo(-bowWidth * 0.2, yOffset + bowHeight * 0.55);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.beginPath();
-                    ctx.moveTo(bowWidth * 0.95, yOffset);
-                    ctx.lineTo(bowWidth * 0.2, yOffset - bowHeight * 0.55);
-                    ctx.lineTo(bowWidth * 0.05, yOffset);
-                    ctx.lineTo(bowWidth * 0.2, yOffset + bowHeight * 0.55);
-                    ctx.closePath();
-                    ctx.fill();
-                }
-
-                ctx.beginPath();
-                ctx.arc(0, yOffset, knotSize, 0, Math.PI * 2);
-                ctx.fill();
                 ctx.restore();
             }
 
@@ -2879,10 +2828,6 @@
                 ctx.beginPath();
                 ctx.arc(eyeOffsetX + px, eyeOffsetY + py, eyeSize * 0.5, 0, Math.PI * 2);
                 ctx.fill();
-
-                if (accessoryKind === 2) {
-                    drawBowtie(mascot.radius * 0.9, bowtieStyle);
-                }
 
                 // Glasses
                 if (accessoryKind === 3) {

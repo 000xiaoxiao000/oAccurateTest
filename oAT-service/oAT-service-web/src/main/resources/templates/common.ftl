@@ -148,6 +148,13 @@
             ].join(', ');
         }
 
+        function darkRgbString(rgb, factor) {
+            var parts = String(rgb).split(',');
+            return parts.map(function (part) {
+                return Math.max(0, Math.round((parseInt(part, 10) || 0) * factor));
+            }).join(', ');
+        }
+
         function setThemeColor(name, color) {
             var rgb = hexToRgb(color);
             if (!color || !rgb) {
@@ -157,6 +164,9 @@
             root.style.setProperty('--ai-common-' + name + '-rgb', rgb);
             root.style.setProperty('--oat-' + name, color);
             root.style.setProperty('--oat-' + name + '-rgb', rgb);
+            if (name === 'primary') {
+                root.style.setProperty('--oat-primary-dark', 'rgb(' + darkRgbString(rgb, 0.55) + ')');
+            }
         }
 
         setThemeColor('primary', palette.primary[0]);
