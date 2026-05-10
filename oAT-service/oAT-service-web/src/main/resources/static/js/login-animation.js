@@ -8,7 +8,21 @@ let mouseX = 0;
 let mouseY = 0;
 let isError = false;
 
-const colors = ['#00b5ad', '#fbbd08', '#f2711c', '#db2828', '#2185d0', '#e03997', '#b5cc18'];
+// 扩展颜色方案 - 添加更多活泼的颜色
+const colors = [
+    '#00b5ad', // 青色
+    '#fbbd08', // 黄色
+    '#f2711c', // 橙色
+    '#db2828', // 红色
+    '#2185d0', // 蓝色
+    '#FF9A8A', // 玫瑰粉色
+    '#b5cc18', // 绿色
+    '#a333c8', // 紫色
+    '#00b5cc', // 天蓝色
+    '#21ba45', // 翠绿色
+    '#f2c037', // 金黄色
+    '#e07b53'  // 珊瑚色
+];
 
 function init() {
     resize();
