@@ -9,7 +9,7 @@ let mouseY = 0;
 let isError = false;
 
 // 扩展颜色方案 - 添加更多活泼的颜色
-const colors = [
+const colors = (window.OatPalette && window.OatPalette.primary) ? window.OatPalette.primary : [
     '#00b5ad', // 青色
     '#fbbd08', // 黄色
     '#f2711c', // 橙色
@@ -23,6 +23,8 @@ const colors = [
     '#f2c037', // 金黄色
     '#e07b53'  // 珊瑚色
 ];
+
+const accessoryColor = '#6b7280';
 
 function init() {
     resize();
@@ -90,7 +92,7 @@ class Character {
 
         // 装饰物（与身体一起旋转/移动）
         if (this.type === 1) { // 领结：在脖子位置
-            ctx.fillStyle = '#333';
+            ctx.fillStyle = accessoryColor;
             const bowWidth = Math.max(10, this.radius * 0.35);
             const bowHeight = Math.max(6, this.radius * 0.2);
             const yOffset = this.radius * 0.9; // 更靠近身体下方，作为脖子/胸前装饰
@@ -114,7 +116,7 @@ class Character {
             ctx.arc(0, yOffset, Math.max(2, this.radius * 0.06), 0, Math.PI * 2);
             ctx.fill();
         } else if (this.type === 2) { // 小帽子：在头顶
-            ctx.fillStyle = '#333';
+            ctx.fillStyle = accessoryColor;
             const hatY = -this.radius * 1.05; // 稍微更靠上
             // 帽檐和帽顶按比例扩大一些
             ctx.fillRect(-this.radius * 0.6, hatY - 4, this.radius * 1.2, 6); // 帽檐

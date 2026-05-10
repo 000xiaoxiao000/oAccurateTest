@@ -2,6 +2,9 @@ package com.oAT.web.service.impl;
 
 import com.oAT.ai.agent.AgentContext;
 import com.oAT.ai.agent.AIAgentService;
+import com.oAT.web.common.PaletteColors;
+import com.oAT.web.config.AIInteractiveRouteConfig;
+import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.service.AIInteractiveService;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.CoverageService;
@@ -15,8 +18,6 @@ import com.oAT.web.service.entity.AIQuickLinkVo;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
-import com.oAT.web.config.AIInteractiveRouteConfig;
-import com.oAT.web.esDao.entity.CoverageReportIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,10 +45,6 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     private static final String[] MASCOT_NAMES = {"知秋", "阿涌", "小溯", "言希", "跃链", "拾一"};
     private static final String[] MASCOT_ROLES = {"数据侦察员", "链路向导", "项目陪跑员", "交互分析官", "洞察助手"};
     private static final String[] MASCOT_MOODS = {"专注", "活跃", "机敏", "稳健", "可靠"};
-    private static final String[] PRIMARY_COLORS = {"#5865f2", "#00b5ad", "#ff8a65", "#7e57c2", "#26a69a", "#42a5f5"};
-    private static final String[] ACCENT_COLORS = {"#8ea1ff", "#65e5dd", "#ffb58a", "#b39ddb", "#80cbc4", "#90caf9"};
-    private static final String[] HALO_COLORS = {"rgba(88,101,242,0.18)", "rgba(0,181,173,0.18)", "rgba(255,138,101,0.18)",
-            "rgba(126,87,194,0.18)", "rgba(38,166,154,0.18)", "rgba(66,165,245,0.18)"};
     private static final String SESSION_STORE_KEY_PREFIX = "oAT:ai-interactive:v1:sessions:";
     private static final String LEGACY_SESSION_STORE_KEY_PREFIX = "oAT:ai-interactive:sessions:";
     private static final long SESSION_STORE_TTL_DAYS = 30L;
@@ -249,9 +246,9 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         mascot.put("mascotName", pick(MASCOT_NAMES, seed));
         mascot.put("mascotRole", pick(MASCOT_ROLES, seed / 2 + 7));
         mascot.put("mascotMood", pick(MASCOT_MOODS, seed / 3 + 11));
-        mascot.put("mascotPrimary", pick(PRIMARY_COLORS, seed / 5 + 13));
-        mascot.put("mascotAccent", pick(ACCENT_COLORS, seed / 7 + 17));
-        mascot.put("mascotHalo", pick(HALO_COLORS, seed / 11 + 19));
+        mascot.put("mascotPrimary", PaletteColors.pickPrimary(seed / 5 + 13));
+        mascot.put("mascotAccent", PaletteColors.pickAccent(seed / 7 + 17));
+        mascot.put("mascotHalo", PaletteColors.pickHalo(seed / 11 + 19));
         return mascot;
     }
 

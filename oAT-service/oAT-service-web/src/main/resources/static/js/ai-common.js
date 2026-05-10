@@ -399,6 +399,7 @@
         var h = el.height || parseInt(el.getAttribute('height'), 10) || 180;
         if (w <= 0 || h <= 0) { w = 180; h = 180; }
         var radius = Math.min(w, h) * 0.42;
+        var palette = window.OatPalette || {};
         var primaryColor = opts.primaryColor || '#00b5ad';
         var particleCount = opts.particleCount || 8;
         var orbitRadius = opts.orbitRadius || 52;
@@ -453,7 +454,7 @@
         /** 生成庆祝星星粒子 */
         function spawnCelebrationParticles() {
             celebrationParticles = [];
-            var starColors = ['#fbbf24', '#f472b6', '#60a5fa', '#34d399', '#a78bfa', '#fb923c'];
+            var starColors = (palette.primary && palette.primary.length) ? palette.primary : ['#fbbd08', '#FF9A8A', '#2185d0', '#21ba45', '#a333c8', '#f2711c', '#00b5ad', '#f2c037'];
             for (var i = 0; i < 14; i++) {
                 var angle = (Math.PI * 2 / 14) * i + Math.random() * 0.5;
                 var speed = 1.8 + Math.random() * 2.5;
@@ -521,7 +522,7 @@
             ctx.translate(x, y);
             ctx.rotate(rot);
             ctx.scale(sz / 18, sz / 18);
-            ctx.fillStyle = '#f472b6';
+            ctx.fillStyle = (palette.accent && palette.accent.length) ? palette.accent[5] : '#FF9A8A';
             ctx.beginPath();
             ctx.moveTo(0, 4);
             ctx.bezierCurveTo(0, 2, -6, 0, -9, -3);
@@ -612,10 +613,10 @@
                     var glowAlpha = Math.max(0, 1 - stateElapsed / 1400) * 0.22;
                     var glowR = radius * (1.35 + Math.sin(now / 180) * 0.08);
                     var gradient = ctx.createRadialGradient(0, 0, radius * 0.6, 0, 0, glowR);
-                    gradient.addColorStop(0, 'rgba(255,200,80,' + glowAlpha + ')');
-                    gradient.addColorStop(0.35, 'rgba(244,114,182,' + (glowAlpha * 0.8) + ')');
-                    gradient.addColorStop(0.65, 'rgba(96,165,250,' + (glowAlpha * 0.6) + ')');
-                    gradient.addColorStop(1, 'rgba(167,139,250,0)');
+                    gradient.addColorStop(0, hexToRgba((palette.primary && palette.primary.length) ? palette.primary[1] : '#fbbd08', glowAlpha));
+                    gradient.addColorStop(0.35, hexToRgba((palette.accent && palette.accent.length) ? palette.accent[3] : '#f47f7f', glowAlpha * 0.8));
+                    gradient.addColorStop(0.65, hexToRgba((palette.accent && palette.accent.length) ? palette.accent[4] : '#67aee6', glowAlpha * 0.6));
+                    gradient.addColorStop(1, 'rgba(' + hexToRgb((palette.accent && palette.accent.length) ? palette.accent[7] : '#c28ddc') + ',0)');
                     ctx.beginPath(); ctx.arc(0, 0, glowR, 0, Math.PI * 2);
                     ctx.fillStyle = gradient; ctx.fill();
                 }
@@ -623,7 +624,7 @@
                 // ===== 轨道环 =====
                 var ringSpeedMultiplier = (currentState === STATE_THINKING) ? 4 : 1;
                 ctx.save();
-                ctx.strokeStyle = 'rgba(148,163,184,0.25)';
+                ctx.strokeStyle = 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',0.2)';
                 ctx.setLineDash([6, 6]);
                 ctx.beginPath(); ctx.arc(0, 0, radius * 1.33, now * 0.00008 * ringSpeedMultiplier, Math.PI * 2 + now * 0.00008 * ringSpeedMultiplier); ctx.stroke();
                 ctx.beginPath(); ctx.arc(0, 0, radius * 1.63, -now * 0.00006 * ringSpeedMultiplier, Math.PI * 2 - now * 0.00006 * ringSpeedMultiplier); ctx.stroke();
@@ -687,7 +688,7 @@
                     var sweatAlpha = sweatPhase < 0.85 ? (sweatPhase < 0.15 ? sweatPhase / 0.15 : 1) : Math.max(0, 1 - (sweatPhase - 0.85) / 0.15);
                     if (sweatAlpha > 0.05) {
                         ctx.save();
-                        ctx.fillStyle = 'rgba(180,220,255,' + (sweatAlpha * 0.75) + ')';
+                        ctx.fillStyle = 'rgba(0,181,204,' + (sweatAlpha * 0.45) + ')';
                         ctx.beginPath();
                         ctx.ellipse(sweatX, sweatY, radius * 0.075, radius * 0.11, -0.3, 0, Math.PI * 2);
                         ctx.fill();
@@ -701,11 +702,11 @@
                     ctx.font = 'bold ' + Math.round(radius * 0.36) + 'px sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'bottom';
-                    ctx.fillStyle = 'rgba(251,191,36,' + qAlpha + ')';
+                    ctx.fillStyle = 'rgba(251,189,8,' + qAlpha + ')';
                     ctx.fillText('?', 0, -radius * 0.62 + qBobY);
                     ctx.restore();
                     var blushAlpha = 0.18 + Math.sin(now / 500) * 0.08;
-                    ctx.fillStyle = 'rgba(255,130,160,' + blushAlpha + ')';
+                    ctx.fillStyle = 'rgba(255,154,138,' + blushAlpha + ')';
                     ctx.beginPath(); ctx.arc(-radius * 0.54, radius * 0.08, radius * 0.12, 0, Math.PI * 2); ctx.fill();
                     ctx.beginPath(); ctx.arc(radius * 0.54, radius * 0.08, radius * 0.12, 0, Math.PI * 2); ctx.fill();
                 }
@@ -769,7 +770,7 @@
                 // ===== 完成腮红 =====
                 if (currentState === STATE_DONE) {
                     var doneBlushAlpha = 0.22 + Math.sin(now / 180) * 0.08;
-                    ctx.fillStyle = 'rgba(255,120,150,' + doneBlushAlpha + ')';
+                    ctx.fillStyle = 'rgba(255,154,138,' + doneBlushAlpha + ')';
                     ctx.beginPath(); ctx.arc(-radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
                     ctx.beginPath(); ctx.arc(radius * 0.54, radius * 0.08, radius * 0.14, 0, Math.PI * 2); ctx.fill();
                 }

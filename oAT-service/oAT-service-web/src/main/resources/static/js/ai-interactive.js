@@ -26,6 +26,8 @@
         var aiTimeout = ($root.data('ai-timeout') || 300) * 1000;
         var projectId = $root.data('project-id') || 'default';
         var projectName = $root.data('project-name') || '当前项目';
+        var palette = window.OatPalette || {};
+        var theme = buildWorkbenchTheme();
 
         /* ===== 存储 Key ===== */
         var legacyHistoryKey = 'ai-interactive-history:' + projectId;
@@ -38,6 +40,59 @@
         var sessionMemoryClearUrl = askUrl.replace(/\/ask$/, '/sessionState/clear');
         var sessionStateSyncInFlight = false;
         var serverSessionState = $root.attr('data-session-state') || '';
+
+        function buildWorkbenchTheme() {
+            var shell = $('.ai-workbench-shell')[0];
+            var computed = shell ? window.getComputedStyle(shell) : null;
+            var accentColor = (computed && computed.getPropertyValue('--ai-accent').trim()) || (palette.accent && palette.accent[0]) || mascotPrimary;
+            var haloColor = (computed && computed.getPropertyValue('--ai-halo').trim()) || (palette.halo && palette.halo[0]) || U.hexToRgba(mascotPrimary, 0.18);
+            var warningColor = (palette.primary && palette.primary[10]) || '#f2c037';
+            var softPrimary = U.hexToRgba(mascotPrimary, 0.12);
+            var strongPrimary = U.hexToRgba(mascotPrimary, 0.22);
+            var borderPrimary = U.hexToRgba(mascotPrimary, 0.34);
+            var darkPrimary = U.hexToRgb(mascotPrimary);
+            var accentSoft = U.hexToRgba(accentColor, 0.12);
+            var accentBorder = U.hexToRgba(accentColor, 0.22);
+            var styleId = 'aiInteractiveThemeStyle';
+            var styleBlock = document.getElementById(styleId);
+            if (!styleBlock) {
+                styleBlock = document.createElement('style');
+                styleBlock.id = styleId;
+                document.head.appendChild(styleBlock);
+            }
+            styleBlock.textContent = [
+                '.ai-action-btn, .ai-exec-action-btn { background: ' + softPrimary + ' !important; color: rgb(' + darkPrimary + ') !important; border-color: ' + accentBorder + ' !important; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); }',
+                '.ai-action-btn:hover, .ai-exec-action-btn:hover { background: ' + strongPrimary + ' !important; border-color: ' + borderPrimary + ' !important; box-shadow: 0 8px 20px rgba(' + darkPrimary + ',0.12); }',
+                '.ai-message-toggle, .ai-message-copy, .ai-pending-banner-retry, .ai-pending-banner-toggle, .ai-pending-banner-dismiss, .ai-pending-banner-restore-btn, .ai-session-action { color: rgb(' + darkPrimary + ') !important; border-color: ' + accentBorder + ' !important; }',
+                '.ai-message-toggle:hover, .ai-message-copy:hover, .ai-pending-banner-retry:hover, .ai-pending-banner-toggle:hover, .ai-pending-banner-dismiss:hover, .ai-pending-banner-restore-btn:hover, .ai-session-action:hover { background: ' + accentSoft + ' !important; }',
+                '.ai-message-section-anchor { border-left-color: ' + accentColor + ' !important; }',
+                '.ai-timeline-item { border-left-color: ' + accentColor + ' !important; }',
+                '.ai-anchor-keyword-mark { background: ' + accentSoft + ' !important; color: rgb(' + darkPrimary + ') !important; }',
+                '.ai-loading-timer { color: ' + warningColor + ' !important; }',
+                '.ai-session-action.pin.pinned { color: ' + accentColor + ' !important; }',
+                '.ai-session-item.active { border-color: ' + borderPrimary + ' !important; box-shadow: 0 10px 24px rgba(' + darkPrimary + ',0.10); }',
+                '.ai-floating-anchor-dot.answered { background: ' + accentColor + ' !important; box-shadow: 0 0 0 3px ' + haloColor + ' !important; }',
+                '.ai-floating-anchor-dot.pending { background: ' + softPrimary + ' !important; box-shadow: 0 0 0 3px ' + U.hexToRgba(mascotPrimary, 0.10) + ' !important; }',
+                '.ai-chat-anchor-item.active, .ai-chat-anchor-item.keyboard-focus { border-color: ' + accentColor + ' !important; box-shadow: 0 0 0 3px ' + accentSoft + ' !important; }'
+            ].join('\n');
+
+            $root[0].style.setProperty('--ai-theme-primary', mascotPrimary);
+            $root[0].style.setProperty('--ai-theme-accent', accentColor);
+            $root[0].style.setProperty('--ai-theme-halo', haloColor);
+            $root[0].style.setProperty('--ai-theme-warning', warningColor);
+
+            return {
+                accentColor: accentColor,
+                haloColor: haloColor,
+                warningColor: warningColor,
+                softPrimary: softPrimary,
+                strongPrimary: strongPrimary,
+                borderPrimary: borderPrimary,
+                accentSoft: accentSoft,
+                accentBorder: accentBorder,
+                darkPrimary: darkPrimary
+            };
+        }
 
         /* ===== DOM 引用 ===== */
         var $messageList = $('#aiMessageList');
@@ -1154,7 +1209,7 @@
         function showLoading() {
             hideLoading(); loadingStartTime = Date.now();
             var $loading = $('<div class="ai-loading-indicator" id="aiLoadingIndicator">'
-                + '<div class="loading-avatar" style="width:38px;height:38px;border-radius:14px;background:#dff7f5;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;color:#0f172a;">' + assistantName.substring(0, 1) + '</div>'
+                + '<div class="loading-avatar" style="width:38px;height:38px;border-radius:14px;background:' + theme.softPrimary + ';display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;color:rgb(' + theme.darkPrimary + ');">' + assistantName.substring(0, 1) + '</div>'
                 + '<div class="ai-loading-dots"><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span></div>'
                 + '<span class="ai-loading-text">正在思考中...</span><span class="ai-loading-timer">0s</span></div>');
             $messageList.append($loading); scrollMessageListToBottom(false);
@@ -1162,7 +1217,7 @@
                 var elapsed = Math.round((Date.now() - loadingStartTime) / 1000);
                 $loading.find('.ai-loading-timer').text(elapsed + 's');
                 if (elapsed >= 30 && elapsed % 10 === 0) $loading.find('.ai-loading-text').text('AI 正在深入分析，请稍候...');
-                if (elapsed >= 60) { $loading.find('.ai-loading-text').text('响应时间较长，AI 可能遇到了复杂问题...'); $loading.find('.ai-loading-timer').css('color', '#d97706'); }
+                if (elapsed >= 60) { $loading.find('.ai-loading-text').text('响应时间较长，AI 可能遇到了复杂问题...'); $loading.find('.ai-loading-timer').css('color', theme.warningColor); }
             }, 1000);
         }
 
@@ -1729,7 +1784,7 @@
             var $item = $('.ai-session-item[data-session-id="' + sid + '"]'); var $titleEl = $item.find('.ai-session-title');
             var old = s.title || '新会话';
             var $input = $('<input type="text" class="ai-session-rename-input" value="' + U.escapeHtml(old) + '" maxlength="24" />');
-            $titleEl.empty().append($input).css({ width: '100%', border: '1px solid #0f766e', borderRadius: '6px', padding: '2px 6px', fontSize: 'inherit', outline: 'none', boxSizing: 'border-box' }).focus().select();
+            $titleEl.empty().append($input).css({ width: '100%', border: '1px solid ' + theme.accentColor, borderRadius: '6px', padding: '2px 6px', fontSize: 'inherit', outline: 'none', boxSizing: 'border-box', boxShadow: '0 0 0 3px ' + theme.accentSoft }).focus().select();
 
             function finish() {
                 var n = $.trim($input.val());
