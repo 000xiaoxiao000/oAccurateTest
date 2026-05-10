@@ -8,8 +8,8 @@
     align-items: flex-end;
     gap: 12px;
     user-select: none;
-    --mascot-primary: #00b5ad;
-    --mascot-dark: #0f766e;
+    --mascot-primary: var(--oat-primary, #00b5ad);
+    --mascot-dark: var(--oat-primary-dark, #0f766e);
     --ai-floating-resize-cursor: nwse-resize;
 }
 

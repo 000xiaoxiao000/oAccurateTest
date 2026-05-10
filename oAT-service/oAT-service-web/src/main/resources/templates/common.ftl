@@ -19,8 +19,8 @@
         --ai-common-border: var(--oat-border);
         --ai-common-accent: var(--oat-accent);
         --ai-common-warning: var(--oat-warning);
-        --ai-common-accent-rgb: 33, 133, 208;
-        --ai-common-warning-rgb: 242, 192, 55;
+        --ai-common-accent-rgb: var(--oat-accent-rgb, 33, 133, 208);
+        --ai-common-warning-rgb: var(--oat-warning-rgb, 242, 192, 55);
         --ai-common-accent-soft: rgba(var(--ai-common-accent-rgb), .08);
         --ai-common-accent-border: rgba(var(--ai-common-accent-rgb), .20);
         --ai-common-warning-soft: rgba(var(--ai-common-warning-rgb), .12);
@@ -125,6 +125,47 @@
         padding-right: 10px;
     }
 </style>
+<script>
+    (function (window, document) {
+        var palette = window.OatPalette || {};
+        var root = document.documentElement;
+        if (!root || !palette.primary) {
+            return;
+        }
+
+        function hexToRgb(hex) {
+            var normalized = String(hex || '').replace('#', '');
+            if (normalized.length === 3) {
+                normalized = normalized.split('').map(function (part) { return part + part; }).join('');
+            }
+            if (normalized.length !== 6) {
+                return '';
+            }
+            return [
+                parseInt(normalized.slice(0, 2), 16),
+                parseInt(normalized.slice(2, 4), 16),
+                parseInt(normalized.slice(4, 6), 16)
+            ].join(', ');
+        }
+
+        function setThemeColor(name, color) {
+            var rgb = hexToRgb(color);
+            if (!color || !rgb) {
+                return;
+            }
+            root.style.setProperty('--ai-common-' + name, color);
+            root.style.setProperty('--ai-common-' + name + '-rgb', rgb);
+            root.style.setProperty('--oat-' + name, color);
+            root.style.setProperty('--oat-' + name + '-rgb', rgb);
+        }
+
+        setThemeColor('primary', palette.primary[0]);
+        setThemeColor('accent', palette.primary[4] || palette.accent[0]);
+        setThemeColor('success', palette.primary[9]);
+        setThemeColor('warning', palette.primary[10]);
+        setThemeColor('danger', palette.primary[3]);
+    })(window, document);
+</script>
 <#if aiLlmEnabled!true>
 <link href="/css/ai-floating-widget.css?v=${.now}" rel="stylesheet">
 <!-- AI 统一公共模块（两个模式共用） -->

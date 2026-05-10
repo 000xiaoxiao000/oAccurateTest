@@ -50,7 +50,13 @@
             var softPrimary = U.hexToRgba(mascotPrimary, 0.12);
             var strongPrimary = U.hexToRgba(mascotPrimary, 0.22);
             var borderPrimary = U.hexToRgba(mascotPrimary, 0.34);
-            var darkPrimary = U.hexToRgb(mascotPrimary);
+            var primaryRgb = U.hexToRgb(mascotPrimary);
+            var darkPrimary = primaryRgb;
+            var ambientGlow = U.hexToRgba(mascotPrimary, 0.08);
+            var rippleGlow = U.hexToRgba(mascotPrimary, 0.25);
+            var chipShadow = U.hexToRgba(mascotPrimary, 0.25);
+            var chipInnerGlow = U.hexToRgba(mascotPrimary, 0.06);
+            var pendingHalo = U.hexToRgba(mascotPrimary, 0.10);
             var accentSoft = U.hexToRgba(accentColor, 0.12);
             var accentBorder = U.hexToRgba(accentColor, 0.22);
             var styleId = 'aiInteractiveThemeStyle';
@@ -72,7 +78,7 @@
                 '.ai-session-action.pin.pinned { color: ' + accentColor + ' !important; }',
                 '.ai-session-item.active { border-color: ' + borderPrimary + ' !important; box-shadow: 0 10px 24px rgba(' + darkPrimary + ',0.10); }',
                 '.ai-floating-anchor-dot.answered { background: ' + accentColor + ' !important; box-shadow: 0 0 0 3px ' + haloColor + ' !important; }',
-                '.ai-floating-anchor-dot.pending { background: ' + softPrimary + ' !important; box-shadow: 0 0 0 3px ' + U.hexToRgba(mascotPrimary, 0.10) + ' !important; }',
+                '.ai-floating-anchor-dot.pending { background: ' + softPrimary + ' !important; box-shadow: 0 0 0 3px ' + pendingHalo + ' !important; }',
                 '.ai-chat-anchor-item.active, .ai-chat-anchor-item.keyboard-focus { border-color: ' + accentColor + ' !important; box-shadow: 0 0 0 3px ' + accentSoft + ' !important; }'
             ].join('\n');
 
@@ -85,12 +91,18 @@
                 accentColor: accentColor,
                 haloColor: haloColor,
                 warningColor: warningColor,
+                primaryText: mascotPrimary,
                 softPrimary: softPrimary,
                 strongPrimary: strongPrimary,
                 borderPrimary: borderPrimary,
                 accentSoft: accentSoft,
                 accentBorder: accentBorder,
-                darkPrimary: darkPrimary
+                darkPrimary: darkPrimary,
+                ambientGlow: ambientGlow,
+                rippleGlow: rippleGlow,
+                chipShadow: chipShadow,
+                chipInnerGlow: chipInnerGlow,
+                pendingHalo: pendingHalo
             };
         }
 
@@ -227,7 +239,7 @@
             $shell.prepend($ambient);
             $ambient.css({
                 position: 'absolute', width: '400px', height: '400px', borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(' + U.hexToRgb(mascotPrimary) + ',0.08) 0%, transparent 70%)',
+                background: 'radial-gradient(circle, ' + ambientGlow + ' 0%, transparent 70%)',
                 pointerEvents: 'none', zIndex: 0, opacity: '0',
                 transition: 'opacity 0.4s ease, left 0.15s ease-out, top 0.15s ease-out'
             });
@@ -247,8 +259,8 @@
             $sendButton.on('mousedown', createRipple);
             $(document).on('mouseenter', '.ai-dock-chip', function () {
                 $(this).css({
-                    boxShadow: '0 0 20px ' + U.hexToRgba(mascotPrimary, 0.25) + ', inset 0 0 12px ' + U.hexToRgba(mascotPrimary, 0.06),
-                    borderColor: U.hexToRgba(mascotPrimary, 0.35)
+                    boxShadow: '0 0 20px ' + chipShadow + ', inset 0 0 12px ' + chipInnerGlow,
+                    borderColor: borderPrimary
                 });
             }).on('mouseleave', '.ai-dock-chip', function () {
                 $(this).css({ boxShadow: '', borderColor: '' });
@@ -296,16 +308,16 @@
             });
         }
 
-        function createRipple() {
+        function createRipple(event) {
             var ripple = $('<span class="ai-btn-ripple"></span>');
             var rect = $sendButton[0].getBoundingClientRect();
             var size = Math.max(rect.width, rect.height) * 2;
-            var clientEvent = window.event || event;
+            var clientEvent = event || window.event;
             var x = clientEvent.clientX - rect.left - size / 2;
             var y = clientEvent.clientY - rect.top - size / 2;
             ripple.css({
                 position: 'absolute', width: size + 'px', height: size + 'px',
-                borderRadius: '50%', background: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.25)',
+                borderRadius: '50%', background: rippleGlow,
                 transform: 'scale(0)', left: x + 'px', top: y + 'px',
                 pointerEvents: 'none',
                 animation: 'aiBtnRipple 0.5s ease-out forwards'
@@ -1209,7 +1221,7 @@
         function showLoading() {
             hideLoading(); loadingStartTime = Date.now();
             var $loading = $('<div class="ai-loading-indicator" id="aiLoadingIndicator">'
-                + '<div class="loading-avatar" style="width:38px;height:38px;border-radius:14px;background:' + theme.softPrimary + ';display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;color:rgb(' + theme.darkPrimary + ');">' + assistantName.substring(0, 1) + '</div>'
+                + '<div class="loading-avatar" style="width:38px;height:38px;border-radius:14px;background:' + theme.softPrimary + ';display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0;color:' + theme.primaryText + ';">' + assistantName.substring(0, 1) + '</div>'
                 + '<div class="ai-loading-dots"><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span><span class="ai-loading-dot"></span></div>'
                 + '<span class="ai-loading-text">正在思考中...</span><span class="ai-loading-timer">0s</span></div>');
             $messageList.append($loading); scrollMessageListToBottom(false);

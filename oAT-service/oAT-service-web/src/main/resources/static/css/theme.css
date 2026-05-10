@@ -1,7 +1,9 @@
 :root {
     --oat-primary: #00b5ad;
+    --oat-primary-rgb: 0, 181, 173;
     --oat-primary-hover: #009c95;
     --oat-accent: #2185d0;
+    --oat-accent-rgb: 33, 133, 208;
     --oat-accent-hover: #1b6fb8;
     --oat-bg: #f5f7fb;
     --oat-bg-soft: #f8fafc;
@@ -12,8 +14,14 @@
     --oat-text-secondary: #4b5563;
     --oat-text-muted: #8a94a6;
     --oat-success: #21ba45;
+    --oat-success-rgb: 33, 186, 69;
+    --oat-success-contrast: #138a34;
     --oat-warning: #f2c037;
+    --oat-warning-rgb: 242, 192, 55;
+    --oat-warning-contrast: #9a6a00;
     --oat-danger: #db2828;
+    --oat-danger-rgb: 219, 40, 40;
+    --oat-danger-contrast: #9f3a38;
     --oat-radius-sm: 8px;
     --oat-radius-md: 12px;
     --oat-radius-lg: 16px;
@@ -73,7 +81,7 @@ a:hover {
 .ui.primary.button,
 .ui.primary.buttons .button {
     background: linear-gradient(135deg, var(--oat-primary) 0%, var(--oat-accent) 100%);
-    box-shadow: 0 8px 18px rgba(0, 181, 173, .18);
+    box-shadow: 0 8px 18px rgba(var(--oat-primary-rgb), .18);
 }
 
 .ui.teal.button:hover,
@@ -81,7 +89,7 @@ a:hover {
 .ui.primary.button:hover,
 .ui.primary.buttons .button:hover {
     background: linear-gradient(135deg, var(--oat-primary-hover) 0%, var(--oat-accent-hover) 100%);
-    box-shadow: 0 10px 22px rgba(0, 181, 173, .24);
+    box-shadow: 0 10px 22px rgba(var(--oat-primary-rgb), .24);
 }
 
 .ui.basic.button,
@@ -93,8 +101,8 @@ a:hover {
 
 .ui.basic.button:hover,
 .ui.basic.buttons .button:hover {
-    background: rgba(33, 133, 208, .06) !important;
-    box-shadow: 0 0 0 1px rgba(33, 133, 208, .28) inset;
+    background: rgba(var(--oat-accent-rgb), .06) !important;
+    box-shadow: 0 0 0 1px rgba(var(--oat-accent-rgb), .28) inset;
     color: var(--oat-accent) !important;
 }
 
@@ -138,8 +146,8 @@ a:hover {
 .ui.form input[type="url"]:focus,
 .ui.form textarea:focus,
 .ui.selection.dropdown:focus {
-    border-color: rgba(0, 181, 173, .7);
-    box-shadow: 0 0 0 3px rgba(0, 181, 173, .12);
+    border-color: rgba(var(--oat-primary-rgb), .7);
+    box-shadow: 0 0 0 3px rgba(var(--oat-primary-rgb), .12);
 }
 
 .ui.input > input::placeholder,
@@ -166,7 +174,7 @@ a:hover {
 }
 
 .ui.table tbody tr:hover {
-    background: rgba(33, 133, 208, .035);
+    background: rgba(var(--oat-accent-rgb), .035);
 }
 
 .ui.message {
@@ -224,14 +232,14 @@ a:hover {
 
 .app-header .ui.secondary.menu .item:hover {
     color: var(--oat-accent);
-    background: rgba(33, 133, 208, .06);
+    background: rgba(var(--oat-accent-rgb), .06);
 }
 
 .app-header .ui.secondary.menu .active-m.item,
 .app-header .ui.secondary.menu .item.active,
 .app-header .ui.secondary.menu .item.active-m {
     color: var(--oat-primary) !important;
-    background: rgba(0, 181, 173, .1) !important;
+    background: rgba(var(--oat-primary-rgb), .1) !important;
     box-shadow: inset 0 -2px 0 var(--oat-primary);
 }
 
@@ -325,26 +333,26 @@ a:hover {
 }
 
 .app-chip.info {
-    border-color: rgba(33, 133, 208, .24);
-    background: rgba(33, 133, 208, .08);
+    border-color: rgba(var(--oat-accent-rgb), .24);
+    background: rgba(var(--oat-accent-rgb), .08);
     color: var(--oat-accent);
 }
 
 .app-chip.success {
-    border-color: rgba(33, 186, 69, .24);
-    background: rgba(33, 186, 69, .08);
-    color: #138a34;
+    border-color: rgba(var(--oat-success-rgb), .24);
+    background: rgba(var(--oat-success-rgb), .08);
+    color: var(--oat-success-contrast);
 }
 
 .app-chip.warning {
-    border-color: rgba(242, 192, 55, .32);
-    background: rgba(242, 192, 55, .12);
-    color: #9a6a00;
+    border-color: rgba(var(--oat-warning-rgb), .32);
+    background: rgba(var(--oat-warning-rgb), .12);
+    color: var(--oat-warning-contrast);
 }
 
 .app-chip.danger {
-    border-color: rgba(219, 40, 40, .22);
-    background: rgba(219, 40, 40, .08);
+    border-color: rgba(var(--oat-danger-rgb), .22);
+    background: rgba(var(--oat-danger-rgb), .08);
     color: var(--oat-danger);
 }
 
@@ -355,8 +363,8 @@ a:hover {
     justify-content: center;
     padding: 40px 16px;
     background:
-        radial-gradient(circle at 12% 10%, rgba(0, 181, 173, .12), transparent 30%),
-        radial-gradient(circle at 88% 18%, rgba(33, 133, 208, .12), transparent 28%),
+        radial-gradient(circle at 12% 10%, rgba(var(--oat-primary-rgb), .12), transparent 30%),
+        radial-gradient(circle at 88% 18%, rgba(var(--oat-accent-rgb), .12), transparent 28%),
         linear-gradient(135deg, #f7fbff 0%, #f4f7f6 100%);
     overflow-x: hidden;
 }
@@ -424,8 +432,8 @@ a:hover {
 .settings-nav .section-title.item {
     margin-bottom: 8px;
     padding: 10px 12px !important;
-    border: 1px solid rgba(0, 181, 173, .16);
-    background: linear-gradient(135deg, rgba(0, 181, 173, .1), rgba(33, 133, 208, .08)) !important;
+    border: 1px solid rgba(var(--oat-primary-rgb), .16);
+    background: linear-gradient(135deg, rgba(var(--oat-primary-rgb), .1), rgba(var(--oat-accent-rgb), .08)) !important;
     color: var(--oat-text) !important;
 }
 
@@ -457,7 +465,7 @@ a:hover {
 
 .settings-nav .top-level.item:hover,
 .settings-nav .subnav-item:hover {
-    background: rgba(33, 133, 208, .06) !important;
+    background: rgba(var(--oat-accent-rgb), .06) !important;
     color: var(--oat-accent) !important;
 }
 
@@ -483,7 +491,7 @@ a:hover {
 .settings-nav .subnav-item.active {
     background: linear-gradient(135deg, var(--oat-primary) 0%, var(--oat-accent) 100%) !important;
     color: #fff !important;
-    box-shadow: 0 8px 18px rgba(0, 181, 173, .18);
+    box-shadow: 0 8px 18px rgba(var(--oat-primary-rgb), .18);
 }
 
 .app-unified-header,
@@ -499,7 +507,7 @@ a:hover {
     margin-bottom: 16px;
     padding: 22px 26px;
     background:
-        radial-gradient(circle at 96% 16%, rgba(0, 181, 173, .12), transparent 24%),
+        radial-gradient(circle at 96% 16%, rgba(var(--oat-primary-rgb), .12), transparent 24%),
         linear-gradient(135deg, #fff 0%, #f7fbff 100%);
 }
 
@@ -510,7 +518,7 @@ a:hover {
     margin-bottom: 8px;
     padding: 4px 10px;
     border-radius: 999px;
-    background: rgba(0, 181, 173, .1);
+    background: rgba(var(--oat-primary-rgb), .1);
     color: var(--oat-primary-hover);
     font-size: 12px;
     font-weight: 700;
@@ -581,13 +589,13 @@ a:hover {
 
 .danger-zone {
     overflow: hidden;
-    border-color: rgba(219, 40, 40, .18);
+    border-color: rgba(var(--oat-danger-rgb), .18);
 }
 
 .danger-zone-header {
     padding: 18px 24px;
-    border-bottom: 1px solid rgba(219, 40, 40, .14);
-    background: linear-gradient(135deg, rgba(219, 40, 40, .08), rgba(219, 40, 40, .025));
+    border-bottom: 1px solid rgba(var(--oat-danger-rgb), .14);
+    background: linear-gradient(135deg, rgba(var(--oat-danger-rgb), .08), rgba(var(--oat-danger-rgb), .025));
 }
 
 .danger-zone-title {
@@ -608,10 +616,10 @@ a:hover {
     gap: 10px;
     margin-bottom: 16px;
     padding: 12px 14px;
-    border: 1px solid rgba(219, 40, 40, .2);
+    border: 1px solid rgba(var(--oat-danger-rgb), .2);
     border-radius: var(--oat-radius-md);
-    background: rgba(219, 40, 40, .06);
-    color: #8f1d1d;
+    background: rgba(var(--oat-danger-rgb), .06);
+    color: var(--oat-danger-contrast);
     line-height: 1.6;
 }
 
@@ -705,7 +713,7 @@ a:hover {
     align-items: center;
     gap: 10px;
     padding: 13px 18px;
-    border: 1px solid rgba(33, 133, 208, .18);
+    border: 1px solid rgba(var(--oat-accent-rgb), .18);
     border-radius: var(--oat-radius-md);
     background: rgba(255, 255, 255, .95);
     color: var(--oat-accent);
@@ -730,9 +738,9 @@ a:hover {
     gap: 8px;
     margin: -2px 0 14px;
     padding: 10px 12px;
-    border: 1px solid rgba(33, 133, 208, .14);
+    border: 1px solid rgba(var(--oat-accent-rgb), .14);
     border-radius: var(--oat-radius-md);
-    background: rgba(33, 133, 208, .06);
+    background: rgba(var(--oat-accent-rgb), .06);
     color: var(--oat-text-secondary);
     font-size: 13px;
     line-height: 1.6;
@@ -889,8 +897,8 @@ a:hover {
 
 .probe-alert-summary {
     margin-top: 18px !important;
-    border-color: rgba(0, 181, 173, .16) !important;
-    background: linear-gradient(135deg, rgba(0, 181, 173, .055), rgba(33, 133, 208, .04)) !important;
+    border-color: rgba(var(--oat-primary-rgb), .16) !important;
+    background: linear-gradient(135deg, rgba(var(--oat-primary-rgb), .055), rgba(var(--oat-accent-rgb), .04)) !important;
 }
 
 .probe-alert-summary-head {

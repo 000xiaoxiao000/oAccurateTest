@@ -14,6 +14,18 @@
         return escapeHtml(value).replace(/\n/g, '<br>');
     }
 
+    function rgbaString(rgbValue, alphaValue) {
+        return 'rgba(' + rgbValue + ',' + alphaValue + ')';
+    }
+
+    function darkRgbString(rgbValue, factor) {
+        var components = String(rgbValue).split(',');
+        var red = Math.max(0, Math.round((parseInt(components[0], 10) || 0) * factor));
+        var green = Math.max(0, Math.round((parseInt(components[1], 10) || 0) * factor));
+        var blue = Math.max(0, Math.round((parseInt(components[2], 10) || 0) * factor));
+        return red + ',' + green + ',' + blue;
+    }
+
     $(function () {
         var $root = $('#aiFloatingWidget');
         if ($root.length === 0) {
@@ -26,20 +38,56 @@
         var sessionMemoryClearUrl = askUrl ? askUrl.replace(/\/ask$/, '/sessionState/clear') : '';
         var mascotPrimary = $root.data('mascot-primary') || '#00b5ad';
         var palette = window.OatPalette || {};
+        var primaryRgb = U.hexToRgb(mascotPrimary);
+        var accentRgb = U.hexToRgb((palette.accent && palette.accent[0]) || mascotPrimary);
+        var successRgb = U.hexToRgb((palette.primary && palette.primary[9]) || '#21ba45');
+        var mutedRgb = U.hexToRgb((palette.accent && palette.accent[8]) || '#94a3b8');
+        var primaryDarkRgb = darkRgbString(primaryRgb, 0.55);
         var theme = {
             primary: mascotPrimary,
+            primaryRgb: primaryRgb,
+            primaryDarkRgb: primaryDarkRgb,
+            primaryText: mascotPrimary,
             accent: (palette.accent && palette.accent[0]) || mascotPrimary,
+            accentRgb: accentRgb,
             success: (palette.primary && palette.primary[9]) || '#21ba45',
             warning: (palette.primary && palette.primary[10]) || '#f2c037',
             muted: (palette.accent && palette.accent[8]) || '#94a3b8',
             ring: (palette.halo && palette.halo[0]) || 'rgba(0,181,173,0.18)',
-            surface: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.06)',
-            surfaceBorder: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.16)',
-            panelShadow: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.12)',
+            surface: rgbaString(primaryRgb, 0.06),
+            surfaceBorder: rgbaString(primaryRgb, 0.16),
+            panelShadow: rgbaString(primaryRgb, 0.12),
             lightboxBackdrop: 'rgba(0,0,0,0.75)',
             lightboxShadow: 'rgba(0,0,0,0.4)',
-            lightboxHintBg: 'rgba(' + U.hexToRgb(mascotPrimary) + ',0.12)',
-            lightboxHintText: 'rgb(' + U.hexToRgb(mascotPrimary) + ')'
+            lightboxHintBg: rgbaString(primaryRgb, 0.12),
+            lightboxHintText: 'rgb(' + primaryRgb + ')',
+            successBorder: rgbaString(successRgb, 0.4),
+            mutedBorder: rgbaString(mutedRgb, 0.6),
+            launcherTextBg: rgbaString(primaryRgb, 0.12),
+            launcherTextColor: 'rgb(' + primaryDarkRgb + ')',
+            linkColor: 'rgb(' + primaryDarkRgb + ')',
+            chipBg: rgbaString(primaryRgb, 0.06),
+            chipBorder: rgbaString(primaryRgb, 0.22),
+            rowHoverOutline: rgbaString(primaryRgb, 0.2),
+            rowHoverBg: rgbaString(primaryRgb, 0.06),
+            rowSelectedOutline: rgbaString(primaryRgb, 0.5),
+            rowSelectedBg: rgbaString(primaryRgb, 0.15),
+            avatarBg: rgbaString(primaryRgb, 0.1),
+            actionBorder: rgbaString(primaryDarkRgb, 0.25),
+            quickLinkBorder: rgbaString(primaryRgb, 0.36),
+            quickLinkBg: rgbaString(primaryRgb, 0.06),
+            quickLinkIconBg: rgbaString(primaryRgb, 0.12),
+            starterBorder: rgbaString(primaryRgb, 0.22),
+            starterBg: rgbaString(primaryRgb, 0.06),
+            focusShadow: '0 0 0 3px ' + rgbaString(primaryRgb, 0.12),
+            restoreBg: 'rgb(' + primaryDarkRgb + ')',
+            restoreShadow: '0 12px 26px ' + rgbaString(primaryDarkRgb, 0.24),
+            primaryStroke82: rgbaString(primaryRgb, 0.82),
+            primaryFill92: rgbaString(primaryRgb, 0.92),
+            primaryFill07: rgbaString(primaryRgb, 0.07),
+            accentFill20: rgbaString(accentRgb, 0.2),
+            primaryStroke38: rgbaString(primaryRgb, 0.38),
+            primaryStroke18: rgbaString(primaryRgb, 0.18)
         };
         var aiTimeout = ($root.data('ai-timeout') || 300) * 1000;
         var storagePrefix = 'ai-floating-widget:' + projectId;
@@ -2171,9 +2219,9 @@
             hideLoading();
             fwLoadingStartTime = Date.now();
             var $loading = $('<div class="ai-floating-loading" id="aiFloatingLoading">'
-                + '<div style="display:flex;align-items:center;gap:10px;padding:14px;border-radius:12px;background:rgba(' + U.hexToRgb(theme.primary) + ',0.06);border:1px solid rgba(' + U.hexToRgb(theme.primary) + ',0.16);">'
+                + '<div style="display:flex;align-items:center;gap:10px;padding:14px;border-radius:12px;background:' + theme.surface + ';border:1px solid ' + theme.surfaceBorder + ';">'
                 + '<span class="fw-loading-dots"><i class="spinner loading icon" style="color:' + theme.accent + ';font-size:16px;"></i></span>'
-                + '<span class="fw-loading-text" style="font-size:13px;color:rgb(' + U.hexToRgb(theme.primary) + ');">正在思考中...</span>'
+                + '<span class="fw-loading-text" style="font-size:13px;color:' + theme.primaryText + ';">正在思考中...</span>'
                 + '<span class="fw-loading-timer" style="font-size:11px;color:' + theme.muted + ';margin-left:auto;white-space:nowrap;"></span>'
                 + '</div></div>');
             $messageList.append($loading);
@@ -2231,12 +2279,12 @@
                         clearTimeout(oldTimer);
                     }
                     $copyBtn
-                        .css({color:theme.success,'border-color':'rgba(' + U.hexToRgb(theme.success) + ',0.4)'})
+                        .css({color:theme.success,'border-color':theme.successBorder})
                         .html('<i class="check icon"></i>')
                         .attr('title', '复制成功');
                     var timer = setTimeout(function () {
                         $copyBtn
-                            .css({'color':theme.muted,'border-color':'rgba(' + U.hexToRgb(theme.muted) + ',0.6)'})
+                            .css({'color':theme.muted,'border-color':theme.mutedBorder})
                             .html('<i class="copy icon"></i>')
                             .attr('title', '复制')
                             .removeData('copy-reset-timer');
@@ -2523,17 +2571,10 @@
 
         function applyMascotTheme() {
             var primary = mascotPrimary || theme.primary || '#00b5ad';
-            var r = parseInt(primary.slice(1, 3), 16) || 0;
-            var g = parseInt(primary.slice(3, 5), 16) || 181;
-            var b = parseInt(primary.slice(5, 7), 16) || 173;
-            // 计算一个稍暗的主色作为文字/按钮强调色
-            var darkR = Math.max(0, Math.round(r * 0.55));
-            var darkG = Math.max(0, Math.round(g * 0.55));
-            var darkB = Math.max(0, Math.round(b * 0.55));
 
             // 设置 CSS 变量
             $root[0].style.setProperty('--mascot-primary', primary);
-            $root[0].style.setProperty('--mascot-dark', 'rgb(' + darkR + ',' + darkG + ',' + darkB + ')');
+            $root[0].style.setProperty('--mascot-dark', 'rgb(' + theme.primaryDarkRgb + ')');
 
             // 统一设置所有 UI 强调色，使悬浮小人与 AIInteractive 页面颜色一致
             var styleBlock = document.getElementById('aiFloatingThemeStyle');
@@ -2543,19 +2584,19 @@
                 document.head.appendChild(styleBlock);
             }
             styleBlock.textContent =
-                '.ai-floating-launcher-text { background: rgba(' + r + ',' + g + ',' + b + ',0.12) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
-                '.ai-floating-link { color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
-                '.ai-floating-section-toggle:hover { color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
-                '.ai-floating-context-chip { background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; border-color: rgba(' + r + ',' + g + ',' + b + ',0.22) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
-                '.ai-floating-row-hover { outline-color: rgba(' + r + ',' + g + ',' + b + ',0.2) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; }' +
-                '.ai-floating-row-selected { outline-color: rgba(' + r + ',' + g + ',' + b + ',0.5) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.15) !important; }' +
-                '.ai-floating-avatar { background: rgba(' + r + ',' + g + ',' + b + ',0.1) !important; }' +
-                '.ai-floating-message-action { border-color: rgba(' + darkR + ',' + darkG + ',' + darkB + ',0.25) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
-                '.ai-floating-quick-link.priority-high { border-color: rgba(' + r + ',' + g + ',' + b + ',0.36) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; }' +
-                '.ai-floating-quick-link-icon { background: rgba(' + r + ',' + g + ',' + b + ',0.12) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
-                '.ai-floating-starter { border-color: rgba(' + r + ',' + g + ',' + b + ',0.22) !important; background: rgba(' + r + ',' + g + ',' + b + ',0.06) !important; color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; }' +
-                '.ai-floating-compose textarea:focus { border-color: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; box-shadow: 0 0 0 3px rgba(' + r + ',' + g + ',' + b + ',0.12) !important; }' +
-                '.ai-floating-restore { background: rgb(' + darkR + ',' + darkG + ',' + darkB + ') !important; box-shadow: 0 12px 26px rgba(' + darkR + ',' + darkG + ',' + darkB + ',0.24) !important; }';
+                '.ai-floating-launcher-text { background: ' + theme.launcherTextBg + ' !important; color: ' + theme.launcherTextColor + ' !important; }' +
+                '.ai-floating-link { color: ' + theme.linkColor + ' !important; }' +
+                '.ai-floating-section-toggle:hover { color: ' + theme.linkColor + ' !important; }' +
+                '.ai-floating-context-chip { background: ' + theme.chipBg + ' !important; border-color: ' + theme.chipBorder + ' !important; color: ' + theme.launcherTextColor + ' !important; }' +
+                '.ai-floating-row-hover { outline-color: ' + theme.rowHoverOutline + ' !important; background: ' + theme.rowHoverBg + ' !important; }' +
+                '.ai-floating-row-selected { outline-color: ' + theme.rowSelectedOutline + ' !important; background: ' + theme.rowSelectedBg + ' !important; }' +
+                '.ai-floating-avatar { background: ' + theme.avatarBg + ' !important; }' +
+                '.ai-floating-message-action { border-color: ' + theme.actionBorder + ' !important; color: ' + theme.launcherTextColor + ' !important; }' +
+                '.ai-floating-quick-link.priority-high { border-color: ' + theme.quickLinkBorder + ' !important; background: ' + theme.quickLinkBg + ' !important; }' +
+                '.ai-floating-quick-link-icon { background: ' + theme.quickLinkIconBg + ' !important; color: ' + theme.launcherTextColor + ' !important; }' +
+                '.ai-floating-starter { border-color: ' + theme.starterBorder + ' !important; background: ' + theme.starterBg + ' !important; color: ' + theme.launcherTextColor + ' !important; }' +
+                '.ai-floating-compose textarea:focus { border-color: ' + theme.launcherTextColor + ' !important; box-shadow: ' + theme.focusShadow + ' !important; }' +
+                '.ai-floating-restore { background: ' + theme.restoreBg + ' !important; box-shadow: ' + theme.restoreShadow + ' !important; }';
         }
 
         function initMascot() {
@@ -2578,7 +2619,26 @@
                 g: parseInt(mascotPrimary.slice(3,5), 16) || 181,
                 b: parseInt(mascotPrimary.slice(5,7), 16) || 173
             };
+            var accessoryKind = pickWeightedIndex([42, 20, 18, 20]);
+            var bowtieStyle = Math.floor(Math.random() * 3);
+            var hatStyle = Math.floor(Math.random() * 3);
+            var glassesStyle = Math.floor(Math.random() * 3);
             var particles = [];
+
+            function pickWeightedIndex(weights) {
+                var total = 0;
+                for (var i = 0; i < weights.length; i++) {
+                    total += weights[i];
+                }
+                var roll = Math.random() * total;
+                for (var j = 0; j < weights.length; j++) {
+                    roll -= weights[j];
+                    if (roll <= 0) {
+                        return j;
+                    }
+                }
+                return Math.max(0, weights.length - 1);
+            }
 
             // Orbiting particles (scaled down from workbench mascot)
             for (var i = 0; i < 8; i++) {
@@ -2594,6 +2654,148 @@
                 mouseX = event.clientX;
                 mouseY = event.clientY;
             });
+
+            function drawGlasses(eyeOffsetX, eyeOffsetY, eyeSize, styleIndex) {
+                var style = styleIndex % 3;
+                var lensRadius = eyeSize * 0.72;
+                var bridgeWidth = Math.max(2, eyeSize * 0.18);
+                ctx.save();
+                ctx.strokeStyle = theme.primaryStroke82;
+                ctx.fillStyle = ctx.strokeStyle;
+                ctx.lineWidth = Math.max(1.6, mascot.radius * 0.07);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                if (style === 0) {
+                    ctx.beginPath();
+                    ctx.arc(-eyeOffsetX, eyeOffsetY, lensRadius, 0, Math.PI * 2);
+                    ctx.arc(eyeOffsetX, eyeOffsetY, lensRadius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(-eyeOffsetX + lensRadius, eyeOffsetY);
+                    ctx.lineTo(-bridgeWidth / 2, eyeOffsetY);
+                    ctx.moveTo(bridgeWidth / 2, eyeOffsetY);
+                    ctx.lineTo(eyeOffsetX - lensRadius, eyeOffsetY);
+                    ctx.stroke();
+                } else if (style === 1) {
+                    var boxW = lensRadius * 1.25;
+                    var boxH = lensRadius * 1.08;
+                    ctx.strokeRect(-eyeOffsetX - boxW, eyeOffsetY - boxH, boxW * 2, boxH * 2);
+                    ctx.strokeRect(eyeOffsetX - boxW, eyeOffsetY - boxH, boxW * 2, boxH * 2);
+                    ctx.beginPath();
+                    ctx.moveTo(-eyeOffsetX + boxW, eyeOffsetY);
+                    ctx.lineTo(-bridgeWidth / 2, eyeOffsetY);
+                    ctx.moveTo(bridgeWidth / 2, eyeOffsetY);
+                    ctx.lineTo(eyeOffsetX - boxW, eyeOffsetY);
+                    ctx.stroke();
+                } else {
+                    var halfW = lensRadius * 1.2;
+                    var halfH = lensRadius * 1.02;
+                    ctx.beginPath();
+                    ctx.moveTo(-eyeOffsetX - halfW, eyeOffsetY - halfH);
+                    ctx.lineTo(-eyeOffsetX + halfW, eyeOffsetY - halfH);
+                    ctx.lineTo(-eyeOffsetX + halfW, eyeOffsetY + halfH * 0.1);
+                    ctx.lineTo(-eyeOffsetX - halfW, eyeOffsetY + halfH * 0.1);
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(eyeOffsetX - halfW, eyeOffsetY - halfH);
+                    ctx.lineTo(eyeOffsetX + halfW, eyeOffsetY - halfH);
+                    ctx.lineTo(eyeOffsetX + halfW, eyeOffsetY + halfH * 0.1);
+                    ctx.lineTo(eyeOffsetX - halfW, eyeOffsetY + halfH * 0.1);
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(-eyeOffsetX + halfW, eyeOffsetY);
+                    ctx.lineTo(-bridgeWidth / 2, eyeOffsetY);
+                    ctx.moveTo(bridgeWidth / 2, eyeOffsetY);
+                    ctx.lineTo(eyeOffsetX - halfW, eyeOffsetY);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            function drawBowtie(yOffset, styleIndex) {
+                var style = styleIndex % 3;
+                var bowWidth = 10;
+                var bowHeight = 6;
+                var knotSize = 2.5;
+                ctx.save();
+                ctx.fillStyle = theme.primaryFill92;
+                ctx.strokeStyle = ctx.fillStyle;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                if (style === 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(-bowWidth, yOffset - bowHeight / 2);
+                    ctx.lineTo(0, yOffset);
+                    ctx.lineTo(-bowWidth, yOffset + bowHeight / 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(bowWidth, yOffset - bowHeight / 2);
+                    ctx.lineTo(0, yOffset);
+                    ctx.lineTo(bowWidth, yOffset + bowHeight / 2);
+                    ctx.fill();
+                } else if (style === 1) {
+                    ctx.beginPath();
+                    ctx.ellipse(-bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, -0.25, 0, Math.PI * 2);
+                    ctx.ellipse(bowWidth * 0.75, yOffset, bowWidth * 0.55, bowHeight * 0.55, 0.25, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.moveTo(-bowWidth * 0.95, yOffset);
+                    ctx.lineTo(-bowWidth * 0.2, yOffset - bowHeight * 0.55);
+                    ctx.lineTo(-bowWidth * 0.05, yOffset);
+                    ctx.lineTo(-bowWidth * 0.2, yOffset + bowHeight * 0.55);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(bowWidth * 0.95, yOffset);
+                    ctx.lineTo(bowWidth * 0.2, yOffset - bowHeight * 0.55);
+                    ctx.lineTo(bowWidth * 0.05, yOffset);
+                    ctx.lineTo(bowWidth * 0.2, yOffset + bowHeight * 0.55);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                ctx.beginPath();
+                ctx.arc(0, yOffset, knotSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            function drawHat() {
+                var style = hatStyle % 3;
+                var hatY = -mascot.radius * 1.05;
+                ctx.save();
+                ctx.fillStyle = theme.primaryFill92;
+                ctx.strokeStyle = ctx.fillStyle;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                if (style === 0) {
+                    ctx.fillRect(-mascot.radius * 0.6, hatY - 4, mascot.radius * 1.2, 6);
+                    ctx.fillRect(-mascot.radius * 0.35, hatY - 16, mascot.radius * 0.7, 12);
+                } else if (style === 1) {
+                    ctx.beginPath();
+                    ctx.moveTo(-mascot.radius * 0.55, hatY + 2);
+                    ctx.lineTo(0, hatY - 14);
+                    ctx.lineTo(mascot.radius * 0.55, hatY + 2);
+                    ctx.quadraticCurveTo(0, hatY + 10, -mascot.radius * 0.55, hatY + 2);
+                    ctx.fill();
+                    ctx.fillRect(-mascot.radius * 0.5, hatY + 2, mascot.radius * 1.0, 5);
+                } else {
+                    ctx.beginPath();
+                    ctx.moveTo(-mascot.radius * 0.5, hatY + 5);
+                    ctx.quadraticCurveTo(0, hatY - 18, mascot.radius * 0.5, hatY + 5);
+                    ctx.quadraticCurveTo(0, hatY + 12, -mascot.radius * 0.5, hatY + 5);
+                    ctx.fill();
+                    ctx.fillRect(-mascot.radius * 0.52, hatY + 4, mascot.radius * 1.04, 4);
+                }
+
+                ctx.restore();
+            }
 
             function draw() {
                 ctx.clearRect(0, 0, width, height);
@@ -2634,7 +2836,7 @@
                 // Shadow platform
                 ctx.beginPath();
                 ctx.ellipse(0, 30, 28, 6, 0, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(' + U.hexToRgb(theme.primary) + ',0.07)';
+                ctx.fillStyle = theme.primaryFill07;
                 ctx.fill();
 
                 // Body
@@ -2643,10 +2845,15 @@
                 ctx.fillStyle = mascot.color;
                 ctx.fill();
 
+                // Accessories
+                if (accessoryKind === 1) {
+                    drawHat();
+                }
+
                 // Face highlight
                 ctx.beginPath();
                 ctx.arc(-mascot.radius * 0.48, -mascot.radius * 0.52, mascot.radius * 0.16, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(' + U.hexToRgb(theme.accent) + ',0.2)';
+                ctx.fillStyle = theme.accentFill20;
                 ctx.fill();
 
                 // Eyes
@@ -2673,8 +2880,17 @@
                 ctx.arc(eyeOffsetX + px, eyeOffsetY + py, eyeSize * 0.5, 0, Math.PI * 2);
                 ctx.fill();
 
+                if (accessoryKind === 2) {
+                    drawBowtie(mascot.radius * 0.9, bowtieStyle);
+                }
+
+                // Glasses
+                if (accessoryKind === 3) {
+                    drawGlasses(eyeOffsetX, eyeOffsetY, eyeSize, glassesStyle);
+                }
+
                 // Mouth
-                ctx.strokeStyle = 'rgba(' + U.hexToRgb(theme.primary) + ',0.38)';
+                ctx.strokeStyle = theme.primaryStroke38;
                 ctx.lineWidth = 1.8;
                 ctx.lineCap = 'round';
                 ctx.beginPath();
@@ -2689,7 +2905,7 @@
                 ctx.moveTo(7, 24);
                 ctx.lineTo(3, 31);
                 ctx.lineTo(1, 24);
-                ctx.strokeStyle = 'rgba(' + U.hexToRgb(theme.primary) + ',0.18)';
+                ctx.strokeStyle = theme.primaryStroke18;
                 ctx.lineWidth = 2.8;
                 ctx.lineCap = 'round';
                 ctx.stroke();
