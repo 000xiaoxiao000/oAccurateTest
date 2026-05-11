@@ -2760,40 +2760,38 @@
 
                 ctx.restore();
             }
-            function drawBowtie() {
-                var wingWidth = mascot.radius * 0.14;
-                var wingHeight = mascot.radius * 0.09;
-                var knotSize = mascot.radius * 0.05;
+            function drawBowtie(radius, color) {
+                // 根据登录页样式：简洁的水平蝴蝶结
+                var wingWidth = radius * 0.25;   // 翅膀宽度
+                var wingHeight = radius * 0.16;  // 翅膀高度
+                var knotWidth = radius * 0.09;   // 中间结的宽度
+                var knotHeight = radius * 0.13;  // 中间结的高度
 
                 ctx.save();
-                ctx.fillStyle = accessoryColor;
-                ctx.strokeStyle = accessoryColor;
+                ctx.fillStyle = color;
+                ctx.strokeStyle = color;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
 
+                // 左侧蝴蝶结翅膀（简洁的三角形状）
                 ctx.beginPath();
-                ctx.moveTo(-wingWidth, 0);
-                ctx.lineTo(-knotSize * 0.35, -wingHeight);
-                ctx.lineTo(-knotSize * 0.08, 0);
-                ctx.lineTo(-knotSize * 0.35, wingHeight * 0.85);
+                ctx.moveTo(-knotWidth / 2, 0);
+                ctx.lineTo(-wingWidth, -wingHeight * 0.8);
+                ctx.lineTo(-wingWidth, wingHeight * 0.8);
                 ctx.closePath();
                 ctx.fill();
 
+                // 右侧蝴蝶结翅膀（简洁的三角形状）
                 ctx.beginPath();
-                ctx.moveTo(wingWidth, 0);
-                ctx.lineTo(knotSize * 0.35, -wingHeight);
-                ctx.lineTo(knotSize * 0.08, 0);
-                ctx.lineTo(knotSize * 0.35, wingHeight * 0.85);
+                ctx.moveTo(knotWidth / 2, 0);
+                ctx.lineTo(wingWidth, -wingHeight * 0.8);
+                ctx.lineTo(wingWidth, wingHeight * 0.8);
                 ctx.closePath();
                 ctx.fill();
 
-                ctx.beginPath();
-                ctx.moveTo(0, -knotSize);
-                ctx.lineTo(knotSize * 0.9, 0);
-                ctx.lineTo(0, knotSize);
-                ctx.lineTo(-knotSize * 0.9, 0);
-                ctx.closePath();
-                ctx.fill();
+                // 中间的结（小矩形）
+                ctx.fillRect(-knotWidth / 2, -knotHeight / 2, knotWidth, knotHeight);
+
                 ctx.restore();
             }
 
@@ -2839,12 +2837,12 @@
                 ctx.fillStyle = mascot.color;
                 ctx.fill();
 
-                // Accessories
+                // Accessories (hat and bowtie only, glasses drawn after eyes)
                 if (accessoryKind === 1) {
                     drawHat();
                 } else if (accessoryKind === 2) {
                     ctx.save();
-                    ctx.translate(0, mascot.radius * 0.45);
+                    ctx.translate(0, mascot.radius * 0.95);
                     drawBowtie();
                     ctx.restore();
                 }
@@ -2873,7 +2871,7 @@
                 ctx.arc(eyeOffsetX + px, eyeOffsetY + py, eyeSize * 0.5, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Glasses
+                // Glasses (drawn after eyes to overlay properly)
                 if (accessoryKind === 3) {
                     drawGlasses(eyeOffsetX, eyeOffsetY, eyeSize, glassesStyle);
                 }
