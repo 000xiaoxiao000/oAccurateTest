@@ -74,7 +74,7 @@ public class MapControl {
         model.addAttribute("app", app);
         //设置显示的层
         layers = layers == null ? "" : layers;
-        Arrays.stream(layers.split(",")).distinct().filter(a -> !a.trim().equals("")).forEach(a -> {
+        Arrays.stream(layers.split(",")).distinct().filter(a -> !a.trim().isEmpty()).forEach(a -> {
             model.addAttribute(a + "Active", "active");
         });
         model.addAttribute("layers", layers);
@@ -473,11 +473,11 @@ public class MapControl {
             String title = Optional.ofNullable(a.getTitleFragment()).orElse(a.getTitle());
             String describe;
             if (a.getDescribeFragments() != null) {
-                describe = Arrays.stream(a.getDescribeFragments()).collect(Collectors.joining("</br>"));
+                describe = String.join("</br>", a.getDescribeFragments());
             } else if (a.getSqlContentFragments() != null) {
-                describe = Arrays.stream(a.getSqlContentFragments()).collect(Collectors.joining("</br>"));
+                describe = String.join("</br>", a.getSqlContentFragments());
             } else if (a.getRemoteContentFragments() != null) {
-                describe = Arrays.stream(a.getRemoteContentFragments()).collect(Collectors.joining("</br>"));
+                describe = String.join("</br>", a.getRemoteContentFragments());
             } else {
                 describe = a.getSubTitle();
             }
