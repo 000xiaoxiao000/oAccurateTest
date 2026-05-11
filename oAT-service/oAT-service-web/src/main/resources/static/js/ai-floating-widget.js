@@ -2620,7 +2620,7 @@
                 g: parseInt(mascotPrimary.slice(3,5), 16) || 181,
                 b: parseInt(mascotPrimary.slice(5,7), 16) || 173
             };
-            var accessoryKind = pickWeightedIndex([42, 28, 18, 12]);
+            var accessoryKind = 2;
             var hatStyle = Math.floor(Math.random() * 3);
             var glassesStyle = Math.floor(Math.random() * 3);
             var particles = [];
@@ -2761,6 +2761,8 @@
                 ctx.restore();
             }
             function drawBowtie(radius, color) {
+                radius = radius || mascot.radius;
+                color = color || accessoryColor;
                 // 根据登录页样式：简洁的水平蝴蝶结
                 var wingWidth = radius * 0.25;   // 翅膀宽度
                 var wingHeight = radius * 0.16;  // 翅膀高度
@@ -2843,7 +2845,7 @@
                 } else if (accessoryKind === 2) {
                     ctx.save();
                     ctx.translate(0, mascot.radius * 0.9);
-                    drawBowtie();
+                    drawBowtie(mascot.radius, accessoryColor);
                     ctx.restore();
                 }
 
