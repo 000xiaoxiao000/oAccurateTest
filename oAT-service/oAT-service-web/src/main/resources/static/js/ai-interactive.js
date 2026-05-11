@@ -224,6 +224,7 @@
         var mascotCanvas = U.createMascotCanvas({
             canvas: document.getElementById('aiMascotCanvas'),
             primaryColor: mascotPrimary,
+            projectId: projectId,
             particleCount: 10,
             orbitRadius: 60
         });

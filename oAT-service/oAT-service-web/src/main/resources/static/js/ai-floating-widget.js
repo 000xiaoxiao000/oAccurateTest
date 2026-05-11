@@ -2620,9 +2620,14 @@
                 g: parseInt(mascotPrimary.slice(3,5), 16) || 181,
                 b: parseInt(mascotPrimary.slice(5,7), 16) || 173
             };
-            var accessoryKind = 2;
-            var hatStyle = Math.floor(Math.random() * 3);
-            var glassesStyle = Math.floor(Math.random() * 3);
+            var mascotStyle = U.resolveMascotStyle ? U.resolveMascotStyle(projectId || 'default') : {
+                accessoryKind: pickWeightedIndex([42, 28, 18, 12]),
+                hatStyle: Math.floor(Math.random() * 3),
+                glassesStyle: Math.floor(Math.random() * 3)
+            };
+            var accessoryKind = mascotStyle.accessoryKind;
+            var hatStyle = mascotStyle.hatStyle;
+            var glassesStyle = mascotStyle.glassesStyle;
             var particles = [];
 
             function pickWeightedIndex(weights) {
