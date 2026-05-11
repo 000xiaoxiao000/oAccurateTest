@@ -588,9 +588,11 @@
             ctx.restore();
         }
         function drawBowtie(radius, color) {
-            var wingWidth = radius * 0.14;
-            var wingHeight = radius * 0.09;
-            var knotSize = radius * 0.05;
+            // 根据登录页样式：简洁的水平蝴蝶结
+            var wingWidth = radius * 0.25;   // 翅膀宽度
+            var wingHeight = radius * 0.16;  // 翅膀高度
+            var knotWidth = radius * 0.09;   // 中间结的宽度
+            var knotHeight = radius * 0.13;  // 中间结的高度
 
             ctx.save();
             ctx.fillStyle = color;
@@ -598,29 +600,25 @@
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
 
+            // 左侧蝴蝶结翅膀（简洁的三角形状）
             ctx.beginPath();
-            ctx.moveTo(-wingWidth, 0);
-            ctx.lineTo(-knotSize * 0.35, -wingHeight);
-            ctx.lineTo(-knotSize * 0.08, 0);
-            ctx.lineTo(-knotSize * 0.35, wingHeight * 0.85);
+            ctx.moveTo(-knotWidth / 2, 0);
+            ctx.lineTo(-wingWidth, -wingHeight * 0.8);
+            ctx.lineTo(-wingWidth, wingHeight * 0.8);
             ctx.closePath();
             ctx.fill();
 
+            // 右侧蝴蝶结翅膀（简洁的三角形状）
             ctx.beginPath();
-            ctx.moveTo(wingWidth, 0);
-            ctx.lineTo(knotSize * 0.35, -wingHeight);
-            ctx.lineTo(knotSize * 0.08, 0);
-            ctx.lineTo(knotSize * 0.35, wingHeight * 0.85);
+            ctx.moveTo(knotWidth / 2, 0);
+            ctx.lineTo(wingWidth, -wingHeight * 0.8);
+            ctx.lineTo(wingWidth, wingHeight * 0.8);
             ctx.closePath();
             ctx.fill();
 
-            ctx.beginPath();
-            ctx.moveTo(0, -knotSize);
-            ctx.lineTo(knotSize * 0.9, 0);
-            ctx.lineTo(0, knotSize);
-            ctx.lineTo(-knotSize * 0.9, 0);
-            ctx.closePath();
-            ctx.fill();
+            // 中间的结（小矩形）
+            ctx.fillRect(-knotWidth / 2, -knotHeight / 2, knotWidth, knotHeight);
+
             ctx.restore();
         }
 
@@ -914,20 +912,15 @@
                 }
 
                 // ===== 帽子/领结/眼镜 =====
-                if (currentState !== STATE_DONE || eyeP.type !== 'squint') {
-                    if (accessoryKind === 1) {
-                        drawHat(radius, accessoryColor, hatStyle);
-                    } else if (accessoryKind === 2) {
-                        ctx.save();
-                        ctx.translate(0, radius * 0.45);
-                        drawBowtie(radius, accessoryColor);
-                        ctx.restore();
-                    }
-                }
-
-                // ===== 眼镜 =====
-                if ((accessoryKind === 3) && (currentState !== STATE_THINKING || eyeP.type === 'open')) {
-                    drawGlasses(0, ey, radius, accessoryColor, currentState === STATE_DONE ? 0.95 : 0.8, glassesStyle);
+                if (accessoryKind === 1) {
+                    drawHat(radius, accessoryColor, hatStyle);
+                } else if (accessoryKind === 2) {
+                    ctx.save();
+                    ctx.translate(0, radius * 0.95);
+                    drawBowtie(radius, accessoryColor);
+                    ctx.restore();
+                } else if (accessoryKind === 3) {
+                    drawGlasses(0, ey, radius, accessoryColor, 0.8, glassesStyle);
                 }
 
                 // ===== 嘴巴 =====

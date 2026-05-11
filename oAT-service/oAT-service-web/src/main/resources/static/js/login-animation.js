@@ -117,7 +117,7 @@ class Character {
             drawHat(ctx, this.radius, accessoryColor, this.hatStyle);
         } else if (this.type === 2) { // 领结：脖子下方（身体底部边缘）
             ctx.save();
-            ctx.translate(0, this.radius * 0.90); // 向下移动更多
+            ctx.translate(0, this.radius * 0.95); // 向下移动更多
             drawBowtie(ctx, this.radius, accessoryColor);
             ctx.restore();
         } else if (this.type === 3) { // 眼镜：盖住眼睛
