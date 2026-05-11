@@ -69,9 +69,6 @@ public class MapControl {
     @Autowired
     ApiEndpointRepository apiEndpointRepository;
 
-    @Value("${rmi.server.port}")
-    private int rmiPort;
-
     @RequestMapping("/app")
     public String openAppMapView(@PathVariable String projectId, String appId, String layers, Model model) {
         AppVo app = appService.getApp(appId);
