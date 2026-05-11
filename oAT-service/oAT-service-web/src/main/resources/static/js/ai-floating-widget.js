@@ -2620,7 +2620,7 @@
                 g: parseInt(mascotPrimary.slice(3,5), 16) || 181,
                 b: parseInt(mascotPrimary.slice(5,7), 16) || 173
             };
-            var accessoryKind = pickWeightedIndex([42, 29, 0, 29]);
+            var accessoryKind = pickWeightedIndex([42, 28, 18, 12]);
             var hatStyle = Math.floor(Math.random() * 3);
             var glassesStyle = Math.floor(Math.random() * 3);
             var particles = [];
@@ -2760,6 +2760,42 @@
 
                 ctx.restore();
             }
+            function drawBowtie() {
+                var wingWidth = mascot.radius * 0.14;
+                var wingHeight = mascot.radius * 0.09;
+                var knotSize = mascot.radius * 0.05;
+
+                ctx.save();
+                ctx.fillStyle = accessoryColor;
+                ctx.strokeStyle = accessoryColor;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+
+                ctx.beginPath();
+                ctx.moveTo(-wingWidth, 0);
+                ctx.lineTo(-knotSize * 0.35, -wingHeight);
+                ctx.lineTo(-knotSize * 0.08, 0);
+                ctx.lineTo(-knotSize * 0.35, wingHeight * 0.85);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(wingWidth, 0);
+                ctx.lineTo(knotSize * 0.35, -wingHeight);
+                ctx.lineTo(knotSize * 0.08, 0);
+                ctx.lineTo(knotSize * 0.35, wingHeight * 0.85);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(0, -knotSize);
+                ctx.lineTo(knotSize * 0.9, 0);
+                ctx.lineTo(0, knotSize);
+                ctx.lineTo(-knotSize * 0.9, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
 
             function draw() {
                 ctx.clearRect(0, 0, width, height);
@@ -2806,6 +2842,11 @@
                 // Accessories
                 if (accessoryKind === 1) {
                     drawHat();
+                } else if (accessoryKind === 2) {
+                    ctx.save();
+                    ctx.translate(0, mascot.radius * 0.45);
+                    drawBowtie();
+                    ctx.restore();
                 }
 
                 // Eyes

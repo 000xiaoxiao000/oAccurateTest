@@ -67,7 +67,7 @@ class Character {
         this.radius = 30 + Math.random() * 20; // 显著放大基础半径
         this.color = colors[Math.floor(Math.random() * colors.length)];
         this.angle = 0;
-        this.type = pickWeightedIndex([42, 29, 0, 29]);
+        this.type = pickWeightedIndex([42, 28, 18, 12]);
         this.hatStyle = Math.floor(Math.random() * 3);
         this.glassesStyle = Math.floor(Math.random() * 3);
         this.floatOffset = Math.random() * Math.PI * 2;
@@ -115,6 +115,11 @@ class Character {
         // 装饰物（与身体一起旋转/移动）
         if (this.type === 1) { // 小帽子：在头顶
             drawHat(ctx, this.radius, accessoryColor, this.hatStyle);
+        } else if (this.type === 2) { // 领结：脖子下方（身体底部边缘）
+            ctx.save();
+            ctx.translate(0, this.radius * 0.85); // 向下移动更多
+            drawBowtie(ctx, this.radius, accessoryColor);
+            ctx.restore();
         } else if (this.type === 3) { // 眼镜：盖住眼睛
             drawGlasses(ctx, eyeOffsetX, eyeOffsetY, this.radius, accessoryColor, this.glassesStyle);
         }
@@ -297,6 +302,41 @@ function drawHat(ctx, radius, color, styleIndex) {
         ctx.fill();
         ctx.fillRect(-radius * 0.52, hatY + 4, radius * 1.04, 4);
     }
+
+    ctx.restore();
+}
+
+function drawBowtie(ctx, radius, color) {
+    // 根据图片样式：简洁的水平蝴蝶结，位于身体底部
+    const wingWidth = radius * 0.25;   // 增大翅膀宽度
+    const wingHeight = radius * 0.16;  // 增大翅膀高度
+    const knotWidth = radius * 0.09;   // 增大中间结的宽度
+    const knotHeight = radius * 0.13;  // 增大中间结的高度
+
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // 左侧蝴蝶结翅膀（简洁的三角形状）
+    ctx.beginPath();
+    ctx.moveTo(-knotWidth / 2, 0);
+    ctx.lineTo(-wingWidth, -wingHeight * 0.8);
+    ctx.lineTo(-wingWidth, wingHeight * 0.8);
+    ctx.closePath();
+    ctx.fill();
+
+    // 右侧蝴蝶结翅膀（简洁的三角形状）
+    ctx.beginPath();
+    ctx.moveTo(knotWidth / 2, 0);
+    ctx.lineTo(wingWidth, -wingHeight * 0.8);
+    ctx.lineTo(wingWidth, wingHeight * 0.8);
+    ctx.closePath();
+    ctx.fill();
+
+    // 中间的结（小矩形）
+    ctx.fillRect(-knotWidth / 2, -knotHeight / 2, knotWidth, knotHeight);
 
     ctx.restore();
 }
