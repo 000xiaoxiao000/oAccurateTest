@@ -64,6 +64,60 @@
         return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
     }
 
+    function hashString(value) {
+        var text = String(value || 'ai-mascot');
+        var hash = 2166136261;
+        for (var i = 0; i < text.length; i++) {
+            hash ^= text.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+    }
+
+    function createSeededRandom(seedValue) {
+        var state = hashString(seedValue) || 1;
+        return function () {
+            state |= 0;
+            state = (state + 0x6D2B79F5) | 0;
+            var t = Math.imul(state ^ state >>> 15, 1 | state);
+            t ^= t + Math.imul(t ^ t >>> 7, 61 | t);
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+    }
+
+    function pickWeightedIndex(weights, randomFn) {
+        var total = 0;
+        for (var i = 0; i < weights.length; i++) {
+            total += weights[i];
+        }
+        var roll = (typeof randomFn === 'function' ? randomFn() : Math.random()) * total;
+        for (var j = 0; j < weights.length; j++) {
+            roll -= weights[j];
+            if (roll <= 0) {
+                return j;
+            }
+        }
+        return Math.max(0, weights.length - 1);
+    }
+
+    function resolveMascotStyle(seedValue, overrides) {
+        overrides = overrides || {};
+        if (typeof overrides.accessoryKind === 'number' && typeof overrides.hatStyle === 'number' && typeof overrides.glassesStyle === 'number') {
+            return {
+                accessoryKind: overrides.accessoryKind,
+                hatStyle: overrides.hatStyle,
+                glassesStyle: overrides.glassesStyle
+            };
+        }
+
+        var randomFn = createSeededRandom(seedValue || 'ai-mascot');
+        return {
+            accessoryKind: typeof overrides.accessoryKind === 'number' ? overrides.accessoryKind : pickWeightedIndex([42, 28, 18, 12], randomFn),
+            hatStyle: typeof overrides.hatStyle === 'number' ? overrides.hatStyle : Math.floor(randomFn() * 3),
+            glassesStyle: typeof overrides.glassesStyle === 'number' ? overrides.glassesStyle : Math.floor(randomFn() * 3)
+        };
+    }
+
     // ============================================================
     //  2. 存储工具
     // ============================================================
@@ -404,6 +458,10 @@
         var accessoryColor = '#6b7280';
         var particleCount = opts.particleCount || 8;
         var orbitRadius = opts.orbitRadius || 52;
+        var mascotStyle = resolveMascotStyle(opts.variantSeed || opts.projectId || el.id || 'ai-mascot', opts.mascotStyle);
+        var accessoryKind = mascotStyle.accessoryKind;
+        var hatStyle = mascotStyle.hatStyle;
+        var glassesStyle = mascotStyle.glassesStyle;
         var rgb = {
             r: parseInt(primaryColor.slice(1, 3), 16) || 0,
             g: parseInt(primaryColor.slice(3, 5), 16) || 181,
@@ -535,25 +593,6 @@
             ctx.fill();
             ctx.restore();
         }
-
-        function pickWeightedIndex(weights) {
-            var total = 0;
-            for (var i = 0; i < weights.length; i++) {
-                total += weights[i];
-            }
-            var roll = Math.random() * total;
-            for (var j = 0; j < weights.length; j++) {
-                roll -= weights[j];
-                if (roll <= 0) {
-                    return j;
-                }
-            }
-            return Math.max(0, weights.length - 1);
-        }
-
-        var accessoryKind = pickWeightedIndex([42, 28, 18, 12]);
-        var hatStyle = Math.floor(Math.random() * 3);
-        var glassesStyle = Math.floor(Math.random() * 3);
 
         function drawHat(radius, color, styleIndex) {
             var style = styleIndex % 3;
@@ -1389,6 +1428,9 @@
         writeJSON: writeJSON,
         readLocalJSON: readLocalJSON,
         writeLocalJSON: writeLocalJSON,
+
+        // 吉祥物
+        resolveMascotStyle: resolveMascotStyle,
 
         // 工厂
         createImageHandler: createImageHandler,
