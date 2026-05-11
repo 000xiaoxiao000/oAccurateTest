@@ -2842,7 +2842,7 @@
                     drawHat();
                 } else if (accessoryKind === 2) {
                     ctx.save();
-                    ctx.translate(0, mascot.radius * 0.95);
+                    ctx.translate(0, mascot.radius * 0.9);
                     drawBowtie();
                     ctx.restore();
                 }

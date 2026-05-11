@@ -916,7 +916,7 @@
                     drawHat(radius, accessoryColor, hatStyle);
                 } else if (accessoryKind === 2) {
                     ctx.save();
-                    ctx.translate(0, radius * 0.95);
+                    ctx.translate(0, radius * 0.9);
                     drawBowtie(radius, accessoryColor);
                     ctx.restore();
                 } else if (accessoryKind === 3) {
