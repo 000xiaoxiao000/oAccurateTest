@@ -268,7 +268,7 @@
             $shell.prepend($ambient);
             $ambient.css({
                 position: 'absolute', width: '400px', height: '400px', borderRadius: '50%',
-                background: 'radial-gradient(circle, ' + ambientGlow + ' 0%, transparent 70%)',
+                background: 'radial-gradient(circle, ' + theme.ambientGlow + ' 0%, transparent 70%)',
                 pointerEvents: 'none', zIndex: 0, opacity: '0',
                 transition: 'opacity 0.4s ease, left 0.15s ease-out, top 0.15s ease-out'
             });
@@ -288,8 +288,8 @@
             $sendButton.on('mousedown', createRipple);
             $(document).on('mouseenter', '.ai-dock-chip', function () {
                 $(this).css({
-                    boxShadow: '0 0 20px ' + chipShadow + ', inset 0 0 12px ' + chipInnerGlow,
-                    borderColor: borderPrimary
+                    boxShadow: '0 0 20px ' + theme.chipShadow + ', inset 0 0 12px ' + theme.chipInnerGlow,
+                    borderColor: theme.borderPrimary
                 });
             }).on('mouseleave', '.ai-dock-chip', function () {
                 $(this).css({ boxShadow: '', borderColor: '' });
@@ -346,7 +346,7 @@
             var y = clientEvent.clientY - rect.top - size / 2;
             ripple.css({
                 position: 'absolute', width: size + 'px', height: size + 'px',
-                borderRadius: '50%', background: rippleGlow,
+                borderRadius: '50%', background: theme.rippleGlow,
                 transform: 'scale(0)', left: x + 'px', top: y + 'px',
                 pointerEvents: 'none',
                 animation: 'aiBtnRipple 0.5s ease-out forwards'
