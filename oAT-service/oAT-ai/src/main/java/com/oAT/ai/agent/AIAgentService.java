@@ -20,6 +20,8 @@ import dev.langchain4j.service.tool.ToolProviderResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.Array;
@@ -122,13 +124,15 @@ public class AIAgentService {
     private volatile AISelfLearningService selfLearningService;
 
     @Autowired
-    public AIAgentService(@Autowired(required = false) ChatModel chatLanguageModel,
+    public AIAgentService(@Qualifier("chatLanguageModel") ObjectProvider<ChatModel> chatLanguageModelProvider,
                           AIConfigProperties configProperties,
                           AgentDataProvider dataProvider,
                           AIConfig aiConfig,
                           AIEnhancedConfig enhancedConfig) {
         this.configProperties = configProperties;
         this.dataProvider = dataProvider;
+
+        ChatModel chatLanguageModel = chatLanguageModelProvider == null ? null : chatLanguageModelProvider.getIfAvailable();
 
         // 初始化增强服务
         this.semanticCacheEnabled = enhancedConfig.getSemanticCache().isEnabled();

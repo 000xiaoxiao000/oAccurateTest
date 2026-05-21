@@ -30,22 +30,20 @@ public class SearchControl {
     SnapshotSearchService snapshotSearchService;
 
     @RequestMapping("/search")
-    public String openSearchView() {
-        return "/search/search";
+    public String openSearchView(@PathVariable String projectId) {
+        return "redirect:/p/" + projectId + "/search";
     }
 
     @RequestMapping("/doSearch")
     public String doSearch(@PathVariable String projectId, String keyword, Model model) {
         Assert.hasText(keyword, "param 'keyword' must be not null");
 //        SearchPage<CaseSearchResult> page = searchService.doSearch(projectId, keyword);
-        SearchPage<SnapshotSearchResult> page = snapshotSearchService.doSearch(projectId, keyword);
-        model.addAttribute("searchPage", page);
-        return "/search/searchResult";
+        return "redirect:/p/" + projectId + "/search?keyword=" + org.springframework.web.util.UriUtils.encode(keyword, java.nio.charset.StandardCharsets.UTF_8);
     }
 
     @RequestMapping("/searchTable")
-    public String openSearchTableView() {
-        return "/search/tableSearch";
+    public String openSearchTableView(@PathVariable String projectId) {
+        return "redirect:/p/" + projectId + "/search?tab=table";
     }
 
     @RequestMapping("/doSearchTable")

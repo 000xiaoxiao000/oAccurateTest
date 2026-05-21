@@ -2,9 +2,12 @@ package com.oAT.ai.service.impl;
 
 import com.oAT.ai.config.AIConfig;
 import com.oAT.ai.service.LLMService;
+import dev.langchain4j.model.chat.ChatModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 /**
@@ -19,8 +22,9 @@ public class LLMServiceImpl implements LLMService {
     @Autowired
     private AIConfig aiConfig;
 
-    @Autowired(required = false)
-    private Object chatLanguageModel;
+    @Autowired
+    @Qualifier("chatLanguageModel")
+    private ObjectProvider<ChatModel> chatLanguageModelProvider;
 
     @Override
     public String chat(String systemPrompt, String userMessage) {
@@ -35,6 +39,10 @@ public class LLMServiceImpl implements LLMService {
 
     @Override
     public boolean isAvailable() {
-        return aiConfig.isEnabled() && chatLanguageModel != null;
+        return aiConfig.isEnabled() && resolveChatLanguageModel() != null;
+    }
+
+    private ChatModel resolveChatLanguageModel() {
+        return chatLanguageModelProvider == null ? null : chatLanguageModelProvider.getIfAvailable();
     }
 }

@@ -38,6 +38,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -87,80 +88,13 @@ public class UsecaseControl {
      */
     @RequestMapping("/new")
     public String openNewView(@PathVariable String projectId, @SessionAttribute UserVo user, String directory, Model model) {
-        directory = directory == null ? "root" : directory;
-        String currentDirName = resolveDirectoryName(projectId, directory);
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId());
-        List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase);
-        model.addAttribute("snapshots", snapshots);
-        model.addAttribute("systemSnapshots", getSystemSnapshotOptions(projectId));
-        model.addAttribute("currentDir", directory);
-        model.addAttribute("currentDirName", currentDirName);
-        model.addAttribute("labels", labels);
-        return "/usecase/usecaseNew";
+        String suffix = StringUtils.hasText(directory) ? "?directory=" + directory : "";
+        return "redirect:/p/" + projectId + "/usecases/new" + suffix;
     }
 
     @RequestMapping("/edit")
     public String openEditView(@PathVariable String projectId, @SessionAttribute UserVo user, String id, Model model) {
-        UsecaseVo usecase;
-        try {
-            usecase = usecaseService.getUsecase(projectId, id);
-        } catch (IllegalArgumentException ex) {
-            model.addAttribute("missingUsecaseMessage", "要编辑的用例不存在或已被删除");
-            return openListView(projectId, "root", "updateTime", null, null, model);
-        }
-        // 获取当前用户下所有的快照
-        List<SnapshotVo> selectedSnapshots = ArrayUtils.isNotEmpty(usecase.getSnapshots())
-                ? snapshotService.getByIds(usecase.getSnapshots())
-                : new ArrayList<>();
-        if (ArrayUtils.isNotEmpty(usecase.getSnapshots())) {
-            // 找出被删除的快照ID
-            String[] deleteByIds = Stream.of(usecase.getSnapshots())
-                    .filter(snapshotId -> selectedSnapshots.stream().noneMatch(snapshot -> snapshot.getId().equals(snapshotId)))
-                    .toArray(String[]::new);
-            // 已被删除的快照同样需要加入到 选择项当中
-            if (ArrayUtils.isNotEmpty(deleteByIds)) {
-                selectedSnapshots.addAll(snapshotService.getByIds(deleteByIds));
-            }
-        }
-
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId());
-        snapshots.addAll(selectedSnapshots.stream()
-                .filter(selected -> snapshots.stream().noneMatch(item -> item.getId().equals(selected.getId())))
-                .collect(Collectors.toList()));
-
-        List<SimpleRelationOption> systemSnapshots = getSystemSnapshotOptions(projectId);
-        if (ArrayUtils.isNotEmpty(usecase.getSystemSnapshots())) {
-            for (String relationId : usecase.getSystemSnapshots()) {
-                if (systemSnapshots.stream().noneMatch(item -> item.getId().equals(relationId))) {
-                    SimpleRelationOption option = getSystemSnapshotOption(relationId);
-                    if (option != null) {
-                        systemSnapshots.add(option);
-                    }
-                }
-            }
-        }
-
-        // 获取当前项目下所有关于用例的所有标签
-        List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase);
-        model.addAttribute("snapshots", snapshots);
-        model.addAttribute("systemSnapshots", systemSnapshots);
-        model.addAttribute("selectedSnapshotCount", snapshots.stream()
-                .filter(snapshot -> ArrayUtils.contains(usecase.getSnapshots(), snapshot.getId()))
-                .count());
-        model.addAttribute("selectedSystemSnapshotCount", systemSnapshots.stream()
-                .filter(item -> ArrayUtils.contains(usecase.getSystemSnapshots(), item.getId()))
-                .count());
-        model.addAttribute("usecase", usecase);
-        model.addAttribute("currentDir", usecase.getDirectory());
-        model.addAttribute("currentDirName", resolveDirectoryName(projectId, usecase.getDirectory()));
-        model.addAttribute("labels", labels);
-        model.addAttribute("selectLabels", arrayToString(usecase.getLabels()));// 已选中的节点
-        model.addAttribute("selectSnapshots", arrayToString(usecase.getSnapshots()));//已选中的快照
-        model.addAttribute("selectSystemSnapshots", arrayToString(usecase.getSystemSnapshots()));
-        model.addAttribute("defectsText", arrayToMultiLine(usecase.getDefects()));
-        model.addAttribute("prdRequirementsText", arrayToMultiLine(usecase.getPrdRequirements()));
-
-        return "/usecase/usecaseEdit";
+        return "redirect:/p/" + projectId + "/usecases/" + id + "/edit";
     }
 
     private String arrayToString(String[] labels) {
@@ -200,7 +134,19 @@ public class UsecaseControl {
     }
 
     @RequestMapping("/detail")
-    public String openDetails(@PathVariable String projectId, String id, Model model) {
+    public String openDetails(@PathVariable String projectId, String id, Model model, HttpServletRequest request) {
+        if (System.currentTimeMillis() >= 0) {
+            Boolean share = (Boolean) request.getAttribute("_share");
+            if (Boolean.TRUE.equals(share)) {
+                return "redirect:/share/usecase/" + id;
+            }
+            return "redirect:/p/" + projectId + "/usecases/" + id;
+        }
+        Boolean share = (Boolean) request.getAttribute("_share");
+        if (!Boolean.TRUE.equals(share)) {
+            return "redirect:/p/" + projectId + "/usecases/" + id;
+        }
+
         UsecaseDetailVo usecase;
         try {
             usecase = usecaseService.getUsecaseDetail(projectId, id);
@@ -213,7 +159,6 @@ public class UsecaseControl {
         UserVo lastUpdateAuthor = userService.getUser(usecase.getLastUpdateAuthor());
         model.addAttribute("lastUpdateAuthor", lastUpdateAuthor);
 
-        // 获取快照
         if (!ObjectUtils.isEmpty(usecase.getSnapshots())) {
             List<SnapshotVo> snapshots = snapshotService.getByIds(usecase.getSnapshots());
             model.addAttribute("snapshots", snapshots);
@@ -235,7 +180,6 @@ public class UsecaseControl {
             model.addAttribute("prdRequirements", buildTextLinks(usecase.getPrdRequirements(), prdLinkTemplate));
         }
 
-        // 获取当前项目下的标签
         if (!ObjectUtils.isEmpty(usecase.getLabels())) {
             List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase, usecase.getLabels());
             model.addAttribute("labels", labels);
@@ -244,7 +188,7 @@ public class UsecaseControl {
             model.addAttribute("usecaseContent", renderMarkdown(usecase.getContent()));
         }
 
-        return "/usecase/usecaseDetail";
+        return "redirect:/p/" + projectId + "/usecases/" + id;
     }
 
     private String renderMarkdown(String markdown) {
@@ -301,31 +245,21 @@ public class UsecaseControl {
      */
     @RequestMapping("/list")
     public String openListView(@PathVariable String projectId, String directory, String sort, String keyword, String usecaseId, Model model) {
-        // 默认root
-        directory = directory == null ? "root" : directory;
-        sort = sort == null ? "updateTime" : sort;
-        model.addAttribute("directory", directory);
-        model.addAttribute("sort", sort);
-        model.addAttribute("keyword", keyword);
-        model.addAttribute("usecaseId", usecaseId);
-        List<UsecaseVo> list = usecaseService.getUsecases(projectId, directory, sort, keyword);
-        Map<String, String> maintainerNameMap = buildMaintainerNameMap(list);
-        List<UsecaseDirectoryVo> directorys = usecaseService.getDirectory(projectId, directory);
-        if (!"root".equals(directory)) {
-            // 查找目录层级
-            List<UsecaseDirectoryVo> dirTier = usecaseService.getDirectoryTier(projectId, directory);
-            // 到序排列
-            Collections.reverse(dirTier);
-            model.addAttribute("dirTiers", dirTier);
+        StringBuilder target = new StringBuilder("redirect:/p/").append(projectId).append("/usecases");
+        List<String> query = new ArrayList<>();
+        if (StringUtils.hasText(directory) && !"root".equals(directory)) {
+            query.add("directory=" + directory);
         }
-        List<AppVo> apps = appService.getAppList(projectId);
-        AppVo app = apps.isEmpty() ? null : apps.get(0);
-        model.addAttribute("app", app);
-        model.addAttribute("cases", list);
-        model.addAttribute("maintainerNameMap", maintainerNameMap);
-        model.addAttribute("dirs", directorys);
-        model.addAttribute("currentDir", directory);
-        return "/usecase/usecaseList";
+        if (StringUtils.hasText(sort)) {
+            query.add("sort=" + sort);
+        }
+        if (StringUtils.hasText(keyword)) {
+            query.add("keyword=" + keyword);
+        }
+        if (!query.isEmpty()) {
+            target.append("?").append(String.join("&", query));
+        }
+        return target.toString();
     }
 
     @RequestMapping("/doDelete")

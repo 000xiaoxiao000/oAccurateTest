@@ -50,7 +50,7 @@ public class ApiEndpointControl {
         model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
         model.addAttribute("app", appService.getApp(appId));
         model.addAttribute("loginNameRole", getLoginUserRole(projectId, user.getName()));
-        return "/settings/apiEndpointList";
+        return "forward:/index.html";
     }
 
     @RequestMapping("/upload")

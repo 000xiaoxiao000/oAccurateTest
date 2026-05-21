@@ -298,30 +298,30 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     private List<AIQuickLinkVo> buildQuickLinks(String projectId, List<AppVo> apps, RouteContext routeContext) {
         List<AIQuickLinkVo> links = new ArrayList<>();
         links.add(new AIQuickLinkVo("项目主页", "回到项目整体概况", "/p/" + projectId + "/home"));
-        links.add(new AIQuickLinkVo("监控台", "查看实时请求与调用链", "/p/" + projectId + "/monitor"));
+        links.add(new AIQuickLinkVo("在线实例", "查看当前在线应用实例", "/p/" + projectId + "/apps/online"));
         if (isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
-            links.add(new AIQuickLinkVo("覆盖率概览", "查看项目整体覆盖率", "/p/" + projectId + "/coverage/overview"));
+            links.add(new AIQuickLinkVo("覆盖率概览", "查看项目整体覆盖率", "/p/" + projectId + "/coverage"));
         }
         if (!apps.isEmpty() && isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
             String coverageUrl = buildCoverageUrl(projectId, apps);
             links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", coverageUrl));
         } else if (isRoute(routeContext, "coverage", "coverage.overview", "coverage.app", "coverage.trend", "coverage.low", "quality.lowComplexity", "quality.report")) {
-            links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage/overview"));
+            links.add(new AIQuickLinkVo("覆盖率报告", "查看代码覆盖率详情", "/p/" + projectId + "/coverage"));
         }
         if (isRoute(routeContext, "snapshot", "snapshot.list", "snapshot.detail", "snapshot.my")) {
-            links.add(new AIQuickLinkVo("快照列表", "浏览项目沉淀的全部快照", "/p/" + projectId + "/snapshot/list"));
+            links.add(new AIQuickLinkVo("快照列表", "浏览项目沉淀的全部快照", buildSystemSnapshotUrl(projectId, apps, null)));
         }
         if (isRoute(routeContext, "snapshot", "snapshot.my")) {
-            links.add(new AIQuickLinkVo("我的快照", "只看当前用户保存的快照", "/p/" + projectId + "/snapshot/my"));
+            links.add(new AIQuickLinkVo("我的快照", "只看当前用户保存的快照", "/p/" + projectId + "/my-snapshots"));
         }
         if (isRoute(routeContext, "trace", "trace.recent", "trace.detail", "trace.app")) {
-            links.add(new AIQuickLinkVo("最近调用链", "查看最近的链路数据", "/p/" + projectId + "/monitor"));
+            links.add(new AIQuickLinkVo("链路地图", "查看调用关系与链路分布", "/p/" + projectId + "/map/home"));
         }
         if (isRoute(routeContext, "trace", "trace.app")) {
-            links.add(new AIQuickLinkVo("按应用查链路", "查看当前应用相关链路", "/p/" + projectId + "/monitor"));
+            links.add(new AIQuickLinkVo("按应用看链路", "查看当前应用相关调用关系", "/p/" + projectId + "/map/home"));
         }
         if (isRoute(routeContext, "quality", "quality.lowComplexity", "quality.report")) {
-            links.add(new AIQuickLinkVo("代码质量", "查看复杂度与质量分析", "/p/" + projectId + "/coverage/overview"));
+            links.add(new AIQuickLinkVo("代码质量", "查看复杂度与质量分析", "/p/" + projectId + "/coverage"));
         }
         return links;
     }
@@ -361,10 +361,9 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
                         (disableAutoSave ? "关闭" : "开启") + (systemSnapshot ? "自动保存系统快照" : "自动保存我的快照"),
                         "已" + (disableAutoSave ? "关闭" : "开启") + (systemSnapshot ? "自动保存系统快照" : "自动保存我的快照") + "。"));
             } else {
-                actions.add(new AIActionVo("navigate", "前往实时监控", "自动保存快照属于监控页能力，请先进入实时监控页面确认采集范围", "/p/" + projectId + "/monitor", true,
-                        disableAutoSave ? "即将跳转到实时监控页面。进入页面后可让我直接关闭对应自动保存开关。" : "即将跳转到实时监控页面。进入页面后可让我直接开启对应自动保存开关。"));
+                actions.add(new AIActionVo("link", "查看链路地图", "实时监控页尚未迁移到新前端，可先通过链路地图确认调用关系。", "/p/" + projectId + "/map/home", false, null));
             }
-            actions.add(new AIActionVo("link", "我的快照", "查看已保存的个人快照", "/p/" + projectId + "/snapshot/my", false, null));
+            actions.add(new AIActionVo("link", "我的快照", "查看已保存的个人快照", "/p/" + projectId + "/my-snapshots", false, null));
         }
 
         if ((onMonitorPage || isRoute(routeContext, "trace", "trace.recent", "trace.app", "trace.detail"))
@@ -467,25 +466,38 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
                 return buildCoverageOverviewUrl(projectId, targetApp.getId(), latestReport);
             }
             if (StringUtils.hasText(targetApp.getCurrentVersion())) {
-                return "/p/" + projectId + "/coverage/overview?appId=" + encodeQueryParam(targetApp.getId())
-                        + "&versionNumber=" + encodeQueryParam(targetApp.getCurrentVersion());
+                return "/p/" + projectId + "/apps/" + encodeQueryParam(targetApp.getId())
+                        + "/coverage?versionNumber=" + encodeQueryParam(targetApp.getCurrentVersion());
             }
         }
-        return "/p/" + projectId + "/coverage/overview";
+        return "/p/" + projectId + "/coverage";
     }
 
     private String buildCoverageOverviewUrl(String projectId, String appId, CoverageReportIndex report) {
         String targetAppId = StringUtils.hasText(report.getAppId()) ? report.getAppId() : appId;
-        StringBuilder url = new StringBuilder("/p/").append(projectId).append("/coverage/overview?appId=")
-                .append(encodeQueryParam(targetAppId));
+        StringBuilder url = new StringBuilder("/p/").append(projectId).append("/apps/")
+                .append(encodeQueryParam(targetAppId)).append("/coverage?versionNumber=");
         if (StringUtils.hasText(report.getVersionNumber())) {
-            url.append("&versionNumber=").append(encodeQueryParam(report.getVersionNumber()));
+            url.append(encodeQueryParam(report.getVersionNumber()));
+        } else {
+            url.append("");
         }
         url.append("&reportId=").append(encodeQueryParam(report.getId()));
         if (StringUtils.hasText(report.getRepoCommitId())) {
             url.append("&commitId=").append(encodeQueryParam(report.getRepoCommitId()));
         }
         return url.toString();
+    }
+
+    private String buildSystemSnapshotUrl(String projectId, List<AppVo> apps, String questionText) {
+        AppVo targetApp = findTargetApp(apps, questionText);
+        if (targetApp == null && apps != null && !apps.isEmpty()) {
+            targetApp = apps.get(0);
+        }
+        if (targetApp != null && StringUtils.hasText(targetApp.getId())) {
+            return "/p/" + projectId + "/apps/" + targetApp.getId() + "/snapshots";
+        }
+        return "/p/" + projectId + "/apps";
     }
 
     private String encodeQueryParam(String value) {
@@ -572,37 +584,37 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         if (containsAny(questionText, "项目主页", "首页", "项目首页", "概览")) {
             actions.add(buildAutoNavigateAction("打开项目主页", "/p/" + projectId + "/home"));
         } else if (containsAny(questionText, "搜索")) {
-            actions.add(buildAutoNavigateAction("打开搜索", "/p/" + projectId + "/map/home"));
+            actions.add(buildAutoNavigateAction("打开搜索", "/p/" + projectId + "/search"));
         } else if (containsAny(questionText, "监控台", "实时监控", "监控页")) {
-            actions.add(buildAutoNavigateAction("打开监控台", "/p/" + projectId + "/monitor"));
+            actions.add(buildAutoNavigateAction("打开链路地图", "/p/" + projectId + "/map/home"));
         } else if (containsAny(questionText, "ai interactive", "ai工作台", "ai interactive", "工作台")) {
-            actions.add(buildAutoNavigateAction("打开 AI Interactive", "/p/" + projectId + "/AIInteractive"));
+            actions.add(buildAutoNavigateAction("打开 AI Interactive", "/p/" + projectId + "/ai"));
         } else if (containsAny(questionText, "应用中心", "应用列表")) {
-            actions.add(buildAutoNavigateAction("打开应用中心", "/p/" + projectId + "/app/list"));
+            actions.add(buildAutoNavigateAction("打开应用中心", "/p/" + projectId + "/apps"));
         } else if (containsAny(questionText, "在线应用")) {
-            actions.add(buildAutoNavigateAction("打开在线应用", "/p/" + projectId + "/app/online"));
+            actions.add(buildAutoNavigateAction("打开在线应用", "/p/" + projectId + "/apps/online"));
         } else if (containsAny(questionText, "添加应用", "新增应用", "创建应用")) {
-            actions.add(buildAutoNavigateAction("打开添加应用", "/p/" + projectId + "/app/create"));
+            actions.add(buildAutoNavigateAction("打开添加应用", "/p/" + projectId + "/apps?create=1"));
         } else if (containsAny(questionText, "创建新项目", "新建项目", "创建项目")) {
-            actions.add(buildAutoNavigateAction("打开创建新项目", "/project/create"));
+            actions.add(buildAutoNavigateAction("打开创建新项目", "/projects?create=1"));
         } else if (containsAny(questionText, "项目设置", "设置")) {
-            actions.add(buildAutoNavigateAction("打开项目设置", "/p/" + projectId + "/edit"));
+            actions.add(buildAutoNavigateAction("打开项目设置", "/projects?edit=" + projectId));
         } else if (containsAny(questionText, "我的项目", "项目列表", "切换项目")) {
-            actions.add(buildAutoNavigateAction("打开我的项目列表", "/myProjects"));
+            actions.add(buildAutoNavigateAction("打开我的项目列表", "/projects"));
         } else if (containsAny(questionText, "用户设置", "个人设置", "账号设置")) {
-            actions.add(buildAutoNavigateAction("打开用户设置", "/user/info"));
+            actions.add(buildAutoNavigateAction("打开用户设置", "/account"));
         } else if (containsAny(questionText, "注销", "退出登录", "登出")) {
             actions.add(new AIActionVo("navigate", "注销退出", "即将注销当前账号", "/user/logout", true, "确认要注销退出吗？"));
         } else if (containsAny(questionText, "我的快照")) {
-            actions.add(buildAutoNavigateAction("打开我的快照", "/p/" + projectId + "/snapshot/my"));
+            actions.add(buildAutoNavigateAction("打开我的快照", "/p/" + projectId + "/my-snapshots"));
         } else if (appId != null && containsAny(questionText, "系统快照")) {
-            actions.add(buildAutoNavigateAction("打开系统快照", "/p/" + projectId + "/" + appId + "/snapshot/list"));
+            actions.add(buildAutoNavigateAction("打开系统快照", "/p/" + projectId + "/apps/" + appId + "/snapshots"));
         } else if (appId != null && containsAny(questionText, "版本比对", "版本比较")) {
-            actions.add(buildAutoNavigateAction("打开版本比对", "/p/" + projectId + "/" + appId + "/version/compare"));
+            actions.add(buildAutoNavigateAction("打开版本比对", "/p/" + projectId + "/apps/" + appId + "/compare"));
         } else if (appId != null && containsAny(questionText, "覆盖率报告", "覆盖率")) {
             actions.add(buildAutoNavigateAction("打开覆盖率报告", buildCoverageUrl(projectId, apps, questionText)));
         } else if (appId != null) {
-            actions.add(buildAutoNavigateAction("打开应用系统快照", "/p/" + projectId + "/" + appId + "/snapshot/list"));
+            actions.add(buildAutoNavigateAction("打开应用系统快照", "/p/" + projectId + "/apps/" + appId + "/snapshots"));
         }
         return actions;
     }

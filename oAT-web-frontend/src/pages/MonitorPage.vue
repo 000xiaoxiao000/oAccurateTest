@@ -1,0 +1,964 @@
+<template>
+  <section>
+    <div class="page-header">
+      <div>
+        <div class="eyebrow">Runtime Monitor</div>
+        <h1>实时监控台</h1>
+        <p class="subtext">查看在线探针、实时调用链路、调用拓扑，并可将 trace 保存为系统快照。</p>
+      </div>
+      <div class="header-actions">
+        <RouterLink class="secondary-link" :to="`/p/${projectId}/home`">返回项目</RouterLink>
+        <button class="action-button" type="button" @click="refreshAll">刷新</button>
+      </div>
+    </div>
+
+    <div class="overview-grid">
+      <div class="overview-card">
+        <span>在线探针</span>
+        <strong>{{ probes.length }}</strong>
+      </div>
+      <div class="overview-card">
+        <span>Trace 数</span>
+        <strong>{{ traces.length }}</strong>
+      </div>
+      <div class="overview-card">
+        <span>当前图节点</span>
+        <strong>{{ graph?.nodes.length || 0 }}</strong>
+      </div>
+      <div class="overview-card">
+        <span>自动刷新</span>
+        <strong>{{ autoRefresh ? `${refreshSeconds}s` : '关闭' }}</strong>
+      </div>
+    </div>
+
+    <section class="panel probe-panel">
+      <div class="panel-head">
+        <div>
+          <h2>探针状态</h2>
+          <p>按 IP、应用、工程或 Agent 版本过滤当前在线实例。</p>
+        </div>
+        <input v-model.trim="probeKeyword" class="text-input compact" type="text" placeholder="搜索探针" />
+      </div>
+      <div v-if="probeLoading" class="status-card">正在加载探针...</div>
+      <div v-else-if="probeError" class="status-card error">{{ probeError }}</div>
+      <div v-else-if="filteredProbes.length === 0" class="status-card">暂无在线探针</div>
+      <div v-else class="probe-grid">
+        <article v-for="probe in filteredProbes" :key="probeKey(probe)" class="probe-card">
+          <strong>{{ probe.appName || '未定义应用' }}</strong>
+          <span>{{ probe.addressIp || '-' }} · PID {{ probe.pid || '-' }}</span>
+          <small>{{ probe.projectSrcName || '-' }} · {{ probe.agentVersion || 'unknown agent' }}</small>
+          <small>在线 {{ probe.onlineTime || '-' }}</small>
+        </article>
+      </div>
+    </section>
+
+    <div class="monitor-grid">
+      <section class="panel trace-panel">
+        <div class="panel-head trace-head">
+          <div>
+            <h2>Trace 列表</h2>
+            <p>点击 trace 加载拓扑图。</p>
+          </div>
+          <label class="auto-refresh">
+            <input v-model="autoRefresh" type="checkbox" />
+            自动刷新
+          </label>
+        </div>
+
+        <div class="toolbar">
+          <input v-model.trim="traceKeyword" class="text-input" type="text" placeholder="搜索 URL / traceId / IP" />
+          <select v-model.number="upToTime" class="text-input time-select">
+            <option :value="60">一分钟内</option>
+            <option :value="180">三分钟内</option>
+            <option :value="300">五分钟内</option>
+            <option :value="600">十分钟内</option>
+            <option :value="1800">三十分钟内</option>
+          </select>
+          <input v-model.number="maxSize" class="text-input size-input" type="number" min="10" max="500" />
+          <button class="ghost-button" type="button" @click="loadTraces">查询</button>
+        </div>
+
+        <div v-if="traceLoading" class="status-card">正在加载 trace...</div>
+        <div v-else-if="traceError" class="status-card error">{{ traceError }}</div>
+        <div v-else-if="filteredTraces.length === 0" class="status-card">暂无 trace 数据</div>
+        <div v-else class="trace-list">
+          <button
+            v-for="trace in filteredTraces"
+            :key="trace.traceId"
+            class="trace-item"
+            :class="{ active: selectedTraceId === trace.traceId }"
+            type="button"
+            @click="selectTrace(trace)"
+          >
+            <strong>{{ trace.title || trace.traceId }}</strong>
+            <span>{{ trace.addressIp || '-' }} · {{ trace.clientIp || '-' }}</span>
+            <small>{{ trace.traceId }} · #{{ trace.index }}</small>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel graph-panel">
+        <div class="panel-head">
+          <div>
+            <h2>调用拓扑</h2>
+            <p>{{ selectedTraceId || '请选择左侧 trace' }}</p>
+          </div>
+          <div class="header-actions">
+            <button class="ghost-button" type="button" :disabled="!selectedTraceId || graphLoading" @click="loadGraph">重载拓扑</button>
+            <button class="ghost-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="autoSaveSnapshot">
+              自动保存
+            </button>
+            <button class="action-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">
+              {{ savingSnapshot ? '保存中...' : '保存系统快照' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="graphLoading" class="status-card">正在加载拓扑...</div>
+        <div v-else-if="graphError" class="status-card error">{{ graphError }}</div>
+        <div v-else-if="!graph" class="status-card">还没有加载拓扑图</div>
+        <template v-else>
+          <div class="graph-board">
+            <svg class="graph-svg" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <marker id="monitorArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                  <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
+                </marker>
+              </defs>
+              <line
+                v-for="edge in edgePositions"
+                :key="`${edge.from}-${edge.to}-${edge.label}`"
+                :x1="edge.x1"
+                :y1="edge.y1"
+                :x2="edge.x2"
+                :y2="edge.y2"
+                class="graph-edge"
+                marker-end="url(#monitorArrow)"
+              />
+              <text v-for="edge in edgePositions" :key="`${edge.from}-${edge.to}-label`" :x="edge.mx" :y="edge.my" class="edge-label">
+                {{ edge.label || edge.type || edge.count }}
+              </text>
+              <g
+                v-for="node in nodePositions"
+                :key="node.id"
+                class="graph-node"
+                :class="{ selected: selectedNodeId === node.id }"
+                @click="selectNode(node.id)"
+              >
+                <rect :x="node.x" :y="node.y" rx="18" ry="18" width="220" height="92" />
+                <text :x="node.x + 16" :y="node.y + 28" class="node-title">{{ node.title || node.id }}</text>
+                <text :x="node.x + 16" :y="node.y + 54" class="node-subtitle">{{ node.subTitle || node.type || '-' }}</text>
+                <text :x="node.x + 16" :y="node.y + 76" class="node-type">{{ node.type || 'node' }}</text>
+              </g>
+            </svg>
+          </div>
+
+          <div class="node-detail-grid">
+            <article class="node-detail-card full-detail-card">
+              <h3>节点详情</h3>
+              <div v-if="nodeDetailLoading" class="status-card">正在加载节点详情...</div>
+              <div v-else-if="nodeDetailError" class="status-card error">{{ nodeDetailError }}</div>
+              <GraphNodeDetailCard v-else :detail="selectedNodeDetail" empty-text="点击图中节点查看详情" />
+            </article>
+            <article class="node-detail-card">
+              <h3>保存状态</h3>
+              <span>{{ snapshotNotice || '可将当前 trace 自动保存为系统快照，重复保存会由后端去重。' }}</span>
+            </article>
+          </div>
+        </template>
+      </section>
+    </div>
+
+    <div v-if="snapshotDialogOpen" class="modal-backdrop" @click.self="closeSnapshotDialog">
+      <form class="snapshot-modal" @submit.prevent="submitSnapshotForm">
+        <div class="modal-head">
+          <div>
+            <div class="eyebrow">System Snapshot</div>
+            <h2>保存系统快照</h2>
+            <p>{{ snapshotContext?.subTitle || selectedTraceId }}</p>
+          </div>
+          <button class="icon-button" type="button" @click="closeSnapshotDialog">×</button>
+        </div>
+
+        <div v-if="snapshotFormError" class="status-card error">{{ snapshotFormError }}</div>
+        <div v-if="snapshotContextLoading" class="status-card">正在加载保存上下文...</div>
+        <template v-else>
+          <div class="snapshot-form-grid">
+            <div class="form-main">
+              <label class="field required">
+                <span>名称</span>
+                <input v-model.trim="snapshotForm.title" class="text-input" type="text" maxlength="50" placeholder="系统快照名称" />
+              </label>
+              <label class="field">
+                <span>图片</span>
+                <input class="text-input" type="file" accept="image/*" @change="handleTopicImageUpload" />
+              </label>
+              <div v-if="snapshotForm.topicImage" class="image-preview-line">
+                <img :src="snapshotForm.topicImage" alt="系统快照图片" />
+                <span>{{ snapshotForm.topicImage }}</span>
+              </div>
+              <label class="field">
+                <span>描述</span>
+                <textarea v-model.trim="snapshotForm.describe" class="text-input textarea" maxlength="512" rows="6" placeholder="描述本次调用场景、关键输入或异常现象"></textarea>
+              </label>
+            </div>
+
+            <div class="form-side">
+              <label class="field">
+                <span>所属应用</span>
+                <input class="text-input" type="text" :value="snapshotContext?.appName || snapshotForm.appId" readonly />
+              </label>
+              <label class="field">
+                <span>目录</span>
+                <select v-model="snapshotForm.directory" class="text-input">
+                  <option value="root">/root</option>
+                  <option v-for="dir in snapshotContext?.directories || []" :key="dir.id" :value="dir.id">
+                    {{ dir.path || dir.name }}
+                  </option>
+                </select>
+              </label>
+              <label class="field">
+                <span>版本有效周期（天）</span>
+                <input v-model.number="snapshotForm.versionCycle" class="text-input" type="number" min="1" max="3650" />
+              </label>
+              <div class="field">
+                <span>添加标签</span>
+                <div class="choice-grid">
+                  <label v-for="label in snapshotContext?.labels || []" :key="label.name" class="choice-pill">
+                    <input v-model="snapshotForm.labels" type="checkbox" :value="label.name" />
+                    <span>{{ label.name }}</span>
+                  </label>
+                </div>
+              </div>
+              <div class="field required">
+                <span>负责人</span>
+                <div class="choice-grid">
+                  <label v-for="member in snapshotContext?.members || []" :key="member.memberId" class="choice-pill">
+                    <input v-model="snapshotForm.principals" type="checkbox" :value="member.memberId" />
+                    <span>{{ member.memberName || member.memberEmail || member.memberId }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button class="ghost-button" type="button" @click="closeSnapshotDialog">算啦</button>
+            <button class="action-button" type="submit" :disabled="savingSnapshot || topicImageUploading">
+              {{ savingSnapshot ? '保存中...' : topicImageUploading ? '图片上传中...' : '是的，帮我保存' }}
+            </button>
+          </div>
+        </template>
+      </form>
+    </div>
+  </section>
+</template>
+
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
+
+import { fetchMonitorSnapshotContext, saveMonitorSystemSnapshot, uploadResource } from '@/api/bootstrap'
+import { apiGet, apiGetRaw, apiPost } from '@/api/http'
+import type { GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload, MonitorSnapshotContextPayload, OnlineSessionSummary, TraceItemSummary } from '@/api/types'
+import GraphNodeDetailCard from '@/components/snapshot/GraphNodeDetailCard.vue'
+
+type PositionedNode = GraphNodeSummary & { x: number; y: number }
+type PositionedEdge = GraphEdgeSummary & { x1: number; y1: number; x2: number; y2: number; mx: number; my: number }
+
+const route = useRoute()
+const projectId = computed(() => String(route.params.projectId || ''))
+const selectedAppId = computed(() => String(route.query.appId || ''))
+
+const probes = ref<OnlineSessionSummary[]>([])
+const traces = ref<TraceItemSummary[]>([])
+const graph = ref<GraphViewPayload | null>(null)
+const selectedTraceId = ref('')
+const selectedNodeId = ref('')
+const selectedNodeDetail = ref<GraphNodeDetailPayload | null>(null)
+const probeKeyword = ref('')
+const traceKeyword = ref('')
+const upToTime = ref(180)
+const maxSize = ref(100)
+const autoRefresh = ref(false)
+const refreshSeconds = ref(5)
+const probeLoading = ref(false)
+const traceLoading = ref(false)
+const graphLoading = ref(false)
+const nodeDetailLoading = ref(false)
+const savingSnapshot = ref(false)
+const snapshotDialogOpen = ref(false)
+const snapshotContextLoading = ref(false)
+const topicImageUploading = ref(false)
+const probeError = ref('')
+const traceError = ref('')
+const graphError = ref('')
+const nodeDetailError = ref('')
+const snapshotNotice = ref('')
+const snapshotFormError = ref('')
+const snapshotContext = ref<MonitorSnapshotContextPayload | null>(null)
+const snapshotForm = ref({
+  traceId: '',
+  appId: '',
+  directory: 'root',
+  title: '',
+  topicImage: '',
+  describe: '',
+  versionCycle: 30,
+  labels: [] as string[],
+  principals: [] as string[],
+})
+let refreshTimer: number | undefined
+
+const filteredProbes = computed(() => {
+  const needle = probeKeyword.value.toLowerCase()
+  if (!needle) return probes.value
+  return probes.value.filter((probe) => [probe.addressIp, probe.appName, probe.projectSrcName, probe.agentVersion, probe.systemDir]
+    .join(' ')
+    .toLowerCase()
+    .includes(needle))
+})
+
+const filteredTraces = computed(() => {
+  const needle = traceKeyword.value.toLowerCase()
+  return traces.value.filter((trace) => {
+    const haystack = [trace.traceId, trace.title, trace.addressIp, trace.clientIp, trace.appId]
+      .join(' ')
+      .toLowerCase()
+    const matchesApp = !selectedAppId.value || trace.appId === selectedAppId.value
+    return matchesApp && (!needle || haystack.includes(needle))
+  })
+})
+
+const nodePositions = computed<PositionedNode[]>(() => {
+  const nodes = graph.value?.nodes || []
+  return nodes.map((node, index) => ({
+    ...node,
+    x: 36 + (index % 4) * 290,
+    y: 40 + Math.floor(index / 4) * 150,
+  }))
+})
+
+const edgePositions = computed<PositionedEdge[]>(() => {
+  const nodeMap = new Map(nodePositions.value.map((node) => [node.id, node]))
+  return (graph.value?.edges || [])
+    .map((edge) => {
+      const from = nodeMap.get(edge.from)
+      const to = nodeMap.get(edge.to)
+      if (!from || !to) return null
+      const x1 = from.x + 220
+      const y1 = from.y + 46
+      const x2 = to.x
+      const y2 = to.y + 46
+      return { ...edge, x1, y1, x2, y2, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 - 8 }
+    })
+    .filter((edge): edge is PositionedEdge => edge !== null)
+})
+
+watch(autoRefresh, (enabled) => {
+  if (enabled) startRefreshTimer()
+  else stopRefreshTimer()
+})
+
+async function refreshAll() {
+  await Promise.all([loadProbes(), loadTraces()])
+  if (!selectedTraceId.value && traces.value[0]) {
+    await selectTrace(traces.value[0])
+  }
+}
+
+async function loadProbes() {
+  probeLoading.value = true
+  probeError.value = ''
+  try {
+    probes.value = await apiGetRaw<OnlineSessionSummary[]>(`/p/${projectId.value}/monitor/probeStatus`)
+  } catch (err) {
+    probeError.value = err instanceof Error ? err.message : '加载探针失败'
+  } finally {
+    probeLoading.value = false
+  }
+}
+
+async function loadTraces() {
+  traceLoading.value = true
+  traceError.value = ''
+  try {
+    const query = new URLSearchParams()
+    query.set('upToTime', String(upToTime.value || 180))
+    query.set('maxSize', String(maxSize.value || 100))
+    traces.value = await apiGetRaw<TraceItemSummary[]>(`/p/${projectId.value}/monitor/getNodeByTime?${query.toString()}`)
+  } catch (err) {
+    traceError.value = err instanceof Error ? err.message : '加载 trace 失败'
+  } finally {
+    traceLoading.value = false
+  }
+}
+
+async function selectTrace(trace: TraceItemSummary) {
+  selectedTraceId.value = trace.traceId
+  selectedNodeId.value = ''
+  selectedNodeDetail.value = null
+  await loadGraph()
+}
+
+async function loadGraph() {
+  if (!selectedTraceId.value) return
+  graphLoading.value = true
+  graphError.value = ''
+  try {
+    const query = new URLSearchParams()
+    query.set('traceId', selectedTraceId.value)
+    graph.value = await apiGetRaw<GraphViewPayload>(`/p/${projectId.value}/monitor/getTraceGraph?${query.toString()}`)
+    selectedNodeId.value = graph.value?.showDefaultNode?.id || graph.value?.nodes[0]?.id || ''
+    if (selectedNodeId.value) {
+      await loadNodeDetail(selectedNodeId.value)
+    }
+  } catch (err) {
+    graphError.value = err instanceof Error ? err.message : '加载拓扑失败'
+  } finally {
+    graphLoading.value = false
+  }
+}
+
+function selectNode(nodeId: string) {
+  selectedNodeId.value = nodeId
+  loadNodeDetail(nodeId)
+}
+
+async function loadNodeDetail(nodeId: string) {
+  if (!selectedTraceId.value || !nodeId) return
+  nodeDetailLoading.value = true
+  nodeDetailError.value = ''
+  try {
+    const query = new URLSearchParams()
+    query.set('traceId', selectedTraceId.value)
+    query.set('nodeId', nodeId)
+    selectedNodeDetail.value = await apiGet<GraphNodeDetailPayload>(`/p/${projectId.value}/monitor/getTraceGraphNode?${query.toString()}`)
+  } catch (err) {
+    selectedNodeDetail.value = null
+    nodeDetailError.value = err instanceof Error ? err.message : '加载节点详情失败'
+  } finally {
+    nodeDetailLoading.value = false
+  }
+}
+
+async function autoSaveSnapshot() {
+  if (!selectedTraceId.value) return
+  savingSnapshot.value = true
+  snapshotNotice.value = ''
+  try {
+    const body = new URLSearchParams()
+    body.set('traceId', selectedTraceId.value)
+    body.set('title', graph.value?.title || '实时监控自动快照')
+    const result = await apiPost<string>(`/p/${projectId.value}/monitor/autoSaveSystemSnapshot`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
+    snapshotNotice.value = result || '系统快照已保存'
+  } catch (err) {
+    snapshotNotice.value = err instanceof Error ? err.message : '保存系统快照失败'
+  } finally {
+    savingSnapshot.value = false
+  }
+}
+
+async function openSnapshotDialog() {
+  if (!selectedTraceId.value) return
+  snapshotDialogOpen.value = true
+  snapshotContextLoading.value = true
+  snapshotFormError.value = ''
+  try {
+    const context = await fetchMonitorSnapshotContext(projectId.value, selectedTraceId.value)
+    snapshotContext.value = context
+    snapshotForm.value = {
+      traceId: context.traceId,
+      appId: context.appId,
+      directory: 'root',
+      title: (context.defaultTitle || graph.value?.title || '实时监控系统快照').slice(0, 50),
+      topicImage: '',
+      describe: '',
+      versionCycle: 30,
+      labels: [],
+      principals: context.currentUserId ? [context.currentUserId] : [],
+    }
+  } catch (err) {
+    snapshotFormError.value = err instanceof Error ? err.message : '加载系统快照保存上下文失败'
+  } finally {
+    snapshotContextLoading.value = false
+  }
+}
+
+function closeSnapshotDialog() {
+  if (savingSnapshot.value || topicImageUploading.value) {
+    return
+  }
+  snapshotDialogOpen.value = false
+  snapshotFormError.value = ''
+}
+
+async function handleTopicImageUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+  topicImageUploading.value = true
+  snapshotFormError.value = ''
+  try {
+    snapshotForm.value.topicImage = await uploadResource(file)
+  } catch (err) {
+    snapshotFormError.value = err instanceof Error ? err.message : '图片上传失败'
+  } finally {
+    input.value = ''
+    topicImageUploading.value = false
+  }
+}
+
+async function submitSnapshotForm() {
+  const form = snapshotForm.value
+  if (!form.title || form.title.length < 4) {
+    snapshotFormError.value = '标题至少包含4个字符'
+    return
+  }
+  if (form.title.length > 50) {
+    snapshotFormError.value = '标题不能超过50个字符'
+    return
+  }
+  if (form.describe.length > 512) {
+    snapshotFormError.value = '描述不能超过512个字符'
+    return
+  }
+  if (!form.principals.length) {
+    snapshotFormError.value = '请至少选择一个负责人'
+    return
+  }
+  savingSnapshot.value = true
+  snapshotFormError.value = ''
+  snapshotNotice.value = ''
+  try {
+    const result = await saveMonitorSystemSnapshot(projectId.value, form)
+    snapshotNotice.value = result || '系统快照已保存'
+    snapshotDialogOpen.value = false
+  } catch (err) {
+    snapshotFormError.value = err instanceof Error ? err.message : '系统快照保存失败'
+  } finally {
+    savingSnapshot.value = false
+  }
+}
+
+function startRefreshTimer() {
+  stopRefreshTimer()
+  refreshTimer = window.setInterval(() => {
+    loadProbes()
+    loadTraces()
+  }, Math.max(2, refreshSeconds.value) * 1000)
+}
+
+function stopRefreshTimer() {
+  if (refreshTimer !== undefined) {
+    window.clearInterval(refreshTimer)
+    refreshTimer = undefined
+  }
+}
+
+function probeKey(probe: OnlineSessionSummary) {
+  return `${probe.addressIp || ''}-${probe.pid || ''}-${probe.systemDir || ''}-${probe.appName || ''}`
+}
+
+onMounted(refreshAll)
+onBeforeUnmount(stopRefreshTimer)
+</script>
+
+<style scoped>
+.page-header,
+.header-actions,
+.panel-head,
+.toolbar,
+.trace-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.subtext,
+.panel-head p,
+.probe-card span,
+.probe-card small,
+.trace-item span,
+.trace-item small {
+  color: #64748b;
+}
+
+.secondary-link {
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.action-button,
+.ghost-button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.action-button {
+  background: #0f172a;
+  color: #fff;
+}
+
+.ghost-button {
+  background: #eef7f7;
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.action-button:disabled,
+.ghost-button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.overview-card,
+.panel,
+.status-card,
+.probe-card,
+.trace-item,
+.node-detail-card {
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .06);
+}
+
+.overview-card {
+  padding: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, .16), transparent 42%),
+    rgba(255, 255, 255, .94);
+}
+
+.overview-card span {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.overview-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 30px;
+}
+
+.panel,
+.status-card {
+  padding: 20px;
+}
+
+.status-card.error {
+  color: #b91c1c;
+}
+
+.probe-panel {
+  margin-bottom: 16px;
+}
+
+.text-input {
+  width: 100%;
+  border: 1px solid #d9e5ea;
+  border-radius: 14px;
+  padding: 11px 12px;
+  background: #fbfdfe;
+  color: #0f172a;
+}
+
+.text-input.compact {
+  width: min(320px, 100%);
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.size-input {
+  width: 96px;
+}
+
+.probe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.probe-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  box-shadow: none;
+}
+
+.monitor-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, .72fr) minmax(0, 1.28fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.trace-panel,
+.graph-panel {
+  min-height: 520px;
+}
+
+.toolbar {
+  margin: 14px 0;
+}
+
+.auto-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-weight: 800;
+}
+
+.trace-list {
+  display: grid;
+  gap: 10px;
+  max-height: 620px;
+  overflow: auto;
+}
+
+.trace-item {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  padding: 14px;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.trace-item.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+}
+
+.graph-board {
+  overflow: auto;
+  border-radius: 20px;
+  background:
+    linear-gradient(rgba(15, 23, 42, .04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, .04) 1px, transparent 1px),
+    #f8fbfc;
+  background-size: 28px 28px;
+}
+
+.graph-svg {
+  min-width: 900px;
+  width: 100%;
+  height: 480px;
+}
+
+.graph-edge {
+  stroke: #94a3b8;
+  stroke-width: 2;
+}
+
+.edge-label {
+  fill: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.graph-node {
+  cursor: pointer;
+}
+
+.graph-node rect {
+  fill: #fff;
+  stroke: #cbd5e1;
+  stroke-width: 2;
+  filter: drop-shadow(0 10px 18px rgba(15, 23, 42, .08));
+}
+
+.graph-node.selected rect {
+  fill: #ecfdf5;
+  stroke: #0f766e;
+}
+
+.node-title {
+  fill: #0f172a;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.node-subtitle,
+.node-type {
+  fill: #64748b;
+  font-size: 12px;
+}
+
+.node-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, .45fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.node-detail-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  box-shadow: none;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .45);
+}
+
+.snapshot-modal {
+  width: min(1040px, 100%);
+  max-height: min(860px, 92vh);
+  overflow: auto;
+  border-radius: 28px;
+  padding: 24px;
+  background: #fff;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, .28);
+}
+
+.modal-head,
+.modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+}
+
+.modal-head {
+  margin-bottom: 18px;
+}
+
+.modal-head h2 {
+  margin: 4px 0;
+}
+
+.modal-head p {
+  margin: 0;
+  color: #64748b;
+  word-break: break-all;
+}
+
+.icon-button {
+  border: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.snapshot-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+  gap: 18px;
+}
+
+.form-main,
+.form-side,
+.field {
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  margin-bottom: 14px;
+  font-weight: 800;
+}
+
+.field.required > span::after {
+  content: ' *';
+  color: #b91c1c;
+}
+
+.choice-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.choice-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 700;
+}
+
+.image-preview-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.image-preview-line img {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.modal-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+@media (max-width: 980px) {
+  .overview-grid,
+  .monitor-grid,
+  .node-detail-grid,
+  .snapshot-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header,
+  .panel-head,
+  .toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>

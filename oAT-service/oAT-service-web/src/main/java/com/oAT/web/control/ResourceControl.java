@@ -5,14 +5,17 @@ import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.service.ResourceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.util.DigestUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 
 @Controller
 public class ResourceControl {
@@ -25,6 +28,11 @@ public class ResourceControl {
     @ResponseBody
     public ResultNotified<String> upload(@RequestParam("file") MultipartFile file,
                                          String md5) throws IOException {
+        if (!StringUtils.hasText(md5)) {
+            try (InputStream inputStream = file.getInputStream()) {
+                md5 = DigestUtils.md5DigestAsHex(inputStream);
+            }
+        }
         if (md5.length() == 32) {
             md5 = EncryptUtil.md5_32To16(md5);
         }

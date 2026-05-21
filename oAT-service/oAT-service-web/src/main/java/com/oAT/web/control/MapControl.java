@@ -70,18 +70,8 @@ public class MapControl {
 
     @RequestMapping("/app")
     public String openAppMapView(@PathVariable String projectId, String appId, String layers, Model model) {
-        AppVo app = appService.getApp(appId);
-        model.addAttribute("app", app);
-        //设置显示的层
-        layers = layers == null ? "" : layers;
-        Arrays.stream(layers.split(",")).distinct().filter(a -> !a.trim().isEmpty()).forEach(a -> {
-            model.addAttribute(a + "Active", "active");
-        });
-        model.addAttribute("layers", layers);
-        // 数据URL
-        model.addAttribute("dataUrl", String.format("/p/%s/map/app/data?appId=%s&layers=%s", projectId, appId, layers));
-        model.addAttribute("visualAngle", "app");
-        return "/map/mapVisual";
+        String suffix = StringUtils.hasText(layers) ? "?layers=" + layers : "";
+        return "redirect:/p/" + projectId + "/map/app/" + appId + suffix;
     }
 
     @RequestMapping("/app/data")
@@ -106,23 +96,7 @@ public class MapControl {
 
     @RequestMapping("/home")
     public String openHomeMapView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        String loginName = user.getName();
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-
-        // 登录用户权限，原则是最小权限（访客）
-        String loginNameRole = "visitor";
-        for (ProjectMemberVo member : members) {
-            if (loginName.equals(member.getMemberName())) {
-                loginNameRole = String.valueOf(member.getRole());
-            }
-        }
-
-        model.addAttribute("loginNameRole", loginNameRole);
-
-        //视角
-        model.addAttribute("visualAngle", "home");
-        model.addAttribute("dataUrl", String.format("/p/%s/map/home/data", projectId));
-        return "/map/mapVisual";
+        return "redirect:/p/" + projectId + "/map/home";
     }
 
     @RequestMapping("/home/data")
@@ -165,9 +139,7 @@ public class MapControl {
 
     @RequestMapping("/code")
     public String openCodeMap(String traceId, Model model, @PathVariable String projectId) {
-        model.addAttribute("dataUrl", String.format("/p/%s/map/code/data?traceId=%s", projectId, traceId));
-        model.addAttribute("visualAngle", "code");
-        return "/map/map";
+        return "redirect:/p/" + projectId + "/map/code?traceId=" + traceId;
     }
 
     /**

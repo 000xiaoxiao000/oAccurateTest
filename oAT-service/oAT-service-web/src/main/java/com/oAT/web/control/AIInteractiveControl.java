@@ -28,25 +28,7 @@ public class AIInteractiveControl {
     public String openAIInteractiveView(@PathVariable String projectId,
                                         @SessionAttribute UserVo user,
                                         Model model) {
-        AIInteractivePageVo page = aiInteractiveService.buildPage(projectId, user);
-        model.addAttribute("projectId", page.getProjectId());
-        model.addAttribute("projectName", page.getProjectName());
-        model.addAttribute("projectSummary", page.getProjectSummary());
-        model.addAttribute("welcomeMessage", page.getWelcomeMessage());
-        model.addAttribute("starterQuestions", page.getStarterQuestions());
-        model.addAttribute("abilityCards", page.getAbilityCards());
-        model.addAttribute("onlineAppCount", page.getOnlineAppCount());
-        model.addAttribute("appCount", page.getAppCount());
-        model.addAttribute("appNames", page.getAppNames());
-        model.addAttribute("mascotHint", page.getMascotHint());
-        model.addAttribute("quickLinks", page.getQuickLinks());
-        model.addAttribute("sessionState", page.getSessionState());
-        model.addAttribute("aiTimeout", page.getAiTimeout());
-        Map<String, String> mascot = page.getMascot();
-        if (mascot != null) {
-            model.addAllAttributes(mascot);
-        }
-        return "/ai/interactive";
+        return "redirect:/p/" + projectId + "/ai";
     }
 
     @PostMapping("/p/{projectId}/AIInteractive/sessionState")

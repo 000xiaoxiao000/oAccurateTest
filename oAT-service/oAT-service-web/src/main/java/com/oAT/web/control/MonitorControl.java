@@ -3,6 +3,7 @@ package com.oAT.web.control;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.DateUtil;
+import com.oAT.web.control.api.SnapshotApiControl;
 import com.oAT.web.control.entity.*;
 import com.oAT.web.domain.RemoteCallResolver;
 import com.oAT.web.esDao.ApiEndpointRepository;
@@ -23,6 +24,8 @@ import java.util.*;
 @Controller
 @RequestMapping("/p/{projectId}/monitor")
 public class MonitorControl {
+
+    private static final int DEFAULT_UP_TO_TIME_SECONDS = 180;
 
     @org.springframework.beans.factory.annotation.Value("${traceNode.monitor.maxSize:200}")
     private Integer defaultMaxSize;
@@ -70,7 +73,7 @@ public class MonitorControl {
         model.addAttribute("onlineSessions", onlineSessions);
         model.addAttribute("onlineProbeCount", onlineSessions.size());
         model.addAttribute("appId", appId);
-        return "/monitor/MonitorPlatform";
+        return "forward:/index.html";
     }
 
     @RequestMapping("/probeStatus")
@@ -127,13 +130,17 @@ public class MonitorControl {
     @RequestMapping("/getNodeByTime")
     @ResponseBody
     public TraceItemVo[] getNodeByTime(@PathVariable String projectId, Integer upToTime, TraceItemSearchParam filter) {
+        if (filter == null) {
+            filter = new TraceItemSearchParam();
+        }
         List<String> appIds = getAppIds(projectId);
         filter.setAppIds(appIds);
         // 默认值
         if (filter.getMaxSize() == null) {
             filter.setMaxSize(defaultMaxSize);
         }
-        List<TraceItemVo> list = clientSessionService.getTraceItemByTime(upToTime, filter);
+        int queryUpToTime = upToTime == null || upToTime <= 0 ? DEFAULT_UP_TO_TIME_SECONDS : upToTime;
+        List<TraceItemVo> list = clientSessionService.getTraceItemByTime(queryUpToTime, filter);
         // 基于时间到序排列
         TraceItemVo[] items = new TraceItemVo[list.size()];
         for (int i = list.size() - 1, k = 0; i >= 0; i--, k++) {
@@ -146,6 +153,17 @@ public class MonitorControl {
     @ResponseBody
     public GraphView getTraceGraph(@PathVariable String projectId, String traceId) {
         return new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId)).getGraphView();
+    }
+
+    @RequestMapping("/getTraceGraphNode")
+    @ResponseBody
+    public ResultNotified<SnapshotApiControl.GraphNodeDetailPayload> getTraceGraphNode(@PathVariable String projectId,
+                                                                                       String traceId,
+                                                                                       String nodeId) {
+        TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId));
+        GraphNode node = parse.getGraphNode(nodeId);
+        Assert.notNull(node, "not found GraphNode: " + nodeId);
+        return new ResultNotified<>(true, "获取监控链路节点详情成功", SnapshotApiControl.toGraphNodeDetail(node));
     }
 
     /**
@@ -171,6 +189,9 @@ public class MonitorControl {
 
     @RequestMapping("/{traceId}/{nodeId}.html")
     public String getNodeDetailView(@PathVariable String projectId, @PathVariable String traceId, @PathVariable String nodeId, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : "");
+        }
         TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId));
         GraphNode node = parse.getGraphNode(nodeId);
         Assert.notNull(node, "not found GraphNode: " + nodeId);
@@ -210,6 +231,9 @@ public class MonitorControl {
     @RequestMapping("/openSystemSnapshot")
     public String openSystemSnapshot(@PathVariable String projectId, String traceId, @SessionAttribute UserVo user,
                                            Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : "");
+        }
         model.addAttribute("projectId", projectId);
         // 所属应用
         Map<String, TraceNode> nodes = getTraceNode(traceId);
@@ -230,6 +254,31 @@ public class MonitorControl {
         List<Directory> dirs = appService.getAppSnapshotDirs(app.getAppId());
         model.addAttribute("dirs", dirs);
         return "/monitor/createSystemSnapshot";
+    }
+
+    @GetMapping("/systemSnapshotContext")
+    @ResponseBody
+    public ResultNotified<SystemSnapshotContextPayload> getSystemSnapshotContext(@PathVariable String projectId,
+                                                                                 @SessionAttribute UserVo user,
+                                                                                 @RequestParam String traceId) {
+        Map<String, TraceNode> nodes = getTraceNode(traceId);
+        TraceNode rootNode = nodes.get("0");
+        Assert.notNull(rootNode, "找不到主调用节点");
+        Application app = rootNode.getApp();
+        Assert.notNull(app, "找不到应用信息");
+
+        SystemSnapshotContextPayload payload = new SystemSnapshotContextPayload();
+        payload.setTraceId(traceId);
+        payload.setAppId(app.getAppId());
+        payload.setAppName(app.getAppName());
+        payload.setProjectSrcName(app.getProjectSrcName());
+        payload.setDirectories(appService.getAppSnapshotDirs(app.getAppId()));
+        payload.setLabels(projectService.getLables(projectId, LableType.snapshot));
+        payload.setMembers(projectService.getProjectMembers(projectId));
+        payload.setCurrentUserId(user.getId());
+        payload.setDefaultTitle(rootNode instanceof HttpTraceNode ? ((HttpTraceNode) rootNode).getRequestUrl() : traceId);
+        payload.setSubTitle(rootNode instanceof HttpTraceNode ? ((HttpTraceNode) rootNode).getRequestUrl() : "");
+        return new ResultNotified<>(true, "获取系统快照保存上下文成功", payload);
     }
 
     @PostMapping("/doSaveSystemSnapshot")
@@ -286,6 +335,40 @@ public class MonitorControl {
             result.setErrorMessage(e.getMessage());
             return result;
         }
+    }
+
+    public static class SystemSnapshotContextPayload {
+        private String traceId;
+        private String appId;
+        private String appName;
+        private String projectSrcName;
+        private List<Directory> directories;
+        private List<LabelGroup.Label> labels;
+        private List<ProjectMemberVo> members;
+        private String currentUserId;
+        private String defaultTitle;
+        private String subTitle;
+
+        public String getTraceId() { return traceId; }
+        public void setTraceId(String traceId) { this.traceId = traceId; }
+        public String getAppId() { return appId; }
+        public void setAppId(String appId) { this.appId = appId; }
+        public String getAppName() { return appName; }
+        public void setAppName(String appName) { this.appName = appName; }
+        public String getProjectSrcName() { return projectSrcName; }
+        public void setProjectSrcName(String projectSrcName) { this.projectSrcName = projectSrcName; }
+        public List<Directory> getDirectories() { return directories; }
+        public void setDirectories(List<Directory> directories) { this.directories = directories; }
+        public List<LabelGroup.Label> getLabels() { return labels; }
+        public void setLabels(List<LabelGroup.Label> labels) { this.labels = labels; }
+        public List<ProjectMemberVo> getMembers() { return members; }
+        public void setMembers(List<ProjectMemberVo> members) { this.members = members; }
+        public String getCurrentUserId() { return currentUserId; }
+        public void setCurrentUserId(String currentUserId) { this.currentUserId = currentUserId; }
+        public String getDefaultTitle() { return defaultTitle; }
+        public void setDefaultTitle(String defaultTitle) { this.defaultTitle = defaultTitle; }
+        public String getSubTitle() { return subTitle; }
+        public void setSubTitle(String subTitle) { this.subTitle = subTitle; }
     }
 
 }

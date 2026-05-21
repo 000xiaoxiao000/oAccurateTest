@@ -81,11 +81,7 @@ public class VersionItemControl {
 
     @RequestMapping("{appId}/version/new")
     public String addVersion(@PathVariable String projectId, @PathVariable String appId, Model model) {
-        model.addAttribute("appId", appId);
-        model.addAttribute("app", appService.getApp(appId));
-        model.addAttribute("project", projectService.getProject(projectId));
-        model.addAttribute("hasVersion", !versionService.getVersionItemList(projectId, appId).isEmpty());
-        return "version/versionAdd";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/versions/new";
     }
 
     @RequestMapping("{appId}/version/doAdd")
@@ -487,7 +483,7 @@ public class VersionItemControl {
             model.addAttribute("errorMessage", "git diff 比对未能启动");
             return "forward:/error/404";
         }
-        return "redirect:/p/" + projectId + "/version/compare/console?jobId=" + jobId;
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare?jobId=" + jobId;
     }
 
     // 验证版本号 是否可用
@@ -504,25 +500,7 @@ public class VersionItemControl {
                                  @RequestParam(defaultValue = "10") int size,
                                  @SessionAttribute UserVo user,
                                  Model model) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createTime"));
-        Page<VersionItemVo> pageResult = versionService.getVersionItemList(projectId, appId, pageable);
-        model.addAttribute("items", pageResult.getContent());
-        model.addAttribute("page", pageResult);
-        model.addAttribute("appInfo", appService.getApp(appId));
-        model.addAttribute("project", projectService.getProject(projectId));
-        model.addAttribute("appId", appId);
-
-        String loginName = user.getName();
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-        String loginNameRole = "visitor";
-        for (ProjectMemberVo member : members) {
-            if (loginName.equals(member.getMemberName())) {
-                loginNameRole = String.valueOf(member.getRole());
-            }
-        }
-        model.addAttribute("loginNameRole", loginNameRole);
-
-        return "version/versionList";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/versions";
     }
 
     @RequestMapping(value = "{appId}/version/delete", method = RequestMethod.POST)
@@ -535,48 +513,19 @@ public class VersionItemControl {
     // 选择管理版本的应用
     @RequestMapping("/version/apps")
     public String openAppListView(@PathVariable String projectId, Model model) {
-        List<AppVo> list = appService.getAppList(projectId);
-        model.addAttribute("apps", list);
-        return "/version/appList";
+        return "redirect:/p/" + projectId + "/version/apps";
     }
 
     // 兼容旧路由：/p/{projectId}/{appId}/version/appList
     @RequestMapping("{appId}/version/appList")
     public String openAppListLegacyView(@PathVariable String projectId, @PathVariable String appId, Model model) {
-        List<AppVo> list = appService.getAppList(projectId);
-        model.addAttribute("apps", list);
-        return "/version/appList";
+        return "redirect:/p/" + projectId + "/version/apps";
     }
 
     // 打开版本比对页面
     @RequestMapping("{appId}/version/compare")
     public String openCompareView(@PathVariable String projectId, @PathVariable String appId, Model model) {
-        List<VersionItemVo> versionItems = versionService.getVersionItemList(projectId, appId);
-        List<VersionItemVo> packageItems = versionItems;
-        // 过滤掉非制品包文件（如.zip），只保留 .jar 和 .war
-        if (packageItems != null) {
-            packageItems = packageItems.stream()
-                    .filter(item -> {
-                        String file = item.getProgramFile();
-                        if (file == null) return false;
-                        String lower = file.toLowerCase();
-                        return lower.endsWith(".jar") || lower.endsWith(".war");
-                    })
-                    .collect(Collectors.toList());
-        }
-        model.addAttribute("items", packageItems);
-        model.addAttribute("versionItems", versionItems);
-        model.addAttribute("app", appService.getApp(appId));
-        List<VersionCompareReportVo> list = versionService.getCompareReportList(projectId, appId);
-        // Sort by createTime descending (newest first), nulls last
-        if (list != null && !list.isEmpty()) {
-            list = list.stream()
-                    .sorted(Comparator.comparing(VersionCompareReportVo::getCreateTime,
-                            Comparator.nullsLast(Comparator.reverseOrder())))
-                    .collect(Collectors.toList());
-        }
-        model.addAttribute("reports", list);
-        return "/version/versionCompare";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare";
     }
 
     @RequestMapping("{appId}/version/compare/start")
@@ -591,7 +540,7 @@ public class VersionItemControl {
             model.addAttribute("errorMessage", "源版本（新）或目标版本（旧）文件未选择");
             return "forward:/error/404";
         }
-        return "redirect:/p/" + projectId + "/version/compare/console?jobId=" + jobId;
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare?jobId=" + jobId;
     }
 
     @RequestMapping("/version/compare/console")
@@ -603,12 +552,9 @@ public class VersionItemControl {
 
         CompareJobVo job = versionService.getCompareJob(jobId);
         if (job == null || job.isFinish()) {
-            return "redirect:/p/" + projectId + "/version/report/detail/" + jobId;
+            return "redirect:/p/" + projectId + "/version/reports/" + jobId;
         }
-        model.addAttribute("appInfo", appService.getApp(job.getAppId()));
-        model.addAttribute("apps", appService.getAppList(projectId));
-        model.addAttribute("compareJob", job);
-        return "/version/compareConsole";
+        return "redirect:/p/" + projectId + "/apps/" + job.getAppId() + "/compare?jobId=" + jobId;
     }
 
     @RequestMapping("/version/compare/get")
@@ -630,66 +576,14 @@ public class VersionItemControl {
                                         @RequestParam(defaultValue = "0") int page,
                                         @RequestParam(defaultValue = "10") int size,
                                         Model model) {
-        if (!StringUtils.hasText(tab)) {
-            tab = "coverage";
-        }
-        model.addAttribute("tab", tab);
-        model.addAttribute("appId", appId);
-        model.addAttribute("appInfo", appService.getApp(appId));
-        model.addAttribute("project", projectService.getProject(projectId));
-
-        if ("compare".equals(tab)) {
-            Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createTime"));
-            Page<VersionCompareReportVo> comparePage = versionService.getCompareReportList(projectId, appId, pageable);
-            model.addAttribute("reports", comparePage.getContent());
-            model.addAttribute("page", comparePage);
-            model.addAttribute("highlightReportId", highlightReportId);
-        } else {
-            // 1. 获取基于版本的生成的报告（全量/增量）
-            // 这里我们获取该应用下所有的覆盖率报告
-            List<CoverageReportIndex> generatedReports = coverageService.getReportsByAppId(appId);
-
-            // Ensure reports are shown newest-first (by createTime desc)
-            if (generatedReports != null && !generatedReports.isEmpty()) {
-                // Make a mutable copy in case the returned list is unmodifiable
-                generatedReports = new ArrayList<>(generatedReports);
-                generatedReports.sort(Comparator.comparing(CoverageReportIndex::getCreateTime,
-                        Comparator.nullsLast(Comparator.naturalOrder())).reversed());
-            }
-
-            Map<String, Boolean> reportNeedRegenerateMap = new HashMap<>();
-            if (generatedReports != null) {
-                for (CoverageReportIndex report : generatedReports) {
-                    boolean needRegenerate = coverageService.hasNewerData(appId, report.getVersionNumber(), report);
-                    reportNeedRegenerateMap.put(report.getId(), needRegenerate);
-                }
-            }
-
-            model.addAttribute("generatedReports", generatedReports);
-            model.addAttribute("reportNeedRegenerateMap", reportNeedRegenerateMap);
-
-            // 2. 覆盖率数据逻辑 (即时聚合快照数据)
-            List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId, appId);
-            Set<String> userIds = snapshots.stream()
-                    .filter(s -> s.getPrincipals() != null)
-                    .flatMap(s -> Arrays.stream(s.getPrincipals()))
-                    .filter(StringUtils::hasText)
-                    .collect(Collectors.toSet());
-            if (!userIds.isEmpty()) {
-                List<UserVo> users = userService.getUsers(userIds.toArray(new String[0]));
-                Map<String, UserVo> userMap = new HashMap<>();
-                for (UserVo u : users) {
-                    userMap.put(u.getId(), u);
-                }
-                model.addAttribute("userMap", userMap);
-            }
-            model.addAttribute("snapshots", snapshots); // Added to show snapshot list
-        }
-        return "/version/compareList";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare";
     }
 
     @RequestMapping("{appId}/version/report/snapshots")
     public String snapshotsCodeReport(@PathVariable String projectId, @PathVariable String appId, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots";
+        }
         Map<String, Map<String, List<StackNodeVo>>> codeRelationships = new HashMap<>();
         List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId, appId);
 
@@ -856,7 +750,7 @@ public class VersionItemControl {
         model.addAttribute("appId", appId);
         model.addAttribute("fromVersionCenter", true); // 用于模板识别来源
 
-        return "/snapshot/mySnapshotsCodeReport";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots";
     }
 
     private double calculateBranchRate(long coveredBranchTargets, long totalBranchTargets) {
@@ -999,94 +893,11 @@ public class VersionItemControl {
     public String openCompareReport(@PathVariable String projectId, @PathVariable String reportId, Model model) {
         try {
             VersionCompareReport report = versionService.getCompareReport(reportId);
-            model.addAttribute("report", report);
-            model.addAttribute("app", appService.getApp(report.getAppId()));
-
-            // 差异项转换
-            Map<String, CompareResult> differenceClass = new HashMap<>();
-            VersionCompareReport.Difference[] diffs = report.getDifferences();
-            if (diffs != null) {
-                for (VersionCompareReport.Difference difference : diffs) {
-                    if (difference == null) continue;
-                    if ("class".equals(difference.getType())) {
-                        if (differenceClass.containsKey(difference.getValue())) {
-                            continue;
-                        }
-                        CompareResult r = new CompareResult(difference.getValue(),
-                                CompareResult.Model.valueOf(difference.getModel()));
-                        differenceClass.put(r.getClassName(), r);
-                    } else if ("method".equals(difference.getType())) {
-                        String raw = difference.getValue();
-                        String className = null, methodName = null, desc = "";
-                        if (raw != null) {
-                            String[] parts = raw.split("\t");
-                            if (parts.length >= 3) {
-                                className = parts[0];
-                                methodName = parts[1];
-                                desc = parts[2];
-                            } else {
-                                parts = raw.split(" ");
-                                if (parts.length >= 3) {
-                                    className = parts[0];
-                                    methodName = parts[1];
-                                    desc = parts[2];
-                                } else if (parts.length == 2) {
-                                    className = parts[0];
-                                    methodName = parts[1];
-                                }
-                            }
-                        }
-                        if (className == null || methodName == null) continue;
-                        if (!differenceClass.containsKey(className)) {
-                            CompareResult r = new CompareResult(className,
-                                    CompareResult.Model.update);
-                            differenceClass.put(r.getClassName(), r);
-                        }
-                        differenceClass.get(className).add(methodName, desc,
-                                CompareResult.Model.valueOf(difference.getModel()));
-                    }
-                }
-            }
-            model.addAttribute("different", differenceClass.values());
-
-            List<UsecaseBo> usecaseBos = new ArrayList<>();
-            AtomicInteger skippedDeletedUsecaseCount = new AtomicInteger();
-            VersionCompareReport.ImpactCase[] casesArr = report.getCases();
-            if (casesArr != null) {
-                Arrays.stream(casesArr).forEach(a -> {
-                    if (a == null || a.getCaseId() == null) return;
-                    try {
-                        UsecaseVo usecase = usecaseService.getUsecase(report.getProjectId(), a.getCaseId());
-                        List<LabelGroup.Label> labels = projectService.getLables(report.getProjectId(), LableType.usecase, usecase.getLabels());
-                        UsecaseBo bo = new UsecaseBo(usecase.getId(), usecase.getTitle(), labels, a.getDifferences());
-                        bo.setDirectoryPath(resolveUsecaseDirectoryPath(report.getProjectId(), Optional.ofNullable(usecase.getDirectory()).orElse("root")));
-                        usecaseBos.add(bo);
-                    } catch (IllegalArgumentException ex) {
-                        skippedDeletedUsecaseCount.incrementAndGet();
-                        logger.info("影响用例已不存在，跳过展示 projectId={}, reportId={}, caseId={}", report.getProjectId(), reportId, a.getCaseId());
-                    } catch (Exception ex) {
-                        logger.warn("处理影响用例时发生异常, id={}", a.getCaseId(), ex);
-                    }
-                });
-                Map<String, List<UsecaseBo>> grouped = usecaseBos.stream().collect(Collectors.groupingBy(UsecaseBo::getDirectoryPath));
-                ArrayList<UsecaseGroup> usecaseGroups = new ArrayList<>();
-                grouped.forEach((k, v) -> usecaseGroups.add(new UsecaseGroup(k, v)));
-                model.addAttribute("usecaseGroups", usecaseGroups);
-                model.addAttribute("skippedDeletedUsecaseCount", skippedDeletedUsecaseCount.get());
-            } else {
-                model.addAttribute("usecaseGroups", Collections.emptyList());
-                model.addAttribute("skippedDeletedUsecaseCount", 0);
-            }
-
-            model.addAttribute("impactHintSummary", buildImpactHintSummary(report.getJobLog()));
-            return "/version/compareReport";
+            return "redirect:/p/" + projectId + "/version/reports/" + reportId + "?appId=" + report.getAppId();
         } catch (IllegalArgumentException ex) {
-            logger.warn("比对报告暂不可用，等待重试 reportId={}", reportId, ex);
-            model.addAttribute("reportId", reportId);
             CompareJobVo compareJob = versionService.getCompareJob(reportId);
-            model.addAttribute("appId", compareJob == null ? "" : compareJob.getAppId());
-            model.addAttribute("retryMessage", "比对报告正在生成或索引刷新中，页面会自动重试...");
-            return "/version/compareReportPending";
+            String appId = compareJob == null ? "" : compareJob.getAppId();
+            return "redirect:/p/" + projectId + "/version/reports/" + reportId + "?appId=" + appId;
         }
     }
 

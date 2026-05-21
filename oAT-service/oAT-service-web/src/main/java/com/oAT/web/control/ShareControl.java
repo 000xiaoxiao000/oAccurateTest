@@ -40,15 +40,12 @@ public class ShareControl {
             model.addAttribute("errorMessage", "当前快照未开放共享");
             return "forward:/error/404";
         }
-        ProjectVo project = projectService.getProject(snapshot.getProjectId());
-        model.addAttribute("_share", true);
-        return "forward:/p/" + project.getId() + "/snapshot/detail/" + id;
+        return "forward:/index.html";
     }
 
     @RequestMapping("/get")
     public String getShareResource(String url, Model model) {
-        model.addAttribute("_share", true);
-        return "forward:" + url;
+        return "forward:/index.html";
     }
 
 
@@ -70,8 +67,7 @@ public class ShareControl {
             model.addAttribute("errorMessage", "找不到指定项目");
             return "forward:/error/404";
         }
-        model.addAttribute("_share", true);
-        return "forward:/p/" + project.getId() + "/usecase/detail?id=" + id;
+        return "forward:/index.html";
     }
 
 }

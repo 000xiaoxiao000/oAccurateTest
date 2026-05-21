@@ -1,0 +1,291 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+import AppShell from '@/layouts/AppShell.vue'
+import { ApiError } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: '/login',
+      name: 'login',
+      component: () => import('@/pages/LoginPage.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/register',
+      name: 'register',
+      component: () => import('@/pages/LoginPage.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/share/snapshot/:snapshotId',
+      name: 'share-snapshot',
+      component: () => import('@/pages/ShareSnapshotPage.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/share/usecase/:usecaseId',
+      name: 'share-usecase',
+      component: () => import('@/pages/ShareUsecasePage.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/',
+      component: AppShell,
+      children: [
+        {
+          path: '',
+          redirect: '/projects',
+        },
+        {
+          path: 'projects',
+          name: 'projects',
+          component: () => import('@/pages/ProjectsPage.vue'),
+        },
+        {
+          path: 'account',
+          name: 'account-settings',
+          component: () => import('@/pages/AccountSettingsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/home',
+          name: 'project-home',
+          component: () => import('@/pages/ProjectHomePage.vue'),
+        },
+        {
+          path: 'p/:projectId/ai',
+          name: 'project-ai',
+          component: () => import('@/pages/ProjectAiPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps',
+          name: 'project-apps',
+          component: () => import('@/pages/ProjectAppsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/online',
+          name: 'online-apps',
+          component: () => import('@/pages/OnlineAppsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/settings',
+          name: 'app-settings',
+          component: () => import('@/pages/AppSettingsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/probe-alerts',
+          name: 'app-probe-alerts',
+          component: () => import('@/pages/ProbeAlertsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/repository',
+          name: 'app-repository',
+          component: () => import('@/pages/RepositoryConfigPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/api-endpoints',
+          name: 'app-api-endpoints',
+          component: () => import('@/pages/ApiEndpointsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/app/:appId/api-endpoints',
+          name: 'legacy-app-api-endpoints',
+          component: () => import('@/pages/ApiEndpointsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/monitor',
+          name: 'monitor',
+          component: () => import('@/pages/MonitorPage.vue'),
+        },
+        {
+          path: 'p/:projectId/version/apps',
+          name: 'version-apps',
+          component: () => import('@/pages/VersionAppsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/versions',
+          name: 'version-list',
+          component: () => import('@/pages/VersionListPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/versions/new',
+          name: 'version-create',
+          component: () => import('@/pages/VersionCreatePage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/compare',
+          name: 'version-compare',
+          component: () => import('@/pages/VersionComparePage.vue'),
+        },
+        {
+          path: 'p/:projectId/version/reports/:reportId',
+          name: 'version-report-detail',
+          component: () => import('@/pages/VersionReportDetailPage.vue'),
+        },
+        {
+          path: 'p/:projectId/coverage',
+          name: 'coverage-hub',
+          component: () => import('@/pages/CoverageHubPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/coverage',
+          name: 'coverage-overview',
+          component: () => import('@/pages/CoverageOverviewPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/coverage/details',
+          name: 'coverage-details',
+          component: () => import('@/pages/CoverageDetailsPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/coverage/code',
+          name: 'coverage-code',
+          component: () => import('@/pages/CoverageCodePage.vue'),
+        },
+        {
+          path: 'p/:projectId/map/home',
+          name: 'map-home',
+          component: () => import('@/pages/MapHomePage.vue'),
+        },
+        {
+          path: 'p/:projectId/map/app/:appId',
+          name: 'map-app',
+          component: () => import('@/pages/MapAppPage.vue'),
+        },
+        {
+          path: 'p/:projectId/map/code',
+          name: 'map-code',
+          component: () => import('@/pages/MapCodePage.vue'),
+        },
+        {
+          path: 'p/:projectId/search',
+          name: 'search-center',
+          component: () => import('@/pages/SearchCenterPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/snapshots',
+          name: 'system-snapshot-list',
+          component: () => import('@/pages/SystemSnapshotListPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/snapshots/:snapshotId',
+          name: 'system-snapshot-detail',
+          component: () => import('@/pages/SystemSnapshotDetailPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/snapshots/:snapshotId/report',
+          name: 'system-snapshot-report',
+          component: () => import('@/pages/SystemSnapshotReportPage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/snapshots/:snapshotId/report/code',
+          name: 'system-snapshot-code',
+          component: () => import('@/pages/SystemSnapshotCodePage.vue'),
+        },
+        {
+          path: 'p/:projectId/apps/:appId/snapshots/:snapshotId/graph',
+          name: 'system-snapshot-graph',
+          component: () => import('@/pages/SystemSnapshotGraphPage.vue'),
+        },
+        {
+          path: 'p/:projectId/my-snapshots',
+          name: 'my-snapshot-list',
+          component: () => import('@/pages/MySnapshotListPage.vue'),
+        },
+        {
+          path: 'p/:projectId/my-snapshots/code-report',
+          name: 'my-snapshot-code-report',
+          component: () => import('@/pages/MySnapshotCodeReportPage.vue'),
+        },
+        {
+          path: 'p/:projectId/my-snapshots/code',
+          name: 'my-snapshot-aggregate-code',
+          component: () => import('@/pages/MySnapshotAggregateCodePage.vue'),
+        },
+        {
+          path: 'p/:projectId/my-snapshots/:snapshotId',
+          name: 'my-snapshot-detail',
+          component: () => import('@/pages/MySnapshotDetailPage.vue'),
+        },
+        {
+          path: 'p/:projectId/my-snapshots/:snapshotId/report',
+          name: 'my-snapshot-report',
+          component: () => import('@/pages/MySnapshotReportPage.vue'),
+        },
+        {
+          path: 'p/:projectId/my-snapshots/:snapshotId/report/code',
+          name: 'my-snapshot-code',
+          component: () => import('@/pages/MySnapshotCodePage.vue'),
+        },
+        {
+          path: 'p/:projectId/my-snapshots/:snapshotId/graph',
+          name: 'my-snapshot-graph',
+          component: () => import('@/pages/MySnapshotGraphPage.vue'),
+        },
+        {
+          path: 'p/:projectId/usecases',
+          name: 'usecase-list',
+          component: () => import('@/pages/UsecaseListPage.vue'),
+        },
+        {
+          path: 'p/:projectId/usecases/new',
+          name: 'usecase-new',
+          component: () => import('@/pages/UsecaseEditorPage.vue'),
+        },
+        {
+          path: 'p/:projectId/usecases/:usecaseId/edit',
+          name: 'usecase-edit',
+          component: () => import('@/pages/UsecaseEditorPage.vue'),
+        },
+        {
+          path: 'p/:projectId/usecases/:usecaseId',
+          name: 'usecase-detail',
+          component: () => import('@/pages/UsecaseDetailPage.vue'),
+        },
+        {
+          path: 'p/:projectId/members',
+          name: 'project-members',
+          component: () => import('@/pages/ProjectMembersPage.vue'),
+        },
+        {
+          path: 'p/:projectId/labels',
+          name: 'project-labels',
+          component: () => import('@/pages/ProjectLabelsPage.vue'),
+        },
+      ],
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/pages/NotFoundPage.vue'),
+      meta: { public: true },
+    },
+  ],
+})
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) {
+    return true
+  }
+
+  const authStore = useAuthStore()
+
+  try {
+    await authStore.ensureLoaded()
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      return { name: 'login', query: { redirect: to.fullPath } }
+    }
+    throw error
+  }
+
+  if (!authStore.isAuthenticated) {
+    return { name: 'login', query: { redirect: to.fullPath } }
+  }
+
+  return true
+})
+
+export default router

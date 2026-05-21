@@ -1,0 +1,175 @@
+package com.oAT.web.control.api;
+
+import com.oAT.web.control.SearchResult;
+import com.oAT.web.control.entity.NetworkGraphData;
+import com.oAT.web.control.entity.ResultNotified;
+import com.oAT.web.esDao.entity.SystemSnapshot;
+import com.oAT.web.service.ProjectService;
+import com.oAT.web.service.SnapshotSearchService;
+import com.oAT.web.service.entity.ProjectVo;
+import com.oAT.web.service.entity.SearchPage;
+import com.oAT.web.service.entity.SnapshotSearchResult;
+import com.oAT.web.service.entity.UserVo;
+import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.SessionAttribute;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+@RestController
+@RequestMapping("/api/projects/{projectId}/search")
+public class SearchApiControl {
+
+    private final SnapshotSearchService snapshotSearchService;
+    private final ProjectService projectService;
+
+    public SearchApiControl(SnapshotSearchService snapshotSearchService,
+                            ProjectService projectService) {
+        this.snapshotSearchService = snapshotSearchService;
+        this.projectService = projectService;
+    }
+
+    @GetMapping("/keyword")
+    public ResultNotified<SearchKeywordPayload> keyword(@PathVariable String projectId,
+                                                        @SessionAttribute UserVo user,
+                                                        @RequestParam String keyword) {
+        ensureProjectAccess(projectId, user);
+        Assert.hasText(keyword, "keyword不能为空");
+
+        SearchPage<SnapshotSearchResult> page = snapshotSearchService.doSearch(projectId, keyword);
+        SearchKeywordPayload payload = new SearchKeywordPayload();
+        payload.setKeyword(keyword);
+        payload.setTotal(page.getContents() == null ? 0 : page.getContents().size());
+        payload.setResults(page.getContents().stream().map(this::toResult).collect(Collectors.toList()));
+        return new ResultNotified<>(true, "搜索成功", payload);
+    }
+
+    @GetMapping("/tables")
+    public ResultNotified<NetworkGraphData> table(@PathVariable String projectId,
+                                                  @SessionAttribute UserVo user,
+                                                  @RequestParam(name = "database", required = false) String database,
+                                                  @RequestParam(name = "DataBase", required = false) String legacyDatabase,
+                                                  @RequestParam String table) {
+        ensureProjectAccess(projectId, user);
+        final String queryDatabase = StringUtils.hasText(database) ? database : legacyDatabase;
+        Assert.hasText(queryDatabase, "database不能为空");
+        Assert.hasText(table, "table不能为空");
+
+        List<SystemSnapshot> list = snapshotSearchService.searchByTable(projectId, queryDatabase, table);
+        List<NetworkGraphData.Node> nodeLists = list.stream()
+                .map(snapshot -> {
+                    NetworkGraphData.Node node = new NetworkGraphData.Node(snapshot.getId(), "snapshot", snapshot.getTitle());
+                    node.setBackgroundImage("/r/" + snapshot.getTopicImage());
+                    return node;
+                })
+                .collect(Collectors.toList());
+        nodeLists.add(new NetworkGraphData.Node(queryDatabase + "_" + table, "table", queryDatabase + "." + table));
+        NetworkGraphData.Node[] nodes = nodeLists.toArray(new NetworkGraphData.Node[0]);
+        NetworkGraphData.Edge[] edges = list.stream()
+                .map(snapshot -> buildEdge(snapshot, queryDatabase, table))
+                .toArray(NetworkGraphData.Edge[]::new);
+        return new ResultNotified<>(true, "搜索成功", new NetworkGraphData(nodes, edges));
+    }
+
+    private SearchKeywordResult toResult(SnapshotSearchResult item) {
+        SearchKeywordResult result = new SearchKeywordResult();
+        result.setId(item.getId());
+        result.setAppId(item.getAppId());
+        result.setTitle(StringUtils.hasText(item.getTitleFragment()) ? item.getTitleFragment() : item.getTitle());
+        result.setSubTitle(item.getSubTitle());
+        result.setDirectoryPath(item.getDirectoryPath());
+        result.setUpdateTimeText(item.getUpdateTime() == null ? null : item.getUpdateTime().toString());
+        if (item.getDescribeFragments() != null) {
+            result.setDescription(String.join("</br>", item.getDescribeFragments()));
+        } else if (item.getSqlContentFragments() != null) {
+            result.setDescription(String.join("</br>", item.getSqlContentFragments()));
+        } else if (item.getRemoteContentFragments() != null) {
+            result.setDescription(String.join("</br>", item.getRemoteContentFragments()));
+        } else {
+            result.setDescription(item.getSubTitle());
+        }
+        result.setTargetPath("/p/" + item.getProjectId() + "/apps/" + item.getAppId() + "/snapshots/" + item.getId());
+        return result;
+    }
+
+    private NetworkGraphData.Edge buildEdge(SystemSnapshot snapshot, String database, String table) {
+        NetworkGraphData.Edge edge = new NetworkGraphData.Edge();
+        edge.setId(snapshot.getId() + "-" + database + "_" + table);
+        edge.setSource(snapshot.getId());
+        edge.setTarget(database + "_" + table);
+        List<String> actions = Arrays.stream(snapshot.getSqls())
+                .filter(sql -> sql.getDatabase().equalsIgnoreCase(database))
+                .flatMap(sql -> Stream.of(sql.getActions()))
+                .filter(action -> action.getTable().equalsIgnoreCase(table))
+                .map(action -> action.getType())
+                .distinct()
+                .collect(Collectors.toList());
+        edge.setType("snapshotToTable");
+        edge.setAction(String.join(",", actions));
+        edge.setLabel(actions.stream().map(this::jdbcActionToLabel).collect(Collectors.joining(",")));
+        return edge;
+    }
+
+    private String jdbcActionToLabel(String action) {
+        return "insert".equals(action) ? "增"
+                : "delete".equals(action) ? "删"
+                : "update".equals(action) ? "改"
+                : "select".equals(action) ? "查"
+                : action;
+    }
+
+    private ProjectVo ensureProjectAccess(String projectId, UserVo user) {
+        ProjectVo project = projectService.getProjectByProjectIdAndMemberId(projectId, user.getId());
+        Assert.notNull(project, "找不到指定项目,或者您没有该项目的访问权限");
+        return project;
+    }
+
+    public static class SearchKeywordPayload {
+        private String keyword;
+        private int total;
+        private List<SearchKeywordResult> results;
+
+        public String getKeyword() { return keyword; }
+        public void setKeyword(String keyword) { this.keyword = keyword; }
+        public int getTotal() { return total; }
+        public void setTotal(int total) { this.total = total; }
+        public List<SearchKeywordResult> getResults() { return results; }
+        public void setResults(List<SearchKeywordResult> results) { this.results = results; }
+    }
+
+    public static class SearchKeywordResult {
+        private String id;
+        private String appId;
+        private String title;
+        private String subTitle;
+        private String description;
+        private String directoryPath;
+        private String updateTimeText;
+        private String targetPath;
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        public String getAppId() { return appId; }
+        public void setAppId(String appId) { this.appId = appId; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getSubTitle() { return subTitle; }
+        public void setSubTitle(String subTitle) { this.subTitle = subTitle; }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+        public String getDirectoryPath() { return directoryPath; }
+        public void setDirectoryPath(String directoryPath) { this.directoryPath = directoryPath; }
+        public String getUpdateTimeText() { return updateTimeText; }
+        public void setUpdateTimeText(String updateTimeText) { this.updateTimeText = updateTimeText; }
+        public String getTargetPath() { return targetPath; }
+        public void setTargetPath(String targetPath) { this.targetPath = targetPath; }
+    }
+}

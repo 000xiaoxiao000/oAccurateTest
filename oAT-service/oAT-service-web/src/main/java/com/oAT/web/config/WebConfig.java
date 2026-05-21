@@ -34,9 +34,10 @@ public class WebConfig implements WebMvcConfigurer {
         // excludePathPatterns 用于排除拦截
         registry.addInterceptor(loginInterceptor)
                 .addPathPatterns("/**")
-                .excludePathPatterns("/", "/login", "/doLogin", "/register",
+                .excludePathPatterns("/", "/index.html", "/login", "/doLogin", "/register",
                         "/doRegister", "/client/**", "/r/**", "/error",
-                        "/css/**", "/images/**", "/js/**", "/share/**");
+                        "/css/**", "/images/**", "/js/**", "/assets/**", "/share/**",
+                        "/api/auth/login", "/api/auth/register");
         registry.addInterceptor(aiInteractiveAccessInterceptor).addPathPatterns("/p/*/AIInteractive/**");
         //项目节点拦截
         registry.addInterceptor(projectInterceptor).addPathPatterns("/p/**");
@@ -44,8 +45,8 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
-        //设置首页
-        registry.addViewController("/").setViewName("forward:/myProjects");
+        registry.addViewController("/").setViewName("forward:/projects");
+        registry.addViewController("/projects").setViewName("forward:/index.html");
         registry.setOrder(Ordered.HIGHEST_PRECEDENCE);
     }
 

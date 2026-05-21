@@ -67,39 +67,13 @@ public class AppControl {
     public String openAppAddView(@PathVariable String projectId,
                                  @SessionAttribute UserVo user,
                                  Model model) {
-        ProjectVo project = projectService.getProjectByProjectIdAndMemberId(projectId, user.getId());
-        if (project == null) {
-            model.addAttribute("errorMessage", "找不到指定项目,或者您没有该项目的访问权限");
-            return "/error/404";
-        }
-        model.addAttribute("project", project);
-        return "/settings/createApp";
+        return "redirect:/p/" + projectId + "/apps?create=1";
     }
 
     // 打开APP列表页
     @RequestMapping("/list")
     public String openAppListView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        List<AppVo> list = appService.getAppList(projectId);
-        model.addAttribute("apps", list);
-        Map<String, Integer> onlineCounts = onlineInstanceSseService.buildCounts(projectId);
-        for (AppVo appVo : list) {
-            appVo.setOnlineCount(onlineCounts.getOrDefault(appVo.getId(), 0));
-        }
-
-        String loginName = user.getName();
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-
-        // 登录用户权限，原则是最小权限（访客）
-        String loginNameRole = "visitor";
-        for (ProjectMemberVo member : members) {
-            if (loginName.equals(member.getMemberName())) {
-                loginNameRole = String.valueOf(member.getRole());
-            }
-        }
-
-        model.addAttribute("loginNameRole", loginNameRole);
-
-        return "/settings/appList";
+        return "redirect:/p/" + projectId + "/apps";
     }
 
     /**
@@ -126,7 +100,7 @@ public class AppControl {
         app.setProbeAlertOnOnline(probeAlertOnOnline);
         AppVo appVo = appService.createApp(app);
         doLog(SystemLogService.Action.addApp, "添加了一个新应用", user, appVo);
-        return new com.oAT.web.control.entity.ResultNotified(true, "应用创建成功", "/p/" + app.getCreateProjectId() + "/app/list");
+        return new com.oAT.web.control.entity.ResultNotified(true, "应用创建成功", "/p/" + app.getCreateProjectId() + "/apps");
     }
 
     private boolean isCheckboxChecked(HttpServletRequest request, String name) {
@@ -137,8 +111,8 @@ public class AppControl {
     private void doLog(SystemLogService.Action action, String actionMessage, UserVo user, AppVo appVo) {
         SystemLog log = new SystemLog();
 
-        log.setTitle(String.format("%s %s <a href='app/list?id=%s'>%s</a>", user.getName(), actionMessage,
-                appVo.getId(), appVo.getName()));
+        log.setTitle(String.format("%s %s <a href='/p/%s/apps/%s/settings'>%s</a>", user.getName(), actionMessage,
+                appVo.getCreateProjectId(), appVo.getId(), appVo.getName()));
         log.setMessage(appVo.getDescribe());
         log.setUserId(user.getId());
         log.setUserName(user.getName());
@@ -152,26 +126,7 @@ public class AppControl {
                                String appId,
                                Model model,
                                @SessionAttribute UserVo user) {
-        ProjectVo project = projectService.getProjectByProjectIdAndMemberId(projectId, user.getId());
-        if (project == null) {
-            model.addAttribute("errorMessage", "找不到指定项目,或者您没有该项目的访问权限");
-            return "/error/404";
-        }
-
-        AppVo app = appService.getApp(appId);
-        model.addAttribute("project", project);
-        model.addAttribute("app", app);
-
-        String loginName = user.getName();
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-        String loginNameRole = "visitor";
-        for (ProjectMemberVo member : members) {
-            if (loginName.equals(member.getMemberName())) {
-                loginNameRole = String.valueOf(member.getRole());
-            }
-        }
-        model.addAttribute("loginNameRole", loginNameRole);
-        return "/settings/editApp";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/settings";
     }
 
     @RequestMapping(value = "{appId}/edit", method = RequestMethod.POST)
@@ -210,7 +165,7 @@ public class AppControl {
         }
         redirectAttributes.addFlashAttribute("toastMessage", toastMessage);
         redirectAttributes.addFlashAttribute("toastMessageType", "success");
-        return "redirect:/p/" + projectId + "/app/" + appId + "/settings";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/settings";
     }
 
     @RequestMapping(value = "{appId}/delete", method = RequestMethod.POST)
@@ -289,25 +244,7 @@ public class AppControl {
 
     @RequestMapping("online")
     public String openOnlineList(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
-        List<ClientSessionVo> list = getProjectOnlineSessions(projectId);
-
-        String loginName = user.getName();
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-
-        // 登录用户权限，原则是最小权限（访客）
-        String loginNameRole = "visitor";
-        for (ProjectMemberVo member : members) {
-            if (loginName.equals(member.getMemberName())) {
-                loginNameRole = String.valueOf(member.getRole());
-            }
-        }
-
-        model.addAttribute("loginNameRole", loginNameRole);
-
-        model.addAttribute("sessions", list);
-        return "/settings/onlineAppList";
+        return "redirect:/p/" + projectId + "/apps/online";
     }
 
     @RequestMapping("online-counts")
@@ -372,49 +309,13 @@ public class AppControl {
     @RequestMapping("{appId}/settings")
     public String openSetting(@PathVariable String projectId, @PathVariable String appId,
                               @SessionAttribute UserVo user, Model model) {
-        AppVo app = appService.getApp(appId);
-        List<AppVo> appList = appService.getAppList(projectId);
-
-        String loginName = user.getName();
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-
-        // 登录用户权限，原则是最小权限（访客）
-        String loginNameRole = "visitor";
-        for (ProjectMemberVo member : members) {
-            if (loginName.equals(member.getMemberName())) {
-                loginNameRole = String.valueOf(member.getRole());
-            }
-        }
-
-        model.addAttribute("loginNameRole", loginNameRole);
-
-        model.addAttribute("app", app);
-        model.addAttribute("apps", appList);
-        model.addAttribute("probeAlertDashboard", probeAlertDashboardService.getDashboard(appId, 10));
-        return "/app/settings";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/settings";
     }
 
     @RequestMapping("{appId}/probe-alerts")
     public String openProbeAlerts(@PathVariable String projectId, @PathVariable String appId,
                                   @SessionAttribute UserVo user, Model model) {
-        AppVo app = appService.getApp(appId);
-        List<AppVo> appList = appService.getAppList(projectId);
-
-        String loginName = user.getName();
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-
-        String loginNameRole = "visitor";
-        for (ProjectMemberVo member : members) {
-            if (loginName.equals(member.getMemberName())) {
-                loginNameRole = String.valueOf(member.getRole());
-            }
-        }
-
-        model.addAttribute("loginNameRole", loginNameRole);
-        model.addAttribute("app", app);
-        model.addAttribute("apps", appList);
-        model.addAttribute("probeAlertDashboard", probeAlertDashboardService.getDashboard(appId));
-        return "/app/probeAlerts";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/probe-alerts";
     }
 
     @RequestMapping("probe-alerts/recent")

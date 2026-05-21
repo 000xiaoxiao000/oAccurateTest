@@ -160,6 +160,20 @@ public class SnapshotControl {
      */
     @RequestMapping("/list")
     public String openList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            StringBuilder target = new StringBuilder("redirect:/p/").append(projectId).append("/my-snapshots");
+            List<String> query = new ArrayList<>();
+            if (StringUtils.hasText(sort)) {
+                query.add("sort=" + sort);
+            }
+            if (ArrayUtils.isNotEmpty(labels)) {
+                query.add("labels=" + StringUtils.arrayToDelimitedString(labels, ","));
+            }
+            if (!query.isEmpty()) {
+                target.append("?").append(String.join("&", query));
+            }
+            return target.toString();
+        }
 
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
 
@@ -183,27 +197,18 @@ public class SnapshotControl {
     @RequestMapping("/my")
     public String mySnapshotList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, String keyword,
                                  String snapshotId, String missingSnapshotId, Model model) {
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null, keyword);
-        // 基于标签过滤
-        if (ArrayUtils.isNotEmpty(labels)) {
-            for (SnapshotVo snapshotVo : snapshots.toArray(new SnapshotVo[0])) {
-                if (snapshotVo.getLabels() == null || !in(snapshotVo.getLabels(), labels)) {
-                    snapshots.remove(snapshotVo);
-                }
-            }
+        StringBuilder target = new StringBuilder("redirect:/p/").append(projectId).append("/my-snapshots");
+        List<String> query = new ArrayList<>();
+        if (StringUtils.hasText(sort)) {
+            query.add("sort=" + sort);
         }
-        model.addAttribute("snapshots", snapshots);
-        List<LabelGroup.Label> snapshotLabels = projectService.getLables(projectId, LableType.snapshot);
-        model.addAttribute("snapshotLabels", snapshotLabels);
-        model.addAttribute("filterLabels", StringUtils.arrayToDelimitedString(labels, ","));
-        model.addAttribute("sort", sort);
-        model.addAttribute("keyword", keyword);
-        model.addAttribute("snapshotId", snapshotId);
-        model.addAttribute("missingSnapshotId", missingSnapshotId);
-        model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
-        model.addAttribute("apiCoverageSummaryText", buildSnapshotApiCoverageSummaryText(snapshots));
-
-        return "/snapshot/mySnapshot";
+        if (StringUtils.hasText(keyword)) {
+            query.add("keyword=" + keyword);
+        }
+        if (!query.isEmpty()) {
+            target.append("?").append(String.join("&", query));
+        }
+        return target.toString();
     }
 
     private String buildSnapshotApiCoverageSummaryText(List<SnapshotVo> snapshots) {
@@ -262,12 +267,18 @@ public class SnapshotControl {
 
     @RequestMapping("/mySnapshotsCodeReport")
     public String mySnapshotsCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String sort, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/my-snapshots/code-report" + (StringUtils.hasText(sort) ? "?sort=" + sort : "");
+        }
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
         return buildMySnapshotsCodeReport(projectId, snapshots, model);
     }
 
     @RequestMapping("/mySnapshotCodeReport")
     public String mySnapshotCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String snapshotId, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/my-snapshots/" + snapshotId + "/report";
+        }
         Assert.hasText(snapshotId, "参数'snapshotId'不能为空");
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), null);
         SnapshotVo targetSnapshot = snapshots.stream()
@@ -515,11 +526,14 @@ public class SnapshotControl {
         model.addAttribute("projectId", projectId);
         model.addAttribute("appId", appId);
 
-        return "/snapshot/mySnapshotsCodeReport";
+        return "redirect:/p/" + projectId + "/my-snapshots/code-report";
     }
 
     @RequestMapping("/my/code")
     public String snapshotCodeView(@PathVariable String projectId, String appId, String className, @SessionAttribute UserVo user, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/my-snapshots/code?appId=" + appId + "&className=" + className;
+        }
         // 1. 获取该用户在该项目下的所有快照
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), null);
 
@@ -653,6 +667,9 @@ public class SnapshotControl {
 
     @RequestMapping("/node")
     public String openNodeDetail(@PathVariable String projectId, String traceId, String nodeId, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/my-snapshots";
+        }
         TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(traceId), buildRemoteCallResolver(projectId));
         GraphNode graphNode = parse.getGraphNode(nodeId);
         if (graphNode != null) {
@@ -792,6 +809,9 @@ public class SnapshotControl {
 
     @RequestMapping("/detail/stack/{traceId}")
     public String openTraceTable(@PathVariable String projectId, @PathVariable String traceId, Model model) {
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/p/" + projectId + "/my-snapshots";
+        }
         Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
         StackItemHelp help = new StackItemHelp(nodes);
         List<StackItem> stacks = help.buildItems();
@@ -801,12 +821,7 @@ public class SnapshotControl {
 
     @RequestMapping("/edit")
     public String openEdit(@PathVariable String projectId, @SessionAttribute UserVo user, String id, Model model) {
-        SnapshotVo snapshotVo = snapshotService.get(id);
-        model.addAttribute("snapshot", snapshotVo);
-        model.addAttribute("snapshotLabel", StringUtils.arrayToDelimitedString(snapshotVo.getLabels(), ","));
-        List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.snapshot);
-        model.addAttribute("labels", labels);
-        return "/snapshot/snapshotEdit";
+        return "redirect:/p/" + projectId + "/my-snapshots/" + id;
     }
 
     /**
@@ -816,6 +831,14 @@ public class SnapshotControl {
      */
     @RequestMapping("/detail/{id}")
     public String openDetail(@PathVariable String projectId, @PathVariable String id, Model model, HttpServletRequest request) {
+        Boolean share = (Boolean) request.getAttribute("_share");
+        if (!BooleanUtils.isTrue(share)) {
+            return "redirect:/p/" + projectId + "/my-snapshots/" + id;
+        }
+        if (System.currentTimeMillis() >= 0) {
+            return "redirect:/share/snapshot/" + id;
+        }
+
         SnapshotVo snapshotVo = snapshotService.get(id);
         if (snapshotVo == null) {
             logger.warn("我的快照不存在, projectId={}, snapshotId={}", projectId, id);
@@ -831,12 +854,7 @@ public class SnapshotControl {
         }
         model.addAttribute("usecases", usecaseService.getUsecasesBySnapshot(projectId, id));
         model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
-        // 跳转至快照共享页
-        Boolean share = (Boolean) request.getAttribute("_share");
-        if (BooleanUtils.isTrue(share)) {
-            return "/snapshot/shareSnapshotDetail";
-        }
-        return "/snapshot/snapshotDetail";
+        return "/snapshot/shareSnapshotDetail";
     }
 
     @RequestMapping("/{snapshotId}/usecase/bind")

@@ -53,7 +53,7 @@ public class RedisTraceNode extends TraceNode implements StatementError, Seriali
 
     @Override
     public Error getError() {
-        return null;
+        return error;
     }
 
     @Override

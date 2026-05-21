@@ -21,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -55,64 +56,19 @@ public class CoverageControl {
     public String overview(@PathVariable String projectId, String appId, String versionNumber,
                            @RequestParam(required = false) String reportId,
                            @RequestParam(required = false) String commitId, Model model) {
-        CoverageReportIndex report;
+        if (!StringUtils.hasText(appId) || !StringUtils.hasText(versionNumber)) {
+            return "redirect:/p/" + projectId + "/coverage";
+        }
+        StringBuilder target = new StringBuilder("redirect:/p/")
+                .append(projectId).append("/apps/").append(appId)
+                .append("/coverage?versionNumber=").append(versionNumber);
         if (StringUtils.hasText(reportId)) {
-            report = coverageService.getReport(reportId);
-        } else {
-            report = coverageService.getLatestReport(appId, versionNumber, commitId);
+            target.append("&reportId=").append(reportId);
         }
-
-        // 如果最新的是增量报告，我们也去拿一个全量的
-        CoverageReportIndex fullReport = null;
-        CoverageReportIndex incReport = null;
-
-        if (report != null) {
-            String targetCommitId = StringUtils.hasText(commitId) ? commitId : report.getRepoCommitId();
-            if (report.getReportType() == 1) {
-                incReport = report;
-                fullReport = getLatestFullReport(appId, versionNumber, targetCommitId);
-            } else {
-                fullReport = report;
-                incReport = getLatestIncrementalReport(appId, versionNumber, targetCommitId);
-            }
+        if (StringUtils.hasText(commitId)) {
+            target.append("&commitId=").append(commitId);
         }
-
-        // 检查是否有比全量报告更新的快照数据
-        boolean hasNewerData;
-        if (fullReport != null) {
-            hasNewerData = coverageService.hasNewerData(appId, versionNumber, fullReport);
-            // 获取对比数据
-            CoverageComparisonVo comparison = coverageService.getComparison(fullReport.getId());
-            model.addAttribute("comparison", comparison);
-        } else {
-            hasNewerData = coverageService.hasNewerData(appId, versionNumber, null);
-        }
-
-        model.addAttribute("report", fullReport);
-        model.addAttribute("incReport", incReport);
-        model.addAttribute("hasNewerData", hasNewerData);
-        model.addAttribute("projectId", projectId);
-        model.addAttribute("appId", appId);
-        model.addAttribute("versionNumber", versionNumber);
-        model.addAttribute("commitId", commitId);
-
-        // Get App info for appName
-        AppVo appVo = appService.getApp(appId);
-        model.addAttribute("appName", appVo != null ? appVo.getName() : appId);
-
-        // Fetch version info to get branch/commit if possible
-        model.addAttribute("version", versionService.getVersionItemList(projectId, appId).stream()
-                .filter(v -> v.getVersionNumber().equals(versionNumber) && (commitId == null || commitId.equals(v.getRepoCommitId())))
-                .findFirst()
-                .orElseGet(() -> versionService.getVersionItemList(projectId, appId).stream()
-                        .filter(v -> v.getVersionNumber().equals(versionNumber))
-                        .findFirst().orElse(null)));
-
-        // Required by projectHeader.ftl
-        model.addAttribute("project", projectService.getProject(projectId));
-        model.addAttribute("apps", appService.getAppList(projectId));
-
-        return "coverage/overview";
+        return target.toString();
     }
 
     /**
@@ -134,66 +90,21 @@ public class CoverageControl {
                           @RequestParam(required = false) Integer minComplexity,
                           @RequestParam(required = false) Integer maxComplexity,
                           Model model) {
-        if ("list".equalsIgnoreCase(viewType)) {
-            Page<ClassCoverageIndex> classPage = coverageService.getClassCoveragePage(reportId, className, methodName,
-                    minRate, maxRate,
-                    minBranchRate, maxBranchRate,
-                    minMethodRate, maxMethodRate,
-                    minComplexity, maxComplexity,
-                    PageRequest.of(page, size, org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "lineRate", "branchRate", "methodRate")));
-            model.addAttribute("classPage", classPage);
-        } else {
-            // Initial Tree nodes (root)
-            model.addAttribute("rootNodes", coverageService.getTreeNodes(reportId, "", className, methodName,
-                    minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity));
-        }
-
-        model.addAttribute("reportId", reportId);
-        model.addAttribute("projectId", projectId);
-        model.addAttribute("viewType", viewType);
-
-        // Keep search params for pagination links and tree lazy load
-        model.addAttribute("className", className);
-        model.addAttribute("methodName", methodName);
-        model.addAttribute("minRate", minRate);
-        model.addAttribute("maxRate", maxRate);
-        model.addAttribute("minBranchRate", minBranchRate);
-        model.addAttribute("maxBranchRate", maxBranchRate);
-        model.addAttribute("minMethodRate", minMethodRate);
-        model.addAttribute("maxMethodRate", maxMethodRate);
-        model.addAttribute("minComplexity", minComplexity);
-        model.addAttribute("maxComplexity", maxComplexity);
-
-        // Extract appId and versionNumber from report to show in header
         CoverageReportIndex report = coverageService.getReport(reportId);
-        if (report != null) {
-            model.addAttribute("report", report);
-            model.addAttribute("reportNeedRegenerate", coverageService.hasNewerData(report.getAppId(), report.getVersionNumber(), report));
-            model.addAttribute("appId", report.getAppId());
-            model.addAttribute("versionNumber", report.getVersionNumber());
-            AppVo appVo = appService.getApp(report.getAppId());
-            model.addAttribute("appName", appVo != null ? appVo.getName() : report.getAppId());
-
-            // Fetch version info to get branch/commit if possible
-            model.addAttribute("version", versionService.getVersionItemList(projectId, report.getAppId()).stream()
-                    .filter(v -> v.getVersionNumber().equals(report.getVersionNumber()) && (report.getRepoCommitId() == null || report.getRepoCommitId().equals(v.getRepoCommitId())))
-                    .findFirst()
-                    .orElseGet(() -> versionService.getVersionItemList(projectId, report.getAppId()).stream()
-                            .filter(v -> v.getVersionNumber().equals(report.getVersionNumber()))
-                            .findFirst().orElse(null)));
-        } else {
-            // 防御性兜底：确保模板必需变量始终存在，避免 InvalidReferenceException
-            model.addAttribute("appId", "");
-            model.addAttribute("versionNumber", "");
-            model.addAttribute("appName", "未知应用");
-            logger.warn("[details] reportId={} 未找到对应报告，已设置默认值避免模板渲染异常", reportId);
+        Assert.notNull(report, "覆盖率报告不存在");
+        StringBuilder target = new StringBuilder("redirect:/p/")
+                .append(projectId).append("/apps/").append(report.getAppId())
+                .append("/coverage/details?reportId=").append(reportId);
+        if (StringUtils.hasText(viewType)) {
+            target.append("&viewType=").append(viewType);
         }
-
-        // Required by projectHeader.ftl
-        model.addAttribute("project", projectService.getProject(projectId));
-        model.addAttribute("apps", appService.getAppList(projectId));
-
-        return "coverage/details";
+        if (StringUtils.hasText(report.getVersionNumber())) {
+            target.append("&versionNumber=").append(report.getVersionNumber());
+        }
+        if (StringUtils.hasText(report.getRepoCommitId())) {
+            target.append("&commitId=").append(report.getRepoCommitId());
+        }
+        return target.toString();
     }
 
     /**
@@ -282,58 +193,12 @@ public class CoverageControl {
      */
     @RequestMapping("/code")
     public String viewCode(@PathVariable String projectId, String appId, String reportId, String className, Model model) {
-        // 先获取 classCov 并按页面显示的规则排序，再传入 getColoredSource 的重载方法
-        ClassCoverageIndex classCov = coverageService.getClassCoverage(reportId, className);
-        String displayClassName = toDisplayClassName(className);
-
-        if (classCov != null && classCov.getMethods() != null) {
-            classCov.getMethods().sort((a, b) -> {
-                double rateA = a.getTotalLines() > 0 ? (double) a.getCoveredLines() / a.getTotalLines() : 0;
-                double rateB = b.getTotalLines() > 0 ? (double) b.getCoveredLines() / b.getTotalLines() : 0;
-                if (rateA != rateB) {
-                    return Double.compare(rateB, rateA); // Descending
-                }
-                double bRateA = a.getBranchRate() != null ? a.getBranchRate() : 0;
-                double bRateB = b.getBranchRate() != null ? b.getBranchRate() : 0;
-                return Double.compare(bRateB, bRateA); // Descending
-            });
-        }
-
-        // 使用按顺序整理过的 classCov 调用覆盖着色（避免模板方法列表顺序与着色锚点不一致）
-        String coloredSource = coverageService.getColoredSource(appId, classCov);
-
-        model.addAttribute("coloredSource", coloredSource);
-        model.addAttribute("classCov", classCov);
-        model.addAttribute("className", className);
-        model.addAttribute("rawClassName", className);
-        model.addAttribute("displayClassName", displayClassName);
-        model.addAttribute("reportId", reportId);
-
-        // 为面包屑补充信息
-        model.addAttribute("projectId", projectId);
-        com.oAT.web.service.entity.ProjectVo project = projectService.getProject(projectId);
-        model.addAttribute("project", project);
-        model.addAttribute("appId", appId);
-        AppVo appVo = appService.getApp(appId);
-        model.addAttribute("appName", appVo != null ? appVo.getName() : appId);
-        // 悬浮小人主色，与 AIInteractive 保持一致
-        model.addAttribute("mascotPrimary", computeMascotPrimary(project.getId(), project.getName()));
-
         CoverageReportIndex report = coverageService.getReport(reportId);
         if (report != null) {
-            model.addAttribute("report", report);
-            model.addAttribute("reportNeedRegenerate", coverageService.hasNewerData(appId, report.getVersionNumber(), report));
-            model.addAttribute("versionNumber", report.getVersionNumber());
-            // Fetch version info to get branch/commit if possible
-            model.addAttribute("version", versionService.getVersionItemList(projectId, appId).stream()
-                    .filter(v -> v.getVersionNumber().equals(report.getVersionNumber()) && (report.getRepoCommitId() == null || report.getRepoCommitId().equals(v.getRepoCommitId())))
-                    .findFirst()
-                    .orElseGet(() -> versionService.getVersionItemList(projectId, appId).stream()
-                            .filter(v -> v.getVersionNumber().equals(report.getVersionNumber()))
-                            .findFirst().orElse(null)));
+            appId = report.getAppId();
         }
-
-        return "coverage/code_view";
+        Assert.hasText(appId, "应用不存在");
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/coverage/code?reportId=" + reportId + "&className=" + className;
     }
 
     private String toDisplayClassName(String className) {

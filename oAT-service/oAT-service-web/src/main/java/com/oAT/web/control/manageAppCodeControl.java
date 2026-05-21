@@ -38,24 +38,13 @@ public class manageAppCodeControl {
 
     @RequestMapping("/manageAppCode")
     public String manageAppCode(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        List<AppVo> list = appService.getAppList(projectId);
-        model.addAttribute("apps", list);
-        model.addAttribute("defaultApp", list.isEmpty() ? null : list.get(0));
-        for (AppVo appVo : list) {
-            appVo.setOnlineCount(sessionService.getOnlineSessionsByAppId(appVo.getId()).size());
-        }
-
-        model.addAttribute("loginNameRole", getLoginUserRole(projectId, user.getName()));
-        return "/settings/manageAppCode";
+        return "redirect:/p/" + projectId + "/apps";
     }
 
     @RequestMapping("/app/{appId}/repository")
     public String repositoryConfig(@PathVariable String projectId, @PathVariable String appId,
                                    Model model, @SessionAttribute UserVo user) {
-        AppVo app = appService.getApp(appId);
-        model.addAttribute("app", app);
-        model.addAttribute("loginNameRole", getLoginUserRole(projectId, user.getName()));
-        return "/settings/codeRepositoryConfig";
+        return "redirect:/p/" + projectId + "/apps/" + appId + "/repository";
     }
 
     @RequestMapping("/app/{appId}/repository/save")

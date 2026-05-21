@@ -585,23 +585,23 @@ public class AIStreamingControl {
         if (containsAny(lowerQ, "趋势", "trend", "变化", "历史")) {
             viz.put("chartType", "line");
             viz.put("title", "数据趋势图");
-            viz.put("suggestedApi", "/p/" + projectId + "/coverage/trend");
+            viz.put("suggestedApi", "/p/" + projectId + "/coverage");
         } else if (containsAny(lowerQ, "对比", "compare", "分布", "比例", "占比")) {
             viz.put("chartType", "pie");
             viz.put("title", "数据分布图");
-            viz.put("suggestedApi", "/p/" + projectId + "/coverage/overview");
+            viz.put("suggestedApi", "/p/" + projectId + "/coverage");
         } else if (containsAny(lowerQ, "排名", "top", "最差", "最低", "最高", "排序")) {
             viz.put("chartType", "bar");
             viz.put("title", "排行榜");
-            viz.put("suggestedApi", "/p/" + projectId + "/coverage/details?sort=coverage_asc");
+            viz.put("suggestedApi", "/p/" + projectId + "/coverage");
         } else if (containsAny(lowerQ, "性能", "响应时间", "慢", "延迟", "p95", "p99")) {
             viz.put("chartType", "bar");
             viz.put("title", "性能指标");
-            viz.put("suggestedApi", "/p/" + projectId + "/monitor/performance");
+            viz.put("suggestedApi", "/p/" + projectId + "/map/home");
         } else if (containsAny(lowerQ, "错误率", "异常", "缺陷", "bug", "失败")) {
             viz.put("chartType", "heatmap");
             viz.put("title", "错误热力图");
-            viz.put("suggestedApi", "/p/" + projectId + "/monitor/errors");
+            viz.put("suggestedApi", "/p/" + projectId + "/map/home");
         }
 
         // 如果回答已包含表格，不重复推荐

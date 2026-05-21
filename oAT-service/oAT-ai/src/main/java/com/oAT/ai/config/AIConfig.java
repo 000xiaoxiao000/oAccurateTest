@@ -5,6 +5,7 @@ import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -187,12 +188,8 @@ public class AIConfig implements AIConfigProperties {
      * 根据 provider 配置创建对应的模型实例
      */
     @Bean(name = "chatLanguageModel")
+    @ConditionalOnProperty(prefix = "ai.llm", name = "enabled", havingValue = "true")
     public ChatModel chatLanguageModel() {
-        if (!enabled) {
-            logger.info("AI LLM is disabled, chatLanguageModel bean will not be created");
-            return null;
-        }
-
         Provider providerType = resolveProvider();
         logger.info("Initializing AI LLM with provider: {}, model: {}, baseUrl: {}", providerType, model, resolveApiBaseUrl(providerType));
 
