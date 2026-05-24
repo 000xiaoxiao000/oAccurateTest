@@ -192,6 +192,7 @@ onMounted(load)
 }
 
 .hero {
+  --hero-accent: #0f766e;
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr);
   gap: 18px;

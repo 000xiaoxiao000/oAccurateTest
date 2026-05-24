@@ -470,6 +470,7 @@ onMounted(load)
 }
 
 .tag {
+  --tag-color: #0f766e;
   padding: 6px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--tag-color) 14%, white);

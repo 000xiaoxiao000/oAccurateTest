@@ -230,6 +230,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { backendApiUrl } from '@/api/http'
+import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -704,6 +705,7 @@ onMounted(async () => {
 }
 
 .hero-card {
+  --hero-accent: #0f766e;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) 320px;
   gap: 18px;
@@ -976,6 +978,7 @@ onMounted(async () => {
 
 
 .hero-card {
+  --hero-accent: #0f766e;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) minmax(260px, .65fr);
 }
 
@@ -1055,6 +1058,7 @@ onMounted(async () => {
 
 @media (max-width: 980px) {
   .hero-card {
+  --hero-accent: #0f766e;
     grid-template-columns: 1fr;
   }
 }

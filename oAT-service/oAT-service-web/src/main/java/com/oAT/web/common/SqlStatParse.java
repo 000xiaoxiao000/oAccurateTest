@@ -1,5 +1,6 @@
 package com.oAT.web.common;
 
+import com.alibaba.druid.DbType;
 import com.alibaba.druid.sql.SQLUtils;
 import com.alibaba.druid.sql.ast.SQLStatement;
 import com.alibaba.druid.sql.visitor.SchemaStatVisitor;
@@ -31,9 +32,10 @@ public class SqlStatParse {
     }
 
     private void parse(String sql, String dbType) {
-        List<SQLStatement> stmtList = SQLUtils.parseStatements(sql, dbType);
+        DbType resolvedDbType = resolveDbType(dbType);
+        List<SQLStatement> stmtList = SQLUtils.parseStatements(sql, resolvedDbType);
         for (SQLStatement sqlStatement : stmtList) {
-            SchemaStatVisitor statVisitor = SQLUtils.createSchemaStatVisitor(dbType);
+            SchemaStatVisitor statVisitor = SQLUtils.createSchemaStatVisitor(resolvedDbType);
             sqlStatement.accept(statVisitor);
             for (Map.Entry<TableStat.Name, TableStat> tables : statVisitor.getTables().entrySet()) {
                 SqlParseInfo statData = new SqlParseInfo(tables.getKey().toString(),
@@ -60,6 +62,12 @@ public class SqlStatParse {
             }
 
         }
+    }
+
+
+    private DbType resolveDbType(String dbType) {
+        DbType resolvedDbType = DbType.of(dbType);
+        return resolvedDbType == null ? DbType.mysql : resolvedDbType;
     }
 
     public List<SqlParseInfo> getAdds() {
