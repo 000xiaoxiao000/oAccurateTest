@@ -4,24 +4,24 @@
 
     <button v-else class="launcher" type="button" title="打开 AI 助手" data-tooltip="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
       <MascotCanvas :size="78" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="true" />
-      <span class="launcher-label">AI 助手</span>
       <span v-if="!panelOpen" class="launcher-bubble">{{ launcherHint }}</span>
     </button>
 
     <section v-if="!mascotHidden && panelOpen" ref="panelRef" class="assistant-panel" :style="panelStyle">
+      <div v-if="!layoutLocked" class="resize-handle" title="拖拽放大" @pointerdown.stop.prevent="startResize"></div>
       <header class="panel-header" @pointerdown="startDrag">
         <div>
-          <div class="eyebrow">AI Assistant</div>
-          <h2>AI 助手</h2>
+          <div class="eyebrow">AI Interactive</div>
+          <h2>项目悬浮助手</h2>
         </div>
         <div class="panel-tools">
-          <button type="button" title="恢复默认位置和尺寸" @click="resetLayout">↺</button>
-          <button type="button" :title="layoutLocked ? '解锁内部布局拖动' : '锁定内部布局'" @click="toggleLayoutLock">{{ layoutLocked ? '🔒' : '🔓' }}</button>
+          <button type="button" title="恢复默认内部布局" @click="resetLayout">↺</button>
           <button type="button" title="撤销上一步内部布局调整" @click="undoLayout">↶</button>
-          <button type="button" title="清空当前助手对话" @click="clearConversation">清空</button>
+          <button type="button" :title="layoutLocked ? '解锁内部布局拖动' : '锁定内部布局'" @click="toggleLayoutLock">{{ layoutLocked ? '🔒' : '🔓' }}</button>
+          <button type="button" class="danger-tool" title="清空当前助手对话" @click="clearConversation">清</button>
           <RouterLink :to="`/p/${projectId}/ai`">工作台</RouterLink>
-          <button type="button" title="隐藏 AI 吉祥物" @click="hideMascot">-</button>
-          <button type="button" title="收起助手" @click="panelOpen = false">×</button>
+          <button type="button" title="隐藏小人" @click="hideMascot">-</button>
+          <button type="button" title="收起助手" @click="panelOpen = false">x</button>
         </div>
       </header>
 
@@ -208,7 +208,7 @@ function restoreState() {
   mascotHidden.value = localStorage.getItem(`${storagePrefix.value}:hidden`) === '1'
   panelOpen.value = sessionStorage.getItem(`${storagePrefix.value}:panel`) === '1'
   position.value = readJson<FloatingPosition | null>(`${storagePrefix.value}:position`, null)
-  panelSize.value = readJson<PanelSize | null>(`${storagePrefix.value}:panel-size`, null)
+  panelSize.value = normalizePanelSize(readJson<PanelSize | null>(`${storagePrefix.value}:panel-size`, null))
   collapsedSections.value = readJson<SectionName[]>(`${storagePrefix.value}:sections`, [])
   layoutLocked.value = localStorage.getItem(`${storagePrefix.value}:layout-locked`) === '1'
 }
@@ -219,6 +219,16 @@ function readJson<T>(key: string, fallback: T): T {
     return raw ? JSON.parse(raw) as T : fallback
   } catch {
     return fallback
+  }
+}
+
+function normalizePanelSize(size: PanelSize | null): PanelSize | null {
+  if (!size) return null
+  const maxWidth = Math.min(640, Math.max(340, window.innerWidth - 132))
+  const maxHeight = Math.min(720, Math.max(420, window.innerHeight - 48))
+  return {
+    width: Math.min(Math.max(size.width, 340), maxWidth),
+    height: Math.min(Math.max(size.height, 420), maxHeight),
   }
 }
 
@@ -339,6 +349,32 @@ function clampPosition(value: FloatingPosition): FloatingPosition {
     left: Math.min(Math.max(value.left, margin), Math.max(margin, window.innerWidth - width - margin)),
     top: Math.min(Math.max(value.top, margin), Math.max(margin, window.innerHeight - height - margin)),
   }
+}
+
+function startResize(event: PointerEvent) {
+  if (layoutLocked.value) return
+  const panel = panelRef.value
+  if (!panel) return
+  const startX = event.clientX
+  const startY = event.clientY
+  const rect = panel.getBoundingClientRect()
+  const startWidth = rect.width
+  const startHeight = rect.height
+  snapshotLayout()
+  const move = (moveEvent: PointerEvent) => {
+    const nextWidth = Math.min(Math.max(startWidth + moveEvent.clientX - startX, 340), Math.min(640, window.innerWidth - 132))
+    const nextHeight = Math.min(Math.max(startHeight + moveEvent.clientY - startY, 420), Math.min(720, window.innerHeight - 64))
+    panelSize.value = { width: Math.round(nextWidth), height: Math.round(nextHeight) }
+  }
+  const up = () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+    if (storagePrefix.value && panelSize.value) {
+      localStorage.setItem(`${storagePrefix.value}:panel-size`, JSON.stringify(panelSize.value))
+    }
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
 }
 
 function installResizeObserver() {
@@ -497,10 +533,15 @@ onBeforeUnmount(() => {
 <style scoped>
 .ai-floating {
   position: fixed;
-  right: 24px;
+  right: 22px;
   bottom: 24px;
-  z-index: 95;
-  color: #0f172a;
+  z-index: 1000;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-end;
+  gap: 12px;
+  color: #111827;
+  user-select: none;
 }
 
 .launcher,
@@ -508,246 +549,359 @@ onBeforeUnmount(() => {
   border: none;
   cursor: grab;
   touch-action: none;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, .18);
 }
 
 .launcher {
   position: relative;
-  display: grid;
-  place-items: center;
-  width: 98px;
-  min-height: 98px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 82px;
+  height: 82px;
   padding: 0;
   border-radius: 999px;
   background: transparent;
-  border: none;
-  box-shadow: none;
 }
 
 .launcher :deep(.mascot-canvas) {
-  filter: drop-shadow(0 16px 24px rgba(15, 23, 42, .16));
-}
-
-.launcher-label {
-  position: absolute;
-  right: 4px;
-  bottom: -2px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .94);
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 900;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, .12);
-}
-
-.launcher-bubble {
-  position: absolute;
-  right: 84px;
-  bottom: 58px;
-  width: max-content;
-  max-width: 150px;
-  padding: 8px 12px;
-  border: 1px solid rgba(15, 118, 110, .14);
-  border-radius: 16px 16px 4px;
-  background: rgba(255, 255, 255, .96);
-  color: #334155;
-  font-size: 12px;
-  font-weight: 900;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, .12);
-}
-
-.launcher-bubble::after {
-  position: absolute;
-  right: -6px;
-  bottom: 8px;
-  width: 10px;
-  height: 10px;
-  content: '';
-  background: rgba(255, 255, 255, .96);
-  border-right: 1px solid rgba(15, 118, 110, .14);
-  border-bottom: 1px solid rgba(15, 118, 110, .14);
-  transform: rotate(-45deg);
-}
-
-.launcher::after {
-  content: '';
+  width: 76px;
+  height: 76px;
+  display: block;
+  filter: drop-shadow(0 12px 24px rgba(15, 23, 42, .16));
+  transition: transform .16s ease;
 }
 
 .launcher:hover :deep(.mascot-canvas) {
   transform: translateY(-2px) scale(1.03);
 }
 
+.launcher-bubble {
+  position: absolute;
+  right: 82px;
+  bottom: 48px;
+  width: max-content;
+  max-width: 168px;
+  padding: 8px 12px;
+  border: 1px solid rgba(20, 184, 166, .18);
+  border-radius: 14px 14px 4px;
+  background: rgba(255, 255, 255, .98);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  box-shadow: 0 12px 26px rgba(15, 23, 42, .12);
+}
+
+.launcher-bubble::after {
+  position: absolute;
+  right: -6px;
+  bottom: 9px;
+  width: 10px;
+  height: 10px;
+  content: '';
+  background: rgba(255, 255, 255, .98);
+  border-right: 1px solid rgba(20, 184, 166, .18);
+  border-bottom: 1px solid rgba(20, 184, 166, .18);
+  transform: rotate(-45deg);
+}
+
 .restore-button {
+  position: fixed;
+  right: 22px;
+  bottom: 24px;
+  z-index: 1001;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 999px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   background: #0f766e;
   color: #fff;
+  box-shadow: 0 12px 26px rgba(15, 118, 110, .24);
 }
 
 .assistant-panel {
-  position: absolute;
-  right: 0;
-  bottom: 126px;
-  width: min(460px, calc(100vw - 32px));
-  height: min(650px, calc(100vh - 160px));
-  max-height: min(720px, calc(100vh - 160px));
-  min-width: min(340px, calc(100vw - 32px));
-  min-height: 460px;
-  display: grid;
-  grid-template-rows: auto minmax(150px, 1fr) auto auto auto;
-  gap: 10px;
-  padding: 14px;
-  overflow: auto;
-  resize: v-bind('layoutLocked ? "none" : "both"');
-  border-radius: 26px;
-  border: 1px solid rgba(15, 23, 42, .10);
-  background:
-    radial-gradient(circle at top right, color-mix(in srgb, v-bind(mascotColor) 18%, white), transparent 34%),
-    rgba(255, 255, 255, .96);
-  box-shadow: 0 30px 76px rgba(15, 23, 42, .22);
+  position: relative;
+  width: min(380px, calc(100vw - 132px));
+  height: min(560px, calc(100vh - 48px));
+  min-width: min(340px, calc(100vw - 132px));
+  min-height: 420px;
+  max-width: min(640px, calc(100vw - 132px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(226, 232, 240, .95);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, .14);
+  cursor: default;
 }
 
-.panel-header,
-.panel-tools,
-.compose-actions,
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.resize-handle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(20, 184, 166, .24);
+  border-radius: 6px;
+  background:
+    linear-gradient(135deg, transparent 0 32%, rgba(15, 118, 110, .22) 32% 40%, transparent 40% 54%, rgba(15, 118, 110, .34) 54% 62%, transparent 62% 76%, rgba(15, 118, 110, .5) 76% 84%, transparent 84% 100%),
+    rgba(240, 253, 250, .92);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, .08);
+  cursor: nwse-resize;
 }
 
 .panel-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(226, 232, 240, .8);
   cursor: grab;
   touch-action: none;
 }
 
 .eyebrow {
-  color: #0f766e;
+  color: #6b7280;
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: .12em;
+  line-height: 1.2;
+  letter-spacing: .8px;
   text-transform: uppercase;
 }
 
 .panel-header h2 {
   margin: 2px 0 0;
-  font-size: 17px;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.panel-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .panel-tools button,
-.panel-tools a,
-.starters button,
-.tool-button,
-.send-button {
+.panel-tools a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 26px;
   border: none;
   border-radius: 999px;
-  padding: 7px 10px;
-  background: #eef7f7;
-  color: #0f766e;
+  padding: 0 8px;
+  background: #f1f5f9;
+  color: #475569;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
   cursor: pointer;
+  transition: background .16s ease, color .16s ease, transform .16s ease;
 }
 
-.section-box,
-.context-status,
-.compose {
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 18px;
-  background: rgba(248, 250, 252, .78);
+.panel-tools a {
+  color: #0f766e;
+  background: transparent;
 }
 
-.section-box,
-.context-status {
-  padding: 10px;
+.panel-tools button:hover,
+.panel-tools a:hover {
+  background: rgba(20, 184, 166, .12);
+  color: #0f766e;
+  transform: translateY(-1px);
+}
+
+.panel-tools .danger-tool {
+  background: rgba(254, 242, 242, .96);
+  color: #b91c1c;
+}
+
+.section-box {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fff;
+}
+
+.messages-box {
+  flex: 1 1 auto;
 }
 
 .section-title {
-  margin-bottom: 8px;
-  color: #334155;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.section-toggle {
-  width: 100%;
   display: flex;
-  justify-content: space-between;
+  flex: 0 0 auto;
   align-items: center;
+  justify-content: space-between;
+  width: 100%;
   border: none;
+  padding: 6px 12px 2px;
   background: transparent;
-  padding: 0 0 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .35px;
   cursor: pointer;
 }
 
+.section-title span:last-child {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .section-box.collapsed {
-  padding-bottom: 2px;
+  flex: 0 0 auto;
 }
 
 .message-list {
   display: grid;
+  align-content: start;
   gap: 8px;
-  max-height: 210px;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 2px;
 }
 
 .message {
   display: grid;
-  gap: 3px;
+  gap: 5px;
   padding: 9px 10px;
-  border-radius: 14px;
-  background: #fff;
+  border: 1px solid rgba(226, 232, 240, .82);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, .96);
+  color: #334155;
 }
 
 .message.user {
-  background: #ecfdf5;
+  border-color: rgba(20, 184, 166, .24);
+  background: rgba(240, 253, 250, .92);
+  color: #0f766e;
 }
 
 .message strong {
   font-size: 12px;
+  line-height: 1;
 }
 
-.message span,
-.context-status,
-.quick-links span {
+.message span {
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.context-status {
+  display: block;
+  flex: 0 0 auto;
+  padding: 4px 12px 7px;
   color: #64748b;
   font-size: 12px;
-  white-space: pre-wrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .quick-links,
 .starters {
   display: grid;
-  gap: 8px;
+  flex: 0 0 auto;
+  gap: 6px;
+  overflow-y: auto;
+  padding: 6px 12px 8px;
+}
+
+.quick-links {
+  max-height: 126px;
+}
+
+.starters {
+  max-height: 116px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-links a,
+.starters button,
+.tool-button,
+.send-button {
+  border-radius: 12px;
+  border: 1px solid rgba(20, 184, 166, .22);
+  background: rgba(20, 184, 166, .06);
+  color: #0f766e;
+  cursor: pointer;
 }
 
 .quick-links a {
   display: grid;
-  gap: 2px;
-  padding: 9px 10px;
-  border-radius: 14px;
-  background: #fff;
-  border: 1px solid rgba(15, 23, 42, .06);
+  gap: 3px;
+  padding: 8px 10px;
+  text-decoration: none;
 }
 
-.starters {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.quick-links strong {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.quick-links span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.starters button {
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
 }
 
 .compose {
-  padding: 10px;
+  flex: 0 0 auto;
+  padding: 2px 12px 12px;
+  background: #fff;
 }
 
 .compose textarea {
   width: 100%;
-  min-height: 78px;
-  border: 1px solid #d9e5ea;
-  border-radius: 14px;
-  padding: 10px;
+  min-height: 76px;
+  max-height: 130px;
+  border: 1px solid #dbe5ea;
+  border-radius: 12px;
+  padding: 9px 10px;
   resize: vertical;
+  color: #0f172a;
   font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.compose textarea:focus {
+  border-color: rgba(20, 184, 166, .52);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, .12);
+}
+
+.compose-actions,
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .compose-actions {
@@ -756,8 +910,21 @@ onBeforeUnmount(() => {
 }
 
 .state {
-  color: #64748b;
+  color: #6b7280;
   font-size: 12px;
+}
+
+.toolbar {
+  justify-content: flex-end;
+}
+
+.tool-button {
+  position: relative;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .tool-button.active {
@@ -771,8 +938,14 @@ onBeforeUnmount(() => {
 }
 
 .send-button {
-  background: #0f172a;
+  min-width: 52px;
+  height: 30px;
+  padding: 0 12px;
+  border-color: rgba(15, 118, 110, .35);
+  background: #0f766e;
   color: #fff;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .send-button:disabled {
@@ -784,15 +957,41 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .ai-floating {
+    right: 12px;
+    bottom: 12px;
+    gap: 8px;
+  }
+
+  .assistant-panel {
+    width: calc(100vw - 24px);
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    height: min(78vh, 520px);
+    max-height: min(78vh, 520px);
+  }
+
+  .ai-floating.open {
+    display: block;
+  }
+
+  .ai-floating.open .launcher {
+    position: fixed;
     right: 12px;
     bottom: 12px;
   }
 
-  .assistant-panel {
-    right: -4px;
-    bottom: 116px;
+  .ai-floating.open .assistant-panel {
+    margin-bottom: 94px;
+  }
+
+  .panel-header {
+    padding: 12px 12px 8px;
+  }
+
+  .panel-tools {
+    gap: 4px;
   }
 
   .launcher-bubble {
