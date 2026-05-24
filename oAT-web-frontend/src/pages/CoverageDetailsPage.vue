@@ -78,25 +78,45 @@
       <section v-else class="panel">
         <div class="panel-head">
           <h2>树结构</h2>
-          <span>{{ payload.treeNodes?.length || 0 }}</span>
+          <span>{{ visibleTreeRows.length }}</span>
         </div>
-        <div class="tree-list">
-          <article v-for="node in payload.treeNodes || []" :key="node.id" class="tree-card">
-            <div class="tree-top">
-              <strong>{{ node.name }}</strong>
-              <span class="tag">{{ node.type || '-' }}</span>
-            </div>
-            <div class="meta-grid">
-              <span>方法 {{ node.coveredMethods }} / {{ node.totalMethods }}</span>
-              <span>行 {{ node.coveredLines }} / {{ node.totalLines }}</span>
-              <span>分支 {{ node.coveredBranchTargets }} / {{ node.totalBranchTargets }}</span>
-              <span>复杂度 {{ node.totalComplexity }}</span>
-            </div>
-            <RouterLink v-if="node.type === 'class'" class="table-link" :to="buildCodeRoute(node.fullName || node.name)">
-              查看源码
-            </RouterLink>
-          </article>
+        <div class="table-shell">
+          <table class="report-table tree-table">
+            <thead>
+              <tr>
+                <th>包/类</th>
+                <th>方法 (覆盖/总)</th>
+                <th>方法覆盖率</th>
+                <th>分支 (覆盖/总)</th>
+                <th>分支覆盖率</th>
+                <th>代码行 (覆盖/总)</th>
+                <th>代码行覆盖率</th>
+                <th>圈复杂度</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in visibleTreeRows" :key="row.id" :class="[row.type === 'package' ? 'package-row' : 'class-row']">
+                <td :title="row.fullName || row.name" :style="{ paddingLeft: `${16 + row.level * 22}px` }">
+                  <button v-if="row.hasChildren" class="tree-fold" type="button" :disabled="row.loading" @click="toggleTreeRow(row)">
+                    {{ row.loading ? '…' : row.expanded ? '▣' : '▢' }}
+                  </button>
+                  <span v-else class="tree-fold muted">−</span>
+                  <span class="tree-icon">{{ row.type === 'package' ? '📁' : '📄' }}</span>
+                  <span>{{ row.name }}</span>
+                  <RouterLink v-if="row.type === 'class'" class="code-link" :to="buildCodeRoute(row.fullName || row.name)">代码</RouterLink>
+                </td>
+                <td>{{ row.coveredMethods }} / {{ row.totalMethods }}</td>
+                <td :class="rateTone(row.methodRate)">{{ percent(row.methodRate) }}</td>
+                <td>{{ row.coveredBranchTargets }} / {{ row.totalBranchTargets }}</td>
+                <td :class="rateTone(row.branchRate, row.totalBranchTargets)">{{ row.totalBranchTargets > 0 ? percent(row.branchRate) : 'N/A' }}</td>
+                <td>{{ row.coveredLines }} / {{ row.totalLines }}</td>
+                <td :class="rateTone(row.lineRate)">{{ percent(row.lineRate) }}</td>
+                <td>{{ row.totalComplexity }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+        <div v-if="treeError" class="status-card error compact">{{ treeError }}</div>
       </section>
     </template>
   </section>
@@ -107,15 +127,15 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { backendApiUrl } from '@/api/http'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
-import { fetchCoverageDetails } from '@/api/bootstrap'
-import type { CoverageDetailsPayload } from '@/api/types'
+import { fetchCoverageDetails, fetchCoverageTreeNodes } from '@/api/bootstrap'
+import type { CoverageDetailsPayload, CoverageTreeNode } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const reportId = computed(() => String(route.query.reportId || ''))
-const viewType = computed(() => String(route.query.viewType || 'list'))
+const viewType = computed(() => String(route.query.viewType || 'tree'))
 const currentPage = computed(() => Number(route.query.page || 0))
 const pageSize = computed(() => Number(route.query.size || 20))
 const backRoute = computed(() => ({
@@ -130,6 +150,9 @@ const backRoute = computed(() => ({
 const payload = ref<CoverageDetailsPayload | null>(null)
 const loading = ref(false)
 const error = ref('')
+const treeError = ref('')
+type TreeRow = CoverageTreeNode & { level: number; expanded: boolean; loaded: boolean; loading: boolean }
+const treeRows = ref<TreeRow[]>([])
 const filters = reactive({
   className: '',
   methodName: '',
@@ -145,6 +168,67 @@ const filters = reactive({
 
 function percent(value?: number) {
   return value === undefined || value === null ? '-' : `${value.toFixed(1)}%`
+}
+
+function rateTone(value?: number, total = 1) {
+  if (total <= 0) return ''
+  return (value || 0) > 0 ? 'positive' : 'negative'
+}
+
+function toTreeRow(node: CoverageTreeNode, level: number): TreeRow {
+  return { ...node, level, expanded: false, loaded: !node.hasChildren, loading: false }
+}
+
+const visibleTreeRows = computed(() => treeRows.value.filter((row) => isTreeRowVisible(row)))
+
+function isTreeRowVisible(row: TreeRow): boolean {
+  if (row.level === 0) return true
+  let parentId = row.parentId
+  while (parentId) {
+    const parent = treeRows.value.find((item) => item.fullName === parentId)
+    if (!parent || !parent.expanded) return false
+    parentId = parent.parentId
+  }
+  return true
+}
+
+function buildTreeQuery(parentPackage?: string) {
+  return {
+    reportId: reportId.value,
+    parentPackage,
+    className: filters.className || undefined,
+    methodName: filters.methodName || undefined,
+    minRate: filters.minRate,
+    maxRate: filters.maxRate,
+    minBranchRate: filters.minBranchRate,
+    maxBranchRate: filters.maxBranchRate,
+    minMethodRate: filters.minMethodRate,
+    maxMethodRate: filters.maxMethodRate,
+    minComplexity: filters.minComplexity,
+    maxComplexity: filters.maxComplexity,
+  }
+}
+
+async function toggleTreeRow(row: TreeRow) {
+  treeError.value = ''
+  if (row.loaded) {
+    row.expanded = !row.expanded
+    return
+  }
+  row.loading = true
+  try {
+    const children = await fetchCoverageTreeNodes(projectId.value, buildTreeQuery(row.fullName || row.name))
+    const index = treeRows.value.findIndex((item) => item.id === row.id)
+    if (index >= 0) {
+      treeRows.value.splice(index + 1, 0, ...children.map((child) => toTreeRow(child, row.level + 1)))
+    }
+    row.loaded = true
+    row.expanded = true
+  } catch (err) {
+    treeError.value = err instanceof Error ? err.message : '加载树节点失败'
+  } finally {
+    row.loading = false
+  }
 }
 
 function buildCodeRoute(className: string) {
@@ -245,6 +329,7 @@ async function load() {
       minComplexity: filters.minComplexity,
       maxComplexity: filters.maxComplexity,
     })
+    treeRows.value = viewType.value === 'tree' ? (payload.value.treeNodes || []).map((node) => toTreeRow(node, 0)) : []
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载覆盖率明细失败'
   } finally {
@@ -394,9 +479,72 @@ onMounted(() => {
   text-align: left;
 }
 
-.tree-list {
-  display: grid;
-  gap: 12px;
+.tree-table {
+  table-layout: fixed;
+}
+
+.tree-table th:first-child,
+.tree-table td:first-child {
+  width: 34%;
+}
+
+.tree-table th:not(:first-child),
+.tree-table td:not(:first-child) {
+  width: 9.4%;
+  text-align: center;
+}
+
+.tree-table td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-table .package-row {
+  background: #f9fafb;
+  font-weight: 800;
+}
+
+.tree-fold {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 5px;
+  border: none;
+  background: transparent;
+  color: #0f766e;
+  font-weight: 900;
+}
+
+.tree-fold.muted {
+  color: #94a3b8;
+}
+
+.tree-icon {
+  margin-right: 6px;
+}
+
+.code-link {
+  margin-left: 10px;
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.positive {
+  color: #047857;
+}
+
+.negative {
+  color: #b91c1c;
+}
+
+.status-card.compact {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
 }
 
 .meta-grid {

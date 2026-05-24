@@ -3,7 +3,7 @@
     <button v-if="mascotHidden" class="restore-button" type="button" @pointerdown="startDrag" @click="showMascot">显示 AI 助手</button>
 
     <button v-else class="launcher" type="button" title="打开 AI 助手" data-tooltip="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
-      <MascotCanvas :size="78" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="false" />
+      <MascotCanvas :size="78" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="true" />
       <span class="launcher-label">AI 助手</span>
       <span v-if="!panelOpen" class="launcher-bubble">{{ launcherHint }}</span>
     </button>

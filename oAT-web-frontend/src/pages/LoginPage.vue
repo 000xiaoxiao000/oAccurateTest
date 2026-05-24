@@ -43,7 +43,7 @@
               placeholder="请输入密码"
             />
             <button class="password-toggle" type="button" @click="showLoginPassword = !showLoginPassword">
-              {{ showLoginPassword ? '🙈' : '👁' }}
+              {{ showLoginPassword ? '👁' : '🙈' }}
             </button>
           </div>
         </label>

@@ -257,6 +257,27 @@ public class CoverageApiControl {
         return new ResultNotified<>(true, "获取覆盖率明细成功", payload);
     }
 
+    @GetMapping("/tree-nodes")
+    public ResultNotified<List<CoverageTreeNode>> treeNodes(@PathVariable String projectId,
+                                                            @SessionAttribute UserVo user,
+                                                            @RequestParam String reportId,
+                                                            @RequestParam(required = false) String parentPackage,
+                                                            @RequestParam(required = false) String className,
+                                                            @RequestParam(required = false) String methodName,
+                                                            @RequestParam(required = false) Double minRate,
+                                                            @RequestParam(required = false) Double maxRate,
+                                                            @RequestParam(required = false) Double minBranchRate,
+                                                            @RequestParam(required = false) Double maxBranchRate,
+                                                            @RequestParam(required = false) Double minMethodRate,
+                                                            @RequestParam(required = false) Double maxMethodRate,
+                                                            @RequestParam(required = false) Integer minComplexity,
+                                                            @RequestParam(required = false) Integer maxComplexity) {
+        ensureProjectAccess(projectId, user);
+        Assert.hasText(reportId, "reportId不能为空");
+        return new ResultNotified<>(true, "获取覆盖率树节点成功", coverageService.getTreeNodes(reportId, parentPackage, className, methodName,
+                minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity));
+    }
+
     @GetMapping("/code")
     public ResultNotified<CoverageCodePayload> code(@PathVariable String projectId,
                                                     @SessionAttribute UserVo user,

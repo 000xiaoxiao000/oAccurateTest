@@ -9,6 +9,7 @@ import type {
   CoverageCodePayload,
   CoverageDetailsPayload,
   CoverageOverviewPayload,
+  CoverageTreeNode,
   GitCommitOption,
   GitJobSummary,
   GitPullEstimate,
@@ -295,6 +296,16 @@ export function fetchCoverageDetails(projectId: string, params: Record<string, s
     }
   })
   return apiGet<CoverageDetailsPayload>(`/api/projects/${projectId}/coverage/details?${query.toString()}`)
+}
+
+export function fetchCoverageTreeNodes(projectId: string, params: Record<string, string | number | undefined>) {
+  const query = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && `${value}` !== '') {
+      query.set(key, String(value))
+    }
+  })
+  return apiGet<CoverageTreeNode[]>(`/api/projects/${projectId}/coverage/tree-nodes?${query.toString()}`)
 }
 
 export function fetchCoverageCode(projectId: string, params: { appId: string; reportId: string; className: string }) {
