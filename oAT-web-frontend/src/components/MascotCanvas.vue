@@ -27,6 +27,7 @@ let mouseX = 0
 let mouseY = 0
 let pupilX = 0
 let pupilY = 0
+let bodyAngle = 0
 
 function hash(value: string) {
   let h = 2166136261
@@ -78,21 +79,39 @@ function draw() {
 
   const seeded = random(hash(props.seed))
   const accessoryKind = Math.floor(seeded() * 4)
-  const radius = cssSize * 0.31
+  const radius = cssSize * 0.34
   const centerX = cssSize / 2
   const centerY = cssSize / 2 + (props.float ? Math.sin(Date.now() / 720) * 3 : 0)
   const rgb = hexToRgb(props.color)
-  const dx = props.interactive ? mouseX - centerX : 12
-  const dy = props.interactive ? mouseY - centerY : 8
-  const distance = Math.min(Math.hypot(dx, dy), 28)
-  const targetX = (dx / Math.max(distance, 1)) * Math.min(distance, 5)
-  const targetY = (dy / Math.max(distance, 1)) * Math.min(distance, 4)
-  pupilX += (targetX - pupilX) * 0.18
-  pupilY += (targetY - pupilY) * 0.18
+  const rect = canvas.getBoundingClientRect()
+  const worldCenterX = props.interactive ? rect.left + centerX : centerX
+  const worldCenterY = props.interactive ? rect.top + centerY : centerY
+  const dx = props.interactive ? mouseX - worldCenterX : 24
+  const dy = props.interactive ? mouseY - worldCenterY : 10
+  const targetAngle = Math.atan2(dy, dx)
+  let angleDiff = targetAngle - bodyAngle
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
+  bodyAngle += angleDiff * 0.01
+
+  const cosA = Math.cos(bodyAngle)
+  const sinA = Math.sin(bodyAngle)
+  const localX = dx * cosA + dy * sinA
+  const localY = -dx * sinA + dy * cosA
+  const localDistance = Math.hypot(localX, localY)
+  let localAngle = Math.atan2(localY, localX)
+  const maxEyeAngle = Math.PI / 4
+  localAngle = Math.max(-maxEyeAngle, Math.min(maxEyeAngle, localAngle))
+  const eyeSizeForTarget = radius * 0.25
+  const pupilMaxDist = eyeSizeForTarget * 0.46
+  const targetX = Math.cos(localAngle) * Math.min(localDistance, pupilMaxDist)
+  const targetY = Math.sin(localAngle) * Math.min(localDistance, pupilMaxDist)
+  pupilX += (targetX - pupilX) * 0.25
+  pupilY += (targetY - pupilY) * 0.25
 
   ctx.save()
   ctx.translate(centerX, centerY)
-  ctx.rotate(Math.sin(Date.now() / 1100 + seeded()) * 0.05)
+  ctx.rotate(bodyAngle + Math.sin(Date.now() / 1100 + seeded()) * 0.015)
 
   const halo = ctx.createRadialGradient(0, 0, radius * 0.15, 0, 0, radius * 1.55)
   halo.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},0.18)`)
@@ -104,7 +123,7 @@ function draw() {
 
   ctx.fillStyle = props.color
   ctx.beginPath()
-  ctx.arc(0, 0, radius, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, radius, radius * 0.90, 0, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.fillStyle = `rgba(${rgb.r},${rgb.g},${rgb.b},0.30)`
@@ -116,7 +135,7 @@ function draw() {
 
   const eyeOffsetX = radius * 0.34
   const eyeOffsetY = -radius * 0.12
-  const eyeSize = radius * 0.22
+  const eyeSize = radius * 0.25
   ctx.fillStyle = '#fff'
   ctx.beginPath()
   ctx.arc(-eyeOffsetX, eyeOffsetY, eyeSize, 0, Math.PI * 2)
@@ -124,7 +143,7 @@ function draw() {
   ctx.fill()
 
   ctx.fillStyle = '#0f172a'
-  const pupilSize = props.mood === 'error' ? eyeSize * 0.28 : eyeSize * 0.48
+  const pupilSize = props.mood === 'error' ? eyeSize * 0.30 : eyeSize * 0.50
   ctx.beginPath()
   ctx.arc(-eyeOffsetX + pupilX, eyeOffsetY + pupilY, pupilSize, 0, Math.PI * 2)
   ctx.arc(eyeOffsetX + pupilX, eyeOffsetY + pupilY, pupilSize, 0, Math.PI * 2)
@@ -188,6 +207,11 @@ function drawAccessory(ctx: CanvasRenderingContext2D, kind: number, radius: numb
 }
 
 function handleMouse(event: MouseEvent) {
+  if (props.interactive) {
+    mouseX = event.clientX
+    mouseY = event.clientY
+    return
+  }
   const rect = canvasRef.value?.getBoundingClientRect()
   if (!rect) return
   mouseX = event.clientX - rect.left
@@ -195,8 +219,9 @@ function handleMouse(event: MouseEvent) {
 }
 
 onMounted(() => {
-  mouseX = props.size / 2 + 16
-  mouseY = props.size / 2 + 8
+  const rect = canvasRef.value?.getBoundingClientRect()
+  mouseX = props.interactive && rect ? rect.left + props.size / 2 + 28 : props.size / 2 + 16
+  mouseY = props.interactive && rect ? rect.top + props.size / 2 + 8 : props.size / 2 + 8
   const eventTarget = props.interactive ? window : canvasRef.value
   eventTarget?.addEventListener('mousemove', handleMouse as EventListener)
   draw()

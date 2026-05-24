@@ -77,6 +77,8 @@
             <h2>快照列表</h2>
             <div class="batch-actions">
               <span class="muted">已选 {{ selectedSnapshotIds.length }} 项</span>
+              <button class="ghost-button small" type="button" @click="selectAllSnapshots">全选</button>
+              <button class="ghost-button small" type="button" @click="clearSelection">清空选择</button>
               <button class="ghost-button small" type="button" @click="batchBindUsecases">批量关联用例</button>
             </div>
           </div>
@@ -102,9 +104,10 @@
                 </div>
                 <div class="snapshot-actions">
                   <button class="ghost-button small" type="button" @click="openSingleUsecasePicker(snapshot.id)">关联用例</button>
-                  <RouterLink class="inline-link" :to="`/p/${projectId}/apps/${appId}/snapshots/${snapshot.id}`">
-                    查看详情
-                  </RouterLink>
+                  <RouterLink class="ghost-button small" :to="`/p/${projectId}/apps/${appId}/snapshots/${snapshot.id}`">查看详情</RouterLink>
+                  <RouterLink class="ghost-button small" :to="`/p/${projectId}/apps/${appId}/snapshots/${snapshot.id}/report`">覆盖率报告</RouterLink>
+                  <RouterLink class="ghost-button small" :to="`/p/${projectId}/apps/${appId}/snapshots/${snapshot.id}/graph`">链路图</RouterLink>
+                  <button class="danger-link" type="button" @click="removeSnapshot(snapshot.id, snapshot.title)">删除</button>
                 </div>
               </div>
             </article>
@@ -270,6 +273,14 @@ async function openSingleUsecasePicker(snapshotId: string) {
   }
 }
 
+function selectAllSnapshots() {
+  selectedSnapshotIds.value = payload.value?.snapshots.map((snapshot) => snapshot.id) || []
+}
+
+function clearSelection() {
+  selectedSnapshotIds.value = []
+}
+
 function batchBindUsecases() {
   if (!selectedSnapshotIds.value.length) {
     error.value = '请先选择至少一个系统快照'
@@ -279,6 +290,20 @@ function batchBindUsecases() {
   usecasePickerSnapshotId.value = ''
   usecasePickerSelectedIds.value = []
   usecasePickerOpen.value = true
+}
+
+async function removeSnapshot(snapshotId: string, title?: string) {
+  if (!window.confirm(`确认删除系统快照「${title || snapshotId}」？`)) return
+  loading.value = true
+  error.value = ''
+  try {
+    await projectStore.removeSystemSnapshot(projectId.value, appId.value, snapshotId)
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '删除系统快照失败'
+  } finally {
+    loading.value = false
+  }
 }
 
 async function submitUsecaseBinding(usecaseIds: string[]) {
@@ -385,8 +410,21 @@ onMounted(load)
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.status-card.error {
+.status-card.error,
+.danger-link {
   color: #b91c1c;
+}
+
+.danger-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.snapshot-actions a {
+  text-decoration: none;
 }
 
 .toolbar-card {

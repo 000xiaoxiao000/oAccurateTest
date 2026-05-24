@@ -18,9 +18,19 @@
         <section class="panel">
           <div class="card-title">
             <h2>方法覆盖列表</h2>
-            <span class="helper-text">{{ methods.length }} 个方法</span>
+            <span class="helper-text">{{ filteredMethods.length }} / {{ methods.length }} 个方法</span>
           </div>
-          <div v-if="!methods.length" class="empty-card">暂无方法覆盖数据</div>
+          <div class="method-filters">
+            <input v-model.trim="methodKeyword" class="text-input" type="text" placeholder="按方法名或签名筛选..." />
+            <select v-model="statusFilter" class="text-input">
+              <option value="">全部状态</option>
+              <option value="full">全覆盖</option>
+              <option value="partial">部分覆盖</option>
+              <option value="none">未覆盖</option>
+            </select>
+            <button class="ghost-button" type="button" @click="clearFilters">清空</button>
+          </div>
+          <div v-if="!filteredMethods.length" class="empty-card">暂无匹配的方法覆盖数据</div>
           <div v-else class="table-shell">
             <table class="method-table">
               <thead>
@@ -33,20 +43,20 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(method, index) in methods" :key="`${method.methodName}-${index}`">
+                <tr v-for="item in filteredMethods" :key="`${item.method.methodName}-${item.index}`">
                   <td class="method-name">
-                    <a class="table-link" :href="`#method-${index}`">{{ method.methodName }}</a>
-                    <small>{{ method.methodDesc || '-' }}</small>
+                    <a class="table-link" :href="`#method-${item.index}`">{{ item.method.methodName }}</a>
+                    <small>{{ item.method.methodDesc || '-' }}</small>
                   </td>
-                  <td>{{ method.coveredLines }} / {{ method.totalLines }} ({{ formatRate(method.coveredLines, method.totalLines) }})</td>
+                  <td>{{ item.method.coveredLines }} / {{ item.method.totalLines }} ({{ formatRate(item.method.coveredLines, item.method.totalLines) }})</td>
                   <td>
-                    {{ method.coveredBranchTargets }} / {{ method.totalBranchTargets }}
-                    ({{ formatBranchRate(method.branchRate, method.totalBranchTargets) }})
+                    {{ item.method.coveredBranchTargets }} / {{ item.method.totalBranchTargets }}
+                    ({{ formatBranchRate(item.method.branchRate, item.method.totalBranchTargets) }})
                   </td>
-                  <td>{{ method.complexity }}</td>
+                  <td>{{ item.method.complexity }}</td>
                   <td>
-                    <span :class="['status-pill', coverageTone(method)]">
-                      {{ coverageText(method) }}
+                    <span :class="['status-pill', coverageTone(item.method)]">
+                      {{ coverageText(item.method) }}
                     </span>
                   </td>
                 </tr>
@@ -63,11 +73,13 @@
           <div v-else class="empty-card">源码不可用</div>
         </section>
       </div>
+      <button class="back-to-top" type="button" @click="scrollTop">回到顶部</button>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 
@@ -84,6 +96,29 @@ const props = defineProps<{
   methods?: MethodCoverageSummary[]
   coloredSourceHtml?: string
 }>()
+
+const methodKeyword = ref('')
+const statusFilter = ref('')
+
+const filteredMethods = computed(() => {
+  const needle = methodKeyword.value.toLowerCase()
+  return (props.methods || [])
+    .map((method, index) => ({ method, index }))
+    .filter(({ method }) => {
+      if (!needle) return true
+      return [method.methodName, method.methodDesc].join(' ').toLowerCase().includes(needle)
+    })
+    .filter(({ method }) => !statusFilter.value || coverageStatus(method) === statusFilter.value)
+})
+
+function clearFilters() {
+  methodKeyword.value = ''
+  statusFilter.value = ''
+}
+
+function scrollTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
 function formatRate(covered = 0, total = 0) {
   if (!total) {
@@ -111,6 +146,13 @@ function coverageTone(method: MethodCoverageSummary) {
   return 'default'
 }
 
+function coverageStatus(method: MethodCoverageSummary) {
+  const tone = coverageTone(method)
+  if (tone === 'success') return 'full'
+  if (tone === 'warning') return 'partial'
+  return 'none'
+}
+
 function coverageText(method: MethodCoverageSummary) {
   const tone = coverageTone(method)
   if (tone === 'success') {
@@ -126,7 +168,8 @@ function coverageText(method: MethodCoverageSummary) {
 <style scoped>
 .page-header,
 .header-actions,
-.card-title {
+.card-title,
+.method-filters {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -164,6 +207,28 @@ function coverageText(method: MethodCoverageSummary) {
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.method-filters {
+  margin: 12px 0;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.text-input {
+  min-width: 180px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 12px;
+  padding: 9px 11px;
+}
+
+.ghost-button {
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 999px;
+  padding: 9px 12px;
+  background: rgba(15, 118, 110, .06);
+  color: #0f766e;
+  cursor: pointer;
 }
 
 .status-card.error {

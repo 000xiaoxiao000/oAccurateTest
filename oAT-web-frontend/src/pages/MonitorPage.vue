@@ -16,66 +16,99 @@
       <div class="overview-card">
         <span>在线探针</span>
         <strong>{{ probes.length }}</strong>
+        <small>当前项目已连接实例</small>
       </div>
       <div class="overview-card">
-        <span>Trace 数</span>
-        <strong>{{ traces.length }}</strong>
+        <span>项目应用</span>
+        <strong>{{ projectApps.length }}</strong>
+        <small>已纳入监控范围</small>
       </div>
       <div class="overview-card">
-        <span>当前图节点</span>
-        <strong>{{ graph?.nodes.length || 0 }}</strong>
+        <span>实时请求</span>
+        <strong>{{ filteredTraces.length }}</strong>
+        <small>当前过滤窗口内</small>
       </div>
       <div class="overview-card">
-        <span>自动刷新</span>
-        <strong>{{ autoRefresh ? `${refreshSeconds}s` : '关闭' }}</strong>
+        <span>最后接收</span>
+        <strong class="time-value">{{ lastReceiveText }}</strong>
+        <small>监控数据到达时间</small>
       </div>
     </div>
 
-    <section class="panel probe-panel">
+    <section class="panel probe-panel probe-dashboard-card">
       <div class="panel-head">
         <div>
           <h2>探针状态</h2>
-          <p>按 IP、应用、工程或 Agent 版本过滤当前在线实例。</p>
+          <p>点击探针可快速过滤 IP。</p>
         </div>
-        <input v-model.trim="probeKeyword" class="text-input compact" type="text" placeholder="搜索探针" />
+        <div class="header-actions">
+          <input v-model.trim="probeKeyword" class="text-input compact" type="text" placeholder="搜索应用、IP、PID、Agent" />
+          <button class="ghost-button" type="button" @click="loadProbes">刷新探针状态</button>
+        </div>
       </div>
+      <div class="probe-summary">在线 {{ filteredProbes.length }} / {{ probes.length }} 个探针</div>
       <div v-if="probeLoading" class="status-card">正在加载探针...</div>
       <div v-else-if="probeError" class="status-card error">{{ probeError }}</div>
       <div v-else-if="filteredProbes.length === 0" class="status-card">暂无在线探针</div>
       <div v-else class="probe-grid">
-        <article v-for="probe in filteredProbes" :key="probeKey(probe)" class="probe-card">
+        <button v-for="probe in filteredProbes" :key="probeKey(probe)" class="probe-card" :class="{ active: selectedClientIps.includes(probe.addressIp || '') }" type="button" @click="toggleProbeFilter(probe)">
+          <span class="probe-status-dot"></span>
           <strong>{{ probe.appName || '未定义应用' }}</strong>
           <span>{{ probe.addressIp || '-' }} · PID {{ probe.pid || '-' }}</span>
           <small>{{ probe.projectSrcName || '-' }} · {{ probe.agentVersion || 'unknown agent' }}</small>
           <small>在线 {{ probe.onlineTime || '-' }}</small>
-        </article>
+        </button>
       </div>
     </section>
 
-    <div class="monitor-grid">
+    <section class="monitor-toolbar panel">
+      <div class="toolbar-left">
+        <strong>条件过滤：</strong>
+        <select v-model.number="upToTime" class="text-input time-select">
+          <option :value="60">一分钟内</option>
+          <option :value="180">三分钟内</option>
+          <option :value="300">五分钟内</option>
+          <option :value="1800">三十分钟内</option>
+        </select>
+        <select v-model="selectedAppIds" class="text-input app-select" multiple>
+          <option v-for="app in projectApps" :key="app.id" :value="app.id">{{ app.name }}</option>
+        </select>
+        <select v-model="selectedClientIps" class="text-input app-select" multiple>
+          <option v-for="ip in availableClientIps" :key="ip" :value="ip">{{ ip }}</option>
+        </select>
+        <input v-model.number="maxSize" class="text-input size-input" type="number" min="10" max="500" />
+        <button class="ghost-button" type="button" @click="loadTraces">查询</button>
+      </div>
+      <div class="toolbar-right">
+        <div class="snapshot-actions" :class="{ disabled: !selectedTraceId }">
+          <button class="action-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">保存快照</button>
+          <div class="snapshot-menu">
+            <button type="button" :disabled="!selectedTraceId || savingSnapshot" @click="saveMySnapshot">我的快照</button>
+            <button type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">系统快照</button>
+          </div>
+        </div>
+        <label class="auto-refresh"><input v-model="autoSaveMySnapshot" type="checkbox" /> 自动保存我的快照</label>
+        <label class="auto-refresh"><input v-model="autoSaveSystemSnapshot" type="checkbox" /> 自动保存系统快照</label>
+      </div>
+    </section>
+
+    <div class="monitor-grid" :style="monitorGridStyle">
       <section class="panel trace-panel">
         <div class="panel-head trace-head">
           <div>
             <h2>Trace 列表</h2>
             <p>点击 trace 加载拓扑图。</p>
           </div>
-          <label class="auto-refresh">
-            <input v-model="autoRefresh" type="checkbox" />
-            自动刷新
-          </label>
+          <div class="auto-refresh-controls">
+            <label class="auto-refresh"><input v-model="autoRefresh" type="checkbox" /> 自动刷新</label>
+            <input v-model.number="refreshSeconds" class="text-input refresh-input" type="number" min="3" max="120" />
+            <span>{{ autoRefresh ? '运行中' : '已暂停' }}</span>
+          </div>
         </div>
 
         <div class="toolbar">
           <input v-model.trim="traceKeyword" class="text-input" type="text" placeholder="搜索 URL / traceId / IP" />
-          <select v-model.number="upToTime" class="text-input time-select">
-            <option :value="60">一分钟内</option>
-            <option :value="180">三分钟内</option>
-            <option :value="300">五分钟内</option>
-            <option :value="600">十分钟内</option>
-            <option :value="1800">三十分钟内</option>
-          </select>
-          <input v-model.number="maxSize" class="text-input size-input" type="number" min="10" max="500" />
-          <button class="ghost-button" type="button" @click="loadTraces">查询</button>
+          <button class="ghost-button" type="button" @click="clearMonitorFilters">清空过滤</button>
         </div>
 
         <div v-if="traceLoading" class="status-card">正在加载 trace...</div>
@@ -97,17 +130,18 @@
         </div>
       </section>
 
+      <div class="monitor-resizer" @pointerdown="startResize"><span>拖拽调整宽度</span></div>
+
       <section class="panel graph-panel">
         <div class="panel-head">
           <div>
-            <h2>调用拓扑</h2>
-            <p>{{ selectedTraceId || '请选择左侧 trace' }}</p>
+            <h2>{{ graph ? '实时监控详情' : '实时请求示波器' }}</h2>
+            <p>{{ selectedTraceId || oscilloscopeSubtitle }}</p>
           </div>
           <div class="header-actions">
+            <button v-if="graph" class="ghost-button" type="button" @click="showOscilloscope">返回示波器</button>
             <button class="ghost-button" type="button" :disabled="!selectedTraceId || graphLoading" @click="loadGraph">重载拓扑</button>
-            <button class="ghost-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="autoSaveSnapshot">
-              自动保存
-            </button>
+            <button class="ghost-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="autoSaveSnapshot">自动保存系统</button>
             <button class="action-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">
               {{ savingSnapshot ? '保存中...' : '保存系统快照' }}
             </button>
@@ -116,7 +150,28 @@
 
         <div v-if="graphLoading" class="status-card">正在加载拓扑...</div>
         <div v-else-if="graphError" class="status-card error">{{ graphError }}</div>
-        <div v-else-if="!graph" class="status-card">还没有加载拓扑图</div>
+        <div v-else-if="!graph" class="oscilloscope-card">
+          <div class="oscilloscope-header">
+            <div>
+              <strong>实时请求示波器</strong>
+              <p>{{ oscilloscopeSubtitle }}</p>
+            </div>
+            <div class="oscilloscope-actions">
+              <button class="ghost-button" :class="{ active: scopeMode === 'aggregate' }" type="button" @click="setScopeMode('aggregate')">全部探针</button>
+              <button class="ghost-button" :class="{ active: scopeMode === 'single' }" type="button" @click="setScopeMode('single')">当前探针</button>
+              <button class="ghost-button" :class="{ active: scopeMode === 'lanes' }" type="button" @click="setScopeMode('lanes')">多探针泳道</button>
+            </div>
+          </div>
+          <div class="wave-board">
+            <div v-if="!wavePoints.length" class="wave-empty">暂无请求波形<br /><small>当监控列表收到请求后，每个请求会形成一个圆点</small></div>
+            <span v-for="point in wavePoints" :key="point.id" class="wave-point" :style="{ left: `${point.x}%`, top: `${point.y}%` }" :title="point.title"></span>
+          </div>
+          <div class="monitor-request-summary">
+            <div><span>最新请求</span><strong>{{ latestTrace?.title || '暂无' }}</strong></div>
+            <div><span>请求来源</span><strong>{{ latestTraceSource }}</strong></div>
+            <div><span>操作提示</span><strong>点击左侧请求查看链路详情</strong></div>
+          </div>
+        </div>
         <template v-else>
           <div class="graph-board">
             <svg class="graph-svg" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet">
@@ -259,16 +314,20 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import { fetchMonitorSnapshotContext, saveMonitorSystemSnapshot, uploadResource } from '@/api/bootstrap'
+import { useProjectStore } from '@/stores/project'
 import { apiGet, apiGetRaw, apiPost } from '@/api/http'
-import type { GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload, MonitorSnapshotContextPayload, OnlineSessionSummary, TraceItemSummary } from '@/api/types'
+import type { AppSummary, GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload, MonitorSnapshotContextPayload, OnlineSessionSummary, TraceItemSummary } from '@/api/types'
 import GraphNodeDetailCard from '@/components/snapshot/GraphNodeDetailCard.vue'
 
 type PositionedNode = GraphNodeSummary & { x: number; y: number }
 type PositionedEdge = GraphEdgeSummary & { x1: number; y1: number; x2: number; y2: number; mx: number; my: number }
 
 const route = useRoute()
+const projectStore = useProjectStore()
 const projectId = computed(() => String(route.params.projectId || ''))
 const selectedAppId = computed(() => String(route.query.appId || ''))
+const projectContext = computed(() => projectId.value ? projectStore.contextByProjectId[projectId.value] : undefined)
+const projectApps = computed<AppSummary[]>(() => projectContext.value?.apps || [])
 
 const probes = ref<OnlineSessionSummary[]>([])
 const traces = ref<TraceItemSummary[]>([])
@@ -278,10 +337,16 @@ const selectedNodeId = ref('')
 const selectedNodeDetail = ref<GraphNodeDetailPayload | null>(null)
 const probeKeyword = ref('')
 const traceKeyword = ref('')
+const selectedAppIds = ref<string[]>([])
+const selectedClientIps = ref<string[]>([])
 const upToTime = ref(180)
 const maxSize = ref(100)
 const autoRefresh = ref(false)
+const autoSaveMySnapshot = ref(false)
+const autoSaveSystemSnapshot = ref(false)
 const refreshSeconds = ref(5)
+const scopeMode = ref<'aggregate' | 'single' | 'lanes'>('aggregate')
+const monitorListWidth = ref(380)
 const probeLoading = ref(false)
 const traceLoading = ref(false)
 const graphLoading = ref(false)
@@ -309,6 +374,18 @@ const snapshotForm = ref({
   principals: [] as string[],
 })
 let refreshTimer: number | undefined
+const autoSavedTraceIds = {
+  my: new Set<string>(),
+  system: new Set<string>(),
+}
+
+watch(selectedAppId, (value) => {
+  selectedAppIds.value = value ? [value] : []
+}, { immediate: true })
+
+watch(projectId, (value) => {
+  if (value) projectStore.loadProjectContext(value).catch(() => undefined)
+}, { immediate: true })
 
 const filteredProbes = computed(() => {
   const needle = probeKeyword.value.toLowerCase()
@@ -325,10 +402,31 @@ const filteredTraces = computed(() => {
     const haystack = [trace.traceId, trace.title, trace.addressIp, trace.clientIp, trace.appId]
       .join(' ')
       .toLowerCase()
-    const matchesApp = !selectedAppId.value || trace.appId === selectedAppId.value
+    const matchesApp = !selectedAppIds.value.length || selectedAppIds.value.includes(trace.appId || '')
+    const traceIp = trace.clientIp || trace.addressIp || ''
+    const matchesIp = !selectedClientIps.value.length || selectedClientIps.value.includes(traceIp)
+      || selectedClientIps.value.includes(trace.addressIp || '')
     return matchesApp && (!needle || haystack.includes(needle))
+      && matchesIp
   })
 })
+
+const latestTrace = computed(() => filteredTraces.value[0])
+const latestTraceSource = computed(() => latestTrace.value ? `${latestTrace.value.addressIp || '-'}${latestTrace.value.clientIp ? ` / ${latestTrace.value.clientIp}` : ''}` : '-')
+const lastReceiveText = computed(() => formatTraceTime(latestTrace.value?.cacheTime))
+const availableClientIps = computed(() => Array.from(new Set(probes.value.map((probe) => probe.addressIp).filter((ip): ip is string => Boolean(ip)))))
+const monitorGridStyle = computed(() => ({ gridTemplateColumns: `${monitorListWidth.value}px 10px minmax(0, 1fr)` }))
+const oscilloscopeSubtitle = computed(() => {
+  if (scopeMode.value === 'single') return selectedClientIps.value[0] ? `当前探针：${selectedClientIps.value[0]}` : '当前探针：请点击左侧探针'
+  if (scopeMode.value === 'lanes') return '多探针泳道：按 IP 分组展示请求脉冲'
+  return '聚合全部探针：圆点 = 一次请求；折线 = 请求脉冲趋势；扫描线 = 实时监听节奏'
+})
+const wavePoints = computed(() => filteredTraces.value.slice(0, 80).map((trace, index, list) => ({
+  id: trace.traceId || `${trace.cacheTime}-${index}`,
+  title: trace.title || trace.traceId,
+  x: list.length <= 1 ? 50 : 4 + (index / (list.length - 1)) * 92,
+  y: 20 + ((trace.title || trace.traceId || '').length * 17 + index * 11) % 58,
+})))
 
 const nodePositions = computed<PositionedNode[]>(() => {
   const nodes = graph.value?.nodes || []
@@ -360,6 +458,10 @@ watch(autoRefresh, (enabled) => {
   else stopRefreshTimer()
 })
 
+watch(refreshSeconds, () => {
+  if (autoRefresh.value) startRefreshTimer()
+})
+
 async function refreshAll() {
   await Promise.all([loadProbes(), loadTraces()])
   if (!selectedTraceId.value && traces.value[0]) {
@@ -386,7 +488,10 @@ async function loadTraces() {
     const query = new URLSearchParams()
     query.set('upToTime', String(upToTime.value || 180))
     query.set('maxSize', String(maxSize.value || 100))
+    selectedAppIds.value.forEach((appId) => query.append('appIds', appId))
+    selectedClientIps.value.forEach((ip) => query.append('clientIps', ip))
     traces.value = await apiGetRaw<TraceItemSummary[]>(`/p/${projectId.value}/monitor/getNodeByTime?${query.toString()}`)
+    await runAutoSaveForNewTraces(traces.value)
   } catch (err) {
     traceError.value = err instanceof Error ? err.message : '加载 trace 失败'
   } finally {
@@ -399,6 +504,42 @@ async function selectTrace(trace: TraceItemSummary) {
   selectedNodeId.value = ''
   selectedNodeDetail.value = null
   await loadGraph()
+}
+
+function showOscilloscope() {
+  graph.value = null
+  selectedNodeId.value = ''
+  selectedNodeDetail.value = null
+}
+
+function toggleProbeFilter(probe: OnlineSessionSummary) {
+  const ip = probe.addressIp
+  if (!ip) return
+  if (scopeMode.value === 'single') {
+    selectedClientIps.value = [ip]
+  } else if (selectedClientIps.value.includes(ip)) {
+    selectedClientIps.value = selectedClientIps.value.filter((item) => item !== ip)
+  } else {
+    selectedClientIps.value = [...selectedClientIps.value, ip]
+  }
+  scopeMode.value = 'single'
+  loadTraces()
+}
+
+function setScopeMode(mode: 'aggregate' | 'single' | 'lanes') {
+  scopeMode.value = mode
+  if (mode !== 'single') {
+    selectedClientIps.value = []
+  }
+  loadTraces()
+}
+
+function clearMonitorFilters() {
+  traceKeyword.value = ''
+  selectedAppIds.value = []
+  selectedClientIps.value = []
+  scopeMode.value = 'aggregate'
+  loadTraces()
 }
 
 async function loadGraph() {
@@ -456,6 +597,44 @@ async function autoSaveSnapshot() {
     snapshotNotice.value = err instanceof Error ? err.message : '保存系统快照失败'
   } finally {
     savingSnapshot.value = false
+  }
+}
+
+async function saveMySnapshot() {
+  if (!selectedTraceId.value) return
+  savingSnapshot.value = true
+  snapshotNotice.value = ''
+  try {
+    const selectedTrace = traces.value.find((trace) => trace.traceId === selectedTraceId.value)
+    const body = new URLSearchParams()
+    body.set('traceId', selectedTraceId.value)
+    body.set('autoSave', 'true')
+    body.set('name', buildAutoSnapshotName('自动快照', selectedTrace?.title || graph.value?.title || selectedTraceId.value))
+    body.set('describe', '实时监控自动保存')
+    body.append('labels', '自动保存')
+    body.append('labels', '实时监控')
+    const result = await apiPost<unknown>(`/p/${projectId.value}/snapshot/save`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
+    snapshotNotice.value = extractResultMessage(result, '我的快照已保存')
+  } catch (err) {
+    snapshotNotice.value = err instanceof Error ? err.message : '保存我的快照失败'
+  } finally {
+    savingSnapshot.value = false
+  }
+}
+
+async function runAutoSaveForNewTraces(items: TraceItemSummary[]) {
+  for (const item of items.slice(0, 5)) {
+    if (!item.traceId) continue
+    if (autoSaveMySnapshot.value && !autoSavedTraceIds.my.has(item.traceId)) {
+      autoSavedTraceIds.my.add(item.traceId)
+      selectedTraceId.value = item.traceId
+      await saveMySnapshot()
+    }
+    if (autoSaveSystemSnapshot.value && !autoSavedTraceIds.system.has(item.traceId)) {
+      autoSavedTraceIds.system.add(item.traceId)
+      selectedTraceId.value = item.traceId
+      await autoSaveSnapshot()
+    }
   }
 }
 
@@ -546,9 +725,10 @@ async function submitSnapshotForm() {
 function startRefreshTimer() {
   stopRefreshTimer()
   refreshTimer = window.setInterval(() => {
+    if (document.hidden) return
     loadProbes()
     loadTraces()
-  }, Math.max(2, refreshSeconds.value) * 1000)
+  }, Math.min(120, Math.max(3, refreshSeconds.value || 10)) * 1000)
 }
 
 function stopRefreshTimer() {
@@ -562,7 +742,49 @@ function probeKey(probe: OnlineSessionSummary) {
   return `${probe.addressIp || ''}-${probe.pid || ''}-${probe.systemDir || ''}-${probe.appName || ''}`
 }
 
-onMounted(refreshAll)
+function formatTraceTime(value?: number) {
+  if (!value) return '等待中'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '等待中'
+  return date.toLocaleTimeString()
+}
+
+function buildAutoSnapshotName(prefix: string, title: string) {
+  const normalizedTitle = (title || '未命名链路').trim().slice(0, 24)
+  const now = new Date()
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  return `${prefix}-${normalizedTitle}-${timestamp}`
+}
+
+function extractResultMessage(result: unknown, fallback: string) {
+  if (typeof result === 'string') return result || fallback
+  if (result && typeof result === 'object' && 'message' in result) {
+    return String((result as { message?: unknown }).message || fallback)
+  }
+  return fallback
+}
+
+function startResize(event: PointerEvent) {
+  const startX = event.clientX
+  const startWidth = monitorListWidth.value
+  const move = (moveEvent: PointerEvent) => {
+    monitorListWidth.value = Math.min(Math.max(startWidth + moveEvent.clientX - startX, 280), Math.max(320, window.innerWidth - 420))
+    localStorage.setItem(`monitor:list-width:${projectId.value}`, String(monitorListWidth.value))
+  }
+  const up = () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+}
+
+onMounted(() => {
+  const savedWidth = Number(localStorage.getItem(`monitor:list-width:${projectId.value}`))
+  if (savedWidth) monitorListWidth.value = savedWidth
+  refreshAll()
+})
 onBeforeUnmount(stopRefreshTimer)
 </script>
 
@@ -666,6 +888,17 @@ onBeforeUnmount(stopRefreshTimer)
   font-size: 30px;
 }
 
+.overview-card small {
+  display: block;
+  margin-top: 6px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.overview-card .time-value {
+  font-size: 20px;
+}
+
 .panel,
 .status-card {
   padding: 20px;
@@ -677,6 +910,17 @@ onBeforeUnmount(stopRefreshTimer)
 
 .probe-panel {
   margin-bottom: 16px;
+}
+
+.probe-dashboard-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(245, 251, 255, .96));
+}
+
+.probe-summary {
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .text-input {
@@ -700,6 +944,21 @@ onBeforeUnmount(stopRefreshTimer)
   width: 96px;
 }
 
+.refresh-input {
+  width: 70px;
+  padding: 7px 9px;
+}
+
+.time-select {
+  width: 130px;
+}
+
+.app-select {
+  min-width: 150px;
+  max-width: 220px;
+  min-height: 42px;
+}
+
 .probe-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -708,17 +967,123 @@ onBeforeUnmount(stopRefreshTimer)
 }
 
 .probe-card {
+  position: relative;
   display: grid;
   gap: 6px;
   padding: 14px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  text-align: left;
+  cursor: pointer;
   box-shadow: none;
+}
+
+.probe-card.active {
+  border-color: #0f766e;
+  background: #ecfdf5;
+}
+
+.probe-status-dot {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #22c55e;
+  box-shadow: 0 0 0 6px rgba(34, 197, 94, .12);
+}
+
+.monitor-toolbar {
+  position: sticky;
+  top: 76px;
+  z-index: 8;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  backdrop-filter: blur(14px);
+}
+
+.toolbar-left,
+.toolbar-right,
+.auto-refresh-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.toolbar-right {
+  justify-content: flex-end;
+}
+
+.snapshot-actions {
+  position: relative;
+}
+
+.snapshot-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 12;
+  min-width: 130px;
+  display: none;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, .10);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .14);
+}
+
+.snapshot-actions:hover .snapshot-menu,
+.snapshot-actions:focus-within .snapshot-menu {
+  display: grid;
+  gap: 4px;
+}
+
+.snapshot-menu button {
+  border: none;
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: transparent;
+  color: #334155;
+  text-align: left;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.snapshot-menu button:hover {
+  background: rgba(15, 118, 110, .08);
+  color: #0f766e;
 }
 
 .monitor-grid {
   display: grid;
-  grid-template-columns: minmax(320px, .72fr) minmax(0, 1.28fr);
-  gap: 16px;
-  align-items: start;
+  gap: 0;
+  align-items: stretch;
+  min-height: 620px;
+}
+
+.monitor-grid > .panel {
+  min-width: 0;
+}
+
+.monitor-resizer {
+  display: grid;
+  place-items: center;
+  cursor: col-resize;
+  color: #94a3b8;
+}
+
+.monitor-resizer span {
+  writing-mode: vertical-rl;
+  padding: 10px 2px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .06);
+  font-size: 11px;
+  font-weight: 800;
 }
 
 .trace-panel,
@@ -736,6 +1101,7 @@ onBeforeUnmount(stopRefreshTimer)
   gap: 8px;
   color: #64748b;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .trace-list {
@@ -758,6 +1124,102 @@ onBeforeUnmount(stopRefreshTimer)
 .trace-item.active {
   border-color: #0f766e;
   background: #ecfdf5;
+}
+
+.oscilloscope-card {
+  display: grid;
+  gap: 14px;
+}
+
+.oscilloscope-header,
+.oscilloscope-actions,
+.monitor-request-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.oscilloscope-header p {
+  margin: 5px 0 0;
+  color: #64748b;
+}
+
+.ghost-button.active {
+  background: #0f766e;
+  color: #fff;
+}
+
+.wave-board {
+  position: relative;
+  height: 310px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 22px;
+  background:
+    linear-gradient(rgba(20, 184, 166, .10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 184, 166, .10) 1px, transparent 1px),
+    radial-gradient(circle at center, rgba(20, 184, 166, .08), transparent 48%),
+    #07111f;
+  background-size: 28px 28px, 28px 28px, auto, auto;
+}
+
+.wave-board::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(45, 212, 191, .14), transparent);
+  animation: scan-line 3.6s linear infinite;
+}
+
+@keyframes scan-line {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(320%); }
+}
+
+.wave-point {
+  position: absolute;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #2dd4bf;
+  box-shadow: 0 0 0 7px rgba(45, 212, 191, .12), 0 0 18px rgba(45, 212, 191, .8);
+}
+
+.wave-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: rgba(226, 232, 240, .86);
+  text-align: center;
+  font-weight: 900;
+}
+
+.monitor-request-summary > div {
+  flex: 1 1 180px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 18px;
+  background: #f8fafc;
+}
+
+.monitor-request-summary span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.monitor-request-summary strong {
+  color: #1f2937;
+  word-break: break-all;
 }
 
 .graph-board {
@@ -951,7 +1413,17 @@ onBeforeUnmount(stopRefreshTimer)
   .monitor-grid,
   .node-detail-grid,
   .snapshot-form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
+  }
+
+  .monitor-resizer {
+    display: none;
+  }
+
+  .monitor-toolbar {
+    position: static;
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .page-header,

@@ -62,6 +62,11 @@
             <h2>全量报告</h2>
             <span>{{ payload.report?.createTimeText || '-' }}</span>
           </div>
+          <div v-if="payload.report" class="report-actions">
+            <RouterLink class="ghost-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }">明细</RouterLink>
+            <a class="ghost-link" :href="`/p/${projectId}/coverage/export?reportId=${payload.report.id}`">导出报告</a>
+            <a class="ghost-link" :href="`/p/${projectId}/coverage/export-methods?reportId=${payload.report.id}`">导出方法</a>
+          </div>
           <div v-if="payload.report" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.report.versionNumber || '-' }}</strong></div>
             <div class="info-item"><span>分支</span><strong>{{ payload.report.repoBranch || '-' }}</strong></div>
@@ -77,6 +82,11 @@
           <div class="panel-head">
             <h2>增量报告</h2>
             <span>{{ payload.incrementalReport?.createTimeText || '-' }}</span>
+          </div>
+          <div v-if="payload.incrementalReport" class="report-actions">
+            <RouterLink class="ghost-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }">明细</RouterLink>
+            <a class="ghost-link" :href="`/p/${projectId}/coverage/export?reportId=${payload.incrementalReport.id}`">导出报告</a>
+            <a class="ghost-link" :href="`/p/${projectId}/coverage/export-methods?reportId=${payload.incrementalReport.id}`">导出方法</a>
           </div>
           <div v-if="payload.incrementalReport" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.incrementalReport.versionNumber || '-' }}</strong></div>
@@ -479,6 +489,13 @@ onMounted(load)
 .text-button.danger,
 .error-text {
   color: #b91c1c;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
 }
 
 .trend-list {

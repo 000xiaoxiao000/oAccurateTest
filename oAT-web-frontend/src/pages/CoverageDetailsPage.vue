@@ -8,6 +8,8 @@
       </div>
       <div class="header-actions">
         <RouterLink class="secondary-link" :to="backRoute">返回概览</RouterLink>
+        <a v-if="reportId" class="secondary-link" :href="`/p/${projectId}/coverage/export?reportId=${reportId}`">导出报告</a>
+        <a v-if="reportId" class="secondary-link" :href="`/p/${projectId}/coverage/export-methods?reportId=${reportId}`">导出方法</a>
       </div>
     </div>
 

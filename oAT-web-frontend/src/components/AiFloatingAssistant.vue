@@ -2,9 +2,9 @@
   <div v-if="projectId && context" ref="rootRef" class="ai-floating" :class="{ open: panelOpen, hidden: mascotHidden }" :style="floatingStyle">
     <button v-if="mascotHidden" class="restore-button" type="button" @pointerdown="startDrag" @click="showMascot">显示AI助手</button>
 
-    <button v-else class="launcher" type="button" title="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
+    <button v-else class="launcher" type="button" title="打开 AI 助手" data-tooltip="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
       <MascotCanvas :size="88" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" />
-      <span>AI 助手</span>
+      <span v-if="showLauncherLabel">AI 助手</span>
     </button>
 
     <section v-if="!mascotHidden && panelOpen" ref="panelRef" class="assistant-panel" :style="panelStyle">
@@ -15,6 +15,8 @@
         </div>
         <div class="panel-tools">
           <button type="button" title="恢复默认位置和尺寸" @click="resetLayout">↺</button>
+          <button type="button" :title="layoutLocked ? '解锁内部布局拖动' : '锁定内部布局'" @click="toggleLayoutLock">{{ layoutLocked ? '🔒' : '🔓' }}</button>
+          <button type="button" title="撤销上一步内部布局调整" @click="undoLayout">↶</button>
           <button type="button" title="清空当前助手对话" @click="clearConversation">清空</button>
           <RouterLink :to="`/p/${projectId}/ai`">工作台</RouterLink>
           <button type="button" title="隐藏小人" @click="hideMascot">-</button>
@@ -128,6 +130,7 @@ const panelSize = ref<PanelSize | null>(null)
 const collapsedSections = ref<SectionName[]>([])
 const layoutLocked = ref(false)
 const dragMoved = ref(false)
+const showLauncherLabel = ref(false)
 let layoutUndoSnapshot: { position: FloatingPosition | null; panelSize: PanelSize | null; collapsedSections: SectionName[] } | null = null
 let resizeObserver: ResizeObserver | null = null
 let recognition: SpeechRecognitionLike | null = null
@@ -184,6 +187,7 @@ function restoreState() {
   panelSize.value = readJson<PanelSize | null>(`${storagePrefix.value}:panel-size`, null)
   collapsedSections.value = readJson<SectionName[]>(`${storagePrefix.value}:sections`, [])
   layoutLocked.value = localStorage.getItem(`${storagePrefix.value}:layout-locked`) === '1'
+  showLauncherLabel.value = localStorage.getItem(`${storagePrefix.value}:show-label`) === '1'
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -487,18 +491,49 @@ onBeforeUnmount(() => {
 .launcher {
   display: grid;
   place-items: center;
-  width: 108px;
-  min-height: 118px;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, .92);
-  border: 1px solid rgba(15, 23, 42, .08);
+  width: 96px;
+  min-height: 96px;
+  padding: 4px;
+  border-radius: 999px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .launcher span {
-  margin-top: -6px;
+  position: absolute;
+  bottom: -4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
   color: #0f766e;
   font-size: 12px;
   font-weight: 900;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .12);
+}
+
+.launcher::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 96px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: max-content;
+  max-width: 140px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .86);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.launcher:hover::after {
+  opacity: 1;
+  transform: translate(-4px, -50%);
 }
 
 .restore-button {

@@ -133,8 +133,12 @@ public class MonitorControl {
         if (filter == null) {
             filter = new TraceItemSearchParam();
         }
-        List<String> appIds = getAppIds(projectId);
-        filter.setAppIds(appIds);
+        List<String> projectAppIds = getAppIds(projectId);
+        if (filter.getAppIds() == null || filter.getAppIds().isEmpty()) {
+            filter.setAppIds(projectAppIds);
+        } else {
+            filter.getAppIds().removeIf(appId -> !projectAppIds.contains(appId));
+        }
         // 默认值
         if (filter.getMaxSize() == null) {
             filter.setMaxSize(defaultMaxSize);

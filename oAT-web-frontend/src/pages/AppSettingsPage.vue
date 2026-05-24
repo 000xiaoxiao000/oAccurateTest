@@ -112,19 +112,34 @@
           <RouterLink class="secondary-link" :to="`/p/${projectId}/monitor`">
             实时监控
           </RouterLink>
+          <button class="danger-button" type="button" @click="deleteDialogOpen = true">删除应用</button>
         </div>
       </form>
     </template>
+
+    <div v-if="deleteDialogOpen" class="modal-mask" @click.self="deleteDialogOpen = false">
+      <form class="modal-card" @submit.prevent="removeApp">
+        <h2>删除应用</h2>
+        <p class="subtext">此操作会删除当前应用及相关配置，请输入当前账号密码确认。</p>
+        <input v-model="deletePassword" class="text-input" type="password" placeholder="请输入密码" />
+        <p v-if="deleteError" class="error-text">{{ deleteError }}</p>
+        <div class="actions">
+          <button class="danger-button solid" type="submit" :disabled="loading">确认删除</button>
+          <button class="secondary-button" type="button" @click="deleteDialogOpen = false">取消</button>
+        </div>
+      </form>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
+const router = useRouter()
 const projectStore = useProjectStore()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
@@ -132,6 +147,9 @@ const storeKey = computed(() => `${projectId.value}:${appId.value}`)
 const payload = computed(() => projectStore.appSettingsByKey[storeKey.value])
 const loading = ref(false)
 const error = ref('')
+const deleteDialogOpen = ref(false)
+const deletePassword = ref('')
+const deleteError = ref('')
 
 const form = reactive({
   name: '',
@@ -188,6 +206,23 @@ async function load() {
   }
 }
 
+async function removeApp() {
+  if (!deletePassword.value) {
+    deleteError.value = '请输入密码'
+    return
+  }
+  loading.value = true
+  deleteError.value = ''
+  try {
+    await projectStore.removeManagedApp(projectId.value, appId.value, deletePassword.value)
+    await router.push(`/p/${projectId.value}/apps`)
+  } catch (err) {
+    deleteError.value = err instanceof Error ? err.message : '删除应用失败'
+  } finally {
+    loading.value = false
+  }
+}
+
 async function save() {
   loading.value = true
   error.value = ''
@@ -222,12 +257,29 @@ onMounted(load)
 }
 
 .action-button,
-.primary-button {
+.primary-button,
+.secondary-button,
+.danger-button {
   border: none;
   border-radius: 999px;
   padding: 10px 14px;
   color: #fff;
   cursor: pointer;
+}
+
+.secondary-button {
+  color: #0f766e;
+  background: rgba(15, 118, 110, .08);
+}
+
+.danger-button {
+  color: #b91c1c;
+  background: rgba(185, 28, 28, .1);
+}
+
+.danger-button.solid {
+  background: #b91c1c;
+  color: #fff;
 }
 
 .action-button {
@@ -244,15 +296,31 @@ onMounted(load)
 }
 
 .status-card,
-.form-card {
+.form-card,
+.modal-card {
   padding: 18px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.status-card.error {
+.status-card.error,
+.error-text {
   color: #b91c1c;
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .44);
+}
+
+.modal-card {
+  width: min(460px, calc(100vw - 32px));
 }
 
 .form-grid {

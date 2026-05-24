@@ -5,7 +5,7 @@
         v-for="item in mascotItems"
         :key="item.seed"
         class="login-mascot"
-        :style="{ left: item.left, top: item.top, animationDelay: item.delay }"
+        :style="{ left: item.left, top: item.top, animationDelay: item.delay, transform: `rotate(${item.rotate})` }"
         :size="item.size"
         :color="item.color"
         :seed="item.seed"
@@ -14,26 +14,35 @@
     </div>
     <div class="login-card" :class="{ 'shake-animation': Boolean(error), 'auth-submitting': submitting }">
       <div v-if="submitting" class="submit-overlay">{{ isRegisterMode ? '正在注册，请稍候...' : '正在登录，请稍候...' }}</div>
-      <div class="login-label">Unified Entry</div>
-      <h1>{{ isRegisterMode ? '注册 oAT 新前端账号' : '登录 oAT 新前端' }}</h1>
-      <p>{{ isRegisterMode ? '创建账号后回到登录页，后续默认进入前后端分离工作台。' : '登录成功后会回到当前目标页面，后续已迁移模块默认进入前后端分离工作台。' }}</p>
+      <div class="auth-brand">
+        <MascotCanvas class="brand-mascot" :size="60" color="#00b5ad" seed="login-brand" :mood="error ? 'error' : 'happy'" />
+        <div>
+          <h1>{{ isRegisterMode ? '账号注册' : '账号登录' }}</h1>
+          <p>{{ isRegisterMode ? '创建账号后继续管理你的测试资产' : '欢迎回来，继续管理你的测试资产' }}</p>
+        </div>
+      </div>
 
       <form v-if="!isRegisterMode" class="login-form" @submit.prevent="submitLogin">
         <label class="field">
-          <span>用户名或邮箱</span>
-          <input v-model.trim="loginForm.nameOrEmail" class="text-input" type="text" autocomplete="username" />
+          <span>用户名或邮箱 <b>*</b></span>
+          <div class="input-with-icon">
+            <span>👤</span>
+            <input v-model.trim="loginForm.nameOrEmail" class="text-input" type="text" autocomplete="username" placeholder="请输入用户名或邮箱地址" />
+          </div>
         </label>
         <label class="field">
-          <span>密码</span>
-          <div class="password-row">
+          <span>密码 <b>*</b></span>
+          <div class="password-row input-with-icon">
+            <span>🔒</span>
             <input
               v-model="loginForm.password"
               class="text-input"
               :type="showLoginPassword ? 'text' : 'password'"
               autocomplete="current-password"
+              placeholder="请输入密码"
             />
             <button class="password-toggle" type="button" @click="showLoginPassword = !showLoginPassword">
-              {{ showLoginPassword ? '隐藏' : '显示' }}
+              {{ showLoginPassword ? '🙈' : '👁' }}
             </button>
           </div>
         </label>
@@ -43,21 +52,21 @@
         <button class="login-button" type="submit" :disabled="submitting">
           {{ submitting ? '登录中...' : '登录' }}
         </button>
-        <RouterLink class="mode-link" to="/register">注册新账号</RouterLink>
+        <div class="auth-link-row"><span>还没有账号？</span><RouterLink class="mode-link" to="/register">立即注册</RouterLink></div>
       </form>
 
       <form v-else class="login-form" @submit.prevent="submitRegister">
         <label class="field">
-          <span>用户名</span>
-          <input v-model.trim="registerForm.name" class="text-input" type="text" autocomplete="username" pattern="^[A-Za-z0-9_]+$" />
+          <span>用户名 <b>*</b></span>
+          <input v-model.trim="registerForm.name" class="text-input" type="text" autocomplete="username" pattern="^[A-Za-z0-9_]+$" placeholder="请输入用户名" />
         </label>
         <label class="field">
           <span>昵称</span>
-          <input v-model.trim="registerForm.nickname" class="text-input" type="text" autocomplete="nickname" />
+          <input v-model.trim="registerForm.nickname" class="text-input" type="text" autocomplete="nickname" placeholder="请输入昵称" />
         </label>
         <label class="field">
-          <span>邮箱</span>
-          <input v-model.trim="registerForm.email" class="text-input" type="email" autocomplete="email" />
+          <span>邮箱 <b>*</b></span>
+          <input v-model.trim="registerForm.email" class="text-input" type="email" autocomplete="email" placeholder="请输入邮箱地址" />
         </label>
         <label class="field">
           <span>密码</span>
@@ -127,11 +136,18 @@ const registerForm = reactive({
   againPassword: '',
 })
 const mascotItems = [
-  { seed: 'login-a', left: '8%', top: '16%', size: 82, color: '#00b5ad', delay: '0s' },
-  { seed: 'login-b', left: '18%', top: '68%', size: 68, color: '#f59e0b', delay: '-1.4s' },
-  { seed: 'login-c', left: '78%', top: '18%', size: 78, color: '#2185d0', delay: '-.6s' },
-  { seed: 'login-d', left: '84%', top: '72%', size: 72, color: '#21ba45', delay: '-2s' },
-  { seed: 'login-e', left: '48%', top: '8%', size: 58, color: '#f2711c', delay: '-2.7s' },
+  { seed: 'login-a', left: '4%', top: '5%', size: 128, color: '#21ba45', delay: '0s', rotate: '-12deg' },
+  { seed: 'login-b', left: '20%', top: '31%', size: 118, color: '#21ba45', delay: '-1.4s', rotate: '8deg' },
+  { seed: 'login-c', left: '55%', top: '23%', size: 108, color: '#db2828', delay: '-.6s', rotate: '18deg' },
+  { seed: 'login-d', left: '86%', top: '22%', size: 102, color: '#00b5cc', delay: '-2s', rotate: '-18deg' },
+  { seed: 'login-e', left: '8%', top: '52%', size: 116, color: '#ff9a8a', delay: '-2.7s', rotate: '-8deg' },
+  { seed: 'login-f', left: '64%', top: '55%', size: 122, color: '#21ba45', delay: '-3.2s', rotate: '5deg' },
+  { seed: 'login-g', left: '86%', top: '49%', size: 126, color: '#00b5ad', delay: '-.9s', rotate: '28deg' },
+  { seed: 'login-h', left: '80%', top: '78%', size: 128, color: '#a333c8', delay: '-4s', rotate: '-16deg' },
+  { seed: 'login-i', left: '45%', top: '74%', size: 96, color: '#f2711c', delay: '-2.2s', rotate: '-6deg' },
+  { seed: 'login-j', left: '70%', top: '6%', size: 82, color: '#2185d0', delay: '-1.1s', rotate: '12deg' },
+  { seed: 'login-k', left: '34%', top: '9%', size: 78, color: '#fbbd08', delay: '-3.4s', rotate: '-22deg' },
+  { seed: 'login-l', left: '91%', top: '66%', size: 80, color: '#e07b53', delay: '-1.9s', rotate: '15deg' },
 ]
 
 const isRegisterMode = computed(() => route.name === 'register')
@@ -226,6 +242,7 @@ async function submitRegister() {
   place-items: center;
   position: relative;
   overflow: hidden;
+  background: linear-gradient(110deg, rgba(225, 247, 248, .68), rgba(244, 248, 255, .86));
 }
 
 .login-mascots {
@@ -236,9 +253,9 @@ async function submitRegister() {
 
 .login-mascot {
   position: absolute;
-  opacity: .72;
-  filter: drop-shadow(0 18px 24px rgba(15, 23, 42, .10));
-  animation: mascot-drift 7s ease-in-out infinite alternate;
+  opacity: .86;
+  filter: drop-shadow(0 22px 28px rgba(15, 23, 42, .08));
+  animation: mascot-drift 6.5s ease-in-out infinite alternate;
 }
 
 @keyframes mascot-drift {
@@ -247,16 +264,42 @@ async function submitRegister() {
 }
 
 .login-card {
-  width: min(560px, 100%);
-  padding: 32px;
-  border-radius: 24px;
+  width: min(650px, calc(100vw - 32px));
+  padding: 42px 44px 30px;
+  border-radius: 22px;
   border: 1px solid rgba(15, 23, 42, 0.08);
-  background:
-    radial-gradient(circle at top right, rgba(15, 118, 110, 0.16), transparent 38%),
-    rgba(255, 255, 255, 0.94);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.10);
   position: relative;
   z-index: 1;
+}
+
+.auth-brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 26px;
+  text-align: left;
+}
+
+.brand-mascot {
+  flex: 0 0 auto;
+}
+
+.auth-brand h1 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: .02em;
+}
+
+.auth-brand p {
+  margin: 8px 0 0;
+  color: #a4a9b2;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .submit-overlay {
@@ -284,20 +327,10 @@ async function submitRegister() {
   80% { transform: translateX(4px); }
 }
 
-.login-label {
-  display: inline-block;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(15, 118, 110, 0.1);
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .login-form {
   display: grid;
-  gap: 14px;
-  margin-top: 20px;
+  gap: 18px;
+  margin-top: 8px;
 }
 
 .field {
@@ -306,22 +339,43 @@ async function submitRegister() {
 }
 
 .field span {
-  font-size: 13px;
-  color: #475569;
+  font-size: 16px;
+  color: #4b5563;
+  font-weight: 800;
+}
+
+.field b {
+  color: #e11d48;
 }
 
 .text-input {
   width: 100%;
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  border-radius: 16px;
-  padding: 12px 14px;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   background: rgba(255, 255, 255, 0.96);
+  outline: none;
+  font-size: 16px;
 }
 
+.input-with-icon,
 .password-row {
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 14px;
+  min-height: 62px;
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  border-radius: 5px;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.03);
+}
+
+.input-with-icon > span,
+.password-row > span {
+  flex: 0 0 auto;
+  color: #a3aab4;
+  font-size: 20px;
 }
 
 .password-row .text-input {
@@ -330,21 +384,23 @@ async function submitRegister() {
 
 .password-toggle {
   flex: 0 0 auto;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: #fff;
-  color: #0f766e;
+  border: none;
+  padding: 6px 0;
+  background: transparent;
+  color: #9ca3af;
+  font-size: 18px;
   cursor: pointer;
 }
 
 .login-button {
   border: none;
-  border-radius: 999px;
-  padding: 12px 18px;
-  background: #0f766e;
+  border-radius: 7px;
+  padding: 18px 22px;
+  margin-top: 8px;
+  background: linear-gradient(135deg, #20c3b7, #2185d0);
   color: #fff;
-  font-size: 14px;
+  font-size: 20px;
+  font-weight: 900;
   cursor: pointer;
 }
 
@@ -368,10 +424,31 @@ async function submitRegister() {
 }
 
 .mode-link {
-  display: inline-block;
   color: #0f766e;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
-  text-align: center;
+}
+
+.auth-link-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  color: #94a3b8;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .login-card {
+    padding: 28px 22px;
+  }
+
+  .auth-brand h1 {
+    font-size: 28px;
+  }
+
+  .login-mascot {
+    opacity: .34;
+  }
 }
 </style>

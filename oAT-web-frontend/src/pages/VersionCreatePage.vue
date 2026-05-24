@@ -11,8 +11,12 @@
       </div>
     </div>
 
+    <div v-if="center && !center.app.repoConfigured" class="warning-card">
+      当前应用尚未配置代码仓库，Git 拉取不可用；请先进入代码仓库配置，或切换到文件上传。
+    </div>
+
     <div class="tab-row">
-      <button type="button" :class="['tab-button', sourceType === 'git' && 'active']" @click="sourceType = 'git'">Git 拉取</button>
+      <button type="button" :class="['tab-button', sourceType === 'git' && 'active']" :disabled="!center?.app.repoConfigured" @click="sourceType = 'git'">Git 拉取</button>
       <button type="button" :class="['tab-button', sourceType === 'upload' && 'active']" @click="sourceType = 'upload'">文件上传</button>
     </div>
 
@@ -39,7 +43,7 @@
         <div class="grid-two">
           <label class="field">
             <span>分支</span>
-            <input v-model.trim="form.repoBranch" class="text-input" list="branch-options" type="text" />
+            <input v-model.trim="form.repoBranch" class="text-input" list="branch-options" type="text" @change="fetchLatestCommitForBranch" />
             <datalist id="branch-options">
               <option v-for="branch in branches" :key="branch" :value="branch" />
             </datalist>
@@ -55,8 +59,9 @@
         </div>
         <div class="action-row">
           <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured" @click="loadBranches">刷新分支</button>
-          <button class="ghost-button" type="button" :disabled="busy || !form.repoBranch" @click="checkGit">检测可拉取性</button>
-          <button class="ghost-button" type="button" :disabled="busy || !form.repoBranch" @click="pullGit">执行拉取</button>
+          <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="fetchLatestCommitForBranch">获取最新 Commit</button>
+          <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="checkGit">检测可拉取性</button>
+          <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="pullGit">执行拉取</button>
           <button class="ghost-button" type="button" :disabled="busy || !gitPulledPath" @click="removePulledCode">删除拉取文件</button>
         </div>
         <div v-if="gitEstimate" class="panel">
@@ -99,6 +104,7 @@
         <p class="subtext">{{ uploadedPath || gitPulledPath || '尚未准备程序文件' }}</p>
       </div>
 
+      <p v-if="notice" class="notice-text">{{ notice }}</p>
       <p v-if="error" class="error-text">{{ error }}</p>
       <div class="action-row">
         <button class="primary-button" type="submit" :disabled="busy">{{ busy ? '处理中...' : '创建版本' }}</button>
@@ -108,13 +114,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import {
   createVersion,
   deleteGitCode,
   fetchGitPullEstimate,
+  fetchGitLatestCommit,
   fetchGitPullStatus,
   fetchRepositoryBranches,
   fetchVersionCenter,
@@ -138,6 +145,7 @@ const gitEstimate = ref<GitPullEstimate | null>(null)
 const gitJob = ref<GitJobSummary | null>(null)
 const busy = ref(false)
 const error = ref('')
+const notice = ref('')
 const form = ref({
   versionNumber: '',
   describe: '',
@@ -164,6 +172,7 @@ async function load() {
   try {
     center.value = await fetchVersionCenter(projectId.value, appId.value)
     form.value.setAsCurrent = center.value.versions.length ? '' : 'on'
+    if (!center.value.app.repoConfigured) sourceType.value = 'upload'
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载版本中心失败'
   } finally {
@@ -178,9 +187,23 @@ async function loadBranches() {
     branches.value = await fetchRepositoryBranches(projectId.value, appId.value)
     if (!form.value.repoBranch && branches.value.length) {
       form.value.repoBranch = branches.value[0]
+      await fetchLatestCommitForBranch()
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载分支失败'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function fetchLatestCommitForBranch() {
+  if (!form.value.repoBranch || !center.value?.app.repoConfigured) return
+  busy.value = true
+  error.value = ''
+  try {
+    form.value.repoCommitId = await fetchGitLatestCommit(projectId.value, appId.value, form.value.repoBranch)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '获取最新 Commit 失败'
   } finally {
     busy.value = false
   }
@@ -264,6 +287,7 @@ async function uploadFile() {
   error.value = ''
   try {
     uploadedPath.value = await uploadResource(selectedFile.value)
+    notice.value = `文件已上传：${selectedFile.value.name}`
   } catch (err) {
     error.value = err instanceof Error ? err.message : '上传文件失败'
   } finally {
@@ -293,6 +317,7 @@ async function submit() {
       repoCommitId: form.value.repoCommitId,
       setAsCurrent: form.value.setAsCurrent,
     })
+    gitPulledPath.value = ''
     await router.push(`/p/${projectId.value}/apps/${appId.value}/versions`)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '创建版本失败'
@@ -301,7 +326,20 @@ async function submit() {
   }
 }
 
-onMounted(load)
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (!gitPulledPath.value) return
+  event.preventDefault()
+  event.returnValue = 'Git 拉取的临时代码尚未创建版本或删除，离开页面前建议先删除拉取文件。'
+}
+
+onMounted(() => {
+  load()
+  window.addEventListener('beforeunload', beforeUnload)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', beforeUnload)
+})
 </script>
 
 <style scoped>
@@ -366,11 +404,23 @@ onMounted(load)
 }
 
 .editor-card,
-.panel {
+.panel,
+.warning-card {
   padding: 18px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.warning-card {
+  margin-bottom: 14px;
+  background: rgba(245, 158, 11, .12);
+  color: #92400e;
+}
+
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 .grid-two {
@@ -400,6 +450,11 @@ onMounted(load)
 .panel {
   margin-top: 16px;
   flex-wrap: wrap;
+}
+
+.notice-text {
+  color: #0f766e;
+  margin-top: 14px;
 }
 
 .error-text {
