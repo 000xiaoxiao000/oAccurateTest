@@ -90,7 +90,7 @@ function draw() {
   const dy = props.interactive ? mouseY - worldCenterY : 10
   const localDistance = Math.hypot(dx, dy) || 1
   const eyeSizeForTarget = radius * 0.25
-  const pupilMaxDist = eyeSizeForTarget * 0.36
+  const pupilMaxDist = eyeSizeForTarget * 0.48
   const targetX = (dx / localDistance) * pupilMaxDist
   const targetY = (dy / localDistance) * pupilMaxDist
   pupilX += (targetX - pupilX) * 0.18

@@ -1,7 +1,7 @@
 <template>
-  <section>
+  <section class="coverage-code-view">
     <div class="page-header">
-      <div>
+      <div class="header-title">
         <div class="eyebrow">{{ eyebrow }}</div>
         <h1>{{ title }}</h1>
         <p class="subtext">{{ subtext }}</p>
@@ -176,8 +176,27 @@ function coverageText(method: MethodCoverageSummary) {
   gap: 12px;
 }
 
+.coverage-code-view {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .page-header {
+  min-width: 0;
   margin-bottom: 20px;
+}
+
+.header-title {
+  min-width: 0;
+}
+
+.page-header h1 {
+  margin: 3px 0 4px;
+  max-width: 100%;
+  font-size: 28px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .eyebrow {
@@ -237,18 +256,33 @@ function coverageText(method: MethodCoverageSummary) {
 
 .detail-grid {
   display: grid;
+  min-width: 0;
   gap: 18px;
+}
+
+.panel {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .table-shell,
 .source-container {
+  max-width: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.source-container {
+  max-height: calc(100vh - 220px);
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  background: #fff;
 }
 
 .method-table {
   width: 100%;
+  min-width: 760px;
   border-collapse: collapse;
-  min-width: 900px;
 }
 
 .method-table th,
@@ -261,7 +295,9 @@ function coverageText(method: MethodCoverageSummary) {
 
 .method-name {
   display: grid;
+  max-width: 420px;
   gap: 6px;
+  overflow-wrap: anywhere;
 }
 
 .status-pill {
@@ -291,11 +327,40 @@ function coverageText(method: MethodCoverageSummary) {
 :deep(.source-container pre) {
   margin: 0;
   min-width: 100%;
+  padding: 10px 0;
   font-size: 13px;
   line-height: 18px;
 }
 
 :deep(.source-container pre > div) {
   min-width: max-content;
+}
+
+:deep(.source-container table),
+:deep(.source-container .source),
+:deep(.source-container .code) {
+  width: max-content;
+  min-width: 100%;
+}
+
+:deep(.source-container td),
+:deep(.source-container th),
+:deep(.source-container code) {
+  white-space: pre;
+}
+
+@media (max-width: 720px) {
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-header h1 {
+    font-size: 22px;
+  }
+
+  .method-table {
+    min-width: 680px;
+  }
 }
 </style>

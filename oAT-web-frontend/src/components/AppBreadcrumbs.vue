@@ -130,8 +130,11 @@ const routeLabels: Record<string, string> = {
 
 const items = computed<BreadcrumbItem[]>(() => {
   const name = String(route.name || '')
-  if (!name || name === 'not-found') return []
-  if (!projectId.value) return [{ label: routeLabels[name] || '当前位置' }]
+  if (!name || name === 'not-found' || name === 'projects') return []
+  if (!projectId.value) return [
+    { label: '项目列表', to: '/projects' },
+    { label: routeLabels[name] || '当前位置' },
+  ]
 
   const result: BreadcrumbItem[] = [
     { label: '项目列表', to: '/projects' },

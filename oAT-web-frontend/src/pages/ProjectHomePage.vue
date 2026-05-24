@@ -54,19 +54,47 @@
           </div>
         </section>
 
-        <section class="panel">
-          <div class="panel-head">
-            <h2>AI 能力</h2>
-            <RouterLink class="ai-entry" :to="`/p/${projectId}/ai`">
-              {{ context.ai.enabled ? '进入工作台' : '未启用' }}
+        <section class="panel ai-panel" :style="{ '--ai-accent': context.ai.mascotPrimary }">
+          <div class="panel-head ai-panel-head">
+            <div>
+              <h2>AI 能力</h2>
+              <p class="panel-desc">围绕当前项目上下文提供问答、排查和跳转建议</p>
+            </div>
+            <RouterLink class="ai-entry primary" :to="`/p/${projectId}/ai`">
+              {{ context.ai.enabled ? '进入工作台' : '查看配置' }}
             </RouterLink>
           </div>
-          <ul class="feature-list">
-            <li>工作台入口：{{ context.ai.interactivePath }}</li>
-            <li>问答接口：{{ context.ai.askApiPath }}</li>
-            <li>反馈接口：{{ context.ai.feedbackApiBasePath }}</li>
-            <li>超时时间：{{ context.ai.timeout }} 秒</li>
-          </ul>
+
+          <div class="ai-showcase">
+            <div class="ai-mascot-card">
+              <MascotCanvas :size="118" :color="context.ai.mascotPrimary" :seed="projectId" :interactive="true" />
+              <div>
+                <strong>{{ context.ai.enabled ? 'AI 助手已就绪' : 'AI 助手待启用' }}</strong>
+                <span>{{ context.appCount }} 个应用上下文 · {{ context.onlineAppCount }} 个在线信号</span>
+              </div>
+            </div>
+            <div class="ai-status-card">
+              <span class="status-dot" :class="{ active: context.ai.enabled }"></span>
+              <div>
+                <strong>{{ context.ai.enabled ? '在线响应' : '暂不可用' }}</strong>
+                <span>最长思考 {{ context.ai.timeout }} 秒，支持页面上下文连续追问</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ai-capability-grid">
+            <article v-for="item in aiCapabilities" :key="item.title" class="ai-capability-card">
+              <span>{{ item.icon }}</span>
+              <strong>{{ item.title }}</strong>
+              <small>{{ item.text }}</small>
+            </article>
+          </div>
+
+          <div class="ai-starter-row">
+            <RouterLink v-for="question in aiStarters" :key="question" :to="{ path: `/p/${projectId}/ai`, query: { q: question } }">
+              {{ question }}
+            </RouterLink>
+          </div>
         </section>
 
         <section class="panel">
@@ -139,6 +167,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
+import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -148,6 +177,15 @@ const error = ref('')
 
 const projectId = computed(() => String(route.params.projectId || ''))
 const context = computed(() => projectStore.contextByProjectId[projectId.value])
+
+const aiCapabilities = [
+  { icon: '问', title: '项目问答', text: '基于当前项目、应用和页面信息回答问题' },
+  { icon: '查', title: '异常排查', text: '从监控、快照、覆盖率中提示排查路径' },
+  { icon: '转', title: '智能跳转', text: '把常用入口整理成下一步操作建议' },
+  { icon: '记', title: '会话记忆', text: '保留本地会话，方便连续追问和复盘' },
+]
+
+const aiStarters = ['总结项目风险', '线上异常怎么排查', '低覆盖优先看哪里']
 
 function formatTime(value?: string) {
   if (!value) {
@@ -323,14 +361,168 @@ onMounted(load)
   color: #475569;
 }
 
-.feature-list {
-  margin: 0;
-  padding-left: 18px;
-  color: #4b5563;
+.panel-desc {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
 }
 
-.feature-list li + li {
-  margin-top: 10px;
+.ai-panel {
+  --ai-accent: #0f766e;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 88% 12%, color-mix(in srgb, var(--ai-accent) 18%, white), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(244, 250, 249, .92));
+}
+
+.ai-panel::after {
+  position: absolute;
+  right: -70px;
+  bottom: -92px;
+  width: 220px;
+  height: 220px;
+  content: '';
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ai-accent) 10%, transparent);
+  pointer-events: none;
+}
+
+.ai-panel-head {
+  position: relative;
+  z-index: 1;
+  align-items: flex-start;
+}
+
+.ai-entry.primary {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: #0f766e;
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(15, 118, 110, .18);
+}
+
+.ai-showcase {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(180px, .8fr);
+  gap: 12px;
+}
+
+.ai-mascot-card,
+.ai-status-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(15, 23, 42, .07);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72);
+}
+
+.ai-mascot-card {
+  padding: 14px 16px 14px 12px;
+}
+
+.ai-status-card {
+  padding: 16px;
+}
+
+.ai-mascot-card strong,
+.ai-status-card strong {
+  display: block;
+  color: #172033;
+  font-size: 15px;
+}
+
+.ai-mascot-card span,
+.ai-status-card span {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #94a3b8;
+  box-shadow: 0 0 0 6px rgba(148, 163, 184, .14);
+}
+
+.status-dot.active {
+  background: #16a34a;
+  box-shadow: 0 0 0 6px rgba(22, 163, 74, .14), 0 0 18px rgba(22, 163, 74, .38);
+}
+
+.ai-capability-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ai-capability-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, .11);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .74);
+}
+
+.ai-capability-card > span {
+  grid-row: span 2;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ai-accent) 14%, white);
+  color: #0f766e;
+  font-weight: 900;
+}
+
+.ai-capability-card strong {
+  color: #0f766e;
+  font-size: 14px;
+}
+
+.ai-capability-card small {
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.ai-starter-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.ai-starter-row a {
+  border: 1px solid rgba(15, 118, 110, .16);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(240, 253, 250, .86);
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .quick-grid {
@@ -409,8 +601,15 @@ onMounted(load)
     grid-template-columns: 1fr;
   }
 
-  .quick-grid {
+  .quick-grid,
+  .ai-showcase,
+  .ai-capability-grid {
     grid-template-columns: 1fr;
+  }
+
+  .ai-panel-head {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>
