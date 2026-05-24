@@ -45,9 +45,9 @@
             </marker>
           </defs>
           <g class="edge-layer">
-            <g v-for="edge in graphEdges" :key="edge.id" class="graph-edge">
+            <g v-for="edge in graphEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge)]">
               <line :x1="edge.source.x" :y1="edge.source.y" :x2="edge.target.x" :y2="edge.target.y" marker-end="url(#graph-arrow)" />
-              <text :x="edge.labelX" :y="edge.labelY">{{ edge.label || edge.action || '' }}</text>
+              <text :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionText(edge.action) || '关联' }}</text>
             </g>
           </g>
           <g class="node-layer">
@@ -120,9 +120,9 @@
               <strong>关联关系</strong>
               <div v-if="!selectedEdges.length" class="empty-inline">该节点暂无关系</div>
               <div v-else class="edge-list">
-                <article v-for="edge in selectedEdges" :key="edge.id" class="edge-card">
+                <article v-for="edge in selectedEdges" :key="edge.id" :class="['edge-card', edgeTone(edge)]">
                   <span>{{ edge.sourceLabel || edge.source }}</span>
-                  <strong>{{ edge.label || edge.action || '关联' }}</strong>
+                  <strong>{{ edge.label || actionText(edge.action) || '关联' }}</strong>
                   <span>{{ edge.targetLabel || edge.target }}</span>
                 </article>
               </div>
@@ -150,7 +150,7 @@
             <tbody>
               <tr v-for="edge in filteredEdges" :key="edge.id">
                 <td>{{ edge.sourceLabel || edge.source }}</td>
-                <td>{{ edge.label || edge.action || '-' }}</td>
+                <td><span :class="['action-pill', edgeTone(edge)]">{{ edge.label || actionText(edge.action) || '-' }}</span></td>
                 <td>{{ edge.targetLabel || edge.target }}</td>
               </tr>
             </tbody>
@@ -272,6 +272,27 @@ function nodeTone(node: RelationNode) {
   if (type.includes('code')) return 'code'
   if (type.includes('notice')) return 'notice'
   return 'default'
+}
+
+function edgeTone(edge: Pick<RelationEdge, 'action' | 'label'>) {
+  const value = `${edge.action || ''} ${edge.label || ''}`.toLowerCase()
+  if (value.includes('delete') || value.includes('删')) return 'delete'
+  if (value.includes('update') || value.includes('改')) return 'update'
+  if (value.includes('insert') || value.includes('增')) return 'insert'
+  if (value.includes('select') || value.includes('查')) return 'select'
+  return 'default'
+}
+
+function actionText(action?: string) {
+  if (!action) return ''
+  return action.split(',').map((item) => {
+    const value = item.trim().toLowerCase()
+    if (value === 'insert') return '增'
+    if (value === 'delete') return '删'
+    if (value === 'update') return '改'
+    if (value === 'select') return '查'
+    return item
+  }).filter(Boolean).join(',')
 }
 
 function selectGraphNode(nodeId: string) {
@@ -475,6 +496,25 @@ watchEffect(() => {
   background: #f8fbfb;
 }
 
+.edge-card.insert,
+.action-pill.insert { color: #15803d; background: rgba(22, 163, 74, .10); }
+.edge-card.update,
+.action-pill.update { color: #b45309; background: rgba(245, 158, 11, .12); }
+.edge-card.delete,
+.action-pill.delete { color: #b91c1c; background: rgba(220, 38, 38, .10); }
+.edge-card.select,
+.action-pill.select { color: #1d4ed8; background: rgba(37, 99, 235, .10); }
+
+.action-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(100, 116, 139, .12);
+  color: #475569;
+  font-weight: 800;
+}
+
 .edge-panel {
   margin-top: 18px;
 }
@@ -559,6 +599,16 @@ watchEffect(() => {
   stroke-width: 1.8;
   opacity: .78;
 }
+
+.graph-edge.insert line { stroke: #16a34a; }
+.graph-edge.update line { stroke: #f59e0b; }
+.graph-edge.delete line { stroke: #dc2626; }
+.graph-edge.select line { stroke: #2563eb; }
+
+.graph-edge.insert text { fill: #15803d; }
+.graph-edge.update text { fill: #b45309; }
+.graph-edge.delete text { fill: #b91c1c; }
+.graph-edge.select text { fill: #1d4ed8; }
 
 .graph-edge text {
   font-size: 11px;

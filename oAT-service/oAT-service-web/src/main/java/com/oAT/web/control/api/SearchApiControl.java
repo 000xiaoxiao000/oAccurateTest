@@ -47,8 +47,9 @@ public class SearchApiControl {
         SearchPage<SnapshotSearchResult> page = snapshotSearchService.doSearch(projectId, keyword);
         SearchKeywordPayload payload = new SearchKeywordPayload();
         payload.setKeyword(keyword);
-        payload.setTotal(page.getContents() == null ? 0 : page.getContents().size());
-        payload.setResults(page.getContents().stream().map(this::toResult).collect(Collectors.toList()));
+        payload.setTotal(page.getTotal());
+        payload.setResults((page.getContents() == null ? java.util.Collections.<SnapshotSearchResult>emptyList() : page.getContents())
+                .stream().map(this::toResult).collect(Collectors.toList()));
         return new ResultNotified<>(true, "搜索成功", payload);
     }
 
@@ -85,6 +86,8 @@ public class SearchApiControl {
         result.setAppId(item.getAppId());
         result.setTitle(StringUtils.hasText(item.getTitleFragment()) ? item.getTitleFragment() : item.getTitle());
         result.setSubTitle(item.getSubTitle());
+        result.setHeadImage(item.getHeadImage());
+        result.setImagePath(StringUtils.hasText(item.getHeadImage()) ? "/r/" + item.getHeadImage() : "/images/image.png");
         result.setDirectoryPath(item.getDirectoryPath());
         result.setUpdateTimeText(item.getUpdateTime() == null ? null : item.getUpdateTime().toString());
         if (item.getDescribeFragments() != null) {
@@ -105,11 +108,12 @@ public class SearchApiControl {
         edge.setId(snapshot.getId() + "-" + database + "_" + table);
         edge.setSource(snapshot.getId());
         edge.setTarget(database + "_" + table);
-        List<String> actions = Arrays.stream(snapshot.getSqls())
-                .filter(sql -> sql.getDatabase().equalsIgnoreCase(database))
-                .flatMap(sql -> Stream.of(sql.getActions()))
-                .filter(action -> action.getTable().equalsIgnoreCase(table))
+        List<String> actions = snapshot.getSqls() == null ? java.util.Collections.emptyList() : Arrays.stream(snapshot.getSqls())
+                .filter(sql -> sql != null && sql.getDatabase() != null && sql.getDatabase().equalsIgnoreCase(database))
+                .flatMap(sql -> sql.getActions() == null ? Stream.empty() : Stream.of(sql.getActions()))
+                .filter(action -> action != null && action.getTable() != null && action.getTable().equalsIgnoreCase(table))
                 .map(action -> action.getType())
+                .filter(StringUtils::hasText)
                 .distinct()
                 .collect(Collectors.toList());
         edge.setType("snapshotToTable");
@@ -134,13 +138,13 @@ public class SearchApiControl {
 
     public static class SearchKeywordPayload {
         private String keyword;
-        private int total;
+        private long total;
         private List<SearchKeywordResult> results;
 
         public String getKeyword() { return keyword; }
         public void setKeyword(String keyword) { this.keyword = keyword; }
-        public int getTotal() { return total; }
-        public void setTotal(int total) { this.total = total; }
+        public long getTotal() { return total; }
+        public void setTotal(long total) { this.total = total; }
         public List<SearchKeywordResult> getResults() { return results; }
         public void setResults(List<SearchKeywordResult> results) { this.results = results; }
     }
@@ -150,6 +154,8 @@ public class SearchApiControl {
         private String appId;
         private String title;
         private String subTitle;
+        private String headImage;
+        private String imagePath;
         private String description;
         private String directoryPath;
         private String updateTimeText;
@@ -163,6 +169,10 @@ public class SearchApiControl {
         public void setTitle(String title) { this.title = title; }
         public String getSubTitle() { return subTitle; }
         public void setSubTitle(String subTitle) { this.subTitle = subTitle; }
+        public String getHeadImage() { return headImage; }
+        public void setHeadImage(String headImage) { this.headImage = headImage; }
+        public String getImagePath() { return imagePath; }
+        public void setImagePath(String imagePath) { this.imagePath = imagePath; }
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
         public String getDirectoryPath() { return directoryPath; }

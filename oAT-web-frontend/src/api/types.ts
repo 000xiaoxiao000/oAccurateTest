@@ -768,6 +768,8 @@ export interface SearchKeywordResult {
   appId?: string
   title: string
   subTitle?: string
+  headImage?: string
+  imagePath?: string
   description?: string
   directoryPath?: string
   updateTimeText?: string
