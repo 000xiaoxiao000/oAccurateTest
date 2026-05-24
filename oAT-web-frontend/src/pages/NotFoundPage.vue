@@ -3,7 +3,7 @@
     <div class="not-found-card">
       <div class="eyebrow">404</div>
       <h1>页面不存在</h1>
-      <p>当前新前端骨架只接入了项目列表和项目上下文页，其余业务页会逐步迁移。</p>
+      <p>当前路径在新前端路由中没有对应页面，请返回上一层或进入项目列表继续操作。</p>
     </div>
   </section>
 </template>

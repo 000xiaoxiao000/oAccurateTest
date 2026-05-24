@@ -1,7 +1,9 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.DateUtil;
+import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.App;
 import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
@@ -43,6 +45,10 @@ import java.util.Map;
 public class AppControl {
 
     @Autowired
+    FrontendProperties frontendProperties;
+
+
+    @Autowired
     ProjectService projectService;
 
     @Autowired
@@ -67,13 +73,13 @@ public class AppControl {
     public String openAppAddView(@PathVariable String projectId,
                                  @SessionAttribute UserVo user,
                                  Model model) {
-        return "redirect:/p/" + projectId + "/apps?create=1";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps?create=1");
     }
 
     // 打开APP列表页
     @RequestMapping("/list")
     public String openAppListView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/apps";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps");
     }
 
     /**
@@ -81,9 +87,9 @@ public class AppControl {
      */
     @RequestMapping("doCreate")
     @ResponseBody
-    public com.oAT.web.control.entity.ResultNotified doCreateApp(@SessionAttribute UserVo user,
-                                                                 App app,
-                                                                 HttpServletRequest request) {
+    public ResultNotified<String> doCreateApp(@SessionAttribute UserVo user,
+                                              App app,
+                                              HttpServletRequest request) {
         app.setCreateUserId(user.getId());
         boolean probeAlertEnabled = isCheckboxChecked(request, "probeAlertEnabled");
         boolean probeAlertOnOffline = isCheckboxChecked(request, "probeAlertOnOffline");
@@ -100,7 +106,7 @@ public class AppControl {
         app.setProbeAlertOnOnline(probeAlertOnOnline);
         AppVo appVo = appService.createApp(app);
         doLog(SystemLogService.Action.addApp, "添加了一个新应用", user, appVo);
-        return new com.oAT.web.control.entity.ResultNotified(true, "应用创建成功", "/p/" + app.getCreateProjectId() + "/apps");
+        return new ResultNotified<>(true, "应用创建成功", "/p/" + app.getCreateProjectId() + "/apps");
     }
 
     private boolean isCheckboxChecked(HttpServletRequest request, String name) {
@@ -126,7 +132,7 @@ public class AppControl {
                                String appId,
                                Model model,
                                @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/settings";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/settings");
     }
 
     @RequestMapping(value = "{appId}/edit", method = RequestMethod.POST)
@@ -165,15 +171,15 @@ public class AppControl {
         }
         redirectAttributes.addFlashAttribute("toastMessage", toastMessage);
         redirectAttributes.addFlashAttribute("toastMessageType", "success");
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/settings";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/settings");
     }
 
     @RequestMapping(value = "{appId}/delete", method = RequestMethod.POST)
     @ResponseBody
-    public com.oAT.web.control.entity.ResultNotified deleteApp(@PathVariable String projectId,
-                            @PathVariable String appId,
-                            String password,
-                            @SessionAttribute UserVo user) {
+    public ResultNotified<String> deleteApp(@PathVariable String projectId,
+                                            @PathVariable String appId,
+                                            String password,
+                                            @SessionAttribute UserVo user) {
         String md5Pwd = DigestUtils.md5DigestAsHex(password.getBytes(StandardCharsets.UTF_8));
         Assert.isTrue(user.getPassword().equalsIgnoreCase(md5Pwd), "删除失败!密码错误");
         AppVo appVo = appService.deleteApp(projectId, appId);
@@ -185,15 +191,15 @@ public class AppControl {
         log.setProjectId(projectId);
         log.setAction(SystemLogService.Action.addApp.toString());
         systemLogService.addLog(log);
-        return new com.oAT.web.control.entity.ResultNotified(true, "应用已经被删除", "/p/" + projectId + "/home");
+        return new ResultNotified<>(true, "应用已经被删除", "/p/" + projectId + "/home");
     }
 
     @RequestMapping("doEdit")
     @ResponseBody
-    public com.oAT.web.control.entity.ResultNotified doEditApp(@PathVariable String projectId,
-                                                              @SessionAttribute UserVo user,
-                                                              AppVo app,
-                                                              HttpServletRequest request) {
+    public ResultNotified<String> doEditApp(@PathVariable String projectId,
+                                            @SessionAttribute UserVo user,
+                                            AppVo app,
+                                            HttpServletRequest request) {
         app.setProbeAlertEnabled(isCheckboxChecked(request, "probeAlertEnabled"));
         boolean probeAlertOnOffline = isCheckboxChecked(request, "probeAlertOnOffline");
         boolean probeAlertOnRecovered = isCheckboxChecked(request, "probeAlertOnRecovered");
@@ -207,7 +213,7 @@ public class AppControl {
         app.setProbeAlertOnOnline(probeAlertOnOnline);
         app = appService.updateApp(projectId, app);
         doLog(SystemLogService.Action.editApp, "修改了应用信息", user, app);
-        return new com.oAT.web.control.entity.ResultNotified(true, "应用修改成功");
+        return new ResultNotified<>(true, "应用修改成功");
     }
 
     @RequestMapping("{appid}/oAT.key")
@@ -229,7 +235,7 @@ public class AppControl {
 
     @RequestMapping("doDelete")
     @ResponseBody
-    public com.oAT.web.control.entity.ResultNotified doDeleteApp(@PathVariable String projectId, String appId, @SessionAttribute UserVo user) {
+    public ResultNotified<String> doDeleteApp(@PathVariable String projectId, String appId, @SessionAttribute UserVo user) {
         AppVo appVo = appService.deleteApp(projectId, appId);
         //记录删除日志
         SystemLog log = new SystemLog();
@@ -239,12 +245,12 @@ public class AppControl {
         log.setProjectId(projectId);
         log.setAction(SystemLogService.Action.addApp.toString());
         systemLogService.addLog(log);
-        return new com.oAT.web.control.entity.ResultNotified(true, "应用删除成功");
+        return new ResultNotified<>(true, "应用删除成功");
     }
 
     @RequestMapping("online")
     public String openOnlineList(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/apps/online";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/online");
     }
 
     @RequestMapping("online-counts")
@@ -309,13 +315,13 @@ public class AppControl {
     @RequestMapping("{appId}/settings")
     public String openSetting(@PathVariable String projectId, @PathVariable String appId,
                               @SessionAttribute UserVo user, Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/settings";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/settings");
     }
 
     @RequestMapping("{appId}/probe-alerts")
     public String openProbeAlerts(@PathVariable String projectId, @PathVariable String appId,
                                   @SessionAttribute UserVo user, Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/probe-alerts";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/probe-alerts");
     }
 
     @RequestMapping("probe-alerts/recent")

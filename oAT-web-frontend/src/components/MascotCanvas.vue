@@ -143,10 +143,16 @@ function draw() {
   ctx.fill()
 
   ctx.fillStyle = '#0f172a'
-  const pupilSize = props.mood === 'error' ? eyeSize * 0.30 : eyeSize * 0.50
+  const pupilSize = props.mood === 'error' ? eyeSize * 0.24 : eyeSize * 0.42
   ctx.beginPath()
   ctx.arc(-eyeOffsetX + pupilX, eyeOffsetY + pupilY, pupilSize, 0, Math.PI * 2)
   ctx.arc(eyeOffsetX + pupilX, eyeOffsetY + pupilY, pupilSize, 0, Math.PI * 2)
+  ctx.fill()
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.82)'
+  ctx.beginPath()
+  ctx.arc(-eyeOffsetX + pupilX - pupilSize * 0.25, eyeOffsetY + pupilY - pupilSize * 0.25, pupilSize * 0.18, 0, Math.PI * 2)
+  ctx.arc(eyeOffsetX + pupilX - pupilSize * 0.25, eyeOffsetY + pupilY - pupilSize * 0.25, pupilSize * 0.18, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)'

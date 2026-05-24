@@ -199,13 +199,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
 import { useProjectStore } from '@/stores/project'
 import { reportStatusText } from '@/utils/snapshot'
 
 const route = useRoute()
+const router = useRouter()
 const projectStore = useProjectStore()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
@@ -366,7 +367,7 @@ async function removeSnapshot() {
   error.value = ''
   try {
     await projectStore.removeSystemSnapshot(projectId.value, appId.value, snapshotId.value)
-    window.history.back()
+    await router.push(`/p/${projectId.value}/apps/${appId.value}/snapshots`)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '删除系统快照失败'
   } finally {

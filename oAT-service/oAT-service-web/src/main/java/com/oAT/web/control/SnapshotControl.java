@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.alibaba.druid.sql.SQLUtils;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientSessionVo;
@@ -52,6 +53,10 @@ import java.util.stream.Stream;
 @Controller
 @RequestMapping("/p/{projectId}/snapshot")
 public class SnapshotControl {
+
+    @Autowired
+    FrontendProperties frontendProperties;
+
 
     static final Logger logger = LoggerFactory.getLogger(SnapshotControl.class);
 
@@ -161,7 +166,7 @@ public class SnapshotControl {
     @RequestMapping("/list")
     public String openList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            StringBuilder target = new StringBuilder("redirect:/p/").append(projectId).append("/my-snapshots");
+            StringBuilder target = new StringBuilder("/p/").append(projectId).append("/my-snapshots");
             List<String> query = new ArrayList<>();
             if (StringUtils.hasText(sort)) {
                 query.add("sort=" + sort);
@@ -172,7 +177,7 @@ public class SnapshotControl {
             if (!query.isEmpty()) {
                 target.append("?").append(String.join("&", query));
             }
-            return target.toString();
+            return "redirect:" + frontendProperties.url(target.toString());
         }
 
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
@@ -197,7 +202,7 @@ public class SnapshotControl {
     @RequestMapping("/my")
     public String mySnapshotList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, String keyword,
                                  String snapshotId, String missingSnapshotId, Model model) {
-        StringBuilder target = new StringBuilder("redirect:/p/").append(projectId).append("/my-snapshots");
+        StringBuilder target = new StringBuilder("/p/").append(projectId).append("/my-snapshots");
         List<String> query = new ArrayList<>();
         if (StringUtils.hasText(sort)) {
             query.add("sort=" + sort);
@@ -208,7 +213,7 @@ public class SnapshotControl {
         if (!query.isEmpty()) {
             target.append("?").append(String.join("&", query));
         }
-        return target.toString();
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     private String buildSnapshotApiCoverageSummaryText(List<SnapshotVo> snapshots) {
@@ -268,7 +273,7 @@ public class SnapshotControl {
     @RequestMapping("/mySnapshotsCodeReport")
     public String mySnapshotsCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String sort, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/my-snapshots/code-report" + (StringUtils.hasText(sort) ? "?sort=" + sort : "");
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code-report" + (StringUtils.hasText(sort) ? "?sort=" + sort : ""));
         }
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
         return buildMySnapshotsCodeReport(projectId, snapshots, model);
@@ -277,7 +282,7 @@ public class SnapshotControl {
     @RequestMapping("/mySnapshotCodeReport")
     public String mySnapshotCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String snapshotId, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/my-snapshots/" + snapshotId + "/report";
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/" + snapshotId + "/report");
         }
         Assert.hasText(snapshotId, "参数'snapshotId'不能为空");
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), null);
@@ -526,13 +531,13 @@ public class SnapshotControl {
         model.addAttribute("projectId", projectId);
         model.addAttribute("appId", appId);
 
-        return "redirect:/p/" + projectId + "/my-snapshots/code-report";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code-report");
     }
 
     @RequestMapping("/my/code")
     public String snapshotCodeView(@PathVariable String projectId, String appId, String className, @SessionAttribute UserVo user, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/my-snapshots/code?appId=" + appId + "&className=" + className;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code?appId=" + appId + "&className=" + className);
         }
         // 1. 获取该用户在该项目下的所有快照
         List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), null);
@@ -668,7 +673,7 @@ public class SnapshotControl {
     @RequestMapping("/node")
     public String openNodeDetail(@PathVariable String projectId, String traceId, String nodeId, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/my-snapshots";
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots");
         }
         TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(traceId), buildRemoteCallResolver(projectId));
         GraphNode graphNode = parse.getGraphNode(nodeId);
@@ -810,7 +815,7 @@ public class SnapshotControl {
     @RequestMapping("/detail/stack/{traceId}")
     public String openTraceTable(@PathVariable String projectId, @PathVariable String traceId, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/my-snapshots";
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots");
         }
         Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
         StackItemHelp help = new StackItemHelp(nodes);
@@ -821,7 +826,7 @@ public class SnapshotControl {
 
     @RequestMapping("/edit")
     public String openEdit(@PathVariable String projectId, @SessionAttribute UserVo user, String id, Model model) {
-        return "redirect:/p/" + projectId + "/my-snapshots/" + id;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/" + id);
     }
 
     /**
@@ -833,16 +838,16 @@ public class SnapshotControl {
     public String openDetail(@PathVariable String projectId, @PathVariable String id, Model model, HttpServletRequest request) {
         Boolean share = (Boolean) request.getAttribute("_share");
         if (!BooleanUtils.isTrue(share)) {
-            return "redirect:/p/" + projectId + "/my-snapshots/" + id;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/" + id);
         }
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/share/snapshot/" + id;
+            return "redirect:" + frontendProperties.url("/share/snapshot/" + id);
         }
 
         SnapshotVo snapshotVo = snapshotService.get(id);
         if (snapshotVo == null) {
             logger.warn("我的快照不存在, projectId={}, snapshotId={}", projectId, id);
-            return "redirect:/p/" + projectId + "/snapshot/my?missingSnapshotId=" + id;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/snapshot/my?missingSnapshotId=" + id);
         }
         model.addAttribute("snapshot", snapshotVo);
         UserVo user = userService.getUser(snapshotVo.getCreateUser());

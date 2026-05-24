@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
 import com.oAT.web.service.ProjectService;
@@ -25,6 +26,10 @@ import java.util.Map;
 @Controller
 @RequestMapping("/p/{projectId}")
 public class manageAppCodeControl {
+
+    @Autowired
+    FrontendProperties frontendProperties;
+
     @Autowired
     AppService appService;
     @Autowired
@@ -38,13 +43,13 @@ public class manageAppCodeControl {
 
     @RequestMapping("/manageAppCode")
     public String manageAppCode(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/apps";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps");
     }
 
     @RequestMapping("/app/{appId}/repository")
     public String repositoryConfig(@PathVariable String projectId, @PathVariable String appId,
                                    Model model, @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/repository";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/repository");
     }
 
     @RequestMapping("/app/{appId}/repository/save")

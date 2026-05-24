@@ -10,6 +10,7 @@ import org.objectweb.asm.util.TraceAnnotationVisitor;
  *
  * @author Eric Bruneton
  */
+@SuppressWarnings("deprecation")
 public class TraceMethodVisitor extends MethodVisitor{
 
     public final Printer p;

@@ -1,14 +1,11 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.web.control.entity.NetworkGraphData;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.SnapshotSearchService;
-import com.oAT.web.service.UsecaseSearchService;
-import com.oAT.web.service.entity.SearchPage;
-import com.oAT.web.service.entity.SnapshotSearchResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,25 +22,25 @@ import java.util.stream.Stream;
 public class SearchControl {
 
     @Autowired
-    UsecaseSearchService searchService;
+    FrontendProperties frontendProperties;
     @Autowired
     SnapshotSearchService snapshotSearchService;
 
     @RequestMapping("/search")
     public String openSearchView(@PathVariable String projectId) {
-        return "redirect:/p/" + projectId + "/search";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/search");
     }
 
     @RequestMapping("/doSearch")
-    public String doSearch(@PathVariable String projectId, String keyword, Model model) {
+    public String doSearch(@PathVariable String projectId, String keyword) {
         Assert.hasText(keyword, "param 'keyword' must be not null");
 //        SearchPage<CaseSearchResult> page = searchService.doSearch(projectId, keyword);
-        return "redirect:/p/" + projectId + "/search?keyword=" + org.springframework.web.util.UriUtils.encode(keyword, java.nio.charset.StandardCharsets.UTF_8);
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/search?keyword=" + org.springframework.web.util.UriUtils.encode(keyword, java.nio.charset.StandardCharsets.UTF_8.name()));
     }
 
     @RequestMapping("/searchTable")
     public String openSearchTableView(@PathVariable String projectId) {
-        return "redirect:/p/" + projectId + "/search?tab=table";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/search?tab=table");
     }
 
     @RequestMapping("/doSearchTable")

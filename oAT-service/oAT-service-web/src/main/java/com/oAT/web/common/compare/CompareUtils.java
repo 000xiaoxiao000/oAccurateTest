@@ -212,7 +212,7 @@ public class CompareUtils {
     }
 
     private List<ZipEntryWrapper> getZipEntryFiles(ZipFile zipFile, String includeExpr, String excludeExpr) {
-        List<ZipEntryWrapper> result = new ArrayList(zipFile.size());
+        List<ZipEntryWrapper> result = new ArrayList<>(zipFile.size());
         Enumeration<? extends ZipEntry> entries = zipFile.entries();
         ZipEntry entry;
         WildcardMatcher include = new WildcardMatcher(includeExpr == null ? "*" : includeExpr);

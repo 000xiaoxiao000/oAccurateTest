@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.web.common.CoverageSourceClassUtil;
 import com.oAT.web.common.PaletteColors;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
@@ -32,6 +33,10 @@ import java.io.IOException;
 @RequestMapping("/p/{projectId}/coverage")
 public class CoverageControl {
 
+    @Autowired
+    FrontendProperties frontendProperties;
+
+
     private static final Logger logger = LoggerFactory.getLogger(CoverageControl.class);
 
     @Autowired
@@ -57,9 +62,9 @@ public class CoverageControl {
                            @RequestParam(required = false) String reportId,
                            @RequestParam(required = false) String commitId, Model model) {
         if (!StringUtils.hasText(appId) || !StringUtils.hasText(versionNumber)) {
-            return "redirect:/p/" + projectId + "/coverage";
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/coverage");
         }
-        StringBuilder target = new StringBuilder("redirect:/p/")
+        StringBuilder target = new StringBuilder("/p/")
                 .append(projectId).append("/apps/").append(appId)
                 .append("/coverage?versionNumber=").append(versionNumber);
         if (StringUtils.hasText(reportId)) {
@@ -68,7 +73,7 @@ public class CoverageControl {
         if (StringUtils.hasText(commitId)) {
             target.append("&commitId=").append(commitId);
         }
-        return target.toString();
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     /**
@@ -92,7 +97,7 @@ public class CoverageControl {
                           Model model) {
         CoverageReportIndex report = coverageService.getReport(reportId);
         Assert.notNull(report, "覆盖率报告不存在");
-        StringBuilder target = new StringBuilder("redirect:/p/")
+        StringBuilder target = new StringBuilder("/p/")
                 .append(projectId).append("/apps/").append(report.getAppId())
                 .append("/coverage/details?reportId=").append(reportId);
         if (StringUtils.hasText(viewType)) {
@@ -104,7 +109,7 @@ public class CoverageControl {
         if (StringUtils.hasText(report.getRepoCommitId())) {
             target.append("&commitId=").append(report.getRepoCommitId());
         }
-        return target.toString();
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     /**
@@ -198,7 +203,7 @@ public class CoverageControl {
             appId = report.getAppId();
         }
         Assert.hasText(appId, "应用不存在");
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/coverage/code?reportId=" + reportId + "&className=" + className;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/coverage/code?reportId=" + reportId + "&className=" + className);
     }
 
     private String toDisplayClassName(String className) {

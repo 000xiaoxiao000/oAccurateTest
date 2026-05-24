@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.web.control.entity.DirectoryDeletePreview;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.LabelGroup;
@@ -56,6 +57,10 @@ import java.util.stream.Stream;
 @RequestMapping({"/p/{projectId}/usecase", "/p/{projectId}/usecase/"})
 public class UsecaseControl {
 
+    @Autowired
+    FrontendProperties frontendProperties;
+
+
     private static final Parser MARKDOWN_PARSER = Parser.builder().build();
     private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder().build();
 
@@ -89,12 +94,12 @@ public class UsecaseControl {
     @RequestMapping("/new")
     public String openNewView(@PathVariable String projectId, @SessionAttribute UserVo user, String directory, Model model) {
         String suffix = StringUtils.hasText(directory) ? "?directory=" + directory : "";
-        return "redirect:/p/" + projectId + "/usecases/new" + suffix;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/new" + suffix);
     }
 
     @RequestMapping("/edit")
     public String openEditView(@PathVariable String projectId, @SessionAttribute UserVo user, String id, Model model) {
-        return "redirect:/p/" + projectId + "/usecases/" + id + "/edit";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/" + id + "/edit");
     }
 
     private String arrayToString(String[] labels) {
@@ -138,13 +143,13 @@ public class UsecaseControl {
         if (System.currentTimeMillis() >= 0) {
             Boolean share = (Boolean) request.getAttribute("_share");
             if (Boolean.TRUE.equals(share)) {
-                return "redirect:/share/usecase/" + id;
+                return "redirect:" + frontendProperties.url("/share/usecase/" + id);
             }
-            return "redirect:/p/" + projectId + "/usecases/" + id;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/" + id);
         }
         Boolean share = (Boolean) request.getAttribute("_share");
         if (!Boolean.TRUE.equals(share)) {
-            return "redirect:/p/" + projectId + "/usecases/" + id;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/" + id);
         }
 
         UsecaseDetailVo usecase;
@@ -188,7 +193,7 @@ public class UsecaseControl {
             model.addAttribute("usecaseContent", renderMarkdown(usecase.getContent()));
         }
 
-        return "redirect:/p/" + projectId + "/usecases/" + id;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/" + id);
     }
 
     private String renderMarkdown(String markdown) {
@@ -202,12 +207,12 @@ public class UsecaseControl {
      */
     @RequestMapping("/doSave")
     @ResponseBody
-    public ResultNotified doSave(@PathVariable String projectId, @SessionAttribute UserVo user, UsecaseVo usecase) {
+    public ResultNotified<String> doSave(@PathVariable String projectId, @SessionAttribute UserVo user, UsecaseVo usecase) {
         Assert.hasText(usecase.getTitle(), "用户名称不能为空");
         Assert.hasText(usecase.getDirectory(), "目录不能为空");
         usecase.setDefects(parseMultiLine(usecase.getDefectsText()));
         usecase.setPrdRequirements(parseMultiLine(usecase.getPrdRequirementsText()));
-        ResultNotified result;
+        ResultNotified<String> result;
 
         if (usecase.getId() == null) {
             usecase.setProjectId(projectId);
@@ -245,7 +250,7 @@ public class UsecaseControl {
      */
     @RequestMapping("/list")
     public String openListView(@PathVariable String projectId, String directory, String sort, String keyword, String usecaseId, Model model) {
-        StringBuilder target = new StringBuilder("redirect:/p/").append(projectId).append("/usecases");
+        StringBuilder target = new StringBuilder("/p/").append(projectId).append("/usecases");
         List<String> query = new ArrayList<>();
         if (StringUtils.hasText(directory) && !"root".equals(directory)) {
             query.add("directory=" + directory);
@@ -259,7 +264,7 @@ public class UsecaseControl {
         if (!query.isEmpty()) {
             target.append("?").append(String.join("&", query));
         }
-        return target.toString();
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     @RequestMapping("/doDelete")
@@ -338,7 +343,7 @@ public class UsecaseControl {
         //参数dir.name不能为空
         Assert.hasText(name, "用例路径名称不能为空");
         usecaseService.createFolder(projectId, parentId, name);
-        return new ResultNotified(true, "目录保存成功");
+        return new ResultNotified<>(true, "目录保存成功");
     }
 
     @RequestMapping("/directory/save")
@@ -351,7 +356,7 @@ public class UsecaseControl {
         //name不能为空
         Assert.hasText(name, "路径名称不能为空");
         usecaseService.updateFolder(id, parentId, name);
-        return new ResultNotified(true, "目录保存成功");
+        return new ResultNotified<>(true, "目录保存成功");
     }
 
     private ResultNotified<DirectoryDeletePreview> buildDirectoryDeletePreviewResult(DirectoryDeleteResult serviceResult) {

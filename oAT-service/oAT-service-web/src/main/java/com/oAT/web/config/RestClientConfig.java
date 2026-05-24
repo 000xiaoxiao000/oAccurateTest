@@ -14,6 +14,7 @@ import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
  * Elasticsearch 客户端配置
  */
 @Configuration
+@SuppressWarnings("deprecation")
 public class RestClientConfig extends AbstractElasticsearchConfiguration {
 
     @Value(value = "${elasticsearch.gatewayIpPorts}")

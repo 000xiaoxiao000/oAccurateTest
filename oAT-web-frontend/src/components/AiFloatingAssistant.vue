@@ -3,7 +3,7 @@
     <button v-if="mascotHidden" class="restore-button" type="button" @pointerdown="startDrag" @click="showMascot">显示AI助手</button>
 
     <button v-else class="launcher" type="button" title="打开 AI 助手" data-tooltip="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
-      <MascotCanvas :size="88" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" />
+      <MascotCanvas :size="88" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="false" />
       <span v-if="showLauncherLabel">AI 助手</span>
     </button>
 
@@ -557,8 +557,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 14px;
   overflow: auto;
-  resize: both;
-  resize: v-bind(layoutLocked ? 'none' : 'both');
+  resize: v-bind('layoutLocked ? "none" : "both"');
   border-radius: 26px;
   border: 1px solid rgba(15, 23, 42, .10);
   background:

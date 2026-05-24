@@ -6,10 +6,9 @@ import com.oAT.web.control.ProjectInterceptor;
 import com.oAT.web.service.ResourceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
-import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.io.File;
@@ -25,34 +24,38 @@ public class WebConfig implements WebMvcConfigurer {
     LoginInterceptor loginInterceptor;
     @Autowired
     ResourceService resourceService;
+    @Autowired
+    FrontendProperties frontendProperties;
 
-    // 拦截器配置
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        //自定义拦截器，添加拦截路径和排除拦截路径
-        // addPathPatterns 用于添加拦截规则
-        // excludePathPatterns 用于排除拦截
         registry.addInterceptor(loginInterceptor)
                 .addPathPatterns("/**")
-                .excludePathPatterns("/", "/index.html", "/login", "/doLogin", "/register",
-                        "/doRegister", "/client/**", "/r/**", "/error",
-                        "/css/**", "/images/**", "/js/**", "/assets/**", "/share/**",
-                        "/api/auth/login", "/api/auth/register");
-        registry.addInterceptor(aiInteractiveAccessInterceptor).addPathPatterns("/p/*/AIInteractive/**");
-        //项目节点拦截
-        registry.addInterceptor(projectInterceptor).addPathPatterns("/p/**");
+                .excludePathPatterns("/", "/login", "/doLogin", "/register", "/doRegister",
+                        "/client/**", "/r/**", "/error", "/share/**", "/share/api/**",
+                        "/api/auth/login", "/api/auth/register", "/api/auth/me");
+        registry.addInterceptor(aiInteractiveAccessInterceptor).addPathPatterns("/api/projects/*/ai/**");
+        registry.addInterceptor(projectInterceptor).addPathPatterns("/p/**", "/api/projects/**");
     }
 
     @Override
-    public void addViewControllers(ViewControllerRegistry registry) {
-        registry.addViewController("/").setViewName("forward:/projects");
-        registry.addViewController("/projects").setViewName("forward:/index.html");
-        registry.setOrder(Ordered.HIGHEST_PRECEDENCE);
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+                .allowedOrigins(frontendProperties.getAllowedOrigins())
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true)
+                .maxAge(3600);
+        registry.addMapping("/share/api/**")
+                .allowedOrigins(frontendProperties.getAllowedOrigins())
+                .allowedMethods("GET", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true)
+                .maxAge(3600);
     }
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        //  自定义资源配置
         File resourceRoot = new File(resourceService.getCacheRoot());
         if (!resourceRoot.exists()) {
             resourceRoot.mkdirs();
@@ -60,5 +63,4 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/r/**")
                 .addResourceLocations(resourceRoot.toURI().toString());
     }
-
 }

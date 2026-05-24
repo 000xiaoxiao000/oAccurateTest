@@ -154,8 +154,9 @@ public class TraceNodeCache {
 
     public ArrayList<TraceItemVo> getRangeByTime(Integer upToTime, CacheFilter filter) {
         ArrayList<TraceItemVo> list = new ArrayList<>();
+        int queryUpToTime = upToTime == null || upToTime <= 0 ? 180 : upToTime;
         // Convert to long to avoid integer overflow
-        long toTime = System.currentTimeMillis() - (upToTime.longValue() * 1000L);
+        long toTime = System.currentTimeMillis() - (queryUpToTime * 1000L);
 
         List<Object> traceIds = redisTemplate.opsForList().range(TRACE_ITEMS_LIST_KEY, 0, -1);
         if (traceIds != null) {

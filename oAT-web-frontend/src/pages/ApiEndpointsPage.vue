@@ -271,7 +271,7 @@ watch(pagedItems, (items) => {
 })
 
 function endpointBase() {
-  return `/p/${projectId.value}/app/${appId.value}/api-endpoints`
+  return `/api/projects/${projectId.value}/apps/${appId.value}/api-endpoints`
 }
 
 async function refreshAll() {
@@ -518,7 +518,7 @@ function restoreViewState() {
     currentPage.value = state.currentPage || 1
     expandedKeys.value = new Set(state.expandedKeys || [])
   } catch {
-    // Ignore incompatible legacy state.
+    // Ignore incompatible persisted state.
   }
 }
 

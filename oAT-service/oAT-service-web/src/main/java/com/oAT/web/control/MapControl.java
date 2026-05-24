@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.web.common.ClassStructure;
@@ -30,6 +31,10 @@ import java.util.stream.Collectors;
 @Controller
 @RequestMapping("/p/{projectId}/map")
 public class MapControl {
+
+    @Autowired
+    FrontendProperties frontendProperties;
+
 
     private static final Logger logger = LoggerFactory.getLogger(MapControl.class);
 
@@ -71,7 +76,7 @@ public class MapControl {
     @RequestMapping("/app")
     public String openAppMapView(@PathVariable String projectId, String appId, String layers, Model model) {
         String suffix = StringUtils.hasText(layers) ? "?layers=" + layers : "";
-        return "redirect:/p/" + projectId + "/map/app/" + appId + suffix;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/map/app/" + appId + suffix);
     }
 
     @RequestMapping("/app/data")
@@ -96,7 +101,7 @@ public class MapControl {
 
     @RequestMapping("/home")
     public String openHomeMapView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/map/home";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/map/home");
     }
 
     @RequestMapping("/home/data")
@@ -139,7 +144,7 @@ public class MapControl {
 
     @RequestMapping("/code")
     public String openCodeMap(String traceId, Model model, @PathVariable String projectId) {
-        return "redirect:/p/" + projectId + "/map/code?traceId=" + traceId;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/map/code?traceId=" + traceId);
     }
 
     /**

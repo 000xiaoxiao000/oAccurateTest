@@ -1,10 +1,10 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.web.service.entity.UserVo;
-import org.springframework.http.MediaType;
 import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
@@ -13,18 +13,17 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLDecoder;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 import static com.oAT.web.common.UtilJson.JSON_MAPPER;
 
 @Component
 public class LoginInterceptor implements HandlerInterceptor {
-    static Logger logger = LoggerFactory.getLogger(LoginInterceptor.class);
+    @Autowired
+    private FrontendProperties frontendProperties;
 
     @Override
     public boolean preHandle(HttpServletRequest request, @NotNull HttpServletResponse response, @NotNull Object handler) {
-        // 如果为共享请求，则跳转权登陆权限验证
         Boolean share = (Boolean) request.getAttribute("_share");
         if (share != null && share) {
             return true;
@@ -37,8 +36,7 @@ public class LoginInterceptor implements HandlerInterceptor {
                     return false;
                 }
                 String redirect = buildRedirectPath(request);
-                redirect = URLEncoder.encode(redirect, StandardCharsets.UTF_8);
-                response.sendRedirect("/login?redirect=" + redirect);
+                response.sendRedirect(frontendProperties.loginUrl(redirect));
                 return false;
             } catch (IOException e) {
                 throw new RuntimeException("登录重定向失败!", e);
@@ -49,7 +47,7 @@ public class LoginInterceptor implements HandlerInterceptor {
 
     private boolean isApiRequest(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        if (uri != null && uri.startsWith("/api/")) {
+        if (uri != null && (uri.startsWith("/api/") || uri.startsWith("/share/api/"))) {
             return true;
         }
         String accept = request.getHeader("Accept");
@@ -59,9 +57,6 @@ public class LoginInterceptor implements HandlerInterceptor {
     private String buildRedirectPath(HttpServletRequest request) {
         String uri = request.getRequestURI();
         String queryString = request.getQueryString();
-        if ("/index.html".equals(uri)) {
-            return normalizeRedirect(request.getParameter("redirect"));
-        }
         String redirect = StringUtils.hasText(uri) ? uri : "/projects";
         if (StringUtils.hasText(queryString)) {
             redirect += "?" + queryString;
@@ -75,7 +70,7 @@ public class LoginInterceptor implements HandlerInterceptor {
         }
 
         String normalized = redirect.trim();
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 8; i++) {
             String decoded = URLDecoder.decode(normalized, StandardCharsets.UTF_8);
             if (decoded.equals(normalized)) {
                 break;
@@ -86,6 +81,9 @@ public class LoginInterceptor implements HandlerInterceptor {
         if (normalized.startsWith("http://") || normalized.startsWith("https://") || normalized.startsWith("//")) {
             return "/projects";
         }
+        if (normalized.startsWith("/\\") || normalized.indexOf('\\') >= 0 || containsControlCharacter(normalized)) {
+            return "/projects";
+        }
         if (!normalized.startsWith("/")) {
             return "/projects";
         }
@@ -93,7 +91,19 @@ public class LoginInterceptor implements HandlerInterceptor {
             String nested = extractRedirectParameter(normalized);
             return StringUtils.hasText(nested) ? normalizeRedirect(nested) : "/projects";
         }
+        if (normalized.contains("redirect=/index.html") || normalized.contains("redirect=%2Findex.html")) {
+            return "/projects";
+        }
         return normalized;
+    }
+
+    private static boolean containsControlCharacter(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (value.charAt(i) <= 0x1F || value.charAt(i) == 0x7F) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String extractRedirectParameter(String value) {

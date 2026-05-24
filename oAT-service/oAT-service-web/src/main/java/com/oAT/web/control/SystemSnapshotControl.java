@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.agent.model.*;
 import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.DateUtil;
@@ -32,6 +33,10 @@ import java.util.stream.Collectors;
 @Controller
 @RequestMapping("/p/{projectId}/{appId}/snapshot/")
 public class SystemSnapshotControl {
+
+    @Autowired
+    FrontendProperties frontendProperties;
+
 
     private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
@@ -73,7 +78,7 @@ public class SystemSnapshotControl {
     @RequestMapping("/list")
     public String openList(@PathVariable String projectId, @PathVariable String appId, String directoryId, String sort,
                            String keyword, String missingSnapshotId, @SessionAttribute UserVo user, Model model) {
-        StringBuilder target = new StringBuilder("redirect:/p/")
+        StringBuilder target = new StringBuilder("/p/")
                 .append(projectId)
                 .append("/apps/")
                 .append(appId)
@@ -91,7 +96,7 @@ public class SystemSnapshotControl {
         if (!query.isEmpty()) {
             target.append("?").append(String.join("&", query));
         }
-        return target.toString();
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     /**
@@ -147,7 +152,7 @@ public class SystemSnapshotControl {
     public String open(@PathVariable String projectId, @PathVariable String appId, @PathVariable String id,
                        @RequestParam(value = "tab", required = false) String tab,
                        Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots/" + id;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots/" + id);
     }
 
     @RequestMapping("/{id}/usecase/bind")
@@ -235,7 +240,7 @@ public class SystemSnapshotControl {
     @RequestMapping("/node/{snapshotId}")
     public String openNodeDetail(@PathVariable String projectId, @PathVariable String appId, @PathVariable String snapshotId, String traceId, String nodeId, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots/" + snapshotId;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots/" + snapshotId);
         }
         Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
         Map<String, TraceNode> nodeMap = nodes.stream()
@@ -386,7 +391,7 @@ public class SystemSnapshotControl {
      */
     @RequestMapping("/report/{id}")
     public String systemSnapshotCodeReport(@PathVariable String projectId, @PathVariable String appId, @PathVariable String id, Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots/" + id + "/report";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots/" + id + "/report");
     }
 
     @RequestMapping("/report/calculate/{id}")
@@ -405,7 +410,7 @@ public class SystemSnapshotControl {
 
     @RequestMapping("/report/code")
     public String systemSnapshotCodeView(@PathVariable String projectId, @PathVariable String appId, String snapshotId, String className, Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots/" + snapshotId + "/report/code?className=" + className;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots/" + snapshotId + "/report/code?className=" + className);
     }
 
     private Map<String, List<Integer>> normalizeMethodBranchTargetProbeMap(Map<String, List<Integer>> total,

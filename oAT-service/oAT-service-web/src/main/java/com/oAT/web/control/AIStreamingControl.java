@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * </ul>
  */
 @Controller
-@RequestMapping("/p/{projectId}/AIInteractive")
+@RequestMapping("/api/projects/{projectId}/ai")
 public class AIStreamingControl {
 
     private static final Logger logger = LoggerFactory.getLogger(AIStreamingControl.class);

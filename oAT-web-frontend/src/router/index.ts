@@ -90,11 +90,6 @@ const router = createRouter({
           component: () => import('@/pages/ApiEndpointsPage.vue'),
         },
         {
-          path: 'p/:projectId/app/:appId/api-endpoints',
-          name: 'legacy-app-api-endpoints',
-          component: () => import('@/pages/ApiEndpointsPage.vue'),
-        },
-        {
           path: 'p/:projectId/monitor',
           name: 'monitor',
           component: () => import('@/pages/MonitorPage.vue'),

@@ -1,7 +1,12 @@
 <template>
   <nav v-if="items.length" class="breadcrumbs" aria-label="当前位置">
     <button class="back-button" type="button" @click="goBack">返回</button>
-    <RouterLink v-for="(item, index) in items" :key="`${item.label}-${index}`" :to="item.to || route.fullPath" :class="{ current: index === items.length - 1 || !item.to }">
+    <RouterLink
+      v-for="(item, index) in items"
+      :key="`${item.label}-${index}`"
+      :to="item.to || route.fullPath"
+      :class="{ current: index === items.length - 1 || !item.to }"
+    >
       {{ item.label }}
     </RouterLink>
   </nav>
@@ -23,6 +28,60 @@ const projectId = computed(() => typeof route.params.projectId === 'string' ? ro
 const appId = computed(() => typeof route.params.appId === 'string' ? route.params.appId : '')
 const context = computed(() => projectId.value ? projectStore.contextByProjectId[projectId.value] : undefined)
 const currentApp = computed(() => context.value?.apps.find((app) => app.id === appId.value))
+const backTarget = computed(() => {
+  const name = String(route.name || '')
+  const projectHome = projectId.value ? `/p/${projectId.value}/home` : '/projects'
+  const projectApps = projectId.value ? `/p/${projectId.value}/apps` : '/projects'
+  const projectCoverage = projectId.value ? `/p/${projectId.value}/coverage` : '/projects'
+  const appSettings = projectId.value && appId.value ? `/p/${projectId.value}/apps/${appId.value}/settings` : projectHome
+  const appList = projectId.value ? `/p/${projectId.value}/apps` : '/projects'
+
+  const routeBackTargets: Record<string, string> = {
+    projects: '/projects',
+    'project-home': '/projects',
+    'project-ai': projectHome,
+    'project-apps': projectHome,
+    'online-apps': appList,
+    'app-settings': appList,
+    'app-probe-alerts': appSettings,
+    'app-repository': appSettings,
+    'app-api-endpoints': appSettings,
+    monitor: projectHome,
+    'version-apps': projectHome,
+    'version-list': `/p/${projectId.value}/version/apps`,
+    'version-create': `/p/${projectId.value}/apps/${appId.value}/versions`,
+    'version-compare': `/p/${projectId.value}/apps/${appId.value}/versions`,
+    'version-report-detail': `/p/${projectId.value}/apps/${appId.value}/compare`,
+    'coverage-hub': projectHome,
+    'coverage-overview': projectCoverage,
+    'coverage-details': projectCoverage,
+    'coverage-code': projectCoverage,
+    'map-home': projectHome,
+    'map-app': `/p/${projectId.value}/map/home`,
+    'map-code': `/p/${projectId.value}/map/home`,
+    'search-center': `/p/${projectId.value}/map/home`,
+    'system-snapshot-list': appList,
+    'system-snapshot-detail': `/p/${projectId.value}/apps/${appId.value}/snapshots`,
+    'system-snapshot-report': `/p/${projectId.value}/apps/${appId.value}/snapshots/${route.params.snapshotId}`,
+    'system-snapshot-code': `/p/${projectId.value}/apps/${appId.value}/snapshots/${route.params.snapshotId}/report`,
+    'system-snapshot-graph': `/p/${projectId.value}/apps/${appId.value}/snapshots/${route.params.snapshotId}`,
+    'my-snapshot-list': projectHome,
+    'my-snapshot-code-report': `/p/${projectId.value}/my-snapshots`,
+    'my-snapshot-aggregate-code': `/p/${projectId.value}/my-snapshots`,
+    'my-snapshot-detail': `/p/${projectId.value}/my-snapshots`,
+    'my-snapshot-report': `/p/${projectId.value}/my-snapshots/${route.params.snapshotId}`,
+    'my-snapshot-code': `/p/${projectId.value}/my-snapshots/${route.params.snapshotId}`,
+    'my-snapshot-graph': `/p/${projectId.value}/my-snapshots/${route.params.snapshotId}`,
+    'usecase-list': projectHome,
+    'usecase-new': `/p/${projectId.value}/usecases`,
+    'usecase-edit': `/p/${projectId.value}/usecases/${route.params.usecaseId}`,
+    'usecase-detail': `/p/${projectId.value}/usecases`,
+    'project-members': projectHome,
+    'project-labels': projectHome,
+  }
+
+  return routeBackTargets[name] || projectHome
+})
 
 const routeLabels: Record<string, string> = {
   projects: '项目列表',
@@ -35,7 +94,6 @@ const routeLabels: Record<string, string> = {
   'app-probe-alerts': '探针告警',
   'app-repository': '仓库配置',
   'app-api-endpoints': '接口扫描',
-  'legacy-app-api-endpoints': '接口扫描',
   monitor: '实时监控',
   'version-apps': '版本中心',
   'version-list': '版本列表',
@@ -92,11 +150,7 @@ const items = computed<BreadcrumbItem[]>(() => {
 })
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back()
-    return
-  }
-  router.push(projectId.value ? `/p/${projectId.value}/home` : '/projects')
+  router.push(backTarget.value)
 }
 </script>
 

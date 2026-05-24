@@ -38,9 +38,18 @@ public class ProjectInterceptor implements HandlerInterceptor {
         String projectId;
         UserVo user;
         ProjectVo project;
-        Assert.isTrue(request.getRequestURI().startsWith("/p/"), "url must matching  start with  '/p/{projectId}'");
-        projectId = request.getRequestURI().split("/")[2];
-        Assert.isTrue(!projectId.trim().isEmpty(), "url must matching  start with '/p/{projectId}'");
+        String requestUri = request.getRequestURI();
+        if (requestUri.startsWith("/api/projects/")) {
+            String[] parts = requestUri.split("/");
+            Assert.isTrue(parts.length > 3, "url must matching start with '/api/projects/{projectId}'");
+            projectId = parts[3];
+        } else {
+            Assert.isTrue(requestUri.startsWith("/p/"), "url must matching start with '/p/{projectId}'");
+            String[] parts = requestUri.split("/");
+            Assert.isTrue(parts.length > 2, "url must matching start with '/p/{projectId}'");
+            projectId = parts[2];
+        }
+        Assert.isTrue(!projectId.trim().isEmpty(), "projectId must not be empty");
 
 
         // 如果为共享请求，则跳过项目权限验证

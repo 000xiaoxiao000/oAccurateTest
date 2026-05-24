@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.exceptions.UserOperationException;
 import com.oAT.web.service.UserService;
@@ -15,8 +16,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.SessionAttribute;
+import org.springframework.web.util.UriUtils;
 
 import javax.servlet.http.HttpSession;
+import java.nio.charset.StandardCharsets;
 
 @Controller
 public class UserControl {
@@ -24,29 +27,24 @@ public class UserControl {
 
     @Autowired
     UserService userService;
+    @Autowired
+    FrontendProperties frontendProperties;
 
     @RequestMapping("/register")
     public String openRegisterView() {
-        return "forward:/index.html";
+        return "redirect:" + frontendProperties.url("/register");
     }
 
     @RequestMapping("/login")
-    public String openLoginView(String redirect, Model model) {
-        model.addAttribute("redirect", redirect);
-        return "forward:/index.html";
-    }
-
-    @RequestMapping("/legacy/login")
-    public String openLegacyLoginView(String redirect, Model model) {
-        model.addAttribute("redirect", redirect);
-        return "redirect:/login";
+    public String openLoginView(String redirect) {
+        return "redirect:" + frontendProperties.loginUrl(LoginInterceptor.normalizeRedirect(redirect));
     }
 
     @RequestMapping("/doRegister")
     public String doRegister(UserRegisterVo user, Model model) {
         userService.doRegister(user);
         model.addAttribute("newUser", user);
-        return "redirect:/login?registered=1";
+        return "redirect:" + frontendProperties.url("/login?registered=1");
     }
 
     @RequestMapping("/doLogin")
@@ -57,22 +55,22 @@ public class UserControl {
             logger.info("当前用户已登录，登录的用户名为：" + user.getName());
         } catch (UserOperationException e) {
             model.addAttribute("errorMessage", e.getMessage());
-            return "redirect:/login?error=" + org.springframework.web.util.UriUtils.encode(e.getMessage(), java.nio.charset.StandardCharsets.UTF_8);
+            return "redirect:" + frontendProperties.url("/login?error=" + UriUtils.encodeQueryParam(e.getMessage(), StandardCharsets.UTF_8.name()));
         }
         if (StringUtils.hasText(redirect)) {
-            return "redirect:" + LoginInterceptor.normalizeRedirect(redirect);
+            return "redirect:" + frontendProperties.url(LoginInterceptor.normalizeRedirect(redirect));
         }
-        return "redirect:/projects";
+        return "redirect:" + frontendProperties.url("/projects");
     }
 
     @RequestMapping("/user/info")
     public String openUserInfoView(@SessionAttribute UserVo user, Model model) {
-        return "redirect:/account";
+        return "redirect:" + frontendProperties.url("/account");
     }
 
     @RequestMapping("/user/password")
     public String openPasswordView() {
-        return "redirect:/account?tab=password";
+        return "redirect:" + frontendProperties.url("/account?tab=password");
     }
 
     @RequestMapping(value = "/user/doUpdatePassword", method = RequestMethod.POST)
@@ -80,7 +78,7 @@ public class UserControl {
     public ResultNotified<String> UpdatePassword(@SessionAttribute UserVo user, String oldPassword, String newPassword, String newPasswordConfirm,
                                                  Model model) {
         if (!newPassword.equals(newPasswordConfirm)) {
-            ResultNotified r = new ResultNotified(false, "密码修改失败");
+            ResultNotified<String> r = new ResultNotified<>(false, "密码修改失败");
             r.setErrorMessage("两次密码输入不一至");
             return r;
         }
@@ -89,26 +87,24 @@ public class UserControl {
         } catch (UserOperationException e) {
             model.addAttribute("errorMessage", e.getMessage());
             logger.error("密码修改失败", e);
-            ResultNotified r = new ResultNotified(false, "密码修改失败");
+            ResultNotified<String> r = new ResultNotified<>(false, "密码修改失败");
             r.setErrorMessage(e.getMessage());
             return r;
         }
-        return new ResultNotified(true, "密码修改成功");
+        return new ResultNotified<>(true, "密码修改成功");
     }
-
 
     @RequestMapping("/user/doUpdateInfo")
     public String updateUserInfo(@SessionAttribute UserVo user, UserVo userVo, Model model) {
         userVo.setId(user.getId());
         userService.updateUser(userVo);
-        return "redirect:/account";
+        return "redirect:" + frontendProperties.url("/account");
     }
-
 
     @RequestMapping("/user/logout")
     public String updateUserInfo(HttpSession session, @SessionAttribute UserVo user) {
         session.removeAttribute("user");
-        return "redirect:/login";
+        return "redirect:" + frontendProperties.url("/login");
     }
 
 }

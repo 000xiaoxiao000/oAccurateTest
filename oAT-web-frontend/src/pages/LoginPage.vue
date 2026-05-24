@@ -10,12 +10,13 @@
         :color="item.color"
         :seed="item.seed"
         :mood="error ? 'error' : 'happy'"
+        :interactive="false"
       />
     </div>
     <div class="login-card" :class="{ 'shake-animation': Boolean(error), 'auth-submitting': submitting }">
       <div v-if="submitting" class="submit-overlay">{{ isRegisterMode ? '正在注册，请稍候...' : '正在登录，请稍候...' }}</div>
       <div class="auth-brand">
-        <MascotCanvas class="brand-mascot" :size="60" color="#00b5ad" seed="login-brand" :mood="error ? 'error' : 'happy'" />
+        <MascotCanvas class="brand-mascot" :size="60" color="#00b5ad" seed="login-brand" :mood="error ? 'error' : 'happy'" :interactive="false" />
         <div>
           <h1>{{ isRegisterMode ? '账号注册' : '账号登录' }}</h1>
           <p>{{ isRegisterMode ? '创建账号后继续管理你的测试资产' : '欢迎回来，继续管理你的测试资产' }}</p>
@@ -159,7 +160,7 @@ function resolveRedirect() {
 
 function normalizeRedirect(redirect: string) {
   let normalized = redirect.trim()
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     try {
       const decoded = decodeURIComponent(normalized)
       if (decoded === normalized) break
@@ -179,8 +180,12 @@ function normalizeRedirect(redirect: string) {
     const queryIndex = normalized.indexOf('?')
     if (queryIndex >= 0) {
       const params = new URLSearchParams(normalized.slice(queryIndex + 1))
-      return normalizeRedirect(params.get('redirect') || '')
+      const nested = params.get('redirect') || ''
+      return normalizeRedirect(nested)
     }
+    return '/projects'
+  }
+  if (normalized.includes('redirect=/index.html') || normalized.includes('redirect=%2Findex.html')) {
     return '/projects'
   }
   return normalized

@@ -64,8 +64,8 @@
           </div>
           <div v-if="payload.report" class="report-actions">
             <RouterLink class="ghost-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }">明细</RouterLink>
-            <a class="ghost-link" :href="`/p/${projectId}/coverage/export?reportId=${payload.report.id}`">导出报告</a>
-            <a class="ghost-link" :href="`/p/${projectId}/coverage/export-methods?reportId=${payload.report.id}`">导出方法</a>
+            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export?reportId=${payload.report.id}`)">导出报告</a>
+            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export-methods?reportId=${payload.report.id}`)">导出方法</a>
           </div>
           <div v-if="payload.report" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.report.versionNumber || '-' }}</strong></div>
@@ -85,8 +85,8 @@
           </div>
           <div v-if="payload.incrementalReport" class="report-actions">
             <RouterLink class="ghost-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }">明细</RouterLink>
-            <a class="ghost-link" :href="`/p/${projectId}/coverage/export?reportId=${payload.incrementalReport.id}`">导出报告</a>
-            <a class="ghost-link" :href="`/p/${projectId}/coverage/export-methods?reportId=${payload.incrementalReport.id}`">导出方法</a>
+            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export?reportId=${payload.incrementalReport.id}`)">导出报告</a>
+            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export-methods?reportId=${payload.incrementalReport.id}`)">导出方法</a>
           </div>
           <div v-if="payload.incrementalReport" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.incrementalReport.versionNumber || '-' }}</strong></div>
@@ -178,6 +178,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { backendApiUrl } from '@/api/http'
 import { RouterLink, useRoute } from 'vue-router'
 
 import {

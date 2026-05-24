@@ -473,7 +473,7 @@ async function loadProbes() {
   probeLoading.value = true
   probeError.value = ''
   try {
-    probes.value = await apiGetRaw<OnlineSessionSummary[]>(`/p/${projectId.value}/monitor/probeStatus`)
+    probes.value = await apiGetRaw<OnlineSessionSummary[]>(`/api/projects/${projectId.value}/monitor/probeStatus`)
   } catch (err) {
     probeError.value = err instanceof Error ? err.message : '加载探针失败'
   } finally {
@@ -490,7 +490,11 @@ async function loadTraces() {
     query.set('maxSize', String(maxSize.value || 100))
     selectedAppIds.value.forEach((appId) => query.append('appIds', appId))
     selectedClientIps.value.forEach((ip) => query.append('clientIps', ip))
-    traces.value = await apiGetRaw<TraceItemSummary[]>(`/p/${projectId.value}/monitor/getNodeByTime?${query.toString()}`)
+    traces.value = await apiGetRaw<TraceItemSummary[]>(`/api/projects/${projectId.value}/monitor/getNodeByTime?${query.toString()}`)
+    const visibleTraceIds = new Set(traces.value.map((trace) => trace.traceId))
+    if (traces.value[0] && (!selectedTraceId.value || !visibleTraceIds.has(selectedTraceId.value))) {
+      await selectTrace(traces.value[0])
+    }
     await runAutoSaveForNewTraces(traces.value)
   } catch (err) {
     traceError.value = err instanceof Error ? err.message : '加载 trace 失败'
@@ -538,6 +542,7 @@ function clearMonitorFilters() {
   traceKeyword.value = ''
   selectedAppIds.value = []
   selectedClientIps.value = []
+  selectedTraceId.value = ''
   scopeMode.value = 'aggregate'
   loadTraces()
 }
@@ -549,7 +554,7 @@ async function loadGraph() {
   try {
     const query = new URLSearchParams()
     query.set('traceId', selectedTraceId.value)
-    graph.value = await apiGetRaw<GraphViewPayload>(`/p/${projectId.value}/monitor/getTraceGraph?${query.toString()}`)
+    graph.value = await apiGetRaw<GraphViewPayload>(`/api/projects/${projectId.value}/monitor/getTraceGraph?${query.toString()}`)
     selectedNodeId.value = graph.value?.showDefaultNode?.id || graph.value?.nodes[0]?.id || ''
     if (selectedNodeId.value) {
       await loadNodeDetail(selectedNodeId.value)
@@ -574,7 +579,7 @@ async function loadNodeDetail(nodeId: string) {
     const query = new URLSearchParams()
     query.set('traceId', selectedTraceId.value)
     query.set('nodeId', nodeId)
-    selectedNodeDetail.value = await apiGet<GraphNodeDetailPayload>(`/p/${projectId.value}/monitor/getTraceGraphNode?${query.toString()}`)
+    selectedNodeDetail.value = await apiGet<GraphNodeDetailPayload>(`/api/projects/${projectId.value}/monitor/getTraceGraphNode?${query.toString()}`)
   } catch (err) {
     selectedNodeDetail.value = null
     nodeDetailError.value = err instanceof Error ? err.message : '加载节点详情失败'
@@ -591,7 +596,7 @@ async function autoSaveSnapshot() {
     const body = new URLSearchParams()
     body.set('traceId', selectedTraceId.value)
     body.set('title', graph.value?.title || '实时监控自动快照')
-    const result = await apiPost<string>(`/p/${projectId.value}/monitor/autoSaveSystemSnapshot`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
+    const result = await apiPost<string>(`/api/projects/${projectId.value}/monitor/autoSaveSystemSnapshot`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
     snapshotNotice.value = result || '系统快照已保存'
   } catch (err) {
     snapshotNotice.value = err instanceof Error ? err.message : '保存系统快照失败'
@@ -613,7 +618,7 @@ async function saveMySnapshot() {
     body.set('describe', '实时监控自动保存')
     body.append('labels', '自动保存')
     body.append('labels', '实时监控')
-    const result = await apiPost<unknown>(`/p/${projectId.value}/snapshot/save`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
+    const result = await apiPost<unknown>(`/api/projects/${projectId.value}/snapshots/my/save`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
     snapshotNotice.value = extractResultMessage(result, '我的快照已保存')
   } catch (err) {
     snapshotNotice.value = err instanceof Error ? err.message : '保存我的快照失败'

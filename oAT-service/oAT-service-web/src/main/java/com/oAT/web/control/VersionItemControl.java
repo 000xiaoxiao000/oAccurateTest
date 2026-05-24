@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
@@ -41,6 +42,10 @@ import org.slf4j.LoggerFactory;
 @RequestMapping("/p/{projectId}/")
 public class VersionItemControl {
 
+    @Autowired
+    FrontendProperties frontendProperties;
+
+
     private static final Logger logger = LoggerFactory.getLogger(VersionItemControl.class);
 
     @Autowired
@@ -81,7 +86,7 @@ public class VersionItemControl {
 
     @RequestMapping("{appId}/version/new")
     public String addVersion(@PathVariable String projectId, @PathVariable String appId, Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/versions/new";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/versions/new");
     }
 
     @RequestMapping("{appId}/version/doAdd")
@@ -483,7 +488,7 @@ public class VersionItemControl {
             model.addAttribute("errorMessage", "git diff 比对未能启动");
             return "forward:/error/404";
         }
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare?jobId=" + jobId;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/compare?jobId=" + jobId);
     }
 
     // 验证版本号 是否可用
@@ -500,7 +505,7 @@ public class VersionItemControl {
                                  @RequestParam(defaultValue = "10") int size,
                                  @SessionAttribute UserVo user,
                                  Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/versions";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/versions");
     }
 
     @RequestMapping(value = "{appId}/version/delete", method = RequestMethod.POST)
@@ -513,19 +518,19 @@ public class VersionItemControl {
     // 选择管理版本的应用
     @RequestMapping("/version/apps")
     public String openAppListView(@PathVariable String projectId, Model model) {
-        return "redirect:/p/" + projectId + "/version/apps";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/version/apps");
     }
 
     // 兼容旧路由：/p/{projectId}/{appId}/version/appList
     @RequestMapping("{appId}/version/appList")
     public String openAppListLegacyView(@PathVariable String projectId, @PathVariable String appId, Model model) {
-        return "redirect:/p/" + projectId + "/version/apps";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/version/apps");
     }
 
     // 打开版本比对页面
     @RequestMapping("{appId}/version/compare")
     public String openCompareView(@PathVariable String projectId, @PathVariable String appId, Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/compare");
     }
 
     @RequestMapping("{appId}/version/compare/start")
@@ -540,7 +545,7 @@ public class VersionItemControl {
             model.addAttribute("errorMessage", "源版本（新）或目标版本（旧）文件未选择");
             return "forward:/error/404";
         }
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare?jobId=" + jobId;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/compare?jobId=" + jobId);
     }
 
     @RequestMapping("/version/compare/console")
@@ -552,9 +557,9 @@ public class VersionItemControl {
 
         CompareJobVo job = versionService.getCompareJob(jobId);
         if (job == null || job.isFinish()) {
-            return "redirect:/p/" + projectId + "/version/reports/" + jobId;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/version/reports/" + jobId);
         }
-        return "redirect:/p/" + projectId + "/apps/" + job.getAppId() + "/compare?jobId=" + jobId;
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + job.getAppId() + "/compare?jobId=" + jobId);
     }
 
     @RequestMapping("/version/compare/get")
@@ -576,13 +581,13 @@ public class VersionItemControl {
                                         @RequestParam(defaultValue = "0") int page,
                                         @RequestParam(defaultValue = "10") int size,
                                         Model model) {
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/compare";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/compare");
     }
 
     @RequestMapping("{appId}/version/report/snapshots")
     public String snapshotsCodeReport(@PathVariable String projectId, @PathVariable String appId, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots";
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots");
         }
         Map<String, Map<String, List<StackNodeVo>>> codeRelationships = new HashMap<>();
         List<SystemSnapshot> snapshots = systemSnapshotService.findAll(projectId, appId);
@@ -750,7 +755,7 @@ public class VersionItemControl {
         model.addAttribute("appId", appId);
         model.addAttribute("fromVersionCenter", true); // 用于模板识别来源
 
-        return "redirect:/p/" + projectId + "/apps/" + appId + "/snapshots";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots");
     }
 
     private double calculateBranchRate(long coveredBranchTargets, long totalBranchTargets) {
@@ -893,11 +898,11 @@ public class VersionItemControl {
     public String openCompareReport(@PathVariable String projectId, @PathVariable String reportId, Model model) {
         try {
             VersionCompareReport report = versionService.getCompareReport(reportId);
-            return "redirect:/p/" + projectId + "/version/reports/" + reportId + "?appId=" + report.getAppId();
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/version/reports/" + reportId + "?appId=" + report.getAppId());
         } catch (IllegalArgumentException ex) {
             CompareJobVo compareJob = versionService.getCompareJob(reportId);
             String appId = compareJob == null ? "" : compareJob.getAppId();
-            return "redirect:/p/" + projectId + "/version/reports/" + reportId + "?appId=" + appId;
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/version/reports/" + reportId + "?appId=" + appId);
         }
     }
 

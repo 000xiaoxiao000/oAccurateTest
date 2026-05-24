@@ -65,15 +65,15 @@ public class ProjectServiceImpl implements ProjectService {
         List<ProjectVo> result = new ArrayList<>();
         // 获取指定用户所有项目ID
         List<SystemIndex> list = systemRepository.findByProjectMember_MemberId(memberId, PageRequest.of(0, 1000));
-        List ids = new ArrayList(list.size());
+        List<String> ids = new ArrayList<>(list.size());
         for (SystemIndex index : list) {
             ids.add(index.getProjectMember().getProjectId());
         }
         if (ids.isEmpty()) {
             return new ArrayList<>();
         }
-        for (Object obbp : systemRepository.findAllById(ids)) {
-            result.add(convertProject((SystemIndex) obbp));
+        for (SystemIndex projectIndex : systemRepository.findAllById(ids)) {
+            result.add(convertProject(projectIndex));
         }
         return result;
     }

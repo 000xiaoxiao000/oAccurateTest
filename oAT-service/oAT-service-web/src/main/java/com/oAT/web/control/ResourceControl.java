@@ -43,7 +43,7 @@ public class ResourceControl {
         } catch (Exception e) {
             throw new RuntimeException("文件上传失败:" + cacheFile.toURI().toString(), e);
         }
-        return new ResultNotified(true, "上传成功", resourceService.getCachePath(md5, fileName));
+        return new ResultNotified<>(true, "上传成功", resourceService.getCachePath(md5, fileName));
     }
 
 }

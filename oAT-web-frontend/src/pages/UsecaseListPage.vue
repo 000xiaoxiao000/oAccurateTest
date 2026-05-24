@@ -126,6 +126,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import { backendApiUrl } from '@/api/http'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -151,7 +152,7 @@ const newUsecaseLink = computed(() => {
   return `/p/${projectId.value}/usecases/new${query}`
 })
 
-const templateDownloadLink = computed(() => `/api/projects/${projectId.value}/usecases/template/download`)
+const templateDownloadLink = computed(() => backendApiUrl(`/api/projects/${projectId.value}/usecases/template/download`))
 
 const exportLink = computed(() => {
   const query = new URLSearchParams()
@@ -162,7 +163,7 @@ const exportLink = computed(() => {
   if (currentKeyword.value) {
     query.set('keyword', currentKeyword.value)
   }
-  return `/api/projects/${projectId.value}/usecases/export?${query.toString()}`
+  return backendApiUrl(`/api/projects/${projectId.value}/usecases/export?${query.toString()}`)
 })
 
 function directoryLink(directoryId: string) {

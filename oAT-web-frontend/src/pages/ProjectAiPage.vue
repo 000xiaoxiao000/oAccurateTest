@@ -229,6 +229,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { backendApiUrl } from '@/api/http'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -481,7 +482,7 @@ async function askAiStreaming(currentQuestion: string, assistantMessage: Session
   body.set('activeSessionId', activeSessionId.value)
   body.set('sessionSortMode', sessionSort.value)
   if (imageData.value) body.set('imageData', imageData.value)
-  const response = await fetch(`/p/${projectId.value}/AIInteractive/ask/stream`, {
+  const response = await fetch(backendApiUrl(`/api/projects/${projectId.value}/ai/ask/stream`), {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'text/event-stream', 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },

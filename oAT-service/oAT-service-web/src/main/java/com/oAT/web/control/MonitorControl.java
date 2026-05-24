@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.DateUtil;
@@ -25,6 +26,10 @@ import java.util.*;
 @RequestMapping("/p/{projectId}/monitor")
 public class MonitorControl {
 
+    @Autowired
+    FrontendProperties frontendProperties;
+
+
     private static final int DEFAULT_UP_TO_TIME_SECONDS = 180;
 
     @org.springframework.beans.factory.annotation.Value("${traceNode.monitor.maxSize:200}")
@@ -47,34 +52,6 @@ public class MonitorControl {
 
     @Autowired
     ApiEndpointRepository apiEndpointRepository;
-
-    // 默认打开视图
-    @RequestMapping("")
-    public String openMonitorPlatformView(@PathVariable String projectId, String appId, Model model) {
-        model.addAttribute("projectId", projectId);
-        List<AppVo> appList = appService.getAppList(projectId);
-        List<String> appIds = new ArrayList<>(appList.size());
-        for (AppVo appVo : appList) {
-            appIds.add(appVo.getId());
-            appVo.setOnlineCount(clientSessionService.getOnlineSessionsByAppId(appVo.getId()).size());
-        }
-        List<ClientSessionVo> onlineSessions = new ArrayList<>();
-        for (ClientSessionVo session : clientSessionService.getOnlineSessions()) {
-            String sessionAppId = session.getClientInfo() == null ? null : session.getClientInfo().getAppKey();
-            if (!StringUtils.hasText(sessionAppId) || appIds.contains(sessionAppId)) {
-                session.setOnlineTime(DateUtil.timeDifference(session.getLoginTime(), new Date()));
-                onlineSessions.add(session);
-            }
-        }
-        List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.snapshot);
-
-        model.addAttribute("labels", labels);
-        model.addAttribute("apps", appList);
-        model.addAttribute("onlineSessions", onlineSessions);
-        model.addAttribute("onlineProbeCount", onlineSessions.size());
-        model.addAttribute("appId", appId);
-        return "forward:/index.html";
-    }
 
     @RequestMapping("/probeStatus")
     @ResponseBody
@@ -194,7 +171,7 @@ public class MonitorControl {
     @RequestMapping("/{traceId}/{nodeId}.html")
     public String getNodeDetailView(@PathVariable String projectId, @PathVariable String traceId, @PathVariable String nodeId, Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : "");
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : ""));
         }
         TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId));
         GraphNode node = parse.getGraphNode(nodeId);
@@ -236,7 +213,7 @@ public class MonitorControl {
     public String openSystemSnapshot(@PathVariable String projectId, String traceId, @SessionAttribute UserVo user,
                                            Model model) {
         if (System.currentTimeMillis() >= 0) {
-            return "redirect:/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : "");
+            return "redirect:" + frontendProperties.url("/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : ""));
         }
         model.addAttribute("projectId", projectId);
         // 所属应用

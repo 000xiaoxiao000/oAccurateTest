@@ -8,14 +8,11 @@ import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.ResourceService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectMemberVo;
-import com.oAT.web.service.entity.UserVo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
-import org.springframework.web.bind.annotation.SessionAttribute;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -27,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 @Controller
-@RequestMapping("/p/{projectId}/app/{appId}/api-endpoints")
+@RequestMapping("/api/projects/{projectId}/apps/{appId}/api-endpoints")
 public class ApiEndpointControl {
     @Autowired
     private AppService appService;
@@ -40,18 +37,6 @@ public class ApiEndpointControl {
     @Autowired
     private ResourceService resourceService;
 
-    @RequestMapping("")
-    public String page(@PathVariable String projectId, @PathVariable String appId, Model model, @SessionAttribute UserVo user) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        for (AppVo appVo : apps) {
-            appVo.setOnlineCount(sessionService.getOnlineSessionsByAppId(appVo.getId()).size());
-        }
-        model.addAttribute("apps", apps);
-        model.addAttribute("defaultApp", apps.isEmpty() ? null : apps.get(0));
-        model.addAttribute("app", appService.getApp(appId));
-        model.addAttribute("loginNameRole", getLoginUserRole(projectId, user.getName()));
-        return "forward:/index.html";
-    }
 
     @RequestMapping("/upload")
     @ResponseBody

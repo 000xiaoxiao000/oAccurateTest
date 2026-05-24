@@ -1,5 +1,6 @@
 package com.oAT.web.control;
 
+import com.oAT.web.config.FrontendProperties;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.LabelGroup;
 import com.oAT.web.esDao.entity.SystemLog;
@@ -29,6 +30,10 @@ import java.util.List;
 public class ProjectControl {
 
     @Autowired
+    FrontendProperties frontendProperties;
+
+
+    @Autowired
     ProjectService projectService;
     @Autowired
     UserService userService;
@@ -53,55 +58,46 @@ public class ProjectControl {
      */
     @RequestMapping("/myProjects")
     public String openMyProjectsView(@SessionAttribute UserVo user, Model model) {
-        return "redirect:/projects";
+        return "redirect:" + frontendProperties.url("/projects");
     }
 
     @RequestMapping("/project/create")
     public String createProjectView() {
-        return "redirect:/projects?create=1";
+        return "redirect:" + frontendProperties.url("/projects?create=1");
     }
 
     @RequestMapping("/p/{projectId}/edit")
     public String openEditProjectView(@PathVariable String projectId, @SessionAttribute UserVo user, Model model) {
-        return "redirect:/projects?edit=" + projectId;
+        return "redirect:" + frontendProperties.url("/projects?edit=" + projectId);
     }
 
     @RequestMapping("/p/{projectId}/delete")
     public String openDeleteProjectView(@PathVariable String projectId, @SessionAttribute UserVo user, Model model) {
-        return "redirect:/projects?delete=" + projectId;
+        return "redirect:" + frontendProperties.url("/projects?delete=" + projectId);
     }
 
-    /**
-     * 打开项目主页
-     *
-     * @return
-     */
-    @RequestMapping("/p/{projectId}/home")
-    public String openHomeView(@PathVariable String projectId, @SessionAttribute UserVo user, Model model) {
-        return "forward:/index.html";
-    }
 
     @RequestMapping("/project/doCreate")
     @ResponseBody
-    public ResultNotified doCreateProject(@SessionAttribute UserVo user, String name, String describe) {
+    public ResultNotified<String> doCreateProject(@SessionAttribute UserVo user, String name, String describe) {
         ProjectService.CreateProjectParam param = new ProjectService.CreateProjectParam(name, describe, user.getId());
         param.userName = user.getName();
         ProjectVo vo = projectService.createProject(param);
         doLog(SystemLogService.Action.addProject, "创建了新应用", user, vo);
-        return new ResultNotified(true, "项目创建成功", "/p/" + vo.getId() + "/home");
+        return new ResultNotified<>(true, "项目创建成功", "/p/" + vo.getId() + "/home");
     }
 
     @RequestMapping("/p/{projectId}/doEdit")
     @ResponseBody
-    public ResultNotified doUpdateProject(@PathVariable String projectId, @SessionAttribute UserVo user, ProjectVo projectVo) {
+    public ResultNotified<String> doUpdateProject(@PathVariable String projectId, @SessionAttribute UserVo user, ProjectVo projectVo) {
         try {
             projectVo.setId(projectId);
             projectVo = projectService.updateProject(projectVo);
             doLog(SystemLogService.Action.addProject, "修改了新应用", user, projectVo);
-            return new ResultNotified(true, "项目信息修改成功", "/p/" + projectVo.getId() + "/edit");
+            return new ResultNotified<>(true, "项目信息修改成功", "/p/" + projectVo.getId() + "/edit");
         } catch (Exception e) {
             logger.warn("更新项目信息失败, projectId={}", projectId, e);
-            return new ResultNotified(false, e.getMessage() == null ? "项目信息修改失败" : e.getMessage());
+            return new ResultNotified<>(false, e.getMessage() == null ? "项目信息修改失败" : e.getMessage());
         }
     }
 
@@ -118,7 +114,7 @@ public class ProjectControl {
 
     @RequestMapping("/p/{projectId}/doDelete")
     @ResponseBody
-    public ResultNotified doDeleteProject(@SessionAttribute UserVo user,
+    public ResultNotified<String> doDeleteProject(@SessionAttribute UserVo user,
                                   @PathVariable String projectId,
                                   String password) {
         try {
@@ -130,12 +126,12 @@ public class ProjectControl {
             log.setProjectId(projectId);
             log.setAction(SystemLogService.Action.deleteProject.toString());
             systemLogService.addLog(log);
-            return new ResultNotified(true, "项目已成功移除", "/projects");
+            return new ResultNotified<>(true, "项目已成功移除", "/projects");
         } catch (UserOperationException e) {
             if (logger.isDebugEnabled()) {
                 logger.error("项目删除失败", e);
             }
-            return new ResultNotified(false, e.getMessage());
+            return new ResultNotified<>(false, e.getMessage());
         }
     }
 
@@ -149,42 +145,42 @@ public class ProjectControl {
      */
     @RequestMapping("/project/projectMenu")
     public String getProjectMenu(@SessionAttribute UserVo user, Model model) {
-        return "redirect:/projects";
+        return "redirect:" + frontendProperties.url("/projects");
     }
 
     @RequestMapping("/p/{projectId}/member/list")
     public String openProjectMemberView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/members";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/members");
     }
 
 
     @RequestMapping("/p/{projectId}/member/add")
-    public ResultNotified addProjectMember(@PathVariable String projectId, String[] ids) {
+    public ResultNotified<String> addProjectMember(@PathVariable String projectId, String[] ids) {
         for (String id : ids) {
             projectService.addProjectMember(projectId, id);
         }
-        return new ResultNotified(true, "用户添加成功");
+        return new ResultNotified<>(true, "用户添加成功");
     }
 
 
     @RequestMapping("/p/{projectId}/member/delete")
-    public ResultNotified removeProjectMember(@PathVariable String projectId, String projectMemberId) {
+    public ResultNotified<String> removeProjectMember(@PathVariable String projectId, String projectMemberId) {
         projectService.deleteProjectMember(projectId, projectMemberId);
-        return new ResultNotified(true, "用户移除成功");
+        return new ResultNotified<>(true, "用户移除成功");
     }
 
     /**
      * 修改成员角色
      */
     @RequestMapping("/p/{projectId}/member/updateRole")
-    public ResultNotified updateProjectMemberRole(@PathVariable String projectId, String projectMemberId, String role) {
+    public ResultNotified<String> updateProjectMemberRole(@PathVariable String projectId, String projectMemberId, String role) {
         projectService.updateProjectMemberRole(projectId, projectMemberId, ProjectMemberVo.Role.valueOf(role));
-        return new ResultNotified(true, "权限修改成功");
+        return new ResultNotified<>(true, "权限修改成功");
     }
 
     @RequestMapping("/p/{projectId}/label")
     public String openLableView(@PathVariable String projectId, Model model, @SessionAttribute UserVo user) {
-        return "redirect:/p/" + projectId + "/labels";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/labels");
     }
 
     @RequestMapping("/p/{projectId}/label/add")
@@ -224,7 +220,7 @@ public class ProjectControl {
             groupvo.setLabels(list.toArray(new LabelGroup.Label[0]));
             projectService.doSaveLabelGroup(groupvo);
         }
-        return "redirect:/p/" + projectId + "/label";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/label");
     }
     // 删除标签
     @RequestMapping("/p/{projectId}/label/delete")
@@ -246,7 +242,7 @@ public class ProjectControl {
         }
         groupvo.setLabels(list.toArray(new LabelGroup.Label[0]));
         projectService.doSaveLabelGroup(groupvo);
-        return "redirect:/p/" + projectId + "/label";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/label");
     }
 
 }

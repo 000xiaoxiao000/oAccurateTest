@@ -1,14 +1,17 @@
 package com.oAT.web.control.api;
 
 import com.oAT.web.common.DateUtil;
+import com.oAT.web.common.Job;
 import com.oAT.web.common.PaletteColors;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
+import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.CoverageService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.VersionService;
+import com.oAT.web.service.SystemLogService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.CoverageComparisonVo;
 import com.oAT.web.service.entity.CoverageTreeNode;
@@ -22,16 +25,20 @@ import org.springframework.data.domain.Sort;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.stream.Collectors;
 
@@ -45,15 +52,108 @@ public class CoverageApiControl {
     private final ProjectService projectService;
     private final AppService appService;
     private final VersionService versionService;
+    private final SystemLogService systemLogService;
 
     public CoverageApiControl(CoverageService coverageService,
                               ProjectService projectService,
                               AppService appService,
-                              VersionService versionService) {
+                              VersionService versionService,
+                              SystemLogService systemLogService) {
         this.coverageService = coverageService;
         this.projectService = projectService;
         this.appService = appService;
         this.versionService = versionService;
+        this.systemLogService = systemLogService;
+    }
+
+
+
+    @GetMapping("/export")
+    public void export(@PathVariable String projectId,
+                       @SessionAttribute UserVo user,
+                       @RequestParam String reportId,
+                       HttpServletResponse response) throws IOException {
+        ensureProjectAccess(projectId, user);
+        coverageService.exportReport(reportId, response);
+    }
+
+    @GetMapping("/export-methods")
+    public void exportMethods(@PathVariable String projectId,
+                              @SessionAttribute UserVo user,
+                              @RequestParam String reportId,
+                              HttpServletResponse response) throws IOException {
+        ensureProjectAccess(projectId, user);
+        coverageService.exportMethodReport(reportId, response);
+    }
+
+    @PostMapping("/generate")
+    public ResultNotified<String> generate(@PathVariable String projectId,
+                                           @SessionAttribute UserVo user,
+                                           @RequestParam String appId,
+                                           @RequestParam String versionNumber,
+                                           @RequestParam(required = false) String branch,
+                                           @RequestParam(required = false) String commitId) {
+        ensureProjectAccess(projectId, user);
+        String jobId = coverageService.startGenerateJob(appId, versionNumber, branch, commitId);
+        AppVo app = appService.getApp(appId);
+        String appName = app == null ? appId : app.getName();
+        addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 全量 覆盖率报告 [版本:%s, 分支:%s, Commit:%s]",
+                user.getName(), appName, versionNumber, branch, commitId));
+        return new ResultNotified<>(true, "Task started", jobId);
+    }
+
+    @PostMapping("/generate-incremental")
+    public ResultNotified<String> generateIncremental(@PathVariable String projectId,
+                                                      @SessionAttribute UserVo user,
+                                                      @RequestParam String appId,
+                                                      @RequestParam String versionNumber,
+                                                      @RequestParam(required = false) String branch,
+                                                      @RequestParam(required = false) String commitId,
+                                                      @RequestParam String baseVersionNumber,
+                                                      @RequestParam(required = false) String baseCommitId) {
+        ensureProjectAccess(projectId, user);
+        String jobId = coverageService.startGenerateIncrementalJob(appId, versionNumber, branch, commitId, baseVersionNumber, baseCommitId);
+        AppVo app = appService.getApp(appId);
+        String appName = app == null ? appId : app.getName();
+        addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 增量 覆盖率报告 [版本:%s, 基准:%s, 分支:%s, Commit:%s]",
+                user.getName(), appName, versionNumber, baseVersionNumber, branch, commitId));
+        return new ResultNotified<>(true, "Incremental task started", jobId);
+    }
+
+    @GetMapping("/jobs/{jobId}")
+    public Job<String> job(@PathVariable String jobId) {
+        return coverageService.getJob(jobId);
+    }
+
+    @GetMapping("/trend-data")
+    public List<Map<String, Object>> trendData(@PathVariable String projectId,
+                                               @SessionAttribute UserVo user,
+                                               @RequestParam String appId,
+                                               @RequestParam String versionNumber) {
+        ensureProjectAccess(projectId, user);
+        return coverageService.getTrendData(appId, versionNumber);
+    }
+
+    @PostMapping("/delete")
+    public ResultNotified<String> delete(@PathVariable String projectId,
+                                         @SessionAttribute UserVo user,
+                                         @RequestParam String reportId) {
+        ensureProjectAccess(projectId, user);
+        CoverageReportIndex report = coverageService.getReport(reportId);
+        Assert.notNull(report, "Report not found");
+        coverageService.deleteReport(reportId);
+        AppVo app = appService.getApp(report.getAppId());
+        String appName = app == null ? report.getAppId() : app.getName();
+        String reportType = Integer.valueOf(1).equals(report.getReportType()) ? "增量" : "全量";
+        SystemLog log = new SystemLog();
+        log.setTitle(String.format("%s 删除了应用 [%s] 的 %s 覆盖率报告 [版本:%s] - %s",
+                user.getName(), appName, reportType, report.getVersionNumber(), reportId));
+        log.setUserId(user.getId());
+        log.setUserName(user.getName());
+        log.setProjectId(projectId);
+        log.setAction(SystemLogService.Action.deleteReport.toString());
+        systemLogService.addLog(log);
+        return new ResultNotified<>(true, "报告已删除", reportId);
     }
 
     @GetMapping("/overview")
@@ -197,6 +297,17 @@ public class CoverageApiControl {
         payload.setColoredSourceHtml(coverageService.getColoredSource(appId, classCoverage));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取覆盖率源码详情成功", payload);
+    }
+
+
+    private void addCoverageLog(String projectId, UserVo user, String title) {
+        SystemLog log = new SystemLog();
+        log.setTitle(title);
+        log.setUserId(user.getId());
+        log.setUserName(user.getName());
+        log.setProjectId(projectId);
+        log.setAction(SystemLogService.Action.generateReport.toString());
+        systemLogService.addLog(log);
     }
 
     private VersionItemVo findVersion(String projectId, String appId, String versionNumber, String commitId) {

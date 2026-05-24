@@ -40,6 +40,7 @@ import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.CoverageService;
+import com.oAT.web.service.ClientSessionService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SnapshotService;
 import com.oAT.web.service.SystemSnapshotService;
@@ -82,6 +83,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import javax.servlet.http.HttpSession;
+
 @RestController
 @RequestMapping("/api/projects/{projectId}")
 public class SnapshotApiControl {
@@ -97,6 +100,7 @@ public class SnapshotApiControl {
     private final StaticInfoRepository staticInfoRepository;
     private final CoverageService coverageService;
     private final ApiEndpointRepository apiEndpointRepository;
+    private final ClientSessionService clientSessionService;
 
     public SnapshotApiControl(SnapshotService snapshotService,
                               SystemSnapshotService systemSnapshotService,
@@ -106,7 +110,8 @@ public class SnapshotApiControl {
                               UsecaseService usecaseService,
                               StaticInfoRepository staticInfoRepository,
                               CoverageService coverageService,
-                              ApiEndpointRepository apiEndpointRepository) {
+                              ApiEndpointRepository apiEndpointRepository,
+                              ClientSessionService clientSessionService) {
         this.snapshotService = snapshotService;
         this.systemSnapshotService = systemSnapshotService;
         this.projectService = projectService;
@@ -116,6 +121,38 @@ public class SnapshotApiControl {
         this.staticInfoRepository = staticInfoRepository;
         this.coverageService = coverageService;
         this.apiEndpointRepository = apiEndpointRepository;
+        this.clientSessionService = clientSessionService;
+    }
+
+
+    @PostMapping("/snapshots/my/save")
+    public ResultNotified<SnapshotVo> saveMySnapshot(@PathVariable String projectId,
+                                                     @SessionAttribute UserVo user,
+                                                     HttpSession session,
+                                                     com.oAT.web.esDao.entity.Snapshot snapshot,
+                                                     @RequestParam(value = "autoSave", required = false, defaultValue = "false") boolean autoSave) {
+        ensureProjectAccess(projectId, user);
+        try {
+            Assert.notNull(snapshot, "snapshot不能为空");
+            Assert.hasText(snapshot.getTraceId(), "traceId不能为空");
+            snapshot.setProjectId(projectId);
+            snapshot.setCreateUser(user.getId());
+            Map<String, TraceNode> nodes = getTraceNodesForSave(snapshot.getTraceId(), session);
+            Assert.isTrue(!nodes.isEmpty(), "找不到对应链路，请刷新监控后重试");
+            if (autoSave) {
+                Assert.hasText(snapshot.getName(), "自动保存时快照名称不能为空");
+                if (snapshotService instanceof com.oAT.web.service.impl.SnapshotServiceImpl snapshotServiceImpl
+                        && snapshotServiceImpl.existsByProjectUserAndTraceId(projectId, user.getId(), snapshot.getTraceId())) {
+                    return new ResultNotified<>(true, "我的快照已自动保存过");
+                }
+            }
+            SnapshotVo vo = snapshotService.addSnapshot(snapshot, nodes.values());
+            return new ResultNotified<>(true, autoSave ? "已自动保存我的快照" : "快照保存成功", vo);
+        } catch (Exception e) {
+            ResultNotified<SnapshotVo> result = new ResultNotified<>(false, "快照保存失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
     }
 
     @GetMapping("/apps/{appId}/snapshots")
@@ -601,6 +638,37 @@ public class SnapshotApiControl {
         ensureProjectAccess(projectId, user);
         snapshotService.deleteById(snapshotId);
         return new ResultNotified<>(true, "快照删除成功", snapshotId);
+    }
+
+
+    private Map<String, TraceNode> getTraceNodesForSave(String traceId, HttpSession session) {
+        Map<String, TraceNode> nodes = new LinkedHashMap<>();
+        Map<String, TraceNode> cachedNodes = clientSessionService.getTraceNodes(traceId);
+        if (cachedNodes != null && !cachedNodes.isEmpty()) {
+            nodes.putAll(cachedNodes);
+            return nodes;
+        }
+        Object sessionNodes = session.getAttribute("model-" + traceId);
+        if (sessionNodes instanceof Map) {
+            Map<?, ?> rawNodes = (Map<?, ?>) sessionNodes;
+            for (Map.Entry<?, ?> entry : rawNodes.entrySet()) {
+                if (entry.getKey() instanceof String && entry.getValue() instanceof TraceNode) {
+                    nodes.put((String) entry.getKey(), (TraceNode) entry.getValue());
+                }
+            }
+            if (!nodes.isEmpty()) {
+                return nodes;
+            }
+        }
+        java.util.Collection<TraceNode> storedNodes = snapshotService.getTraceNodes(traceId);
+        if (storedNodes != null) {
+            for (TraceNode node : storedNodes) {
+                if (node != null && StringUtils.hasText(node.getTraceNodeId())) {
+                    nodes.put(node.getTraceNodeId(), node);
+                }
+            }
+        }
+        return nodes;
     }
 
     private ProjectVo ensureProjectAccess(String projectId, UserVo user) {

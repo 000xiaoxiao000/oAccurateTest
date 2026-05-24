@@ -5,14 +5,22 @@ import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
+import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.CoverageService;
 import com.oAT.web.service.ProjectService;
+import com.oAT.web.service.GitService;
+import com.oAT.web.service.ResourceService;
+import com.oAT.web.service.ClientSessionService;
+import com.oAT.web.service.SystemLogService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.VersionService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.CompareJobVo;
 import com.oAT.web.service.entity.GitCommitOptionVo;
+import com.oAT.web.service.entity.GitJobVo;
+import com.oAT.web.service.entity.GitPullEstimateVo;
+import com.oAT.web.service.entity.PackageCommitVerifyVo;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UsecaseDirectoryVo;
@@ -31,6 +39,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
+import java.io.File;
+import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,7 +52,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -58,17 +71,29 @@ public class VersionApiControl {
     private final ProjectService projectService;
     private final CoverageService coverageService;
     private final UsecaseService usecaseService;
+    private final GitService gitService;
+    private final ResourceService resourceService;
+    private final ClientSessionService clientSessionService;
+    private final SystemLogService systemLogService;
 
     public VersionApiControl(VersionService versionService,
                              AppService appService,
                              ProjectService projectService,
                              CoverageService coverageService,
-                             UsecaseService usecaseService) {
+                             UsecaseService usecaseService,
+                             GitService gitService,
+                             ResourceService resourceService,
+                             ClientSessionService clientSessionService,
+                             SystemLogService systemLogService) {
         this.versionService = versionService;
         this.appService = appService;
         this.projectService = projectService;
         this.coverageService = coverageService;
         this.usecaseService = usecaseService;
+        this.gitService = gitService;
+        this.resourceService = resourceService;
+        this.clientSessionService = clientSessionService;
+        this.systemLogService = systemLogService;
     }
 
     @GetMapping("/apps/{appId}/version-center")
@@ -109,6 +134,240 @@ public class VersionApiControl {
                 .map(report -> toCoverageReportCard(report, coverageService.hasNewerData(appId, report.getVersionNumber(), report)))
                 .collect(Collectors.toList()));
         return new ResultNotified<>(true, "获取版本中心数据成功", payload);
+    }
+
+
+    @PostMapping("/apps/{appId}/versions")
+    public ResultNotified<String> createVersion(@PathVariable String projectId,
+                                                @PathVariable String appId,
+                                                @SessionAttribute UserVo user,
+                                                VersionItemVo itemVo) {
+        ensureProjectAccess(projectId, user);
+        itemVo.setProjectId(projectId);
+        itemVo.setAppId(appId);
+        if ("git".equals(itemVo.getSourceType())) {
+            VersionItemVo existing = versionService.getVersionByGitInfo(appId, itemVo.getVersionNumber(), itemVo.getRepoBranch(), itemVo.getRepoCommitId());
+            if (existing != null) {
+                return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID");
+            }
+            if (StringUtils.hasText(itemVo.getProgramFile())) {
+                File programFile = new File(itemVo.getProgramFile());
+                if (!programFile.exists()) {
+                    programFile = new File(resourceService.getCacheRoot(), itemVo.getProgramFile());
+                }
+                if (programFile.exists() && !StringUtils.hasText(itemVo.getProgramName())) {
+                    itemVo.setProgramName(programFile.getName());
+                }
+            }
+        }
+        versionService.addVersionItem(itemVo);
+        if (versionService.getVersionItemList(projectId, appId).size() == 1 && "on".equals(itemVo.getSetAsCurrent())) {
+            AppVo app = appService.getApp(appId);
+            app.setCurrentVersion(itemVo.getVersionNumber());
+            app.setCurrentBranch(itemVo.getRepoBranch());
+            app.setCurrentCommitId(itemVo.getRepoCommitId());
+            appService.updateApp(projectId, app);
+        }
+        return new ResultNotified<>(true, "版本创建成功");
+    }
+
+    @PostMapping("/apps/{appId}/versions/current")
+    public ResultNotified<String> setCurrentVersion(@PathVariable String projectId,
+                                                    @PathVariable String appId,
+                                                    @SessionAttribute UserVo user,
+                                                    @RequestParam String versionNumber,
+                                                    @RequestParam(required = false) String branch,
+                                                    @RequestParam(required = false) String commitId) {
+        ensureProjectAccess(projectId, user);
+        if (isVisitor(projectId, user)) {
+            return new ResultNotified<>(false, "没有权限进行此操作");
+        }
+        AppVo app = appService.getApp(appId);
+        Assert.notNull(app, "应用不存在");
+        String oldVersionText = String.format("[%s (分支:%s, Commit:%s)]",
+                app.getCurrentVersion() != null ? app.getCurrentVersion() : "未设置",
+                app.getCurrentBranch() != null ? app.getCurrentBranch() : "-",
+                abbreviateCommit(app.getCurrentCommitId()));
+        String newVersionText = String.format("[%s (分支:%s, Commit:%s)]",
+                versionNumber, branch != null ? branch : "-", abbreviateCommit(commitId));
+        app.setCurrentVersion(versionNumber);
+        app.setCurrentBranch(branch);
+        app.setCurrentCommitId(commitId);
+        appService.updateApp(projectId, app);
+        SystemLog log = new SystemLog();
+        log.setTitle(String.format("%s 将应用 %s 的当前版本从 %s 变更为 %s", user.getName(), app.getName(), oldVersionText, newVersionText));
+        log.setUserId(user.getId());
+        log.setUserName(user.getName());
+        log.setProjectId(projectId);
+        log.setAction(SystemLogService.Action.editApp.toString());
+        systemLogService.addLog(log);
+        return new ResultNotified<>(true, "设置当前版本成功");
+    }
+
+    @PostMapping("/apps/{appId}/versions/delete")
+    public ResultNotified<String> deleteVersion(@PathVariable String projectId,
+                                                @PathVariable String appId,
+                                                @SessionAttribute UserVo user,
+                                                @RequestParam String id) {
+        ensureProjectAccess(projectId, user);
+        versionService.doDeleteVersionItem(id);
+        return new ResultNotified<>(true, "版本项目删除成功");
+    }
+
+    @PostMapping("/apps/{appId}/version-reports/delete")
+    public ResultNotified<String> deleteCompareReport(@PathVariable String projectId,
+                                                      @PathVariable String appId,
+                                                      @SessionAttribute UserVo user,
+                                                      @RequestParam String reportId) {
+        ensureProjectAccess(projectId, user);
+        versionService.deleteCompareReport(projectId, reportId);
+        return new ResultNotified<>(true, "报告删除成功");
+    }
+
+    @PostMapping("/apps/{appId}/coverage-reports/delete")
+    public ResultNotified<String> deleteCoverageReport(@PathVariable String projectId,
+                                                       @PathVariable String appId,
+                                                       @SessionAttribute UserVo user,
+                                                       @RequestParam String reportId) {
+        ensureProjectAccess(projectId, user);
+        coverageService.deleteReport(reportId);
+        return new ResultNotified<>(true, "覆盖率报告删除成功");
+    }
+
+    @GetMapping("/apps/{appId}/version-files/delete")
+    public ResultNotified<String> deleteVersionFile(@PathVariable String projectId,
+                                                    @PathVariable String appId,
+                                                    @SessionAttribute UserVo user,
+                                                    @RequestParam String filePath) {
+        ensureProjectAccess(projectId, user);
+        versionService.deleteCacheFile(filePath);
+        return new ResultNotified<>(true, "本地文件已删除", filePath);
+    }
+
+    @GetMapping("/apps/{appId}/git/pull-check")
+    public ResultNotified<GitPullEstimateVo> checkGitPull(@PathVariable String projectId,
+                                                          @PathVariable String appId,
+                                                          @SessionAttribute UserVo user,
+                                                          @RequestParam(required = false) String branch,
+                                                          @RequestParam(required = false) String commitId,
+                                                          @RequestParam(required = false) String versionNumber,
+                                                          @RequestParam(required = false) String excludePaths) {
+        ensureProjectAccess(projectId, user);
+        try {
+            AppVo app = appService.getApp(appId);
+            String finalBranch = branch != null ? branch.trim() : "";
+            String finalCommitId = commitId != null ? commitId.trim() : "";
+            ResultNotified<String> excludePathCheck = validateExcludePaths(excludePaths);
+            if (excludePathCheck != null) {
+                return new ResultNotified<>(false, excludePathCheck.getMessage(), null);
+            }
+            gitService.checkGitPull(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, finalCommitId);
+            String checkCommitId = finalCommitId;
+            if (!StringUtils.hasText(checkCommitId)) {
+                checkCommitId = gitService.getLatestCommitId(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch);
+            }
+            if (StringUtils.hasText(versionNumber)) {
+                VersionItemVo existing = versionService.getVersionByGitInfo(appId, versionNumber.trim(), finalBranch, checkCommitId);
+                if (existing != null) {
+                    return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID (版本号: " + existing.getVersionNumber() + ")", null);
+                }
+            }
+            GitPullEstimateVo estimate = gitService.estimateGitPull(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, checkCommitId, excludePaths);
+            estimate.setPackageCommitVerify(verifyRuntimeCommit(appId, checkCommitId));
+            return new ResultNotified<>(true, "检测通过", estimate);
+        } catch (Exception e) {
+            return new ResultNotified<>(false, "检测失败: " + e.getMessage(), null);
+        }
+    }
+
+    @GetMapping("/apps/{appId}/git/latest-commit")
+    public ResultNotified<String> latestCommit(@PathVariable String projectId,
+                                               @PathVariable String appId,
+                                               @SessionAttribute UserVo user,
+                                               @RequestParam String branch) {
+        ensureProjectAccess(projectId, user);
+        AppVo app = appService.getApp(appId);
+        return new ResultNotified<>(true, "获取成功", gitService.getLatestCommitId(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), branch));
+    }
+
+    @GetMapping("/apps/{appId}/git/commits")
+    public ResultNotified<List<GitCommitOptionVo>> commits(@PathVariable String projectId,
+                                                           @PathVariable String appId,
+                                                           @SessionAttribute UserVo user,
+                                                           @RequestParam String branch,
+                                                           @RequestParam(defaultValue = "20") int limit) {
+        ensureProjectAccess(projectId, user);
+        AppVo app = appService.getApp(appId);
+        return new ResultNotified<>(true, "获取成功", gitService.getRecentCommits(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), branch, limit));
+    }
+
+    @PostMapping("/apps/{appId}/git/pull")
+    public ResultNotified<String> startGitPull(@PathVariable String projectId,
+                                               @PathVariable String appId,
+                                               @SessionAttribute UserVo user,
+                                               @RequestParam(required = false) String branch,
+                                               @RequestParam(required = false) String commitId,
+                                               @RequestParam(required = false) String excludePaths,
+                                               @RequestParam(required = false) String versionNumber) {
+        ensureProjectAccess(projectId, user);
+        try {
+            AppVo app = appService.getApp(appId);
+            String finalBranch = branch != null ? branch.trim() : "";
+            String finalCommitId = StringUtils.hasText(commitId) ? commitId.trim() : null;
+            ResultNotified<String> excludePathCheck = validateExcludePaths(excludePaths);
+            if (excludePathCheck != null) {
+                return excludePathCheck;
+            }
+            String checkCommitId = finalCommitId;
+            if (checkCommitId == null) {
+                checkCommitId = gitService.getLatestCommitId(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch);
+            }
+            if (StringUtils.hasText(versionNumber)) {
+                VersionItemVo existing = versionService.getVersionByGitInfo(appId, versionNumber.trim(), finalBranch, checkCommitId);
+                if (existing != null) {
+                    return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID (版本号: " + existing.getVersionNumber() + ")", null);
+                }
+            }
+            String jobId = gitService.startGitPullJob(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, finalCommitId, excludePaths);
+            return new ResultNotified<>(true, "开始拉取", jobId);
+        } catch (Exception e) {
+            return new ResultNotified<>(false, "远程代码拉取失败: " + e.getMessage(), null);
+        }
+    }
+
+    @GetMapping("/apps/{appId}/git/jobs/{jobId}")
+    public ResultNotified<GitJobVo> gitPullStatus(@PathVariable String projectId,
+                                                  @PathVariable String appId,
+                                                  @PathVariable String jobId,
+                                                  @SessionAttribute UserVo user) {
+        ensureProjectAccess(projectId, user);
+        GitJobVo job = gitService.getGitJob(jobId);
+        return job == null ? new ResultNotified<>(false, "任务不存在", null) : new ResultNotified<>(true, "查询成功", job);
+    }
+
+    @GetMapping("/apps/{appId}/git/cache")
+    public ResultNotified<String> deleteGitCache(@PathVariable String projectId,
+                                                 @PathVariable String appId,
+                                                 @SessionAttribute UserVo user,
+                                                 @RequestParam String cachePath) {
+        ensureProjectAccess(projectId, user);
+        gitService.deleteCache(cachePath);
+        return new ResultNotified<>(true, "删除成功");
+    }
+
+    @GetMapping("/apps/{appId}/packages/commit-verify")
+    public ResultNotified<PackageCommitVerifyVo> verifyPackageCommit(@PathVariable String projectId,
+                                                                     @PathVariable String appId,
+                                                                     @SessionAttribute UserVo user,
+                                                                     @RequestParam String programFile,
+                                                                     @RequestParam(required = false) String commitId) {
+        ensureProjectAccess(projectId, user);
+        try {
+            String targetCommitId = StringUtils.hasText(commitId) ? commitId.trim() : readPackageCommitId(programFile);
+            return new ResultNotified<>(true, "校验完成", verifyRuntimeCommit(appId, targetCommitId));
+        } catch (Exception e) {
+            return new ResultNotified<>(false, "校验失败: " + e.getMessage(), null);
+        }
     }
 
     @PostMapping("/apps/{appId}/compare-jobs")
@@ -504,6 +763,151 @@ public class VersionApiControl {
         summary.setImpactCaseCount(report.getImpactCaseCount());
         summary.setJobLog(report.getJobLog());
         return summary;
+    }
+
+
+    private boolean isVisitor(String projectId, UserVo user) {
+        return projectService.getProjectMembers(projectId).stream()
+                .filter(member -> user.getName().equals(member.getMemberName()))
+                .map(ProjectMemberVo::getRole)
+                .anyMatch(role -> ProjectMemberVo.Role.visitor.equals(role));
+    }
+
+    private String abbreviateCommit(String commitId) {
+        if (!StringUtils.hasText(commitId)) {
+            return "-";
+        }
+        return commitId.length() > 7 ? commitId.substring(0, 7) : commitId;
+    }
+
+    private ResultNotified<String> validateExcludePaths(String excludePaths) {
+        if (!StringUtils.hasText(excludePaths)) {
+            return null;
+        }
+        for (String path : excludePaths.split(",")) {
+            String trimmedPath = path.trim();
+            if (!StringUtils.hasText(trimmedPath)) {
+                continue;
+            }
+            if (trimmedPath.contains("..")) {
+                return new ResultNotified<>(false, "检测失败: 排除路径不能包含 ..");
+            }
+            if (trimmedPath.startsWith("/") || trimmedPath.startsWith("\\") || trimmedPath.matches("^[A-Za-z]:.*")) {
+                return new ResultNotified<>(false, "检测失败: 排除路径不能是绝对路径");
+            }
+            String normalized = java.nio.file.Paths.get(trimmedPath).normalize().toString().replace('\\', '/');
+            if (normalized.isEmpty() || ".".equals(normalized) || normalized.startsWith("../")) {
+                return new ResultNotified<>(false, "检测失败: 排除路径格式不合法");
+            }
+        }
+        return null;
+    }
+
+    private PackageCommitVerifyVo verifyRuntimeCommit(String appId, String targetCommitId) {
+        List<com.oAT.server.model.ClientSessionVo> onlineSessions = clientSessionService.getOnlineSessionsByAppId(appId);
+        if (onlineSessions == null || onlineSessions.isEmpty()) {
+            return new PackageCommitVerifyVo(null, targetCommitId, null, false, "探针不在线，无法获取运行时目标系统 CommitId");
+        }
+        String runtimeCommitId = findRuntimePackageCommitId(appId, onlineSessions);
+        String runtime = normalizeCommitId(runtimeCommitId);
+        String target = normalizeCommitId(targetCommitId);
+        Boolean matched = null;
+        if (StringUtils.hasText(runtime) && StringUtils.hasText(target)) {
+            matched = runtime.equals(target) || runtime.startsWith(target) || target.startsWith(runtime);
+        }
+        String unavailableReason = StringUtils.hasText(runtimeCommitId) ? null : "探针在线，但暂未上报运行时目标系统 CommitId";
+        return new PackageCommitVerifyVo(runtimeCommitId, targetCommitId, matched, true, unavailableReason);
+    }
+
+    private String findRuntimePackageCommitId(String appId, List<com.oAT.server.model.ClientSessionVo> sessions) {
+        for (com.oAT.server.model.ClientSessionVo session : sessions) {
+            String commitId = extractCommitIdFromPackageVerifyData(clientSessionService.getPackageVerifyData(session.getSessionId()));
+            if (StringUtils.hasText(commitId)) {
+                return commitId;
+            }
+        }
+        for (com.oAT.server.model.ClientSessionVo session : sessions) {
+            if (session.getClientInfo() == null || !StringUtils.hasText(session.getClientInfo().getAppKey())) {
+                continue;
+            }
+            String commitId = extractCommitIdFromPackageVerifyData(clientSessionService.getLatestPackageVerifyDataByAppId(session.getClientInfo().getAppKey()));
+            if (StringUtils.hasText(commitId)) {
+                return commitId;
+            }
+        }
+        return null;
+    }
+
+    private String extractCommitIdFromPackageVerifyData(String packageVerifyData) {
+        if (!StringUtils.hasText(packageVerifyData)) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("gitCommitIdFromPackage\\s*[:=]\\s*([0-9a-fA-F]{7,40})").matcher(packageVerifyData);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        matcher = Pattern.compile("[0-9a-fA-F]{7,40}").matcher(packageVerifyData);
+        String lastMatch = null;
+        while (matcher.find()) {
+            lastMatch = matcher.group();
+        }
+        return lastMatch;
+    }
+
+    private String readPackageCommitId(String cachePath) throws Exception {
+        if (!StringUtils.hasText(cachePath)) {
+            throw new IllegalArgumentException("程序文件不能为空");
+        }
+        File cacheRoot = new File(resourceService.getCacheRoot()).getCanonicalFile();
+        File packageFile = new File(cacheRoot, cachePath).getCanonicalFile();
+        if (!packageFile.getPath().startsWith(cacheRoot.getPath() + File.separator) || !packageFile.exists() || !packageFile.isFile()) {
+            throw new IllegalArgumentException("程序文件不存在");
+        }
+        try (ZipFile zipFile = new ZipFile(packageFile)) {
+            ZipEntry entry = findBuildInfoEntry(zipFile);
+            if (entry == null) {
+                return null;
+            }
+            Properties props = new Properties();
+            try (InputStream inputStream = zipFile.getInputStream(entry)) {
+                props.load(inputStream);
+            }
+            String commitId = props.getProperty("git.commit.id");
+            if (!StringUtils.hasText(commitId)) {
+                commitId = props.getProperty("git.commit.id.abbrev");
+            }
+            return commitId;
+        }
+    }
+
+    private ZipEntry findBuildInfoEntry(ZipFile zipFile) {
+        String[] paths = {
+                "META-INF/git.properties",
+                "META-INF/build-info.properties",
+                "WEB-INF/classes/META-INF/git.properties",
+                "WEB-INF/classes/META-INF/build-info.properties",
+                "WEB-INF/classes/git.properties",
+                "WEB-INF/classes/build-info.properties"
+        };
+        for (String path : paths) {
+            ZipEntry entry = zipFile.getEntry(path);
+            if (entry != null) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private String normalizeCommitId(String commitId) {
+        if (!StringUtils.hasText(commitId)) {
+            return null;
+        }
+        String normalized = commitId.trim().toLowerCase(Locale.ROOT);
+        Matcher matcher = Pattern.compile("[0-9a-f]{8,40}").matcher(normalized);
+        if (matcher.find()) {
+            return matcher.group();
+        }
+        return normalized;
     }
 
     private String formatDate(java.util.Date date) {

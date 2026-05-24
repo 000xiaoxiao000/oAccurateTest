@@ -88,7 +88,7 @@ public class SqlStatParse {
     }
 
     public ArrayList<SqlParseInfo> getAll() {
-        ArrayList<SqlParseInfo> list = new ArrayList();
+        ArrayList<SqlParseInfo> list = new ArrayList<>();
         list.addAll(adds);
         list.addAll(deletes);
         list.addAll(selects);

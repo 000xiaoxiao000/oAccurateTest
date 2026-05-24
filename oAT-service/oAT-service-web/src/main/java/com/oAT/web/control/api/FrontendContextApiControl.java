@@ -263,7 +263,7 @@ public class FrontendContextApiControl {
         ai.setEnabled(aiLlmEnabled);
         ai.setTimeout(aiTimeout);
         ai.setInteractivePath("/p/" + project.getId() + "/ai");
-        ai.setAskApiPath("/p/" + project.getId() + "/AIInteractive/ask");
+        ai.setAskApiPath("/api/projects/" + project.getId() + "/ai/ask");
         ai.setFeedbackApiBasePath("/api/ai/feedback");
         ai.setMascotPrimary(computeMascotPrimary(project.getId(), project.getName()));
         return ai;

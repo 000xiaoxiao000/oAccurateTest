@@ -89,11 +89,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 5176,
     proxy: {
       '/api': backendProxy,
       '/share/api': backendProxy,
-      '^/p/[^/]+/AIInteractive/': backendProxy,
       '^/p/[^/]+/coverage/(generate|generate-incremental|job|trend-data|export|export-methods)(/|\\?|$)': backendProxy,
       '^/p/[^/]+/monitor/(systemSnapshotContext|doSaveSystemSnapshot)(/|\\?|$)': backendProxy,
       '^/p/[^/]+/map/(home|app|code)/data(/|\\?|$)': backendProxy,

@@ -99,8 +99,8 @@
         </section>
       </div>
 
-      <section class="legacy-grid">
-        <article class="panel legacy-panel">
+      <section class="snapshot-grid">
+        <article class="panel snapshot-panel">
           <div class="panel-head">
             <h2>项目动态</h2>
             <span>{{ context.recentLogs?.length || 0 }} 条</span>
@@ -115,13 +115,13 @@
           <div v-else class="empty-card subtle">暂无项目动态</div>
         </article>
 
-        <article class="panel legacy-panel">
+        <article class="panel snapshot-panel">
           <div class="panel-head">
             <h2>我最近的快照</h2>
-            <RouterLink class="legacy-link" :to="`/p/${projectId}/my-snapshots`">更多</RouterLink>
+            <RouterLink class="snapshot-link" :to="`/p/${projectId}/my-snapshots`">更多</RouterLink>
           </div>
           <div v-if="context.recentSnapshots?.length" class="snapshot-list">
-            <article v-for="snapshot in context.recentSnapshots" :key="snapshot.id" class="legacy-snapshot">
+            <article v-for="snapshot in context.recentSnapshots" :key="snapshot.id" class="snapshot-card">
               <RouterLink class="snapshot-link" :to="`/p/${projectId}/my-snapshots/${snapshot.id}`">
                 {{ snapshot.name || snapshot.id }}
               </RouterLink>
@@ -246,7 +246,7 @@ onMounted(load)
   margin-top: 18px;
 }
 
-.legacy-grid {
+.snapshot-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
@@ -347,11 +347,11 @@ onMounted(load)
   font-weight: 700;
 }
 
-.legacy-panel {
+.snapshot-panel {
   min-height: 220px;
 }
 
-.legacy-link {
+.snapshot-link {
   color: #9a3412;
   font-weight: 700;
 }
@@ -368,7 +368,7 @@ onMounted(load)
 }
 
 .activity-item,
-.legacy-snapshot {
+.snapshot-card {
   padding: 14px 16px;
   border-radius: 18px;
   background: #f8fbfb;
@@ -381,7 +381,7 @@ onMounted(load)
 }
 
 .activity-item span,
-.legacy-snapshot span {
+.snapshot-card span {
   display: block;
   margin-top: 8px;
   color: #94a3b8;
@@ -400,7 +400,7 @@ onMounted(load)
 @media (max-width: 960px) {
   .hero,
   .panel-grid,
-  .legacy-grid {
+  .snapshot-grid {
     grid-template-columns: 1fr;
   }
 

@@ -318,7 +318,7 @@ export function triggerCoverageGenerate(
   if (payload.commitId) {
     body.set('commitId', payload.commitId)
   }
-  return apiPost<string>(`/p/${projectId}/coverage/generate`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
+  return apiPost<string>(`/api/projects/${projectId}/coverage/generate`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
 }
 
 export function triggerCoverageGenerateIncremental(
@@ -346,7 +346,7 @@ export function triggerCoverageGenerateIncremental(
     body.set('baseCommitId', payload.baseCommitId)
   }
   return apiPost<string>(
-    `/p/${projectId}/coverage/generate-incremental`,
+    `/api/projects/${projectId}/coverage/generate-incremental`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -354,7 +354,7 @@ export function triggerCoverageGenerateIncremental(
 
 export function fetchCoverageJob(projectId: string, jobId: string) {
   return apiGetRaw<{ id?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string }>(
-    `/p/${projectId}/coverage/job/${jobId}`,
+    `/api/projects/${projectId}/coverage/jobs/${jobId}`,
   )
 }
 
@@ -362,7 +362,7 @@ export function fetchCoverageTrend(projectId: string, appId: string, versionNumb
   const query = new URLSearchParams()
   query.set('appId', appId)
   query.set('versionNumber', versionNumber)
-  return apiGetRaw<Array<Record<string, unknown>>>(`/p/${projectId}/coverage/trend-data?${query.toString()}`)
+  return apiGetRaw<Array<Record<string, unknown>>>(`/api/projects/${projectId}/coverage/trend-data?${query.toString()}`)
 }
 
 export function fetchVersionCenter(projectId: string, appId: string) {
@@ -405,7 +405,7 @@ export function createVersion(projectId: string, appId: string, payload: Record<
     }
   })
   return apiPost<string>(
-    `/p/${projectId}/${appId}/version/doAdd`,
+    `/api/projects/${projectId}/apps/${appId}/versions`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -425,7 +425,7 @@ export function setCurrentVersion(
     body.set('commitId', payload.commitId)
   }
   return apiPost<string>(
-    `/p/${projectId}/${appId}/version/setCurrent`,
+    `/api/projects/${projectId}/apps/${appId}/versions/current`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -435,7 +435,7 @@ export function deleteVersion(projectId: string, appId: string, id: string) {
   const body = new URLSearchParams()
   body.set('id', id)
   return apiPost<string>(
-    `/p/${projectId}/${appId}/version/delete`,
+    `/api/projects/${projectId}/apps/${appId}/versions/delete`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -445,7 +445,7 @@ export function deleteCompareReport(projectId: string, appId: string, reportId: 
   const body = new URLSearchParams()
   body.set('reportId', reportId)
   return apiPost<string>(
-    `/p/${projectId}/${appId}/version/report/delete`,
+    `/api/projects/${projectId}/apps/${appId}/version-reports/delete`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -455,7 +455,7 @@ export function deleteCoverageReport(projectId: string, appId: string, reportId:
   const body = new URLSearchParams()
   body.set('reportId', reportId)
   return apiPost<string>(
-    `/p/${projectId}/${appId}/version/coverageReport/delete`,
+    `/api/projects/${projectId}/apps/${appId}/coverage-reports/delete`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -464,7 +464,7 @@ export function deleteCoverageReport(projectId: string, appId: string, reportId:
 export function deleteVersionFile(projectId: string, appId: string, filePath: string) {
   const query = new URLSearchParams()
   query.set('filePath', filePath)
-  return apiGet<string>(`/p/${projectId}/${appId}/version/file/delete?${query.toString()}`)
+  return apiGet<string>(`/api/projects/${projectId}/apps/${appId}/version-files/delete?${query.toString()}`)
 }
 
 export function fetchGitPullEstimate(
@@ -485,20 +485,20 @@ export function fetchGitPullEstimate(
   if (params.excludePaths) {
     query.set('excludePaths', params.excludePaths)
   }
-  return apiGet<GitPullEstimate>(`/p/${projectId}/${appId}/version/checkGitPull?${query.toString()}`)
+  return apiGet<GitPullEstimate>(`/api/projects/${projectId}/apps/${appId}/git/pull-check?${query.toString()}`)
 }
 
 export function fetchGitRecentCommits(projectId: string, appId: string, branch: string, limit = 20) {
   const query = new URLSearchParams()
   query.set('branch', branch)
   query.set('limit', String(limit))
-  return apiGet<GitCommitOption[]>(`/p/${projectId}/${appId}/version/git/commits?${query.toString()}`)
+  return apiGet<GitCommitOption[]>(`/api/projects/${projectId}/apps/${appId}/git/commits?${query.toString()}`)
 }
 
 export function fetchGitLatestCommit(projectId: string, appId: string, branch: string) {
   const query = new URLSearchParams()
   query.set('branch', branch)
-  return apiGet<string>(`/p/${projectId}/${appId}/version/git/commit?${query.toString()}`)
+  return apiGet<string>(`/api/projects/${projectId}/apps/${appId}/git/latest-commit?${query.toString()}`)
 }
 
 export function startGitPull(
@@ -520,7 +520,7 @@ export function startGitPull(
     body.set('versionNumber', payload.versionNumber)
   }
   return apiPost<string>(
-    `/p/${projectId}/${appId}/version/git/pull`,
+    `/api/projects/${projectId}/apps/${appId}/git/pull`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -529,13 +529,13 @@ export function startGitPull(
 export function fetchGitPullStatus(projectId: string, appId: string, jobId: string) {
   const query = new URLSearchParams()
   query.set('jobId', jobId)
-  return apiGet<GitJobSummary>(`/p/${projectId}/${appId}/version/git/status?${query.toString()}`)
+  return apiGet<GitJobSummary>(`/api/projects/${projectId}/apps/${appId}/git/jobs/${jobId}`)
 }
 
 export function deleteGitCode(projectId: string, appId: string, cachePath: string) {
   const query = new URLSearchParams()
   query.set('cachePath', cachePath)
-  return apiGet<string>(`/p/${projectId}/${appId}/version/git/deleteCode?${query.toString()}`)
+  return apiGet<string>(`/api/projects/${projectId}/apps/${appId}/git/cache?${query.toString()}`)
 }
 
 export function verifyUploadedPackageCommit(
@@ -548,7 +548,7 @@ export function verifyUploadedPackageCommit(
   if (payload.commitId) {
     query.set('commitId', payload.commitId)
   }
-  return apiGet<PackageCommitVerify>(`/p/${projectId}/${appId}/version/package/verifyCommit?${query.toString()}`)
+  return apiGet<PackageCommitVerify>(`/api/projects/${projectId}/apps/${appId}/packages/commit-verify?${query.toString()}`)
 }
 
 export function uploadResource(file: File) {
@@ -560,7 +560,7 @@ export function uploadResource(file: File) {
 export function fetchMonitorSnapshotContext(projectId: string, traceId: string) {
   const query = new URLSearchParams()
   query.set('traceId', traceId)
-  return apiGet<MonitorSnapshotContextPayload>(`/p/${projectId}/monitor/systemSnapshotContext?${query.toString()}`)
+  return apiGet<MonitorSnapshotContextPayload>(`/api/projects/${projectId}/monitor/system-snapshot-context?${query.toString()}`)
 }
 
 export function saveMonitorSystemSnapshot(
@@ -588,7 +588,7 @@ export function saveMonitorSystemSnapshot(
   if (payload.labels.length) body.set('labels', payload.labels.join(','))
   if (payload.principals.length) body.set('principals', payload.principals.join(','))
   return apiPost<string>(
-    `/p/${projectId}/monitor/doSaveSystemSnapshot`,
+    `/api/projects/${projectId}/monitor/system-snapshots`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -608,7 +608,7 @@ export function searchTableGraph(projectId: string, database: string, table: str
 }
 
 export function fetchMapHome(projectId: string) {
-  return apiGetRaw<MapElement[]>(`/p/${projectId}/map/home/data`)
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/home`)
 }
 
 export function fetchMapApp(projectId: string, appId: string, layers: string[]) {
@@ -617,13 +617,13 @@ export function fetchMapApp(projectId: string, appId: string, layers: string[]) 
   if (layers.length) {
     query.set('layers', layers.join(','))
   }
-  return apiGetRaw<MapElement[]>(`/p/${projectId}/map/app/data?${query.toString()}`)
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/apps/${appId}?${query.toString()}`)
 }
 
 export function fetchMapCode(projectId: string, traceId: string) {
   const query = new URLSearchParams()
   query.set('traceId', traceId)
-  return apiGetRaw<MapElement[]>(`/p/${projectId}/map/code/data?${query.toString()}`)
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/code?${query.toString()}`)
 }
 
 export function fetchUsecaseList(projectId: string, params?: { directory?: string; sort?: string; keyword?: string }) {

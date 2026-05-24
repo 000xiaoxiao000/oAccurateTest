@@ -1,6 +1,7 @@
 import type { ApiResponse } from './types'
 
 const AUTH_REQUIRED_CODE = 'AUTH_REQUIRED'
+const DEFAULT_BACKEND_BASE_URL = import.meta.env.VITE_OAT_BACKEND_BASE_URL || 'http://localhost:8899'
 
 let authRedirectPending = false
 
@@ -15,6 +16,13 @@ export class ApiError extends Error {
   }
 }
 
+function backendUrl(input: string) {
+  if (/^https?:\/\//.test(input)) {
+    return input
+  }
+  return `${DEFAULT_BACKEND_BASE_URL}${input.startsWith('/') ? input : `/${input}`}`
+}
+
 function redirectToLogin() {
   if (typeof window === 'undefined' || authRedirectPending || window.location.pathname === '/login') {
     return
@@ -26,7 +34,7 @@ function redirectToLogin() {
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
+  const response = await fetch(backendUrl(input), {
     credentials: 'include',
     headers: {
       Accept: 'application/json',
@@ -63,7 +71,7 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestRawJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
+  const response = await fetch(backendUrl(input), {
     credentials: 'include',
     headers: {
       Accept: 'application/json',
@@ -119,4 +127,8 @@ export function apiPostRaw<T>(input: string, body?: BodyInit | null, contentType
     body,
     headers,
   })
+}
+
+export function backendApiUrl(input: string) {
+  return backendUrl(input)
 }
