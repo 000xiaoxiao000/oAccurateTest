@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <div class="eyebrow">Coverage Overview</div>
-        <h1>{{ payload?.app.name || appId }}</h1>
+        <h1>{{ payload?.app.name || selectedAppName || appId }}</h1>
         <p class="subtext">{{ versionNumber || payload?.report?.versionNumber || '未选择版本' }}</p>
       </div>
       <div class="header-actions">
@@ -13,7 +13,19 @@
 
     <div v-if="loading" class="status-card">正在加载覆盖率概览...</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
+    <div v-else-if="emptyState" class="empty-state-card">
+      <div>
+        <div class="eyebrow">No Coverage Data</div>
+        <h2>{{ emptyState.title }}</h2>
+        <p class="subtext">{{ emptyState.description }}</p>
+      </div>
+      <div class="empty-actions">
+        <RouterLink class="primary-button" :to="`/p/${projectId}/apps/${appId}/versions/new`">创建版本</RouterLink>
+        <RouterLink class="ghost-link" :to="`/p/${projectId}/coverage`">返回覆盖率中心</RouterLink>
+      </div>
+    </div>
     <template v-else-if="payload">
+      <div v-if="autoSelectionNotice" class="inline-notice">{{ autoSelectionNotice }}</div>
       <div class="action-bar">
         <button class="primary-button" type="button" :disabled="generating" @click="generateFull">
           {{ generating ? '处理中...' : '生成全量报告' }}
@@ -179,18 +191,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { backendApiUrl } from '@/api/http'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import {
   fetchCoverageJob,
   fetchCoverageOverview,
   fetchCoverageTrend,
+  fetchVersionCenter,
   triggerCoverageGenerate,
   triggerCoverageGenerateIncremental,
 } from '@/api/bootstrap'
-import type { CoverageComparisonMethod, CoverageOverviewPayload } from '@/api/types'
+import type { CoverageComparisonMethod, CoverageOverviewPayload, VersionItemSummary } from '@/api/types'
 
 const route = useRoute()
+const router = useRouter()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const versionNumber = computed(() => String(route.query.versionNumber || ''))
@@ -200,6 +214,9 @@ const payload = ref<CoverageOverviewPayload | null>(null)
 const loading = ref(false)
 const generating = ref(false)
 const error = ref('')
+const autoSelectionNotice = ref('')
+const emptyState = ref<{ title: string; description: string } | null>(null)
+const selectedAppName = ref('')
 const trend = ref<Array<Record<string, unknown>>>([])
 const jobStatus = ref<{ progress?: number; progressName?: string; finish?: boolean } | null>(null)
 const incrementalDialogOpen = ref(false)
@@ -219,21 +236,96 @@ function formatTrend(item: Record<string, unknown>) {
     .join(' · ')
 }
 
-async function load() {
-  if (!appId.value || !versionNumber.value) {
-    error.value = '缺少 appId 或 versionNumber'
-    return
+type CoverageSelection = {
+  versionNumber: string
+  reportId?: string
+  commitId?: string
+}
+
+function versionPriority(version: VersionItemSummary) {
+  return version.current ? 0 : 1
+}
+
+async function resolveCoverageSelection(): Promise<CoverageSelection | null> {
+  if (!appId.value) {
+    error.value = '缺少 appId'
+    return null
   }
-  loading.value = true
-  error.value = ''
-  try {
-    payload.value = await fetchCoverageOverview(projectId.value, {
-      appId: appId.value,
+  if (versionNumber.value) {
+    return {
       versionNumber: versionNumber.value,
       reportId: reportId.value || undefined,
       commitId: commitId.value || undefined,
+    }
+  }
+
+  const center = await fetchVersionCenter(projectId.value, appId.value)
+  selectedAppName.value = center.app?.name || ''
+  const latestReport = (center.coverageReports || []).find((report) => !!report.versionNumber)
+  if (latestReport?.versionNumber) {
+    autoSelectionNotice.value = `已自动打开最新${latestReport.reportType === 1 ? '增量' : '全量'}报告：${latestReport.versionNumber}`
+    void router.replace({
+      name: 'coverage-overview',
+      params: { projectId: projectId.value, appId: appId.value },
+      query: {
+        versionNumber: latestReport.versionNumber,
+        reportId: latestReport.id,
+        commitId: latestReport.repoCommitId || undefined,
+      },
     })
-    trend.value = await fetchCoverageTrend(projectId.value, appId.value, versionNumber.value)
+    return {
+      versionNumber: latestReport.versionNumber,
+      reportId: latestReport.id,
+      commitId: latestReport.repoCommitId || undefined,
+    }
+  }
+
+  const versions = [...(center.versions || [])]
+    .filter((version) => !!version.versionNumber)
+    .sort((left, right) => versionPriority(left) - versionPriority(right))
+  const latestVersion = versions[0]
+  if (latestVersion?.versionNumber) {
+    autoSelectionNotice.value = `当前应用还没有覆盖率报告，已进入版本 ${latestVersion.versionNumber} 的报告生成页。`
+    void router.replace({
+      name: 'coverage-overview',
+      params: { projectId: projectId.value, appId: appId.value },
+      query: {
+        versionNumber: latestVersion.versionNumber,
+        commitId: latestVersion.repoCommitId || undefined,
+      },
+    })
+    return {
+      versionNumber: latestVersion.versionNumber,
+      commitId: latestVersion.repoCommitId || undefined,
+    }
+  }
+
+  emptyState.value = {
+    title: center.app?.name ? `${center.app.name} 暂无可用版本` : '暂无可用版本',
+    description: '覆盖率报告需要先创建或导入应用版本，再基于版本生成全量或增量报告。',
+  }
+  return null
+}
+
+async function load() {
+  loading.value = true
+  error.value = ''
+  autoSelectionNotice.value = ''
+  emptyState.value = null
+  payload.value = null
+  trend.value = []
+  try {
+    const selection = await resolveCoverageSelection()
+    if (!selection) {
+      return
+    }
+    payload.value = await fetchCoverageOverview(projectId.value, {
+      appId: appId.value,
+      versionNumber: selection.versionNumber,
+      reportId: selection.reportId,
+      commitId: selection.commitId,
+    })
+    trend.value = await fetchCoverageTrend(projectId.value, appId.value, selection.versionNumber)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载覆盖率概览失败'
   } finally {
@@ -367,6 +459,30 @@ onMounted(load)
   border-radius: 999px;
   padding: 10px 14px;
   cursor: pointer;
+  text-decoration: none;
+}
+
+.empty-state-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inline-notice {
+  margin: 0 0 16px;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: rgba(240, 253, 250, .82);
+  color: #0f766e;
+  font-weight: 800;
 }
 
 .primary-button {
@@ -381,7 +497,8 @@ onMounted(load)
 .status-card,
 .hero-card,
 .panel,
-.empty-card {
+.empty-card,
+.empty-state-card {
   padding: 18px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
@@ -515,6 +632,11 @@ onMounted(load)
   .panel-grid,
   .info-grid {
     grid-template-columns: 1fr;
+  }
+
+  .empty-state-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>

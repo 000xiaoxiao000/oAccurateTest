@@ -1,7 +1,6 @@
 package com.oAT.web.control.api;
 
 import com.oAT.web.common.DateUtil;
-import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;

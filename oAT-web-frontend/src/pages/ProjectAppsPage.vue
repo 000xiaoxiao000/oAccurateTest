@@ -136,7 +136,7 @@
           <RouterLink :to="`/p/${projectId}/apps/${app.id}/probe-alerts`">探针告警</RouterLink>
           <RouterLink :to="`/p/${projectId}/apps/${app.id}/repository`">仓库配置</RouterLink>
           <RouterLink :to="`/p/${projectId}/apps/${app.id}/versions`">版本中心</RouterLink>
-          <a :href="`/p/${projectId}/app/${app.id}/oAT.key`" download>下载注册文件</a>
+          <a :href="backendApiUrl(`/p/${projectId}/app/${app.id}/oAT.key`)" download>下载注册文件</a>
           <button class="text-danger" type="button" @click="startDelete(app.id)">删除应用</button>
         </div>
 
@@ -176,6 +176,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import { backendApiUrl } from '@/api/http'
 import { useProjectStore } from '@/stores/project'
 
 const DEFAULT_APP_PROPERTIES = `#代码追踪范围包括

@@ -3,9 +3,8 @@ package com.oAT.web.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import org.springframework.web.util.UriUtils;
-
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
 @Component
@@ -51,7 +50,7 @@ public class FrontendProperties {
     public String loginUrl(String redirect) {
         String loginUrl = url("/login");
         if (StringUtils.hasText(redirect)) {
-            return loginUrl + "?redirect=" + UriUtils.encodeQueryParam(redirect, StandardCharsets.UTF_8.name());
+            return loginUrl + "?redirect=" + URLEncoder.encode(redirect, StandardCharsets.UTF_8);
         }
         return loginUrl;
     }

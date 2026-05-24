@@ -1,6 +1,5 @@
 package com.oAT.web.control.api;
 
-import com.oAT.web.common.DateUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.common.PaletteColors;
 import com.oAT.web.control.entity.ResultNotified;
@@ -36,7 +35,6 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;

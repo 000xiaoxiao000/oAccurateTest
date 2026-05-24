@@ -2,21 +2,22 @@
   <div ref="shellRef" class="shell">
     <header class="shell-header">
       <div class="page-shell shell-header-inner">
-        <div>
-          <div class="shell-brand">oAT Frontend</div>
-          <div class="shell-subtitle">前后端分离工作台</div>
-        </div>
+        <RouterLink class="brand-block" :to="projectId ? `/p/${projectId}/home` : '/projects'" aria-label="oAccurateTest" @click="closeMenus">
+          <img class="brand-logo-image" src="/images/logo.png" alt="oAccurateTest" />
+        </RouterLink>
         <nav class="shell-nav">
-          <RouterLink v-if="projectId" :to="`/p/${projectId}/map/home`">搜索</RouterLink>
+          <RouterLink v-if="projectId" :to="`/p/${projectId}/search`">搜索</RouterLink>
           <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'monitor' }">
-            <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('monitor')">监控台</button>
+            <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu compact">
               <RouterLink :to="`/p/${projectId}/monitor`" @click="closeMenus">实时监控</RouterLink>
               <RouterLink :to="`/p/${projectId}/my-snapshots`" @click="closeMenus">我的快照</RouterLink>
+              <RouterLink :to="`/p/${projectId}/apps`" @click="closeMenus">系统快照</RouterLink>
+              <RouterLink :to="`/p/${projectId}/map/home`" @click="closeMenus">链路地图</RouterLink>
             </div>
           </div>
           <div v-if="projectId" class="nav-dropdown app-center" :class="{ open: openMenu === 'app' }">
-            <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('app')">应用中心</button>
+            <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('app')">应用中心 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu app-menu">
               <RouterLink class="menu-entry" :to="`/p/${projectId}/apps`" @click="closeMenus">应用总览</RouterLink>
               <input v-model.trim="appKeyword" class="menu-search" type="text" placeholder="搜索应用..." />
@@ -28,14 +29,27 @@
                 </RouterLink>
                 <span class="sub-menu-actions">
                   <RouterLink title="系统快照" :to="`/p/${projectId}/apps/${app.id}/snapshots`" @click="closeMenus">📷</RouterLink>
+                  <RouterLink title="版本" :to="`/p/${projectId}/apps/${app.id}/versions`" @click="closeMenus">V</RouterLink>
                   <RouterLink title="版本比对" :to="`/p/${projectId}/apps/${app.id}/compare`" @click="closeMenus">⚖</RouterLink>
                   <RouterLink title="覆盖率报告" :to="`/p/${projectId}/apps/${app.id}/coverage`" @click="closeMenus">📊</RouterLink>
+                  <RouterLink title="接口扫描" :to="`/p/${projectId}/apps/${app.id}/api-endpoints`" @click="closeMenus">API</RouterLink>
+                  <RouterLink title="应用设置" :to="`/p/${projectId}/apps/${app.id}/settings`" @click="closeMenus">⚙</RouterLink>
                 </span>
               </div>
               <div v-if="!filteredApps.length" class="empty-menu-item">暂无应用</div>
             </div>
           </div>
-          <RouterLink v-if="projectId && aiEnabled" :to="`/p/${projectId}/ai`">AI Interactive</RouterLink>
+          <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'assets' }">
+            <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('assets')">测试资产 <span class="menu-caret">⌄</span></button>
+            <div class="nav-menu compact">
+              <RouterLink :to="`/p/${projectId}/version/apps`" @click="closeMenus">版本中心</RouterLink>
+              <RouterLink :to="`/p/${projectId}/coverage`" @click="closeMenus">覆盖率中心</RouterLink>
+              <RouterLink :to="`/p/${projectId}/usecases`" @click="closeMenus">测试用例</RouterLink>
+              <RouterLink :to="`/p/${projectId}/members`" @click="closeMenus">项目成员</RouterLink>
+              <RouterLink :to="`/p/${projectId}/labels`" @click="closeMenus">标签管理</RouterLink>
+            </div>
+          </div>
+          <RouterLink v-if="projectId && aiEnabled" :to="`/p/${projectId}/ai`">AI 助手</RouterLink>
           <RouterLink to="/projects">项目列表</RouterLink>
           <template v-if="currentUser">
             <div v-if="projectId" class="nav-dropdown create-menu" :class="{ open: openMenu === 'create' }">
@@ -43,6 +57,8 @@
               <div class="nav-menu compact right-aligned">
                 <RouterLink to="/projects?create=1" @click="closeMenus">创建新项目</RouterLink>
                 <RouterLink :to="`/p/${projectId}/apps?create=1`" @click="closeMenus">添加应用</RouterLink>
+                <RouterLink :to="`/p/${projectId}/version/apps`" @click="closeMenus">添加版本</RouterLink>
+                <RouterLink :to="`/p/${projectId}/usecases/new`" @click="closeMenus">新建用例</RouterLink>
               </div>
             </div>
             <RouterLink v-if="projectId" class="icon-trigger" :to="`/projects?edit=${projectId}`" title="设置" @click="closeMenus">⚙</RouterLink>
@@ -60,7 +76,6 @@
               <button class="icon-trigger" type="button" @click.stop="toggleMenu('user')">👤</button>
               <div class="nav-menu compact right-aligned">
                 <RouterLink class="shell-user-link" to="/account" @click="closeMenus">用户设置</RouterLink>
-                <span class="disabled-menu-item">管理面板</span>
                 <button type="button" @click="handleLogout">注销退出</button>
               </div>
             </div>
@@ -96,7 +111,7 @@ const { projects } = storeToRefs(projectStore)
 const projectKeyword = ref('')
 const appKeyword = ref('')
 const shellRef = ref<HTMLElement | null>(null)
-const openMenu = ref<'monitor' | 'app' | 'create' | 'project' | 'user' | ''>('')
+const openMenu = ref<'monitor' | 'app' | 'assets' | 'create' | 'project' | 'user' | ''>('')
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
 const context = computed(() => projectId.value ? projectStore.contextByProjectId[projectId.value] : undefined)
 const apps = computed(() => context.value?.apps || projectStore.appsByProjectId[projectId.value] || [])
@@ -169,7 +184,7 @@ async function handleLogout() {
 .shell-header {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 80;
   backdrop-filter: blur(18px);
   background: rgba(245, 250, 251, 0.85);
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
@@ -183,22 +198,40 @@ async function handleLogout() {
   padding: 16px 0;
 }
 
-.shell-brand {
-  font-size: 20px;
-  font-weight: 800;
+.brand-block {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 145px;
+  padding: 0;
 }
 
-.shell-subtitle {
-  color: #5b6b79;
-  font-size: 13px;
+.brand-logo-image {
+  display: block;
+  width: 145px;
+  max-width: 145px;
+  height: 26px;
+  object-fit: contain;
 }
 
 .shell-nav {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.shell-nav > a.router-link-active,
+.shell-nav > a.router-link-exact-active,
+.nav-dropdown.open .nav-dropdown-trigger {
+  color: #0f766e;
+}
+
+.menu-caret {
+  margin-left: 2px;
+  color: #64748b;
+  font-size: 13px;
 }
 
 .shell-user-link {
@@ -246,22 +279,27 @@ async function handleLogout() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 180px;
+  max-width: 220px;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, .72);
   color: #5b6b79;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .06);
 }
 
 .nav-menu {
   position: absolute;
   top: calc(100% + 10px);
   left: 0;
-  z-index: 30;
+  z-index: 160;
   min-width: 220px;
   display: none;
   padding: 10px;
   border: 1px solid rgba(15, 23, 42, .10);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, .98);
-  box-shadow: 0 22px 48px rgba(15, 23, 42, .14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .18);
+  backdrop-filter: blur(18px);
 }
 
 .nav-dropdown:hover .nav-menu,
@@ -312,13 +350,45 @@ async function handleLogout() {
 }
 
 .project-menu {
-  min-width: 250px;
-  max-height: min(360px, calc(100vh - 120px));
+  width: min(340px, calc(100vw - 24px));
+  min-width: 280px;
+  max-height: min(420px, calc(100vh - 112px));
   overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.project-menu a {
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher .menu-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 8px 14px rgba(255, 255, 255, .85);
+}
+
+.project-switcher::after {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: none;
+  content: '';
+  pointer-events: none;
+}
+
+.project-switcher.open::after {
+  display: block;
 }
 
 .app-menu {
-  width: 390px;
+  width: 520px;
   max-width: calc(100vw - 24px);
   max-height: min(480px, calc(100vh - 120px));
   overflow: auto;
@@ -331,6 +401,8 @@ async function handleLogout() {
   border-radius: 999px;
   padding: 9px 12px;
   outline: none;
+  font: inherit;
+  color: #172033;
 }
 
 .menu-divider {
@@ -346,7 +418,7 @@ async function handleLogout() {
   align-items: center;
   gap: 14px;
   border-radius: 10px;
-  padding-right: 110px !important;
+  padding-right: 244px !important;
 }
 
 .app-menu-item small {
@@ -365,18 +437,19 @@ async function handleLogout() {
 .sub-menu-actions {
   position: absolute;
   right: 8px;
-  display: none;
+  display: inline-flex;
   align-items: center;
   gap: 2px;
 }
 
-.app-menu-item:hover .sub-menu-actions {
-  display: inline-flex;
-}
 
 .sub-menu-actions a {
   width: auto;
-  padding: 4px 5px;
+  min-width: 28px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(15, 118, 110, .06);
 }
 
 .disabled-menu-item,

@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import javax.servlet.http.HttpServletRequest;
@@ -44,15 +45,19 @@ public class ProjectInterceptor implements HandlerInterceptor {
         }
         if (requestUri.startsWith("/api/projects/")) {
             String[] parts = requestUri.split("/");
-            Assert.isTrue(parts.length > 3, "url must matching start with '/api/projects/{projectId}'");
+            if (parts.length <= 3 || !StringUtils.hasText(parts[3])) {
+                response.sendError(HttpServletResponse.SC_BAD_REQUEST, "projectId must not be empty");
+                return false;
+            }
             projectId = parts[3];
         } else {
-            Assert.isTrue(requestUri.startsWith("/p/"), "url must matching start with '/p/{projectId}'");
             String[] parts = requestUri.split("/");
-            Assert.isTrue(parts.length > 2, "url must matching start with '/p/{projectId}'");
+            if (!requestUri.startsWith("/p/") || parts.length <= 2 || !StringUtils.hasText(parts[2])) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND, "project path must start with /p/{projectId}");
+                return false;
+            }
             projectId = parts[2];
         }
-        Assert.isTrue(!projectId.trim().isEmpty(), "projectId must not be empty");
 
 
         // 如果为共享请求，则跳过项目权限验证
@@ -81,6 +86,17 @@ public class ProjectInterceptor implements HandlerInterceptor {
         setMascotPrimary(request, project);
         request.setAttribute("aiTimeout", aiTimeout);
         return true;
+    }
+
+
+    @Override
+    public void postHandle(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler,
+                           org.springframework.web.servlet.ModelAndView modelAndView) {
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull Object handler,
+                                Exception ex) {
     }
 
     /**

@@ -1,17 +1,18 @@
 <template>
-  <div v-if="projectId && context" ref="rootRef" class="ai-floating" :class="{ open: panelOpen, hidden: mascotHidden }" :style="floatingStyle">
-    <button v-if="mascotHidden" class="restore-button" type="button" @pointerdown="startDrag" @click="showMascot">显示AI助手</button>
+  <div v-if="projectId" ref="rootRef" class="ai-floating" :class="{ open: panelOpen, hidden: mascotHidden }" :style="floatingStyle">
+    <button v-if="mascotHidden" class="restore-button" type="button" @pointerdown="startDrag" @click="showMascot">显示 AI 助手</button>
 
     <button v-else class="launcher" type="button" title="打开 AI 助手" data-tooltip="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
-      <MascotCanvas :size="88" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="false" />
-      <span v-if="showLauncherLabel">AI 助手</span>
+      <MascotCanvas :size="78" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="false" />
+      <span class="launcher-label">AI 助手</span>
+      <span v-if="!panelOpen" class="launcher-bubble">{{ launcherHint }}</span>
     </button>
 
     <section v-if="!mascotHidden && panelOpen" ref="panelRef" class="assistant-panel" :style="panelStyle">
       <header class="panel-header" @pointerdown="startDrag">
         <div>
-          <div class="eyebrow">AI Interactive</div>
-          <h2>项目悬浮助手</h2>
+          <div class="eyebrow">AI Assistant</div>
+          <h2>AI 助手</h2>
         </div>
         <div class="panel-tools">
           <button type="button" title="恢复默认位置和尺寸" @click="resetLayout">↺</button>
@@ -19,8 +20,8 @@
           <button type="button" title="撤销上一步内部布局调整" @click="undoLayout">↶</button>
           <button type="button" title="清空当前助手对话" @click="clearConversation">清空</button>
           <RouterLink :to="`/p/${projectId}/ai`">工作台</RouterLink>
-          <button type="button" title="隐藏小人" @click="hideMascot">-</button>
-          <button type="button" title="收起助手" @click="panelOpen = false">x</button>
+          <button type="button" title="隐藏 AI 吉祥物" @click="hideMascot">-</button>
+          <button type="button" title="收起助手" @click="panelOpen = false">×</button>
         </div>
       </header>
 
@@ -36,13 +37,13 @@
           </article>
           <article v-if="!messages.length" class="message assistant">
             <strong>AI</strong>
-            <span>{{ context.mascotHint || context.welcomeMessage }}</span>
+            <span>{{ assistantContext.mascotHint || assistantContext.welcomeMessage }}</span>
           </article>
         </div>
       </div>
 
       <div class="context-status">
-        当前页面：{{ route.fullPath }} · {{ context.appCount }} 个应用 · {{ context.onlineAppCount }} 个在线
+        当前页面：{{ route.fullPath }} · {{ assistantContext.appCount }} 个应用 · {{ assistantContext.onlineAppCount }} 个在线
       </div>
 
       <div class="section-box" :class="{ collapsed: isSectionCollapsed('links') }">
@@ -93,7 +94,7 @@ import { RouterLink, useRoute } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
 import MascotCanvas from '@/components/MascotCanvas.vue'
-import type { AIQuickLink } from '@/api/types'
+import type { AIInteractivePagePayload, AIQuickLink } from '@/api/types'
 
 type Message = { id: string; role: 'user' | 'assistant'; text: string }
 type FloatingPosition = { left: number; top: number }
@@ -130,24 +131,47 @@ const panelSize = ref<PanelSize | null>(null)
 const collapsedSections = ref<SectionName[]>([])
 const layoutLocked = ref(false)
 const dragMoved = ref(false)
-const showLauncherLabel = ref(false)
 let layoutUndoSnapshot: { position: FloatingPosition | null; panelSize: PanelSize | null; collapsedSections: SectionName[] } | null = null
 let resizeObserver: ResizeObserver | null = null
 let recognition: SpeechRecognitionLike | null = null
 
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
 const context = computed(() => projectId.value ? projectStore.aiContextByProjectId[projectId.value] : undefined)
-const mascotColor = computed(() => context.value?.mascot?.mascotPrimary || '#0f766e')
+const fallbackContext = computed<AIInteractivePagePayload>(() => ({
+  projectId: projectId.value,
+  projectName: '当前项目',
+  projectSummary: 'AI 助手正在准备项目上下文',
+  welcomeMessage: '我是 AI 助手，可以帮你分析当前页面、跳转常用功能或排查测试风险。',
+  mascotHint: '点我打开 AI 助手',
+  onlineAppCount: 0,
+  appCount: 0,
+  appNames: [],
+  starterQuestions: [],
+  abilityCards: [],
+  quickLinks: [],
+  mascot: {
+    mascotName: 'AI 助手',
+    mascotPrimary: '#b6d900',
+  },
+  aiTimeout: 120,
+}))
+const assistantContext = computed(() => context.value || fallbackContext.value)
+const mascotColor = computed(() => assistantContext.value.mascot?.mascotPrimary || '#b6d900')
+const launcherHint = computed(() => {
+  if (asking.value) return '分析中...'
+  if (error.value) return '需要处理'
+  return assistantContext.value.mascot?.mascotName || '点我提问'
+})
 const mood = computed(() => error.value ? 'error' : 'happy')
 const stateText = computed(() => error.value || (asking.value ? '生成中...' : imageData.value ? '已附加图片' : '就绪'))
 const storagePrefix = computed(() => projectId.value ? `spa-ai-floating:${projectId.value}` : '')
 const floatingStyle = computed(() => position.value ? { left: `${position.value.left}px`, top: `${position.value.top}px`, right: 'auto', bottom: 'auto' } : {})
 const panelStyle = computed(() => panelSize.value ? { width: `${panelSize.value.width}px`, height: `${panelSize.value.height}px` } : {})
 
-const normalizedQuickLinks = computed(() => normalizeLinks(context.value?.quickLinks || []))
+const normalizedQuickLinks = computed(() => normalizeLinks(assistantContext.value.quickLinks || []))
 const starterQuestions = computed(() => {
   const routeSpecific = routeStarters(route.path)
-  return [...routeSpecific, ...(context.value?.starterQuestions || [])].slice(0, 8)
+  return [...routeSpecific, ...(assistantContext.value.starterQuestions || [])].slice(0, 8)
 })
 
 watch(projectId, async (value) => {
@@ -187,7 +211,6 @@ function restoreState() {
   panelSize.value = readJson<PanelSize | null>(`${storagePrefix.value}:panel-size`, null)
   collapsedSections.value = readJson<SectionName[]>(`${storagePrefix.value}:sections`, [])
   layoutLocked.value = localStorage.getItem(`${storagePrefix.value}:layout-locked`) === '1'
-  showLauncherLabel.value = localStorage.getItem(`${storagePrefix.value}:show-label`) === '1'
 }
 
 function readJson<T>(key: string, fallback: T): T {
@@ -476,7 +499,7 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 24px;
   bottom: 24px;
-  z-index: 80;
+  z-index: 95;
   color: #0f172a;
 }
 
@@ -489,21 +512,27 @@ onBeforeUnmount(() => {
 }
 
 .launcher {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 96px;
-  min-height: 96px;
-  padding: 4px;
+  width: 98px;
+  min-height: 98px;
+  padding: 0;
   border-radius: 999px;
   background: transparent;
   border: none;
   box-shadow: none;
 }
 
-.launcher span {
+.launcher :deep(.mascot-canvas) {
+  filter: drop-shadow(0 16px 24px rgba(15, 23, 42, .16));
+}
+
+.launcher-label {
   position: absolute;
-  bottom: -4px;
-  padding: 4px 8px;
+  right: 4px;
+  bottom: -2px;
+  padding: 5px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, .94);
   color: #0f766e;
@@ -512,28 +541,41 @@ onBeforeUnmount(() => {
   box-shadow: 0 8px 18px rgba(15, 23, 42, .12);
 }
 
-.launcher::after {
-  content: attr(data-tooltip);
+.launcher-bubble {
   position: absolute;
-  right: 96px;
-  top: 50%;
-  transform: translateY(-50%);
+  right: 84px;
+  bottom: 58px;
   width: max-content;
-  max-width: 140px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, .86);
-  color: #fff;
+  max-width: 150px;
+  padding: 8px 12px;
+  border: 1px solid rgba(15, 118, 110, .14);
+  border-radius: 16px 16px 4px;
+  background: rgba(255, 255, 255, .96);
+  color: #334155;
   font-size: 12px;
-  font-weight: 800;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .16s ease, transform .16s ease;
+  font-weight: 900;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .12);
 }
 
-.launcher:hover::after {
-  opacity: 1;
-  transform: translate(-4px, -50%);
+.launcher-bubble::after {
+  position: absolute;
+  right: -6px;
+  bottom: 8px;
+  width: 10px;
+  height: 10px;
+  content: '';
+  background: rgba(255, 255, 255, .96);
+  border-right: 1px solid rgba(15, 118, 110, .14);
+  border-bottom: 1px solid rgba(15, 118, 110, .14);
+  transform: rotate(-45deg);
+}
+
+.launcher::after {
+  content: '';
+}
+
+.launcher:hover :deep(.mascot-canvas) {
+  transform: translateY(-2px) scale(1.03);
 }
 
 .restore-button {
@@ -751,6 +793,10 @@ onBeforeUnmount(() => {
   .assistant-panel {
     right: -4px;
     bottom: 116px;
+  }
+
+  .launcher-bubble {
+    display: none;
   }
 
   .starters {

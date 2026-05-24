@@ -781,6 +781,130 @@ onMounted(async () => {
   border-color: rgba(15, 118, 110, 0.22);
 }
 
+.session-card.pinned {
+  box-shadow: inset 3px 0 0 #0f766e;
+}
+
+.session-tools {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.text-input {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 14px;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, .92);
+  color: #172033;
+  font: inherit;
+  outline: none;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.text-input:focus {
+  border-color: rgba(15, 118, 110, .38);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, .10);
+}
+
+.small-input {
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 9px 12px;
+}
+
+.session-main {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.session-main strong {
+  color: #172033;
+  font-size: 14px;
+}
+
+.session-main span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.session-actions button,
+.timeline-item {
+  border: 1px solid rgba(15, 118, 110, .16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .72);
+  color: #0f766e;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.session-actions button {
+  padding: 6px 9px;
+}
+
+.session-actions button:hover,
+.timeline-item:hover {
+  border-color: rgba(15, 118, 110, .34);
+  background: rgba(15, 118, 110, .08);
+}
+
+.timeline-list {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 24px 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.timeline-item span {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, .10);
+}
+
+.timeline-item small {
+  overflow: hidden;
+  color: #64748b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty-card.compact {
+  padding: 12px;
+  border-radius: 14px;
+  color: #94a3b8;
+}
+
 .message-card.user {
   background: rgba(15, 118, 110, 0.06);
 }

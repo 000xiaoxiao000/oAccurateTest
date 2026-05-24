@@ -4,7 +4,7 @@
       <div>
         <div class="eyebrow">Search Center</div>
         <h1>搜索中心</h1>
-        <p class="subtext">统一替代旧搜索页，覆盖快照关键词检索与表关系检索。</p>
+        <p class="subtext">支持快照关键词检索与数据库表关系检索。</p>
       </div>
     </div>
 
