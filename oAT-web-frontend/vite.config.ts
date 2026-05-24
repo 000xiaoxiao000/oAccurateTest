@@ -12,12 +12,27 @@ const htmlNoStoreHeaders = {
   Expires: '0',
 }
 
+function hasLocalPublicAsset(url?: string) {
+  if (!url) return false
+  const requestPath = url.split('?')[0]
+  if (!requestPath.startsWith('/css/') && !requestPath.startsWith('/js/') && !requestPath.startsWith('/images/')) {
+    return false
+  }
+  const publicPath = path.resolve(__dirname, 'public', requestPath.slice(1))
+  const publicRoot = path.resolve(__dirname, 'public')
+  return publicPath.startsWith(publicRoot) && fs.existsSync(publicPath) && fs.statSync(publicPath).isFile()
+}
+
 const backendProxy: ProxyOptions = {
   target: backendTarget,
   changeOrigin: true,
   bypass(req) {
     const accept = req.headers.accept || ''
     const method = req.method || 'GET'
+
+    if (method === 'GET' && hasLocalPublicAsset(req.url)) {
+      return req.url
+    }
 
     // Vue owns browser page navigations. Only API/form/download calls should be
     // proxied to the Spring Boot backend in dev mode.
