@@ -169,72 +169,18 @@ public class MonitorControl {
     }
 
     @RequestMapping("/{traceId}/{nodeId}.html")
-    public String getNodeDetailView(@PathVariable String projectId, @PathVariable String traceId, @PathVariable String nodeId, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : ""));
-        }
-        TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId));
-        GraphNode node = parse.getGraphNode(nodeId);
-        Assert.notNull(node, "not found GraphNode: " + nodeId);
-
-        if (node instanceof ClientGraphNode) {
-            model.addAttribute("node", ((ClientGraphNode) node).getTraceNode());
-            return "/monitor/httpNodeDetails";
-        } else if (node instanceof ApplicationGraphNode) {
-            String sessionId = ((ApplicationGraphNode) node).getSessionId();
-            ClientSessionVo clientSession = clientSessionService.getClientSession(sessionId);
-            model.addAttribute("appSession", clientSession);
-            model.addAttribute("data", node);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/serverDetails";
-        } else if (node instanceof DatabaseGraphNode) {
-            if (((DatabaseGraphNode) node).getCkdatabase() != null) {
-                model.addAttribute("database", ((DatabaseGraphNode) node).getCkdatabase());
-                model.addAttribute("data", node);
-                model.addAttribute("traceId", traceId);
-                return "/monitor/ckdatabaseDetails";
-            }
-
-            model.addAttribute("database", ((DatabaseGraphNode) node).getDatabase());
-            model.addAttribute("data", node);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/databaseDetails";
-
-        } else if (node instanceof RedisGraphNode) {
-            model.addAttribute("redis", node);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/redisNodeDetails";
-        } else {
-            throw new RuntimeException("Failed to resolve graph model: " + node.getClass().getName());
-        }
+    public String getNodeDetailView(@PathVariable String projectId,
+                                    @PathVariable String traceId,
+                                    @PathVariable String nodeId) {
+        String query = StringUtils.hasText(traceId)
+                ? "?traceId=" + traceId + (StringUtils.hasText(nodeId) ? "&nodeId=" + nodeId : "")
+                : "";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/monitor" + query);
     }
 
     @RequestMapping("/openSystemSnapshot")
-    public String openSystemSnapshot(@PathVariable String projectId, String traceId, @SessionAttribute UserVo user,
-                                           Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId : ""));
-        }
-        model.addAttribute("projectId", projectId);
-        // 所属应用
-        Map<String, TraceNode> nodes = getTraceNode(traceId);
-        Application app = nodes.get("0").getApp();
-        model.addAttribute("app", app);
-
-        // 加载标签
-        List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.snapshot);
-        model.addAttribute("labels", labels);
-
-        List<ProjectMemberVo> members = projectService.getProjectMembers(projectId);
-        model.addAttribute("members", members);
-        // 当前用户
-        model.addAttribute("user", user);
-        model.addAttribute("traceId", traceId);
-        // 加载负责人
-        // 快照目录
-        List<Directory> dirs = appService.getAppSnapshotDirs(app.getAppId());
-        model.addAttribute("dirs", dirs);
-        return "/monitor/createSystemSnapshot";
+    public String openSystemSnapshot(@PathVariable String projectId, String traceId) {
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/monitor" + (StringUtils.hasText(traceId) ? "?traceId=" + traceId + "&snapshot=system" : ""));
     }
 
     @GetMapping("/systemSnapshotContext")

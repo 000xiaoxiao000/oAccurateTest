@@ -6,6 +6,12 @@ import type { ProxyOptions } from 'vite'
 
 const backendTarget = process.env.OAT_BACKEND_TARGET || 'http://localhost:8899'
 
+const htmlNoStoreHeaders = {
+  'Cache-Control': 'no-store, max-age=0, must-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+}
+
 const backendProxy: ProxyOptions = {
   target: backendTarget,
   changeOrigin: true,
@@ -74,6 +80,7 @@ export default defineConfig({
     },
   },
   build: {
+    emptyOutDir: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -88,8 +95,13 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    port: 5176,
+    headers: htmlNoStoreHeaders,
+  },
   server: {
     port: 5176,
+    headers: htmlNoStoreHeaders,
     proxy: {
       '/api': backendProxy,
       '/share/api': backendProxy,

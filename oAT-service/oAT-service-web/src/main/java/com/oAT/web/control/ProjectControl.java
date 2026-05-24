@@ -220,7 +220,7 @@ public class ProjectControl {
             groupvo.setLabels(list.toArray(new LabelGroup.Label[0]));
             projectService.doSaveLabelGroup(groupvo);
         }
-        return "redirect:" + frontendProperties.url("/p/" + projectId + "/label");
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/labels");
     }
     // 删除标签
     @RequestMapping("/p/{projectId}/label/delete")
@@ -242,7 +242,7 @@ public class ProjectControl {
         }
         groupvo.setLabels(list.toArray(new LabelGroup.Label[0]));
         projectService.doSaveLabelGroup(groupvo);
-        return "redirect:" + frontendProperties.url("/p/" + projectId + "/label");
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/labels");
     }
 
 }

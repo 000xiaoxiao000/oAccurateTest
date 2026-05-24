@@ -39,6 +39,9 @@ public class ProjectInterceptor implements HandlerInterceptor {
         UserVo user;
         ProjectVo project;
         String requestUri = request.getRequestURI();
+        if ("/api/projects".equals(requestUri) || "/api/projects/".equals(requestUri)) {
+            return true;
+        }
         if (requestUri.startsWith("/api/projects/")) {
             String[] parts = requestUri.split("/");
             Assert.isTrue(parts.length > 3, "url must matching start with '/api/projects/{projectId}'");

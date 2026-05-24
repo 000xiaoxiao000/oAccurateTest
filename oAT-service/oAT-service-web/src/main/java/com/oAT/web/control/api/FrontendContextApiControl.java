@@ -231,12 +231,16 @@ public class FrontendContextApiControl {
 
     private ProjectSummary toProjectSummary(ProjectVo project) {
         ProjectSummary summary = new ProjectSummary();
+        if (project == null) {
+            summary.setName("未知项目");
+            return summary;
+        }
         summary.setId(project.getId());
-        summary.setName(project.getName());
+        summary.setName(org.springframework.util.StringUtils.hasText(project.getName()) ? project.getName() : "未命名项目");
         summary.setDescribe(project.getDescribe());
         summary.setCreate(project.getCreate());
         summary.setCreateDisplayName(project.getCreateDisplayName());
-        summary.setMemberCount(project.getMemberCount());
+        summary.setMemberCount(Math.max(project.getMemberCount(), 0));
         summary.setCreateTime(project.getCreateTime());
         summary.setUpdateTime(project.getUpdateTime());
         return summary;

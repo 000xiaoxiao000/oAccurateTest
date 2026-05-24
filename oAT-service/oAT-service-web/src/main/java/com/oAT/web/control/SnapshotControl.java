@@ -164,39 +164,13 @@ public class SnapshotControl {
      * @return
      */
     @RequestMapping("/list")
-    public String openList(@PathVariable String projectId, @SessionAttribute UserVo user, String[] labels, String sort, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            StringBuilder target = new StringBuilder("/p/").append(projectId).append("/my-snapshots");
-            List<String> query = new ArrayList<>();
-            if (StringUtils.hasText(sort)) {
-                query.add("sort=" + sort);
-            }
-            if (ArrayUtils.isNotEmpty(labels)) {
-                query.add("labels=" + StringUtils.arrayToDelimitedString(labels, ","));
-            }
-            if (!query.isEmpty()) {
-                target.append("?").append(String.join("&", query));
-            }
-            return "redirect:" + frontendProperties.url(target.toString());
-        }
-
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
-
-        // 基于标签过滤
-        if (ArrayUtils.isNotEmpty(labels)) {
-            for (SnapshotVo snapshotVo : snapshots.toArray(new SnapshotVo[0])) {
-                if (snapshotVo.getLabels() == null || !in(snapshotVo.getLabels(), labels)) {
-                    snapshots.remove(snapshotVo);
-                }
-            }
-        }
-
-        model.addAttribute("snapshots", snapshots);
-        List<LabelGroup.Label> snapshotLabels = projectService.getLables(projectId, LableType.snapshot);
-        model.addAttribute("snapshotLabels", snapshotLabels);
-        model.addAttribute("filterLabels", StringUtils.arrayToDelimitedString(labels, ","));
-        model.addAttribute("sort", sort);
-        return "/snapshot/snapshotList";
+    public String openList(@PathVariable String projectId, String[] labels, String sort) {
+        StringBuilder target = new StringBuilder("/p/").append(projectId).append("/my-snapshots");
+        List<String> query = new ArrayList<>();
+        if (StringUtils.hasText(sort)) query.add("sort=" + sort);
+        if (ArrayUtils.isNotEmpty(labels)) query.add("labels=" + StringUtils.arrayToDelimitedString(labels, ","));
+        if (!query.isEmpty()) target.append("?").append(String.join("&", query));
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     @RequestMapping("/my")
@@ -271,28 +245,14 @@ public class SnapshotControl {
     }
 
     @RequestMapping("/mySnapshotsCodeReport")
-    public String mySnapshotsCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String sort, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code-report" + (StringUtils.hasText(sort) ? "?sort=" + sort : ""));
-        }
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), StringUtils.hasText(sort) ? sort : null);
-        return buildMySnapshotsCodeReport(projectId, snapshots, model);
+    public String mySnapshotsCodeReport(@PathVariable String projectId, String sort) {
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code-report" + (StringUtils.hasText(sort) ? "?sort=" + sort : ""));
     }
 
     @RequestMapping("/mySnapshotCodeReport")
-    public String mySnapshotCodeReport(@PathVariable String projectId, @SessionAttribute UserVo user, String snapshotId, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/" + snapshotId + "/report");
-        }
+    public String mySnapshotCodeReport(@PathVariable String projectId, String snapshotId) {
         Assert.hasText(snapshotId, "参数'snapshotId'不能为空");
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), null);
-        SnapshotVo targetSnapshot = snapshots.stream()
-                .filter(snapshot -> snapshotId.equals(snapshot.getId()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("找不到对应快照或无权限访问"));
-        model.addAttribute("snapshotId", targetSnapshot.getId());
-        model.addAttribute("selectedSnapshotName", targetSnapshot.getName());
-        return buildMySnapshotsCodeReport(projectId, Collections.singletonList(targetSnapshot), model);
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/" + snapshotId + "/report");
     }
 
     @RequestMapping("/usecase/batchBind")
@@ -535,152 +495,18 @@ public class SnapshotControl {
     }
 
     @RequestMapping("/my/code")
-    public String snapshotCodeView(@PathVariable String projectId, String appId, String className, @SessionAttribute UserVo user, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code?appId=" + appId + "&className=" + className);
-        }
-        // 1. 获取该用户在该项目下的所有快照
-        List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), null);
-
-        // 2. 聚合该类的覆盖率数据 (参考 ClassCoverageIndex)
-        ClassCoverageIndex aggregatedClassCov = new ClassCoverageIndex();
-        aggregatedClassCov.setClassName(className);
-        aggregatedClassCov.setAppId(appId);
-
-        // 加载该类的全量静态数据
-        List<StaticSourceInfo> staticInfos = StringUtils.hasText(appId) ? staticInfoRepository.findByAppId(appId) : Collections.emptyList();
-        Map<String, StaticSourceMethodInfo> classStaticMethods = new HashMap<>();
-        for (StaticSourceInfo si : staticInfos) {
-            if (si.getClassInfo() != null && className.equals(si.getClassInfo().getClassName()) && si.getClassInfo().getMethodMaps() != null) {
-                for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
-                    String mKey = CoverageMethodKeyUtil.buildMethodKey(mInfo.getMethodName(), mInfo.getMethodDesc());
-                    classStaticMethods.put(mKey, mInfo);
-                }
-                break;
-            }
-        }
-
-        Map<String, ClassCoverageIndex.MethodCoverageDetail> methodMap = new HashMap<>(); // name#desc -> detail
-
-        for (SnapshotVo snap : snapshots) {
-            String traceId = snap.getTraceId();
-            TraceNode traceNode = snapshotService.getTraceNode(traceId, "0");
-            if (traceNode instanceof HttpTraceNode) {
-                StackNodeVo[] codeNodes = ((HttpTraceNode) traceNode).getCodeNodes();
-                if (codeNodes != null) {
-                    for (StackNodeVo sn : codeNodes) {
-                        if (!sn.getClassName().equals(className)) continue;
-
-                        // 如果进入页面时 appId 为空（如历史快照未记录 appId），则从当前包含该类的链路节点中推断 appId
-                        if (!StringUtils.hasText(appId) && traceNode.getApp() != null) {
-                            appId = traceNode.getApp().getAppId();
-                        }
-
-                        String methodKey = CoverageMethodKeyUtil.buildMethodKey(sn.getMethodName(), sn.getMethodDescriptor());
-                        ClassCoverageIndex.MethodCoverageDetail md = methodMap.computeIfAbsent(methodKey, k -> {
-                            ClassCoverageIndex.MethodCoverageDetail newMd = new ClassCoverageIndex.MethodCoverageDetail();
-                            newMd.setMethodName(sn.getMethodName());
-                            newMd.setMethodDesc(sn.getMethodDescriptor());
-                            // 从全量静态数据获取总数
-                            StaticSourceMethodInfo staticMethod = classStaticMethods.get(methodKey);
-                            List<Integer> totalLines = staticMethod != null && staticMethod.getMethodLineNumberMap() != null
-                                    ? staticMethod.getMethodLineNumberMap() : Collections.emptyList();
-                            newMd.setTotalLineNumbers(new ArrayList<>(totalLines));
-                            newMd.setTotalLines(totalLines.size());
-                            newMd.setTotalBranches(staticMethod != null && staticMethod.getTotalBranchCount() != null
-                                    ? staticMethod.getTotalBranchCount() : 0);
-                            Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
-                                    staticMethod != null ? staticMethod.getBranchLineAndTargetProbeMap() : null,
-                                    sn.getExecuteBranchTargetProbeMap());
-                            newMd.setTotalBranchTargetProbeMap(normalizedTotalBranchTargetProbeMap);
-                            newMd.setTotalBranchTargets(countBranchTargets(normalizedTotalBranchTargetProbeMap));
-                            newMd.setCoveredBranchTargetProbeMap(new LinkedHashMap<>());
-                            newMd.setCoveredBranchTargets(0);
-                            newMd.setBranchRate(0.0);
-                            newMd.setComplexity(staticMethod != null && staticMethod.getCyclomaticComplexityMap() != null
-                                    ? staticMethod.getCyclomaticComplexityMap() : 0);
-                            newMd.setCoveredLineNumbers(new ArrayList<>());
-                            newMd.setCoveredBranchLines(new ArrayList<>());
-                            return newMd;
-                        });
-
-                        if (sn.getDoLines() != null) {
-                            Set<Integer> covered = new HashSet<>(md.getCoveredLineNumbers());
-                            covered.addAll(sn.getDoLines());
-                            md.setCoveredLineNumbers(new ArrayList<>(covered));
-                            md.setCoveredLines(md.getCoveredLineNumbers().size());
-                            md.setCovered(md.getCoveredLines() > 0);
-                        }
-                        if (sn.getExecuteBranch() != null) {
-                            Set<Integer> coveredBranchLines = new LinkedHashSet<>(md.getCoveredBranchLines());
-                            coveredBranchLines.addAll(sn.getExecuteBranch());
-                            md.setCoveredBranchLines(new ArrayList<>(coveredBranchLines));
-                            md.setCoveredBranches(md.getCoveredBranchLines().size());
-                        }
-                        if (sn.getExecuteBranchTargetProbeMap() != null) {
-                            Map<String, List<Integer>> coveredBranchTargetProbeMap = mergeBranchTargetProbeMap(
-                                    md.getCoveredBranchTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
-                            Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
-                                    md.getTotalBranchTargetProbeMap(), coveredBranchTargetProbeMap);
-                            coveredBranchTargetProbeMap = normalizeCoveredBranchTargetProbeMap(
-                                    normalizedTotalBranchTargetProbeMap, coveredBranchTargetProbeMap);
-                            md.setTotalBranchTargetProbeMap(normalizedTotalBranchTargetProbeMap);
-                            md.setTotalBranchTargets(countBranchTargets(normalizedTotalBranchTargetProbeMap));
-                            md.setCoveredBranchTargetProbeMap(coveredBranchTargetProbeMap);
-                            md.setCoveredBranchTargets(countBranchTargets(coveredBranchTargetProbeMap));
-                            md.setBranchRate(calculateBranchRate(md.getCoveredBranchTargets(), md.getTotalBranchTargets()));
-                        }
-                    }
-                }
-            }
-        }
-
-        List<ClassCoverageIndex.MethodCoverageDetail> methods = new ArrayList<>(methodMap.values());
-        aggregatedClassCov.setMethods(methods);
-        aggregatedClassCov.setTotalMethods(methods.size());
-        aggregatedClassCov.setCoveredMethods((int) methods.stream().filter(ClassCoverageIndex.MethodCoverageDetail::isCovered).count());
-        aggregatedClassCov.setTotalLines(methods.stream().mapToInt(ClassCoverageIndex.MethodCoverageDetail::getTotalLines).sum());
-        aggregatedClassCov.setCoveredLines(methods.stream().mapToInt(ClassCoverageIndex.MethodCoverageDetail::getCoveredLines).sum());
-
-        // 3. 先排序方法（页面渲染列表的顺序），然后应用着色逻辑，这样生成的锚点与页面方法列表索引一致
-        methods.sort((a, b) -> {
-            double rateA = a.getTotalLines() > 0 ? (double) a.getCoveredLines() / a.getTotalLines() : 0;
-            double rateB = b.getTotalLines() > 0 ? (double) b.getCoveredLines() / b.getTotalLines() : 0;
-            if (rateA != rateB) return Double.compare(rateB, rateA);
-            return a.getMethodName().compareTo(b.getMethodName());
-        });
-
-        // 应用着色逻辑 (复用通用的 getColoredSource)
-        String coloredSource = coverageService.getColoredSource(appId, aggregatedClassCov);
-
-        model.addAttribute("coloredSource", coloredSource);
-        model.addAttribute("classCov", aggregatedClassCov);
-        model.addAttribute("className", className);
-        model.addAttribute("projectId", projectId);
-        model.addAttribute("appId", appId);
-
-        AppVo appVo = appService.getApp(appId);
-        model.addAttribute("appName", appVo != null ? appVo.getName() : appId);
-        model.addAttribute("project", projectService.getProject(projectId));
-
-        // 获取最新版本信息
-        VersionItemVo lastVersion = versionService.getLastVersionItem(projectId, appId);
-        model.addAttribute("lastVersion", lastVersion);
-
-        return "snapshot/snapshotCodeView";
+    public String snapshotCodeView(@PathVariable String projectId, String appId, String className) {
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code?appId=" + appId + "&className=" + className);
     }
 
     @RequestMapping("/node")
-    public String openNodeDetail(@PathVariable String projectId, String traceId, String nodeId, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots");
-        }
-        TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(traceId), buildRemoteCallResolver(projectId));
-        GraphNode graphNode = parse.getGraphNode(nodeId);
-        if (graphNode != null) {
-            return openGraphNodeDetail(traceId, graphNode, model);
-        }
-        return openRawTraceNodeDetail(traceId, nodeId, model);
+    public String openNodeDetail(@PathVariable String projectId, String traceId, String nodeId) {
+        StringBuilder target = new StringBuilder("/p/").append(projectId).append("/my-snapshots");
+        List<String> query = new ArrayList<>();
+        if (StringUtils.hasText(traceId)) query.add("traceId=" + traceId);
+        if (StringUtils.hasText(nodeId)) query.add("nodeId=" + nodeId);
+        if (!query.isEmpty()) target.append("?").append(String.join("&", query));
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     private RemoteCallResolver buildRemoteCallResolver(String projectId) {
@@ -700,111 +526,17 @@ public class SnapshotControl {
                         (left, right) -> left, LinkedHashMap::new));
     }
 
-    private String openGraphNodeDetail(String traceId, GraphNode graphNode, Model model) {
-        if (graphNode instanceof ClientGraphNode) {
-            model.addAttribute("node", ((ClientGraphNode) graphNode).getTraceNode());
-            return "/monitor/httpNodeDetails";
-        } else if (graphNode instanceof ApplicationGraphNode) {
-            String sessionId = ((ApplicationGraphNode) graphNode).getSessionId();
-            ClientSessionVo clientSession = clientSessionService.getClientSession(sessionId);
-            model.addAttribute("appSession", clientSession);
-            model.addAttribute("data", graphNode);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/serverDetails";
-        } else if (graphNode instanceof DatabaseGraphNode) {
-            if (((DatabaseGraphNode) graphNode).getCkdatabase() != null) {
-                model.addAttribute("database", ((DatabaseGraphNode) graphNode).getCkdatabase());
-                model.addAttribute("data", graphNode);
-                model.addAttribute("traceId", traceId);
-                return "/monitor/ckdatabaseDetails";
-            }
-            model.addAttribute("database", ((DatabaseGraphNode) graphNode).getDatabase());
-            model.addAttribute("data", graphNode);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/databaseDetails";
-        } else if (graphNode instanceof RedisGraphNode) {
-            model.addAttribute("redis", graphNode);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/redisNodeDetails";
-        }
-        throw new RuntimeException("Failed to resolve graph model: " + graphNode.getClass().getName());
-    }
 
-    private String openRawTraceNodeDetail(String traceId, String nodeId, Model model) {
-        TraceNode node = snapshotService.getTraceNode(traceId, nodeId);
-        if (node instanceof HttpTraceNode) {
-            HttpTraceNode httpNode = resolveHttpNodeWithLiveFallback(traceId, (HttpTraceNode) node);
-            model.addAttribute("node", httpNode);
-            model.addAttribute("params", buildHttpParams(httpNode));
-            return "snapshot/webNodeDetail";
-        } else if (node instanceof SqlTraceNode) {
-            model.addAttribute("node", node);
-            if (((SqlTraceNode) node).getSql() != null) {
-                String formatSql = SQLUtils.format(((SqlTraceNode) node).getSql(), ((SqlTraceNode) node).getDatabase().getType());
-                model.addAttribute("sql", formatSql);
-            }
-            return "snapshot/sqlNodeDetail";
-        } else if (node instanceof CKSqlTraceNode) {
-            model.addAttribute("node", node);
-            if (((CKSqlTraceNode) node).getSql() != null) {
-                String formatSql = SQLUtils.format(((CKSqlTraceNode) node).getSql(), ((CKSqlTraceNode) node).getDatabase().getType());
-                model.addAttribute("sql", formatSql);
-            }
-            return "snapshot/sqlNodeDetail";
-        } else if (node instanceof DubboTraceNode) {
-            model.addAttribute("node", node);
-            URI uri = GraphViewHelp.buildURI(node, ((DubboTraceNode) node).getRemoteUrl());
-            model.addAttribute("remoteIp", uri.getHost());
-            return "snapshot/dubboNodeDetail";
-        } else if (node instanceof RedisTraceNode) {
-            model.addAttribute("connectionName", ((RedisTraceNode) node).getHost() + "@" + ((RedisTraceNode) node).getPort());
-            model.addAttribute("cmd", ((RedisTraceNode) node).getCmd().replace("<", "&lt;").replace(">", "&gt;"));
-            return "snapshot/redisNodeDetail";
-        }
-        return null;
-    }
 
-    private List<Param> buildHttpParams(HttpTraceNode httpNode) {
-        String[] names = httpNode.getRequestParamNames();
-        if (names == null || names.length == 0) {
-            return Collections.emptyList();
-        }
 
-        String[] values = httpNode.getRequestParamValues();
-        return Stream.iterate(0, i -> i + 1)
-                .limit(names.length)
-                .map(i -> new Param(names[i], values != null && i < values.length ? values[i] : null))
-                .collect(Collectors.toList());
-    }
 
-    private HttpTraceNode resolveHttpNodeWithLiveFallback(String traceId, HttpTraceNode snapshotNode) {
-        if (hasCompleteRequestParams(snapshotNode)) {
-            return snapshotNode;
-        }
-        Map<String, TraceNode> cachedNodes = clientSessionService.getTraceNodes(traceId);
-        if (cachedNodes == null || cachedNodes.isEmpty()) {
-            return snapshotNode;
-        }
-        TraceNode cachedNode = cachedNodes.get(snapshotNode.getTraceNodeId());
-        if (cachedNode instanceof HttpTraceNode && hasAnyRequestParams((HttpTraceNode) cachedNode)) {
-            return (HttpTraceNode) cachedNode;
-        }
-        return snapshotNode;
-    }
 
-    private boolean hasCompleteRequestParams(HttpTraceNode httpNode) {
-        String[] names = httpNode.getRequestParamNames();
-        if (names == null || names.length == 0) {
-            return false;
-        }
-        String[] values = httpNode.getRequestParamValues();
-        return values != null && values.length >= names.length;
-    }
 
-    private boolean hasAnyRequestParams(HttpTraceNode httpNode) {
-        String[] names = httpNode.getRequestParamNames();
-        return names != null && names.length > 0;
-    }
+
+
+
+
+
 
     @RequestMapping("/detail/graph/{traceId}")
     @ResponseBody
@@ -813,16 +545,10 @@ public class SnapshotControl {
     }
 
     @RequestMapping("/detail/stack/{traceId}")
-    public String openTraceTable(@PathVariable String projectId, @PathVariable String traceId, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots");
-        }
-        Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
-        StackItemHelp help = new StackItemHelp(nodes);
-        List<StackItem> stacks = help.buildItems();
-        model.addAttribute("stacks", stacks);
-        return "/snapshot/stackTable";
+    public String openTraceTable(@PathVariable String projectId, @PathVariable String traceId) {
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots?traceId=" + traceId);
     }
+
 
     @RequestMapping("/edit")
     public String openEdit(@PathVariable String projectId, @SessionAttribute UserVo user, String id, Model model) {
@@ -835,32 +561,14 @@ public class SnapshotControl {
      * @return
      */
     @RequestMapping("/detail/{id}")
-    public String openDetail(@PathVariable String projectId, @PathVariable String id, Model model, HttpServletRequest request) {
+    public String openDetail(@PathVariable String projectId, @PathVariable String id, HttpServletRequest request) {
         Boolean share = (Boolean) request.getAttribute("_share");
-        if (!BooleanUtils.isTrue(share)) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/" + id);
-        }
-        if (System.currentTimeMillis() >= 0) {
+        if (BooleanUtils.isTrue(share)) {
             return "redirect:" + frontendProperties.url("/share/snapshot/" + id);
         }
-
-        SnapshotVo snapshotVo = snapshotService.get(id);
-        if (snapshotVo == null) {
-            logger.warn("我的快照不存在, projectId={}, snapshotId={}", projectId, id);
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/snapshot/my?missingSnapshotId=" + id);
-        }
-        model.addAttribute("snapshot", snapshotVo);
-        UserVo user = userService.getUser(snapshotVo.getCreateUser());
-        model.addAttribute("createUser", user);
-        if (ArrayUtils.isNotEmpty(snapshotVo.getLabels())) {
-            model.addAttribute("labels", projectService.getLables(projectId, LableType.snapshot, snapshotVo.getLabels()));
-        } else {
-            model.addAttribute("labels", new ArrayList<>());
-        }
-        model.addAttribute("usecases", usecaseService.getUsecasesBySnapshot(projectId, id));
-        model.addAttribute("allUsecases", collectAllProjectUsecases(projectId));
-        return "/snapshot/shareSnapshotDetail";
+        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/" + id);
     }
+
 
     @RequestMapping("/{snapshotId}/usecase/bind")
     @ResponseBody

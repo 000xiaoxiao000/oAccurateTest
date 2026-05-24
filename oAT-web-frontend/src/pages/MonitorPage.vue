@@ -469,6 +469,22 @@ async function refreshAll() {
   }
 }
 
+async function applyInitialRouteState() {
+  const initialTraceId = typeof route.query.traceId === 'string' ? route.query.traceId : ''
+  const initialNodeId = typeof route.query.nodeId === 'string' ? route.query.nodeId : ''
+  if (initialTraceId) {
+    selectedTraceId.value = initialTraceId
+    await loadGraph()
+    if (initialNodeId) {
+      await loadNodeDetail(initialNodeId)
+      selectedNodeId.value = initialNodeId
+    }
+  }
+  if (route.query.snapshot === 'system' && selectedTraceId.value) {
+    await openSnapshotDialog()
+  }
+}
+
 async function loadProbes() {
   probeLoading.value = true
   probeError.value = ''
@@ -785,10 +801,11 @@ function startResize(event: PointerEvent) {
   window.addEventListener('pointerup', up)
 }
 
-onMounted(() => {
+onMounted(async () => {
   const savedWidth = Number(localStorage.getItem(`monitor:list-width:${projectId.value}`))
   if (savedWidth) monitorListWidth.value = savedWidth
-  refreshAll()
+  await refreshAll()
+  await applyInitialRouteState()
 })
 onBeforeUnmount(stopRefreshTimer)
 </script>

@@ -73,6 +73,9 @@ public class ProjectServiceImpl implements ProjectService {
             return new ArrayList<>();
         }
         for (SystemIndex projectIndex : systemRepository.findAllById(ids)) {
+            if (projectIndex == null || projectIndex.getProject() == null || !"project".equals(projectIndex.getType())) {
+                continue;
+            }
             result.add(convertProject(projectIndex));
         }
         return result;
@@ -306,7 +309,9 @@ public class ProjectServiceImpl implements ProjectService {
      * @return
      */
     private ProjectVo convertProject(SystemIndex entity) {
-        Assert.isTrue(entity.getType().equals("project"),
+        Assert.notNull(entity, "convert Project fail entity must not be null");
+        Assert.notNull(entity.getProject(), "convert Project fail project must not be null");
+        Assert.isTrue("project".equals(entity.getType()),
                 "convert Project fail type must be 'project' ");
 
         ProjectVo projectVo = new ProjectVo();

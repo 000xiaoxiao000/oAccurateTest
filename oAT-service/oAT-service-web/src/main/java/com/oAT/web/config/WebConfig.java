@@ -35,7 +35,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/client/**", "/r/**", "/error", "/share/**", "/share/api/**",
                         "/api/auth/login", "/api/auth/register", "/api/auth/me");
         registry.addInterceptor(aiInteractiveAccessInterceptor).addPathPatterns("/api/projects/*/ai/**");
-        registry.addInterceptor(projectInterceptor).addPathPatterns("/p/**", "/api/projects/**");
+        registry.addInterceptor(projectInterceptor).addPathPatterns("/p/**");
     }
 
     @Override

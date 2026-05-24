@@ -139,60 +139,11 @@ public class UsecaseControl {
     }
 
     @RequestMapping("/detail")
-    public String openDetails(@PathVariable String projectId, String id, Model model, HttpServletRequest request) {
-        if (System.currentTimeMillis() >= 0) {
-            Boolean share = (Boolean) request.getAttribute("_share");
-            if (Boolean.TRUE.equals(share)) {
-                return "redirect:" + frontendProperties.url("/share/usecase/" + id);
-            }
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/" + id);
-        }
+    public String openDetails(@PathVariable String projectId, String id, HttpServletRequest request) {
         Boolean share = (Boolean) request.getAttribute("_share");
-        if (!Boolean.TRUE.equals(share)) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/" + id);
+        if (Boolean.TRUE.equals(share)) {
+            return "redirect:" + frontendProperties.url("/share/usecase/" + id);
         }
-
-        UsecaseDetailVo usecase;
-        try {
-            usecase = usecaseService.getUsecaseDetail(projectId, id);
-        } catch (IllegalArgumentException ex) {
-            model.addAttribute("missingUsecaseMessage", "要查看的用例不存在或已被删除");
-            return openListView(projectId, "root", "updateTime", null, null, model);
-        }
-
-        model.addAttribute("usecase", usecase);
-        UserVo lastUpdateAuthor = userService.getUser(usecase.getLastUpdateAuthor());
-        model.addAttribute("lastUpdateAuthor", lastUpdateAuthor);
-
-        if (!ObjectUtils.isEmpty(usecase.getSnapshots())) {
-            List<SnapshotVo> snapshots = snapshotService.getByIds(usecase.getSnapshots());
-            model.addAttribute("snapshots", snapshots);
-        }
-
-        if (!ObjectUtils.isEmpty(usecase.getSystemSnapshots())) {
-            List<SimpleRelationOption> systemSnapshots = Arrays.stream(usecase.getSystemSnapshots())
-                    .map(this::getSystemSnapshotOption)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-            model.addAttribute("systemSnapshots", systemSnapshots);
-        }
-
-        if (!ObjectUtils.isEmpty(usecase.getDefects())) {
-            model.addAttribute("defects", buildTextLinks(usecase.getDefects(), defectLinkTemplate));
-        }
-
-        if (!ObjectUtils.isEmpty(usecase.getPrdRequirements())) {
-            model.addAttribute("prdRequirements", buildTextLinks(usecase.getPrdRequirements(), prdLinkTemplate));
-        }
-
-        if (!ObjectUtils.isEmpty(usecase.getLabels())) {
-            List<LabelGroup.Label> labels = projectService.getLables(projectId, LableType.usecase, usecase.getLabels());
-            model.addAttribute("labels", labels);
-        }
-        if (StringUtils.hasText(usecase.getContent())) {
-            model.addAttribute("usecaseContent", renderMarkdown(usecase.getContent()));
-        }
-
         return "redirect:" + frontendProperties.url("/p/" + projectId + "/usecases/" + id);
     }
 

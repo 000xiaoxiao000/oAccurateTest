@@ -10,13 +10,13 @@
         :color="item.color"
         :seed="item.seed"
         :mood="error ? 'error' : 'happy'"
-        :interactive="false"
+        :interactive="true"
       />
     </div>
     <div class="login-card" :class="{ 'shake-animation': Boolean(error), 'auth-submitting': submitting }">
       <div v-if="submitting" class="submit-overlay">{{ isRegisterMode ? '正在注册，请稍候...' : '正在登录，请稍候...' }}</div>
       <div class="auth-brand">
-        <MascotCanvas class="brand-mascot" :size="60" color="#00b5ad" seed="login-brand" :mood="error ? 'error' : 'happy'" :interactive="false" />
+        <MascotCanvas class="brand-mascot" :size="60" color="#00b5ad" seed="login-brand" :mood="error ? 'error' : 'happy'" :interactive="true" />
         <div>
           <h1>{{ isRegisterMode ? '账号注册' : '账号登录' }}</h1>
           <p>{{ isRegisterMode ? '创建账号后继续管理你的测试资产' : '欢迎回来，继续管理你的测试资产' }}</p>
@@ -43,7 +43,7 @@
               placeholder="请输入密码"
             />
             <button class="password-toggle" type="button" @click="showLoginPassword = !showLoginPassword">
-              {{ showLoginPassword ? '🙈' : '👁' }}
+              {{ showLoginPassword ? '👁' : '🙈' }}
             </button>
           </div>
         </label>

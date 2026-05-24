@@ -238,49 +238,23 @@ public class SystemSnapshotControl {
     }
 
     @RequestMapping("/node/{snapshotId}")
-    public String openNodeDetail(@PathVariable String projectId, @PathVariable String appId, @PathVariable String snapshotId, String traceId, String nodeId, Model model) {
-        if (System.currentTimeMillis() >= 0) {
-            return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots/" + snapshotId);
-        }
-        Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
-        Map<String, TraceNode> nodeMap = nodes.stream()
-                .filter(Objects::nonNull)
-                .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
-                .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
-        TraceGraphParse parse = new TraceGraphParse(nodeMap, buildRemoteCallResolver(projectId));
-        GraphNode node = parse.getGraphNode(nodeId);
-        Assert.notNull(node, "not found GraphNode: " + nodeId);
-
-        if (node instanceof ClientGraphNode) {
-            model.addAttribute("node", ((ClientGraphNode) node).getTraceNode());
-            return "/monitor/httpNodeDetails";
-        } else if (node instanceof ApplicationGraphNode) {
-            String sessionId = ((ApplicationGraphNode) node).getSessionId();
-            ClientSessionVo clientSession = clientSessionService.getClientSession(sessionId);
-            model.addAttribute("appSession", clientSession);
-            model.addAttribute("data", node);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/serverDetails";
-        } else if (node instanceof DatabaseGraphNode) {
-            if (((DatabaseGraphNode) node).getCkdatabase() != null) {
-                model.addAttribute("database", ((DatabaseGraphNode) node).getCkdatabase());
-                model.addAttribute("data", node);
-                model.addAttribute("traceId", traceId);
-                return "/monitor/ckdatabaseDetails";
-            }
-
-            model.addAttribute("database", ((DatabaseGraphNode) node).getDatabase());
-            model.addAttribute("data", node);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/databaseDetails";
-
-        } else if (node instanceof RedisGraphNode) {
-            model.addAttribute("redis", node);
-            model.addAttribute("traceId", traceId);
-            return "/monitor/redisNodeDetails";
-        } else {
-            throw new RuntimeException("Failed to resolve graph model: " + node.getClass().getName());
-        }
+    public String openNodeDetail(@PathVariable String projectId,
+                                 @PathVariable String appId,
+                                 @PathVariable String snapshotId,
+                                 String traceId,
+                                 String nodeId) {
+        StringBuilder target = new StringBuilder("/p/")
+                .append(projectId)
+                .append("/apps/")
+                .append(appId)
+                .append("/snapshots/")
+                .append(snapshotId)
+                .append("/graph");
+        List<String> query = new ArrayList<>();
+        if (StringUtils.hasText(traceId)) query.add("traceId=" + traceId);
+        if (StringUtils.hasText(nodeId)) query.add("nodeId=" + nodeId);
+        if (!query.isEmpty()) target.append("?").append(String.join("&", query));
+        return "redirect:" + frontendProperties.url(target.toString());
     }
 
     private Map<String, String> buildSnapshotTimeTextMap(List<SystemSnapshot> snapshots) {

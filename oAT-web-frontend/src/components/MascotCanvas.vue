@@ -88,30 +88,18 @@ function draw() {
   const worldCenterY = props.interactive ? rect.top + centerY : centerY
   const dx = props.interactive ? mouseX - worldCenterX : 24
   const dy = props.interactive ? mouseY - worldCenterY : 10
-  const targetAngle = Math.atan2(dy, dx)
-  let angleDiff = targetAngle - bodyAngle
-  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2
-  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2
-  bodyAngle += angleDiff * 0.01
-
-  const cosA = Math.cos(bodyAngle)
-  const sinA = Math.sin(bodyAngle)
-  const localX = dx * cosA + dy * sinA
-  const localY = -dx * sinA + dy * cosA
-  const localDistance = Math.hypot(localX, localY)
-  let localAngle = Math.atan2(localY, localX)
-  const maxEyeAngle = Math.PI / 4
-  localAngle = Math.max(-maxEyeAngle, Math.min(maxEyeAngle, localAngle))
+  const localDistance = Math.hypot(dx, dy) || 1
   const eyeSizeForTarget = radius * 0.25
-  const pupilMaxDist = eyeSizeForTarget * 0.46
-  const targetX = Math.cos(localAngle) * Math.min(localDistance, pupilMaxDist)
-  const targetY = Math.sin(localAngle) * Math.min(localDistance, pupilMaxDist)
-  pupilX += (targetX - pupilX) * 0.25
-  pupilY += (targetY - pupilY) * 0.25
+  const pupilMaxDist = eyeSizeForTarget * 0.36
+  const targetX = (dx / localDistance) * pupilMaxDist
+  const targetY = (dy / localDistance) * pupilMaxDist
+  pupilX += (targetX - pupilX) * 0.18
+  pupilY += (targetY - pupilY) * 0.18
+  bodyAngle += (0 - bodyAngle) * 0.08
 
   ctx.save()
   ctx.translate(centerX, centerY)
-  ctx.rotate(bodyAngle + Math.sin(Date.now() / 1100 + seeded()) * 0.015)
+  ctx.rotate(Math.sin(Date.now() / 1100 + seeded()) * 0.012)
 
   const halo = ctx.createRadialGradient(0, 0, radius * 0.15, 0, 0, radius * 1.55)
   halo.addColorStop(0, `rgba(${rgb.r},${rgb.g},${rgb.b},0.18)`)
