@@ -450,7 +450,7 @@ async function submitAsk() {
     }
     const assistantMessage: SessionMessage = { id: uid(), role: 'assistant', text: '正在连接 AI 流式响应...' }
     activeSession.value?.messages.push(assistantMessage)
-    await askAiStreaming(currentQuestion, assistantMessage)
+    await askAiWithFallback(currentQuestion, assistantMessage)
     touchSession(activeSession.value)
     await syncSessionState()
     question.value = ''
@@ -462,7 +462,7 @@ async function submitAsk() {
       error.value = '已停止生成'
       await syncSessionState()
     } else {
-      error.value = err instanceof Error ? err.message : 'AI 提问失败'
+      error.value = friendlyAiError(err)
     }
   } finally {
     askAbortController = null
@@ -472,6 +472,35 @@ async function submitAsk() {
 
 function stopAsk() {
   askAbortController?.abort()
+}
+
+
+async function askAiWithFallback(currentQuestion: string, assistantMessage: SessionMessage) {
+  try {
+    await askAiStreaming(currentQuestion, assistantMessage)
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    assistantMessage.text = '流式响应不可用，正在切换普通响应...'
+    const reply = await projectStore.askAi(projectId.value, {
+      question: currentQuestion,
+      pageContext: `route=/p/${projectId.value}/ai`,
+      imageData: imageData.value || undefined,
+      sessionState: buildSessionState(),
+      activeSessionId: activeSessionId.value,
+      sessionSortMode: sessionSort.value,
+    })
+    assistantMessage.text = reply.answer || reply.topic || 'AI 已返回结果，但没有可展示的文本。'
+  }
+}
+
+function friendlyAiError(err: unknown) {
+  if (err instanceof TypeError && err.message === 'Failed to fetch') {
+    return '无法连接 AI 服务，请确认后端服务已启动，并且前端允许访问后端 API。'
+  }
+  if (err instanceof Error && err.message === 'Failed to fetch') {
+    return '无法连接 AI 服务，请确认后端服务已启动，并且前端允许访问后端 API。'
+  }
+  return err instanceof Error ? err.message : 'AI 提问失败'
 }
 
 async function askAiStreaming(currentQuestion: string, assistantMessage: SessionMessage) {
