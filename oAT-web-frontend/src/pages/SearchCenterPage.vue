@@ -86,12 +86,13 @@
           @pointerleave="endTablePan"
         >
           <div class="table-graph-tools">
-            <span>滚轮缩放 · 拖拽平移</span>
+            <span>滚轮缩放 · 拖拽画布 · 拖拽节点</span>
             <button type="button" @click="zoomTableGraph(0.15)">放大</button>
             <button type="button" @click="zoomTableGraph(-0.15)">缩小</button>
+            <button type="button" @click="resetTableGraphLayout">重排</button>
             <button type="button" @click="resetTableGraphView">重置</button>
           </div>
-          <svg class="table-graph" :viewBox="tableViewBox" role="img" aria-label="表结构关系图">
+          <svg ref="tableGraphRef" class="table-graph" :viewBox="tableViewBox" role="img" aria-label="表结构关系图">
             <defs>
               <marker id="search-graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
                 <path d="M0,0 L0,6 L9,3 z" fill="currentColor" />
@@ -105,18 +106,19 @@
                 </g>
               </g>
               <g class="node-layer">
-                <a
+                <g
                   v-for="node in positionedNodes"
                   :key="node.id"
-                  :href="nodeHref(node)"
-                  :target="node.type === 'snapshot' ? '_blank' : undefined"
                   :class="['graph-node', node.type || 'node']"
-                  @pointerdown.stop
+                  @pointerdown.stop="startTableNodeDrag($event, node)"
+                  @click.stop="openTableNode(node)"
                 >
-                  <circle :cx="node.x" :cy="node.y" :r="node.type === 'table' ? 36 : 32" />
-                  <image v-if="node.type === 'snapshot' && node.backgroundImage" :href="node.backgroundImage" :x="node.x - 25" :y="node.y - 25" width="50" height="50" preserveAspectRatio="xMidYMid slice" />
-                  <text :x="node.x" :y="node.y + 52" text-anchor="middle">{{ node.label || node.id }}</text>
-                </a>
+                  <title>{{ node.label || node.id }}</title>
+                  <circle :cx="node.x" :cy="node.y" :r="node.type === 'table' ? 38 : 34" />
+                  <text v-if="node.type === 'table'" :x="node.x" :y="node.y + 5" class="table-symbol" text-anchor="middle">表</text>
+                  <image v-if="node.type === 'snapshot' && node.backgroundImage" :href="node.backgroundImage" :x="node.x - 26" :y="node.y - 26" width="52" height="52" preserveAspectRatio="xMidYMid slice" />
+                  <text :x="node.x" :y="node.y + 58" text-anchor="middle">{{ node.label || node.id }}</text>
+                </g>
               </g>
             </g>
           </svg>
@@ -173,30 +175,41 @@ const tableGraph = ref<Awaited<ReturnType<typeof searchTableGraph>> | null>(null
 const tableGraphZoom = ref(1)
 const tableGraphOffset = ref({ x: 0, y: 0 })
 const tableGraphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+const tableGraphRef = ref<SVGSVGElement | null>(null)
+const tableNodeOverrides = ref<Record<string, { x: number; y: number }>>({})
+const tableNodeDrag = ref<{ id: string; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null)
+const suppressTableNodeClick = ref(false)
+const tableCanvas = { width: 1400, height: 780 }
 
 const modeLabel = computed(() => (mode.value === 'table' ? '表结构图' : '用例'))
 const activeLoading = computed(() => (mode.value === 'keyword' ? loadingKeyword.value : loadingTable.value))
-const tableViewBox = computed(() => '0 0 1100 620')
+const tableViewBox = computed(() => `0 0 ${tableCanvas.width} ${tableCanvas.height}`)
 const tableGraphTransform = computed(() => `translate(${tableGraphOffset.value.x} ${tableGraphOffset.value.y}) scale(${tableGraphZoom.value})`)
 
 const positionedNodes = computed<PositionedNode[]>(() => {
   const nodes = tableGraph.value?.nodes || []
   const tableNode = nodes.find((node) => node.type === 'table') || nodes[nodes.length - 1]
   const snapshots = nodes.filter((node) => node.id !== tableNode?.id)
-  const centerX = 760
-  const centerY = 310
-  const radiusX = 360
-  const radiusY = 210
+  const centerX = 720
+  const centerY = 390
+  const radiusX = snapshots.length > 10 ? 560 : 470
+  const radiusY = snapshots.length > 10 ? 300 : 260
   const positioned = snapshots.map((node, index) => {
     const angle = snapshots.length <= 1 ? Math.PI : Math.PI * 0.2 + (index * Math.PI * 1.6) / Math.max(snapshots.length - 1, 1)
-    return {
-      ...node,
+    const autoPosition = {
       x: centerX - Math.cos(angle) * radiusX,
       y: centerY + Math.sin(angle) * radiusY,
     }
+    const override = tableNodeOverrides.value[node.id]
+    return {
+      ...node,
+      x: override?.x ?? autoPosition.x,
+      y: override?.y ?? autoPosition.y,
+    }
   })
   if (tableNode) {
-    positioned.push({ ...tableNode, x: centerX, y: centerY })
+    const override = tableNodeOverrides.value[tableNode.id]
+    positioned.push({ ...tableNode, x: override?.x ?? centerX, y: override?.y ?? centerY })
   }
   return positioned
 })
@@ -220,7 +233,10 @@ const positionedEdges = computed<PositionedEdge[]>(() => {
 })
 
 watch(mode, () => syncTextFromMode())
-watch(tableGraph, () => resetTableGraphView())
+watch(tableGraph, () => {
+  resetTableGraphLayout()
+  resetTableGraphView()
+})
 
 onMounted(() => {
   if (mode.value === 'keyword' && keyword.value) {
@@ -253,8 +269,19 @@ function resetTableGraphView() {
   tableGraphOffset.value = { x: 0, y: 0 }
 }
 
+function resetTableGraphLayout() {
+  tableNodeOverrides.value = {}
+}
+
 function handleTableWheel(event: WheelEvent) {
   zoomTableGraph(event.deltaY > 0 ? -0.1 : 0.1)
+}
+
+function graphPointerDelta(event: PointerEvent) {
+  const rect = tableGraphRef.value?.getBoundingClientRect()
+  const scaleX = rect?.width ? tableCanvas.width / rect.width : 1
+  const scaleY = rect?.height ? tableCanvas.height / rect.height : 1
+  return { scaleX, scaleY }
 }
 
 function startTablePan(event: PointerEvent) {
@@ -268,15 +295,58 @@ function startTablePan(event: PointerEvent) {
 }
 
 function moveTablePan(event: PointerEvent) {
+  if (tableNodeDrag.value) {
+    const { scaleX, scaleY } = graphPointerDelta(event)
+    const dx = (event.clientX - tableNodeDrag.value.startX) * scaleX / tableGraphZoom.value
+    const dy = (event.clientY - tableNodeDrag.value.startY) * scaleY / tableGraphZoom.value
+    if (Math.abs(event.clientX - tableNodeDrag.value.startX) > 3 || Math.abs(event.clientY - tableNodeDrag.value.startY) > 3) {
+      tableNodeDrag.value.moved = true
+    }
+    tableNodeOverrides.value = {
+      ...tableNodeOverrides.value,
+      [tableNodeDrag.value.id]: {
+        x: tableNodeDrag.value.originX + dx,
+        y: tableNodeDrag.value.originY + dy,
+      },
+    }
+    return
+  }
   if (!tableGraphPan.value) return
+  const { scaleX, scaleY } = graphPointerDelta(event)
   tableGraphOffset.value = {
-    x: tableGraphPan.value.originX + event.clientX - tableGraphPan.value.startX,
-    y: tableGraphPan.value.originY + event.clientY - tableGraphPan.value.startY,
+    x: tableGraphPan.value.originX + (event.clientX - tableGraphPan.value.startX) * scaleX / tableGraphZoom.value,
+    y: tableGraphPan.value.originY + (event.clientY - tableGraphPan.value.startY) * scaleY / tableGraphZoom.value,
   }
 }
 
 function endTablePan() {
   tableGraphPan.value = null
+  if (tableNodeDrag.value?.moved) {
+    suppressTableNodeClick.value = true
+  }
+  tableNodeDrag.value = null
+}
+
+function startTableNodeDrag(event: PointerEvent, node: PositionedNode) {
+  tableNodeDrag.value = {
+    id: node.id,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: node.x,
+    originY: node.y,
+    moved: false,
+  }
+}
+
+function openTableNode(node: PositionedNode) {
+  if (suppressTableNodeClick.value) {
+    suppressTableNodeClick.value = false
+    return
+  }
+  const href = nodeHref(node)
+  if (href) {
+    window.open(href, '_blank', 'noopener')
+  }
 }
 
 function switchMode(next: SearchMode) {
@@ -631,12 +701,12 @@ function edgeTone(action?: string) {
 
 .table-search-area {
   position: relative;
-  min-height: calc(100vh - 148px);
+  min-height: max(760px, calc(100vh - 150px));
 }
 
 .table-empty {
-  position: fixed;
-  top: 190px;
+  position: absolute;
+  top: 150px;
   left: 50%;
   z-index: 4;
   display: grid;
@@ -664,15 +734,20 @@ function edgeTone(action?: string) {
 }
 
 .graph-canvas {
-  position: fixed;
-  inset: 70px 0 0;
+  position: relative;
   z-index: 1;
   overflow: hidden;
+  width: 100%;
+  height: max(720px, calc(100vh - 190px));
+  margin-top: 18px;
+  border: 1px solid rgba(34, 36, 38, .12);
+  border-radius: 18px;
   background:
     linear-gradient(rgba(15, 23, 42, .04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, .04) 1px, transparent 1px),
     #f7f7f7;
   background-size: 34px 34px;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .10);
   cursor: grab;
 }
 
@@ -721,7 +796,7 @@ function edgeTone(action?: string) {
 .table-graph {
   width: 100%;
   height: 100%;
-  min-height: calc(100vh - 70px);
+  min-height: 720px;
 }
 
 .graph-edge {
@@ -750,7 +825,11 @@ function edgeTone(action?: string) {
 .graph-node {
   color: inherit;
   text-decoration: none;
-  cursor: pointer;
+  cursor: grab;
+}
+
+.graph-node:active {
+  cursor: grabbing;
 }
 
 .graph-node circle {
@@ -782,13 +861,20 @@ function edgeTone(action?: string) {
   stroke-width: 4px;
 }
 
+.table-symbol {
+  fill: #1e3a8a;
+  font-size: 16px;
+  font-weight: 900;
+  stroke: transparent;
+}
+
 .graph-node image {
   clip-path: circle(25px at 25px 25px);
   pointer-events: none;
 }
 
 .relation-list {
-  position: fixed;
+  position: absolute;
   right: 18px;
   bottom: 18px;
   z-index: 5;
@@ -846,7 +932,8 @@ function edgeTone(action?: string) {
   }
 
   .graph-canvas {
-    inset-top: 108px;
+    height: 640px;
+    min-height: 640px;
   }
 }
 </style>

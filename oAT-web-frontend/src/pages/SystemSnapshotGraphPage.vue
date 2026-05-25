@@ -11,6 +11,7 @@
     :selected-node-id="selectedNodeId"
     :selected-node-detail="selectedNodeDetail"
     :arrow-marker-id="'graph-arrow-system'"
+    :code-graph-route="codeGraphRoute"
     @select-node="selectNode"
   />
 </template>
@@ -30,6 +31,7 @@ const snapshotId = computed(() => String(route.params.snapshotId || ''))
 const detailRoute = computed(() => `/p/${projectId.value}/apps/${appId.value}/snapshots/${snapshotId.value}`)
 const storeKey = computed(() => `${projectId.value}:${snapshotId.value}`)
 const graph = computed(() => projectStore.systemSnapshotGraphByKey[storeKey.value])
+const codeGraphRoute = computed(() => graph.value?.hasCodeLayer && graph.value.traceId ? `/p/${projectId.value}/map/code?traceId=${encodeURIComponent(graph.value.traceId)}` : undefined)
 const selectedNodeId = ref('')
 const selectedNodeKey = computed(() => `${projectId.value}:${snapshotId.value}:graph:${selectedNodeId.value}`)
 const selectedNodeDetail = computed(() => projectStore.systemSnapshotGraphNodeByKey[selectedNodeKey.value])

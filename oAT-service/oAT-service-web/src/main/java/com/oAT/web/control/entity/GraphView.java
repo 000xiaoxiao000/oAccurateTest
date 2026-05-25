@@ -11,6 +11,8 @@ import java.util.List;
 public class GraphView {
 
     private String title;
+    private String traceId;
+    private Boolean hasCodeLayer;
     private Nodes showDefaultNode;
     private List<Nodes> nodes;
     private List<Edges> edges;
@@ -21,6 +23,22 @@ public class GraphView {
 
     public String getTitle() {
         return title;
+    }
+
+    public String getTraceId() {
+        return traceId;
+    }
+
+    public void setTraceId(String traceId) {
+        this.traceId = traceId;
+    }
+
+    public Boolean getHasCodeLayer() {
+        return hasCodeLayer;
+    }
+
+    public void setHasCodeLayer(Boolean hasCodeLayer) {
+        this.hasCodeLayer = hasCodeLayer;
     }
 
     public void setShowDefaultNode(Nodes showDefaultNode) {

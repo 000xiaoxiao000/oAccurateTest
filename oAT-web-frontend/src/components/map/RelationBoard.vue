@@ -30,38 +30,52 @@
         <input v-model.trim="keyword" class="text-input" type="text" placeholder="输入名称、类型或描述" />
       </label>
 
-      <section class="graph-panel" @click="closeContextMenu">
+      <section
+        class="graph-panel"
+        @click="closeContextMenu"
+        @wheel.prevent="handleGraphWheel"
+        @pointerdown="startBoardPan"
+        @pointermove="moveBoardPan"
+        @pointerup="endBoardPan"
+        @pointerleave="endBoardPan"
+      >
         <div class="graph-toolbar">
           <div>图形画布</div>
           <div class="graph-tools">
             <button type="button" @click.stop="fitGraph">适配视图</button>
+            <button type="button" @click.stop="zoomGraph(0.15)">放大</button>
+            <button type="button" @click.stop="zoomGraph(-0.15)">缩小</button>
+            <button type="button" @click.stop="resetGraphLayout">重排</button>
             <button type="button" @click.stop="showSelectedTip" :disabled="!selectedNode">节点提示</button>
           </div>
         </div>
-        <svg class="relation-graph" :viewBox="viewBox" role="img" aria-label="关系图画布">
+        <svg ref="relationGraphRef" class="relation-graph" :viewBox="viewBox" role="img" aria-label="关系图画布">
           <defs>
             <marker id="graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L0,6 L9,3 z" fill="#64748b" />
             </marker>
           </defs>
-          <g class="edge-layer">
-            <g v-for="edge in graphEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge)]">
-              <line :x1="edge.source.x" :y1="edge.source.y" :x2="edge.target.x" :y2="edge.target.y" marker-end="url(#graph-arrow)" />
-              <text :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionText(edge.action) || '关联' }}</text>
+          <g :transform="graphTransform">
+            <g class="edge-layer">
+              <g v-for="edge in graphEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge)]">
+                <line :x1="edge.source.x" :y1="edge.source.y" :x2="edge.target.x" :y2="edge.target.y" marker-end="url(#graph-arrow)" />
+                <text :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionText(edge.action) || '关联' }}</text>
+              </g>
             </g>
-          </g>
-          <g class="node-layer">
-            <g
-              v-for="node in graphNodes"
-              :key="node.id"
-              :class="['graph-node', nodeTone(node), selectedNode?.id === node.id && 'active']"
-              :transform="`translate(${node.x}, ${node.y})`"
-              @click.stop="selectGraphNode(node.id)"
-              @contextmenu.prevent.stop="openContextMenu($event, node.id)"
-            >
-              <circle :r="node.radius" />
-              <text class="node-label" text-anchor="middle" :y="node.radius + 16">{{ node.shortLabel }}</text>
-              <text v-if="node.metric" class="node-metric" text-anchor="middle" y="5">{{ node.metric }}</text>
+            <g class="node-layer">
+              <g
+                v-for="node in graphNodes"
+                :key="node.id"
+                :class="['graph-node', nodeTone(node), selectedNode?.id === node.id && 'active']"
+                :transform="`translate(${node.x}, ${node.y})`"
+                @pointerdown.stop="startNodeDrag($event, node)"
+                @click.stop="selectGraphNode(node.id)"
+                @contextmenu.prevent.stop="openContextMenu($event, node.id)"
+              >
+                <circle :r="node.radius" />
+                <text class="node-label" text-anchor="middle" :y="node.radius + 16">{{ node.shortLabel }}</text>
+                <text v-if="node.metric" class="node-metric" text-anchor="middle" y="5">{{ node.metric }}</text>
+              </g>
             </g>
           </g>
         </svg>
@@ -186,6 +200,14 @@ interface RelationEdge {
   targetLabel?: string
 }
 
+interface GraphNode extends RelationNode {
+  x: number
+  y: number
+  radius: number
+  shortLabel: string
+  metric: string
+}
+
 const props = defineProps<{
   eyebrow: string
   title: string
@@ -213,6 +235,13 @@ const selectedId = ref('')
 const viewBox = ref('0 0 1200 620')
 const contextMenu = reactive({ open: false, x: 0, y: 0, nodeId: '' })
 const tip = reactive({ open: false })
+const relationGraphRef = ref<SVGSVGElement | null>(null)
+const graphZoom = ref(1)
+const graphOffset = ref({ x: 0, y: 0 })
+const graphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+const nodePositionOverrides = ref<Record<string, { x: number; y: number }>>({})
+const nodeDrag = ref<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null)
+const graphCanvas = { width: 1200, height: 620 }
 
 const filteredNodes = computed(() => {
   if (!keyword.value) {
@@ -236,7 +265,9 @@ const selectedEdges = computed(() =>
   filteredEdges.value.filter((edge) => edge.source === selectedId.value || edge.target === selectedId.value),
 )
 
-const graphNodes = computed(() => {
+const graphTransform = computed(() => `translate(${graphOffset.value.x} ${graphOffset.value.y}) scale(${graphZoom.value})`)
+
+const graphNodes = computed<GraphNode[]>(() => {
   const count = Math.max(filteredNodes.value.length, 1)
   const centerX = 600
   const centerY = 300
@@ -245,10 +276,15 @@ const graphNodes = computed(() => {
   return filteredNodes.value.map((node, index) => {
     const angle = (Math.PI * 2 * index) / count - Math.PI / 2
     const weight = Number(node.meta?.join(' ').match(/([0-9]+(?:\.[0-9]+)?)%/)?.[1] || 0)
-    return {
-      ...node,
+    const autoPosition = {
       x: centerX + Math.cos(angle) * radiusX,
       y: centerY + Math.sin(angle) * radiusY,
+    }
+    const override = nodePositionOverrides.value[node.id]
+    return {
+      ...node,
+      x: override?.x ?? autoPosition.x,
+      y: override?.y ?? autoPosition.y,
       radius: node.type?.includes('snapshot') ? 28 : node.type?.includes('code') ? 23 : 20,
       shortLabel: shorten(node.label || node.id, 18),
       metric: weight ? `${weight}%` : '',
@@ -334,8 +370,83 @@ async function copyContextNodeId() {
   closeContextMenu()
 }
 
+function clampGraphZoom(value: number) {
+  return Math.min(3, Math.max(0.45, value))
+}
+
+function zoomGraph(delta: number) {
+  graphZoom.value = clampGraphZoom(graphZoom.value + delta)
+}
+
 function fitGraph() {
-  viewBox.value = '0 0 1200 620'
+  viewBox.value = `0 0 ${graphCanvas.width} ${graphCanvas.height}`
+  graphZoom.value = 1
+  graphOffset.value = { x: 0, y: 0 }
+}
+
+function resetGraphLayout() {
+  nodePositionOverrides.value = {}
+  fitGraph()
+}
+
+function graphPointerDelta(event: PointerEvent, startX: number, startY: number) {
+  const rect = relationGraphRef.value?.getBoundingClientRect()
+  const scaleX = rect?.width ? graphCanvas.width / rect.width : 1
+  const scaleY = rect?.height ? graphCanvas.height / rect.height : 1
+  return {
+    x: (event.clientX - startX) * scaleX / graphZoom.value,
+    y: (event.clientY - startY) * scaleY / graphZoom.value,
+  }
+}
+
+function handleGraphWheel(event: WheelEvent) {
+  zoomGraph(event.deltaY > 0 ? -0.1 : 0.1)
+}
+
+function startBoardPan(event: PointerEvent) {
+  if ((event.target as Element).closest('.graph-tools, .graph-node, .graph-context-menu, .graph-tip')) return
+  graphPan.value = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: graphOffset.value.x,
+    originY: graphOffset.value.y,
+  }
+}
+
+function moveBoardPan(event: PointerEvent) {
+  if (nodeDrag.value) {
+    const delta = graphPointerDelta(event, nodeDrag.value.startX, nodeDrag.value.startY)
+    nodePositionOverrides.value = {
+      ...nodePositionOverrides.value,
+      [nodeDrag.value.id]: {
+        x: nodeDrag.value.originX + delta.x,
+        y: nodeDrag.value.originY + delta.y,
+      },
+    }
+    return
+  }
+  if (!graphPan.value) return
+  const delta = graphPointerDelta(event, graphPan.value.startX, graphPan.value.startY)
+  graphOffset.value = {
+    x: graphPan.value.originX + delta.x,
+    y: graphPan.value.originY + delta.y,
+  }
+}
+
+function endBoardPan() {
+  graphPan.value = null
+  nodeDrag.value = null
+}
+
+function startNodeDrag(event: PointerEvent, node: GraphNode) {
+  selectGraphNode(node.id)
+  nodeDrag.value = {
+    id: node.id,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: node.x,
+    originY: node.y,
+  }
 }
 
 function showSelectedTip() {
@@ -567,6 +678,12 @@ watchEffect(() => {
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
   margin: 16px 0;
   overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-panel:active {
+  cursor: grabbing;
 }
 
 .graph-toolbar,
@@ -581,6 +698,7 @@ watchEffect(() => {
   color: #334155;
   font-weight: 800;
   margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .graph-tools button,
@@ -599,7 +717,7 @@ watchEffect(() => {
 
 .relation-graph {
   width: 100%;
-  min-height: 520px;
+  min-height: 660px;
   border-radius: 20px;
   background:
     linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
@@ -633,7 +751,11 @@ watchEffect(() => {
 }
 
 .graph-node {
-  cursor: pointer;
+  cursor: grab;
+}
+
+.graph-node:active {
+  cursor: grabbing;
 }
 
 .graph-node circle {
@@ -716,7 +838,7 @@ watchEffect(() => {
 }
 
 .compact-board .relation-graph {
-  min-height: min(620px, calc(100vh - 250px));
+  min-height: min(680px, calc(100vh - 230px));
 }
 
 .compact-board .layout-grid {

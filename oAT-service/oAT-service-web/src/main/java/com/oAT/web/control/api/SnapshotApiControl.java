@@ -290,6 +290,7 @@ public class SnapshotApiControl {
         SystemSnapshot snapshot = systemSnapshotService.getById(snapshotId);
         assertSystemSnapshotScope(projectId, appId, snapshot);
         GraphView graphView = new TraceGraphParse(buildTraceNodeMap(snapshot.getTraceId()), buildRemoteCallResolver(projectId)).getGraphView();
+        enrichGraphViewCodeLayer(graphView, snapshot.getTraceId());
         return new ResultNotified<>(true, "获取系统快照链路图成功", graphView);
     }
 
@@ -571,6 +572,7 @@ public class SnapshotApiControl {
         Assert.notNull(snapshot, "快照不存在");
         Assert.isTrue(projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
         GraphView graphView = new TraceGraphParse(buildTraceNodeMap(snapshot.getTraceId()), buildRemoteCallResolver(projectId)).getGraphView();
+        enrichGraphViewCodeLayer(graphView, snapshot.getTraceId());
         return new ResultNotified<>(true, "获取我的快照链路图成功", graphView);
     }
 
@@ -1099,6 +1101,20 @@ public class SnapshotApiControl {
         aggregatedClassCov.setLineRate(calculateRate(aggregatedClassCov.getCoveredLines(), aggregatedClassCov.getTotalLines()));
         aggregatedClassCov.setBranchRate(calculateRate(aggregatedClassCov.getCoveredBranchTargets(), aggregatedClassCov.getTotalBranchTargets()));
         return aggregatedClassCov;
+    }
+
+
+    private void enrichGraphViewCodeLayer(GraphView graphView, String traceId) {
+        graphView.setTraceId(traceId);
+        graphView.setHasCodeLayer(false);
+        if (!StringUtils.hasText(traceId)) {
+            return;
+        }
+        TraceNode traceNode = snapshotService.getTraceNode(traceId, "0");
+        if (traceNode instanceof HttpTraceNode) {
+            StackNodeVo[] codeNodes = ((HttpTraceNode) traceNode).getCodeNodes();
+            graphView.setHasCodeLayer(codeNodes != null && codeNodes.length > 0);
+        }
     }
 
     private Map<String, com.oAT.agent.model.TraceNode> buildTraceNodeMap(String traceId) {

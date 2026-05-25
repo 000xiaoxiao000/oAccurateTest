@@ -7,6 +7,7 @@
         <p class="subtext">{{ graph?.nodes.length || 0 }} 个节点 · {{ graph?.edges.length || 0 }} 条连线</p>
       </div>
       <div class="header-actions">
+        <RouterLink v-if="codeGraphRoute" class="ghost-button" :to="codeGraphRoute">源码堆栈图谱</RouterLink>
         <RouterLink class="secondary-link" :to="backRoute">{{ backLabel }}</RouterLink>
       </div>
     </div>
@@ -28,8 +29,10 @@
             @pointermove="moveGraphPan"
           >
             <div class="graph-tools">
+              <span>滚轮缩放 · 拖拽平移 · 拖拽节点</span>
               <button type="button" @click="zoomGraph(0.15)">放大</button>
               <button type="button" @click="zoomGraph(-0.15)">缩小</button>
+              <button type="button" @click="resetGraphLayout">重排</button>
               <button type="button" @click="resetGraphView">重置</button>
             </div>
             <svg class="graph-svg" :viewBox="graphViewBox" preserveAspectRatio="xMidYMid meet">
@@ -60,6 +63,7 @@
                   :key="node.id"
                   class="graph-node"
                   :class="[`node-${node.state || 'normal'}`, { active: selectedNodeId === node.id || graph.showDefaultNode?.id === node.id }]"
+                  @pointerdown.stop="startNodeDrag($event, node)"
                   @click.stop="$emit('select-node', node.id)"
                 >
                   <rect :x="node.x" :y="node.y" rx="6" ry="6" :width="nodeWidth" :height="nodeHeight" />
@@ -133,6 +137,8 @@ const nodeHeight = 96
 const graphZoom = ref(1)
 const graphOffset = ref({ x: 0, y: 0 })
 const graphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+const nodePositionOverrides = ref<Record<string, { x: number; y: number }>>({})
+const nodeDrag = ref<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null)
 
 const props = defineProps<{
   eyebrow: string
@@ -146,10 +152,11 @@ const props = defineProps<{
   selectedNodeId?: string
   selectedNodeDetail?: GraphNodeDetailPayload
   arrowMarkerId: string
+  codeGraphRoute?: RouteLocationRaw
   compact?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (event: 'select-node', nodeId: string): void
 }>()
 
@@ -196,11 +203,16 @@ const nodePositions = computed<PositionedNode[]>(() => {
     const bucket = buckets.get(rank) || []
     const row = Math.max(0, bucket.findIndex((item) => item.id === node.id))
     const columnHeight = Math.max(1, bucket.length)
+    const autoPosition = {
+      x: 42 + rank * 318,
+      y: 42 + row * 132 + Math.max(0, 4 - columnHeight) * 36,
+    }
+    const override = nodePositionOverrides.value[node.id]
     return {
       ...node,
       rank,
-      x: 42 + rank * 318,
-      y: 42 + row * 132 + Math.max(0, 4 - columnHeight) * 36,
+      x: override?.x ?? autoPosition.x,
+      y: override?.y ?? autoPosition.y,
     }
   })
 })
@@ -237,7 +249,10 @@ const edgePositions = computed(() => {
     .filter((edge): edge is PositionedEdge => edge !== null)
 })
 
-watch(() => props.graph, resetGraphView)
+watch(() => props.graph, () => {
+  resetGraphLayout()
+  resetGraphView()
+})
 
 function clampZoom(value: number) {
   return Math.min(2.2, Math.max(0.45, value))
@@ -250,6 +265,10 @@ function zoomGraph(delta: number) {
 function resetGraphView() {
   graphZoom.value = 0.92
   graphOffset.value = { x: 0, y: 0 }
+}
+
+function resetGraphLayout() {
+  nodePositionOverrides.value = {}
 }
 
 function handleGraphWheel(event: WheelEvent) {
@@ -268,6 +287,16 @@ function startGraphPan(event: PointerEvent) {
 }
 
 function moveGraphPan(event: PointerEvent) {
+  if (nodeDrag.value) {
+    nodePositionOverrides.value = {
+      ...nodePositionOverrides.value,
+      [nodeDrag.value.id]: {
+        x: nodeDrag.value.originX + (event.clientX - nodeDrag.value.startX) / graphZoom.value,
+        y: nodeDrag.value.originY + (event.clientY - nodeDrag.value.startY) / graphZoom.value,
+      },
+    }
+    return
+  }
   if (!graphPan.value) return
   graphOffset.value = {
     x: graphPan.value.originX + (event.clientX - graphPan.value.startX),
@@ -277,6 +306,18 @@ function moveGraphPan(event: PointerEvent) {
 
 function endGraphPan() {
   graphPan.value = null
+  nodeDrag.value = null
+}
+
+function startNodeDrag(event: PointerEvent, node: PositionedNode) {
+  emit('select-node', node.id)
+  nodeDrag.value = {
+    id: node.id,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: node.x,
+    originY: node.y,
+  }
 }
 
 function iconGlyph(value?: string) {
@@ -320,13 +361,22 @@ function iconGlyph(value?: string) {
   color: #64748b;
 }
 
-.secondary-link {
+.secondary-link,
+.ghost-button {
   color: #0f766e;
   font-weight: 700;
 }
 
+.ghost-button {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  padding: 9px 13px;
+  background: rgba(15, 118, 110, 0.06);
+}
+
 .status-card,
 .panel {
+  min-width: 0;
   padding: 18px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
@@ -339,13 +389,15 @@ function iconGlyph(value?: string) {
 
 .graph-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(520px, 34vw);
+  gap: 20px;
+  align-items: start;
 }
 
 .graph-board {
   position: relative;
-  overflow: hidden;
+  overflow: auto;
+  min-height: min(820px, calc(100vh - 240px));
   border-radius: 18px;
   background:
     linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
@@ -366,12 +418,21 @@ function iconGlyph(value?: string) {
   right: 12px;
   z-index: 3;
   display: flex;
+  align-items: center;
   gap: 6px;
   padding: 6px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.graph-tools span {
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .graph-tools button {
@@ -387,8 +448,9 @@ function iconGlyph(value?: string) {
 
 .graph-svg {
   width: 100%;
-  min-width: 1120px;
-  height: 720px;
+  min-width: 1160px;
+  min-height: 760px;
+  height: max(760px, calc(100vh - 240px));
 }
 
 .graph-edge {
@@ -404,7 +466,11 @@ function iconGlyph(value?: string) {
 }
 
 .graph-node {
-  cursor: pointer;
+  cursor: grab;
+}
+
+.graph-node:active {
+  cursor: grabbing;
 }
 
 .graph-node rect {
@@ -463,6 +529,15 @@ function iconGlyph(value?: string) {
   gap: 12px;
 }
 
+.side-stack {
+  min-width: 0;
+  position: sticky;
+  top: 88px;
+  max-height: calc(100vh - 116px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
 .node-card {
   display: grid;
   gap: 4px;
@@ -516,9 +591,15 @@ function iconGlyph(value?: string) {
   height: 420px;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1360px) {
   .graph-shell {
     grid-template-columns: 1fr;
+  }
+
+  .side-stack {
+    position: static;
+    max-height: none;
+    overflow: visible;
   }
 
   .page-header,

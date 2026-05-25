@@ -7,7 +7,7 @@
         <p class="subtext">查看个人快照并批量关联用例。</p>
       </div>
       <div class="header-actions">
-        <RouterLink class="ghost-button" :to="`/p/${projectId}/my-snapshots/code-report`">代码报告</RouterLink>
+        <RouterLink class="ghost-button" :to="`/p/${projectId}/my-snapshots/code-report`">全量代码报告</RouterLink>
         <button class="action-button" type="button" @click="load">刷新</button>
       </div>
     </div>
@@ -103,9 +103,8 @@
                     <details class="row-menu">
                       <summary title="设置">⚙</summary>
                       <div class="row-menu-panel">
-                        <RouterLink :to="`/p/${projectId}/my-snapshots/${snapshot.id}/report`">报告</RouterLink>
+                        <RouterLink :to="`/p/${projectId}/my-snapshots/${snapshot.id}/report`">覆盖率报告</RouterLink>
                         <RouterLink :to="`/p/${projectId}/my-snapshots/${snapshot.id}/graph`">链路图</RouterLink>
-                        <RouterLink :to="`/p/${projectId}/my-snapshots/code-report`">源码</RouterLink>
                         <button type="button" @click="openSingleUsecasePicker(snapshot.id)">关联用例</button>
                         <button type="button" @click="startEdit(snapshot)">编辑</button>
                         <button type="button" @click="toggleShare(snapshot)">{{ snapshot.share ? '关闭共享' : '开启共享' }}</button>

@@ -1070,6 +1070,8 @@ export interface GraphEdgeSummary {
 
 export interface GraphViewPayload {
   title?: string
+  traceId?: string
+  hasCodeLayer?: boolean
   showDefaultNode?: GraphNodeSummary
   nodes: GraphNodeSummary[]
   edges: GraphEdgeSummary[]
