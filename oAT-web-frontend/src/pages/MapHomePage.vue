@@ -6,6 +6,8 @@
         <span>{{ selectedNode ? selectedTypeText : '选择应用节点后可进入应用图谱或展开快照层' }}</span>
       </div>
       <div class="toolbar-actions">
+        <button type="button" :class="{ active: showHotLabels }" @click="showHotLabels = !showHotLabels">关联热度</button>
+        <button type="button" :class="{ active: highlightRelated }" @click="highlightRelated = !highlightRelated">高亮关联</button>
         <button v-if="canUseAppActions" type="button" @click="openAppMap">查看应用图谱</button>
         <button v-if="canUseAppActions" type="button" :disabled="loadingLayer" @click="loadAppSnapshots">展开快照</button>
         <button v-if="extensionElements.length" type="button" class="danger" :disabled="loadingLayer" @click="clearExtensionLayers">清除扩展图层</button>
@@ -22,7 +24,11 @@
       :error="error"
       :nodes="nodes"
       :edges="edges"
+      :context-actions="contextActions"
+      :show-edge-labels="showHotLabels"
+      :highlight-related="highlightRelated"
       @node-select="handleNodeSelect"
+      @context-action="handleContextAction"
     />
   </section>
 </template>
@@ -54,11 +60,21 @@ const activeExtensionLabel = ref('')
 const elements = ref<MapElement[]>([])
 const extensionElements = ref<MapElement[]>([])
 const selectedNode = ref<RelationNodeSelection | null>(null)
+const showHotLabels = ref(false)
+const highlightRelated = ref(true)
 
 const allElements = computed(() => mergeElements(elements.value, extensionElements.value))
 const selectedClasses = computed(() => selectedNode.value?.classes || selectedNode.value?.type?.split(/\s+/).filter(Boolean) || [])
 const selectedTypeText = computed(() => selectedClasses.value.length ? `类型：${selectedClasses.value.join(' / ')}` : '节点')
 const canUseAppActions = computed(() => selectedClasses.value.some((item) => item === 'app' || item.includes('app')))
+const contextActions = computed(() => [
+  { id: 'refresh-map', label: '刷新图谱', target: 'canvas' as const, disabled: loading.value || loadingLayer.value },
+  { id: 'open-app-map', label: '详情视图', target: 'app' as const },
+  { id: 'load-app-snapshots', label: '展开快照', target: 'app' as const, disabled: loadingLayer.value },
+  ...(extensionElements.value.length
+    ? [{ id: 'clear-extension-layers', label: '清空扩展图层', target: 'canvas' as const, danger: true, disabled: loadingLayer.value }]
+    : []),
+])
 
 const nodes = computed(() =>
   allElements.value
@@ -101,6 +117,26 @@ function edgeAction(data: MapElementData) {
 function handleNodeSelect(node: RelationNodeSelection | null) {
   selectedNode.value = node
   layerError.value = ''
+}
+
+function handleContextAction(actionId: string, node: RelationNodeSelection | null) {
+  selectedNode.value = node
+  layerError.value = ''
+  if (actionId === 'open-app-map') {
+    openAppMap()
+    return
+  }
+  if (actionId === 'load-app-snapshots') {
+    loadAppSnapshots()
+    return
+  }
+  if (actionId === 'refresh-map') {
+    load()
+    return
+  }
+  if (actionId === 'clear-extension-layers') {
+    clearExtensionLayers()
+  }
 }
 
 function openAppMap() {
@@ -192,11 +228,19 @@ onMounted(load)
   background: rgba(15, 23, 42, 0.08);
   cursor: pointer;
   font-weight: 800;
+  transition: transform .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
 }
 
+.toolbar-actions button.active,
 .toolbar-actions button:hover:not(:disabled) {
   background: #0f172a;
   color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, .16);
+}
+
+.toolbar-actions button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .toolbar-actions button:disabled {

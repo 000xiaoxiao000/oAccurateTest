@@ -4,6 +4,7 @@
       <div v-if="mode === 'table' && error" class="inline-error">{{ error }}</div>
       <div class="action-input">
         <input
+          ref="searchInputRef"
           v-model.trim="searchText"
           type="text"
           :maxlength="mode === 'table' ? 30 : 120"
@@ -11,16 +12,16 @@
           "
           @keydown.enter.prevent="submitSearch"
         />
-        <details class="mode-dropdown">
-          <summary>
+        <div class="mode-dropdown" tabindex="0">
+          <button class="mode-trigger" type="button" aria-haspopup="true">
             <span>{{ modeLabel }}</span>
             <span class="caret">⌄</span>
-          </summary>
+          </button>
           <div class="mode-menu">
             <button type="button" :class="{ active: mode === 'keyword' }" @click="switchMode('keyword')">用例</button>
             <button type="button" :class="{ active: mode === 'table' }" @click="switchMode('table')">表结构图</button>
           </div>
-        </details>
+        </div>
         <button class="search-button" type="submit" :disabled="activeLoading">{{ activeLoading ? '搜索中...' : '搜索' }}</button>
       </div>
     </form>
@@ -84,6 +85,8 @@
           @pointermove="moveTablePan"
           @pointerup="endTablePan"
           @pointerleave="endTablePan"
+          @click="closeTableContextMenu"
+          @contextmenu.prevent="openTableCanvasMenu"
         >
           <div class="table-graph-tools">
             <span>滚轮缩放 · 拖拽画布 · 拖拽节点</span>
@@ -112,6 +115,7 @@
                   :class="['graph-node', node.type || 'node']"
                   @pointerdown.stop="startTableNodeDrag($event, node)"
                   @click.stop="openTableNode(node)"
+                  @contextmenu.prevent.stop="openTableNodeMenu($event, node)"
                 >
                   <title>{{ node.label || node.id }}</title>
                   <circle :cx="node.x" :cy="node.y" :r="node.type === 'table' ? 38 : 34" />
@@ -122,6 +126,23 @@
               </g>
             </g>
           </svg>
+          <div v-if="tableContextMenu.open" class="table-context-menu" :style="{ left: `${tableContextMenu.x}px`, top: `${tableContextMenu.y}px` }" @click.stop>
+            <template v-if="tableContextNode">
+              <button v-if="nodeHref(tableContextNode)" type="button" @click="openTableNodeFromMenu">打开快照详情</button>
+              <button type="button" @click="showTableNodeTip">节点概要</button>
+            </template>
+            <template v-else>
+              <button type="button" @click="focusSearchInput">查找 <small>Ctrl+F</small></button>
+              <button type="button" @click="resetTableGraphView">适配视图</button>
+              <button type="button" @click="resetTableGraphLayout">重排图谱</button>
+            </template>
+          </div>
+          <div v-if="tableNodeTip.open && tableContextNode" class="table-node-tip" @click.stop="tableNodeTip.open = false">
+            <strong>{{ tableContextNode.label || tableContextNode.id }}</strong>
+            <span>ID：{{ tableContextNode.id }}</span>
+            <span>类型：{{ tableContextNode.type || 'node' }}</span>
+            <span>关联关系：{{ tableContextEdges.length }} 条</span>
+          </div>
         </div>
         <aside v-if="tableGraph?.edges.length" class="relation-list">
           <div class="relation-head">{{ tableGraph.nodes.length }} 个节点 / {{ tableGraph.edges.length }} 条关系</div>
@@ -136,7 +157,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { searchKeyword, searchTableGraph } from '@/api/bootstrap'
@@ -175,10 +196,13 @@ const tableGraph = ref<Awaited<ReturnType<typeof searchTableGraph>> | null>(null
 const tableGraphZoom = ref(1)
 const tableGraphOffset = ref({ x: 0, y: 0 })
 const tableGraphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const tableGraphRef = ref<SVGSVGElement | null>(null)
 const tableNodeOverrides = ref<Record<string, { x: number; y: number }>>({})
 const tableNodeDrag = ref<{ id: string; startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null)
 const suppressTableNodeClick = ref(false)
+const tableContextMenu = reactive({ open: false, x: 0, y: 0, nodeId: '' })
+const tableNodeTip = reactive({ open: false })
 const tableCanvas = { width: 1400, height: 780 }
 
 const modeLabel = computed(() => (mode.value === 'table' ? '表结构图' : '用例'))
@@ -214,6 +238,11 @@ const positionedNodes = computed<PositionedNode[]>(() => {
   return positioned
 })
 
+const tableContextNode = computed(() => positionedNodes.value.find((node) => node.id === tableContextMenu.nodeId) || null)
+const tableContextEdges = computed(() =>
+  positionedEdges.value.filter((edge) => edge.source.id === tableContextMenu.nodeId || edge.target.id === tableContextMenu.nodeId),
+)
+
 const positionedEdges = computed<PositionedEdge[]>(() => {
   const nodeMap = new Map(positionedNodes.value.map((node) => [node.id, node]))
   return (tableGraph.value?.edges || [])
@@ -238,13 +267,23 @@ watch(tableGraph, () => {
   resetTableGraphView()
 })
 
+function handleSearchKeydown(event: KeyboardEvent) {
+  if (event.ctrlKey && event.key.toLowerCase() === 'f') {
+    event.preventDefault()
+    focusSearchInput()
+  }
+}
+
 onMounted(() => {
+  window.addEventListener('keydown', handleSearchKeydown)
   if (mode.value === 'keyword' && keyword.value) {
     submitKeywordSearch()
   } else if (mode.value === 'table' && (tableKeyword.value || (database.value && table.value))) {
     submitTableSearch()
   }
 })
+
+onBeforeUnmount(() => window.removeEventListener('keydown', handleSearchKeydown))
 
 function initialTableText() {
   if (tableKeyword.value) return tableKeyword.value
@@ -267,10 +306,12 @@ function zoomTableGraph(delta: number) {
 function resetTableGraphView() {
   tableGraphZoom.value = 1
   tableGraphOffset.value = { x: 0, y: 0 }
+  closeTableContextMenu()
 }
 
 function resetTableGraphLayout() {
   tableNodeOverrides.value = {}
+  closeTableContextMenu()
 }
 
 function handleTableWheel(event: WheelEvent) {
@@ -347,6 +388,56 @@ function openTableNode(node: PositionedNode) {
   if (href) {
     window.open(href, '_blank', 'noopener')
   }
+}
+
+function tableMenuPosition(event: MouseEvent) {
+  const rect = (event.currentTarget as Element)
+    .closest('.graph-canvas')
+    ?.getBoundingClientRect()
+  return {
+    x: rect ? event.clientX - rect.left : event.offsetX,
+    y: rect ? event.clientY - rect.top : event.offsetY,
+  }
+}
+
+function openTableCanvasMenu(event: MouseEvent) {
+  if ((event.target as Element).closest('.graph-node, .table-graph-tools, .table-context-menu, .table-node-tip')) return
+  const position = tableMenuPosition(event)
+  tableContextMenu.open = true
+  tableContextMenu.x = position.x
+  tableContextMenu.y = position.y
+  tableContextMenu.nodeId = ''
+  tableNodeTip.open = false
+}
+
+function openTableNodeMenu(event: MouseEvent, node: PositionedNode) {
+  const position = tableMenuPosition(event)
+  tableContextMenu.open = true
+  tableContextMenu.x = position.x
+  tableContextMenu.y = position.y
+  tableContextMenu.nodeId = node.id
+  tableNodeTip.open = false
+}
+
+function closeTableContextMenu() {
+  tableContextMenu.open = false
+}
+
+function openTableNodeFromMenu() {
+  if (tableContextNode.value) {
+    openTableNode(tableContextNode.value)
+  }
+  closeTableContextMenu()
+}
+
+function showTableNodeTip() {
+  tableNodeTip.open = true
+  closeTableContextMenu()
+}
+
+function focusSearchInput() {
+  searchInputRef.value?.focus()
+  closeTableContextMenu()
 }
 
 function switchMode(next: SearchMode) {
@@ -524,22 +615,25 @@ function edgeTone(action?: string) {
   border-left: 1px solid rgba(15, 23, 42, .12);
 }
 
-.mode-dropdown summary {
+.mode-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
   height: 100%;
   min-width: 116px;
+  border: none;
   padding: 0 12px;
   background: #f8fafc;
   color: #334155;
   font-weight: 700;
   cursor: pointer;
-  list-style: none;
+  transition: background .12s ease, color .12s ease;
 }
 
-.mode-dropdown summary::-webkit-details-marker {
-  display: none;
+.mode-dropdown:hover .mode-trigger,
+.mode-dropdown:focus-within .mode-trigger {
+  background: rgba(33, 133, 208, .1);
+  color: #1e70bf;
 }
 
 .caret {
@@ -551,12 +645,18 @@ function edgeTone(action?: string) {
   top: calc(100% + 6px);
   right: 0;
   z-index: 20;
+  display: none;
   min-width: 132px;
   padding: 6px;
   border: 1px solid rgba(15, 23, 42, .12);
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 16px 34px rgba(15, 23, 42, .16);
+}
+
+.mode-dropdown:hover .mode-menu,
+.mode-dropdown:focus-within .mode-menu {
+  display: block;
 }
 
 .mode-menu button {
@@ -586,6 +686,17 @@ function edgeTone(action?: string) {
   color: #fff;
   font-weight: 800;
   cursor: pointer;
+  transition: background .12s ease, transform .12s ease, box-shadow .12s ease;
+}
+
+.search-button:hover:not(:disabled),
+.search-button:focus-visible {
+  background: #1b6fb8;
+  box-shadow: 0 10px 22px rgba(33, 133, 208, .22);
+}
+
+.search-button:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .search-button:disabled {
@@ -786,11 +897,19 @@ function edgeTone(action?: string) {
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
+  transition: transform .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
 }
 
-.table-graph-tools button:hover {
+.table-graph-tools button:hover,
+.table-graph-tools button:focus-visible {
   background: #2185d0;
   color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(33, 133, 208, .18);
+}
+
+.table-graph-tools button:active {
+  transform: translateY(0);
 }
 
 .table-graph {
@@ -871,6 +990,61 @@ function edgeTone(action?: string) {
 .graph-node image {
   clip-path: circle(25px at 25px 25px);
   pointer-events: none;
+}
+
+.table-context-menu {
+  position: absolute;
+  z-index: 8;
+  display: grid;
+  gap: 6px;
+  min-width: 176px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .94);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, .24);
+}
+
+.table-context-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.table-context-menu button:hover,
+.table-context-menu button:focus-visible {
+  background: rgba(255, 255, 255, .10);
+  color: #fff;
+}
+
+.table-context-menu small {
+  color: #94a3b8;
+}
+
+.table-node-tip {
+  position: absolute;
+  right: 18px;
+  top: 66px;
+  z-index: 7;
+  display: grid;
+  gap: 5px;
+  width: min(360px, calc(100% - 36px));
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .92);
+  color: #fff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, .22);
+}
+
+.table-node-tip span {
+  color: #cbd5e1;
+  overflow-wrap: anywhere;
 }
 
 .relation-list {

@@ -444,6 +444,19 @@ function iconGlyph(value?: string) {
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
+  transition: transform .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
+}
+
+.graph-tools button:hover,
+.graph-tools button:focus-visible {
+  background: #0f766e;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 118, 110, .18);
+}
+
+.graph-tools button:active {
+  transform: translateY(0);
 }
 
 .graph-svg {

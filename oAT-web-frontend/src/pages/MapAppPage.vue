@@ -11,6 +11,8 @@
         >
           {{ item.label }}
         </button>
+        <button type="button" :class="['chip-button', showHotLabels && 'active']" @click="showHotLabels = !showHotLabels">关联热度</button>
+        <button type="button" :class="['chip-button', highlightRelated && 'active']" @click="highlightRelated = !highlightRelated">高亮关联</button>
       </div>
 
       <div class="layer-actions">
@@ -43,7 +45,11 @@
       :edges="edges"
       :back-route="`/p/${projectId}/apps`"
       back-label="返回应用列表"
+      :context-actions="contextActions"
+      :show-edge-labels="showHotLabels"
+      :highlight-related="highlightRelated"
       @node-select="handleNodeSelect"
+      @context-action="handleContextAction"
     />
   </section>
 </template>
@@ -85,6 +91,8 @@ const elements = ref<MapElement[]>([])
 const extensionElements = ref<MapElement[]>([])
 const selectedLayers = ref<string[]>(['code'])
 const selectedNode = ref<RelationNodeSelection | null>(null)
+const showHotLabels = ref(false)
+const highlightRelated = ref(true)
 
 const layerOptions = [
   { label: '代码层', value: 'code' },
@@ -130,6 +138,22 @@ const canLoadSnapshotLayer = computed(() => hasSelectedClass('snapshot'))
 const canOpenSnapshot = computed(() => hasSelectedClass('snapshot'))
 const canExpandTableSnapshots = computed(() => hasSelectedClass('table') && Boolean(selectedRaw.value?.database && selectedRaw.value?.name))
 const canExpandRemoteSnapshots = computed(() => hasSelectedClass('dubbo') && Boolean(selectedRaw.value?.interfaceName && selectedRaw.value?.methodName))
+const contextActions = computed(() => [
+  { id: 'refresh-map', label: '刷新图谱', target: 'canvas' as const, disabled: loading.value || loadingLayer.value },
+  { id: 'load-app-snapshots', label: '展开快照', target: 'app' as const, disabled: loadingLayer.value },
+  { id: 'open-snapshot-detail', label: '打开快照详情', target: 'snapshot' as const, disabled: loadingLayer.value },
+  { id: 'load-snapshot-tables', label: '表结构图层', target: 'snapshot' as const, disabled: loadingLayer.value },
+  { id: 'load-snapshot-remote', label: '远程服务图层', target: 'snapshot' as const, disabled: loadingLayer.value },
+  { id: 'load-snapshot-code', label: '源码关联图谱', target: 'snapshot' as const, disabled: loadingLayer.value },
+  { id: 'load-table-snapshots', label: '展开关联快照', target: 'table' as const, disabled: loadingLayer.value },
+  { id: 'load-remote-snapshots', label: '展开关联快照', target: 'remote' as const, disabled: loadingLayer.value },
+  ...(extensionElements.value.length
+    ? [
+        { id: 'clear-extension-layers', label: '清除扩展图层', target: 'canvas' as const, danger: true, disabled: loadingLayer.value },
+        { id: 'clear-extension-layers', label: '清除扩展图层', target: 'snapshot' as const, danger: true, disabled: loadingLayer.value },
+      ]
+    : []),
+])
 
 function buildNodeMeta(data: MapElementData, classes?: string[]) {
   return [
@@ -159,6 +183,46 @@ function toggleLayer(layer: string) {
 function handleNodeSelect(node: RelationNodeSelection | null) {
   selectedNode.value = node
   layerError.value = ''
+}
+
+function handleContextAction(actionId: string, node: RelationNodeSelection | null) {
+  selectedNode.value = node
+  layerError.value = ''
+  if (actionId === 'load-app-snapshots') {
+    loadAppSnapshots()
+    return
+  }
+  if (actionId === 'open-snapshot-detail') {
+    openSnapshotDetail()
+    return
+  }
+  if (actionId === 'load-snapshot-tables') {
+    loadSnapshotTables()
+    return
+  }
+  if (actionId === 'load-snapshot-remote') {
+    loadSnapshotRemote()
+    return
+  }
+  if (actionId === 'load-snapshot-code') {
+    loadSnapshotCode()
+    return
+  }
+  if (actionId === 'load-table-snapshots') {
+    loadTableSnapshots()
+    return
+  }
+  if (actionId === 'load-remote-snapshots') {
+    loadDubboSnapshots()
+    return
+  }
+  if (actionId === 'refresh-map') {
+    load()
+    return
+  }
+  if (actionId === 'clear-extension-layers') {
+    clearExtensionLayers()
+  }
 }
 
 async function loadAppSnapshots() {
@@ -281,12 +345,20 @@ onMounted(load)
   background: rgba(15, 23, 42, 0.08);
   cursor: pointer;
   font-weight: 800;
+  transition: transform .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
 }
 
 .chip-button.active,
 .action-buttons button:hover:not(:disabled) {
   background: #0f172a;
   color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, .16);
+}
+
+.action-buttons button:active:not(:disabled),
+.chip-button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .action-buttons button:disabled {

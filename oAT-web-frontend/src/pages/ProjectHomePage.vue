@@ -100,7 +100,7 @@
         <section class="panel">
           <div class="panel-head">
             <h2>项目导航</h2>
-            <span>已迁移模块</span>
+            <span>常用入口</span>
           </div>
           <div class="quick-grid">
             <RouterLink :to="`/p/${projectId}/apps`">应用管理</RouterLink>
@@ -116,7 +116,7 @@
         <section class="panel">
           <div class="panel-head">
             <h2>分析中心</h2>
-            <span>已切换到新前端</span>
+            <span>分析工具</span>
           </div>
           <div class="quick-grid">
             <RouterLink :to="`/p/${projectId}/version/apps`">版本中心</RouterLink>

@@ -4,7 +4,7 @@
       <div>
         <div class="eyebrow">Version Center</div>
         <h1>版本中心</h1>
-        <p class="subtext">选择应用进入新版本中心，统一使用前后端分离的新前端流程。</p>
+        <p class="subtext">选择应用进入版本中心，管理版本、提交和覆盖率报告。</p>
       </div>
     </div>
 

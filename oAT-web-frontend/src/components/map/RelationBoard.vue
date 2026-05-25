@@ -25,10 +25,32 @@
         </article>
       </div>
 
-      <label v-if="!compact" class="search-box">
-        <span>关键字筛选</span>
-        <input v-model.trim="keyword" class="text-input" type="text" placeholder="输入名称、类型或描述" />
-      </label>
+      <div v-if="!compact" class="graph-search-block">
+        <label class="search-box">
+          <span>图谱搜索</span>
+          <input
+            ref="searchInputRef"
+            v-model.trim="keyword"
+            class="text-input"
+            type="text"
+            placeholder="输入名称、类型或描述，自动定位节点"
+            @keydown.down.prevent="selectSearchMatch(searchMatches[0]?.id)"
+          />
+        </label>
+        <div v-if="keyword" class="graph-search-results">
+          <button
+            v-for="node in searchMatches.slice(0, 8)"
+            :key="node.id"
+            type="button"
+            :class="{ active: selectedNode?.id === node.id }"
+            @click="selectSearchMatch(node.id)"
+          >
+            <strong>{{ node.label || node.id }}</strong>
+            <span>{{ node.type || 'node' }}</span>
+          </button>
+          <div v-if="!searchMatches.length" class="empty-search-result">没有匹配节点</div>
+        </div>
+      </div>
 
       <section
         class="graph-panel"
@@ -38,6 +60,7 @@
         @pointermove="moveBoardPan"
         @pointerup="endBoardPan"
         @pointerleave="endBoardPan"
+        @contextmenu.prevent="openCanvasContextMenu"
       >
         <div class="graph-toolbar">
           <div>图形画布</div>
@@ -49,7 +72,7 @@
             <button type="button" @click.stop="showSelectedTip" :disabled="!selectedNode">节点提示</button>
           </div>
         </div>
-        <svg ref="relationGraphRef" class="relation-graph" :viewBox="viewBox" role="img" aria-label="关系图画布">
+        <svg ref="relationGraphRef" class="relation-graph" :viewBox="graphViewBox" role="img" aria-label="关系图画布">
           <defs>
             <marker id="graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L0,6 L9,3 z" fill="#64748b" />
@@ -57,36 +80,50 @@
           </defs>
           <g :transform="graphTransform">
             <g class="edge-layer">
-              <g v-for="edge in graphEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge)]">
+              <g v-for="edge in graphEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge), edgeRelated(edge) && 'related', edgeDimmed(edge) && 'dimmed']">
                 <line :x1="edge.source.x" :y1="edge.source.y" :x2="edge.target.x" :y2="edge.target.y" marker-end="url(#graph-arrow)" />
-                <text :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionText(edge.action) || '关联' }}</text>
+                <text v-if="showEdgeLabel(edge)" :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionText(edge.action) || '关联' }}</text>
               </g>
             </g>
             <g class="node-layer">
               <g
                 v-for="node in graphNodes"
                 :key="node.id"
-                :class="['graph-node', nodeTone(node), selectedNode?.id === node.id && 'active']"
+                :class="['graph-node', nodeTone(node), selectedNode?.id === node.id && 'active', searchMatchIds.has(node.id) && 'find-match', nodeRelated(node) && 'related', nodeDimmed(node) && 'dimmed']"
                 :transform="`translate(${node.x}, ${node.y})`"
                 @pointerdown.stop="startNodeDrag($event, node)"
                 @click.stop="selectGraphNode(node.id)"
                 @contextmenu.prevent.stop="openContextMenu($event, node.id)"
               >
                 <circle :r="node.radius" />
-                <text class="node-label" text-anchor="middle" :y="node.radius + 16">{{ node.shortLabel }}</text>
+                <text v-if="showNodeLabel(node)" class="node-label" text-anchor="middle" :y="node.radius + 16">{{ node.shortLabel }}</text>
                 <text v-if="node.metric" class="node-metric" text-anchor="middle" y="5">{{ node.metric }}</text>
               </g>
             </g>
           </g>
         </svg>
-        <div v-if="contextMenu.open" class="graph-context-menu" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
-          <button type="button" @click="focusContextNode">定位节点</button>
-          <button type="button" @click="copyContextNodeId">复制节点 ID</button>
-          <button type="button" @click="showSelectedTip">显示节点提示</button>
+        <div v-if="contextMenu.open && visibleContextActions.length" class="graph-context-menu" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
+          <button
+            v-for="action in visibleContextActions"
+            :key="`${action.id}-${action.target || 'node'}`"
+            type="button"
+            :class="{ danger: action.danger }"
+            :disabled="action.disabled"
+            @click="runContextAction(action)"
+          >
+            <span>{{ action.label }}</span>
+            <small v-if="action.shortcut">{{ action.shortcut }}</small>
+          </button>
         </div>
         <div v-if="tip.open && selectedNode" class="graph-tip" @click.stop="tip.open = false">
           <strong>{{ selectedNode.label || selectedNode.id }}</strong>
-          <span>{{ selectedNode.description || selectedNode.type || '暂无描述' }}</span>
+          <span class="tip-line">ID：{{ selectedNode.id }}</span>
+          <span class="tip-line">类型：{{ selectedNode.type || 'node' }}</span>
+          <span v-if="selectedNode.description" class="tip-line">描述：{{ selectedNode.description }}</span>
+          <ul v-if="selectedNode.meta?.length" class="tip-meta">
+            <li v-for="item in selectedNode.meta" :key="item">{{ item }}</li>
+          </ul>
+          <span class="tip-line">关联关系：{{ selectedEdges.length }} 条</span>
         </div>
       </section>
 
@@ -200,6 +237,15 @@ interface RelationEdge {
   targetLabel?: string
 }
 
+interface RelationContextAction {
+  id: string
+  label: string
+  target?: 'canvas' | 'node' | 'app' | 'snapshot' | 'table' | 'remote' | 'code'
+  shortcut?: string
+  danger?: boolean
+  disabled?: boolean
+}
+
 interface GraphNode extends RelationNode {
   x: number
   y: number
@@ -221,10 +267,14 @@ const props = defineProps<{
   backLabel?: string
   compact?: boolean
   hideLists?: boolean
+  contextActions?: RelationContextAction[]
+  showEdgeLabels?: boolean
+  highlightRelated?: boolean
 }>()
 
 const emit = defineEmits<{
   (event: 'node-select', node: RelationNode | null): void
+  (event: 'context-action', actionId: string, node: RelationNode | null): void
 }>()
 
 const compact = computed(() => Boolean(props.compact))
@@ -232,8 +282,8 @@ const hideLists = computed(() => Boolean(props.hideLists))
 
 const keyword = ref('')
 const selectedId = ref('')
-const viewBox = ref('0 0 1200 620')
-const contextMenu = reactive({ open: false, x: 0, y: 0, nodeId: '' })
+const searchInputRef = ref<HTMLInputElement | null>(null)
+const contextMenu = reactive({ open: false, x: 0, y: 0, nodeId: '', target: 'canvas' as 'canvas' | 'node' })
 const tip = reactive({ open: false })
 const relationGraphRef = ref<SVGSVGElement | null>(null)
 const graphZoom = ref(1)
@@ -241,7 +291,7 @@ const graphOffset = ref({ x: 0, y: 0 })
 const graphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
 const nodePositionOverrides = ref<Record<string, { x: number; y: number }>>({})
 const nodeDrag = ref<{ id: string; startX: number; startY: number; originX: number; originY: number } | null>(null)
-const graphCanvas = { width: 1200, height: 620 }
+
 
 const filteredNodes = computed(() => {
   if (!keyword.value) {
@@ -264,30 +314,67 @@ const selectedNode = computed(() => filteredNodes.value.find((node) => node.id =
 const selectedEdges = computed(() =>
   filteredEdges.value.filter((edge) => edge.source === selectedId.value || edge.target === selectedId.value),
 )
+const relatedNodeIds = computed(() => {
+  const ids = new Set<string>()
+  if (!selectedId.value) return ids
+  ids.add(selectedId.value)
+  filteredEdges.value.forEach((edge) => {
+    if (edge.source === selectedId.value) ids.add(edge.target)
+    if (edge.target === selectedId.value) ids.add(edge.source)
+  })
+  return ids
+})
+const relatedEdgeIds = computed(() => {
+  if (!selectedId.value) return new Set<string>()
+  return new Set(filteredEdges.value
+    .filter((edge) => edge.source === selectedId.value || edge.target === selectedId.value)
+    .map((edge) => edge.id))
+})
+const searchMatches = computed(() => {
+  const needle = keyword.value.trim().toLowerCase()
+  if (!needle) return []
+  return props.nodes.filter((node) => nodeSearchText(node).includes(needle))
+})
+const searchMatchIds = computed(() => new Set(searchMatches.value.map((node) => node.id)))
+const contextMenuNode = computed(() => filteredNodes.value.find((node) => node.id === contextMenu.nodeId) || null)
+const builtInContextActions = computed<RelationContextAction[]>(() => {
+  if (contextMenu.target === 'canvas') {
+    return [
+      { id: 'find', label: '查找', target: 'canvas', shortcut: 'Ctrl+F' },
+      { id: 'fit', label: '适配视图', target: 'canvas' },
+      { id: 'relayout', label: '重排图谱', target: 'canvas' },
+    ]
+  }
+  return [{ id: 'tip', label: '节点概要', target: 'node', shortcut: 'F2' }]
+})
+const visibleContextActions = computed(() =>
+  [...(props.contextActions || []), ...builtInContextActions.value]
+    .filter(actionMatchesContext)
+)
 
+const layoutSourceNodes = computed(() => filteredNodes.value)
+const layoutSourceEdges = computed(() => filteredEdges.value)
+const graphLayoutKind = computed(() => resolveGraphLayoutKind(layoutSourceNodes.value))
+const graphLayoutPlan = computed(() => buildGraphLayout(layoutSourceNodes.value, layoutSourceEdges.value, graphLayoutKind.value))
+const graphCanvas = computed(() => graphLayoutPlan.value.canvas)
+const graphViewBox = computed(() => `0 0 ${graphCanvas.value.width} ${graphCanvas.value.height}`)
 const graphTransform = computed(() => `translate(${graphOffset.value.x} ${graphOffset.value.y}) scale(${graphZoom.value})`)
+const denseGraph = computed(() => layoutSourceNodes.value.length > 70)
 
 const graphNodes = computed<GraphNode[]>(() => {
-  const count = Math.max(filteredNodes.value.length, 1)
-  const centerX = 600
-  const centerY = 300
-  const radiusX = count > 8 ? 440 : 340
-  const radiusY = count > 8 ? 220 : 180
-  return filteredNodes.value.map((node, index) => {
-    const angle = (Math.PI * 2 * index) / count - Math.PI / 2
-    const weight = Number(node.meta?.join(' ').match(/([0-9]+(?:\.[0-9]+)?)%/)?.[1] || 0)
-    const autoPosition = {
-      x: centerX + Math.cos(angle) * radiusX,
-      y: centerY + Math.sin(angle) * radiusY,
-    }
+  const positions = graphLayoutPlan.value.positions
+  return layoutSourceNodes.value.map((node) => {
+    const autoPosition = positions.get(node.id) || { x: 80, y: 80 }
     const override = nodePositionOverrides.value[node.id]
+    const type = node.type || ''
+    const isCode = type.includes('code') || type.includes('class') || type.includes('method')
     return {
       ...node,
       x: override?.x ?? autoPosition.x,
       y: override?.y ?? autoPosition.y,
-      radius: node.type?.includes('snapshot') ? 28 : node.type?.includes('code') ? 23 : 20,
-      shortLabel: shorten(node.label || node.id, 18),
-      metric: weight ? `${weight}%` : '',
+      radius: type.includes('snapshot') ? 27 : isCode ? 18 : type.includes('table') ? 22 : 20,
+      shortLabel: shorten(node.label || node.id, denseGraph.value ? 14 : 20),
+      metric: Number(node.meta?.join(' ').match(/([0-9]+(?:\.[0-9]+)?)%/)?.[1] || 0) ? `${Number(node.meta?.join(' ').match(/([0-9]+(?:\.[0-9]+)?)%/)?.[1] || 0)}%` : '',
     }
   })
 })
@@ -307,6 +394,121 @@ const graphEdges = computed(() => filteredEdges.value
     }
   })
   .filter((edge): edge is NonNullable<typeof edge> => Boolean(edge)))
+
+function nodeSearchText(node: RelationNode) {
+  return [node.id, node.label, node.type, node.description, ...(node.meta || [])]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
+function resolveGraphLayoutKind(nodes: RelationNode[]) {
+  const types = nodes.map((node) => `${node.type || ''} ${(node.classes || []).join(' ')}`.toLowerCase())
+  const codeCount = types.filter((type) => type.includes('code') || type.includes('class') || type.includes('method')).length
+  if (nodes.length > 60 || codeCount > Math.max(8, nodes.length * 0.35)) return 'layered'
+  if (types.some((type) => type.includes('snapshot') || type.includes('table') || type.includes('app'))) return 'layered'
+  return 'grid'
+}
+
+function buildGraphLayout(nodes: RelationNode[], edges: RelationEdge[], kind: string) {
+  if (!nodes.length) {
+    return { canvas: { width: 1200, height: 680 }, positions: new Map<string, { x: number; y: number }>() }
+  }
+  return kind === 'grid' ? buildGridLayout(nodes) : buildLayeredLayout(nodes, edges)
+}
+
+function buildGridLayout(nodes: RelationNode[]) {
+  const count = nodes.length
+  const columns = Math.max(1, Math.ceil(Math.sqrt(count * 1.6)))
+  const rows = Math.ceil(count / columns)
+  const spacingX = 160
+  const spacingY = 92
+  const canvas = {
+    width: Math.max(1200, columns * spacingX + 160),
+    height: Math.max(680, rows * spacingY + 160),
+  }
+  const positions = new Map<string, { x: number; y: number }>()
+  nodes.forEach((node, index) => {
+    const column = index % columns
+    const row = Math.floor(index / columns)
+    positions.set(node.id, {
+      x: 90 + column * spacingX,
+      y: 92 + row * spacingY,
+    })
+  })
+  return { canvas, positions }
+}
+
+function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
+  const nodeIds = new Set(nodes.map((node) => node.id))
+  const incoming = new Map<string, number>()
+  const children = new Map<string, string[]>()
+  nodes.forEach((node) => {
+    incoming.set(node.id, 0)
+    children.set(node.id, [])
+  })
+  edges.forEach((edge) => {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) return
+    incoming.set(edge.target, (incoming.get(edge.target) || 0) + 1)
+    children.get(edge.source)?.push(edge.target)
+  })
+
+  const ranks = new Map<string, number>()
+  const roots = nodes.filter((node) => (incoming.get(node.id) || 0) === 0)
+  const queue = (roots.length ? roots : nodes.slice(0, Math.min(4, nodes.length))).map((node) => node.id)
+  queue.forEach((id) => ranks.set(id, 0))
+  for (let index = 0; index < queue.length; index += 1) {
+    const id = queue[index]
+    const nextRank = (ranks.get(id) || 0) + 1
+    ;(children.get(id) || []).forEach((childId) => {
+      if ((ranks.get(childId) ?? -1) < nextRank) {
+        ranks.set(childId, nextRank)
+        queue.push(childId)
+      }
+    })
+  }
+
+  nodes.forEach((node, index) => {
+    if (!ranks.has(node.id)) ranks.set(node.id, Math.floor(index / 12))
+  })
+
+  const buckets = new Map<number, RelationNode[]>()
+  nodes.forEach((node) => {
+    const rank = ranks.get(node.id) || 0
+    const list = buckets.get(rank) || []
+    list.push(node)
+    buckets.set(rank, list)
+  })
+
+  const maxRowsPerColumn = nodes.length > 80 ? 8 : 7
+  const spacingX = nodes.length > 80 ? 132 : 170
+  const spacingY = nodes.length > 80 ? 70 : 86
+  const positions = new Map<string, { x: number; y: number }>()
+  let columnCursor = 0
+  Array.from(buckets.keys()).sort((a, b) => a - b).forEach((rank) => {
+    const bucket = buckets.get(rank) || []
+    const sortedBucket = bucket.slice().sort((left, right) => (left.label || left.id).localeCompare(right.label || right.id))
+    const chunkCount = Math.max(1, Math.ceil(sortedBucket.length / maxRowsPerColumn))
+    for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+      const chunk = sortedBucket.slice(chunkIndex * maxRowsPerColumn, (chunkIndex + 1) * maxRowsPerColumn)
+      const x = 90 + columnCursor * spacingX
+      const verticalOffset = Math.max(0, maxRowsPerColumn - chunk.length) * spacingY * 0.5
+      chunk.forEach((node, row) => {
+        positions.set(node.id, {
+          x,
+          y: 92 + verticalOffset + row * spacingY,
+        })
+      })
+      columnCursor += 1
+    }
+    columnCursor += bucket.length > maxRowsPerColumn ? 0.45 : 0.75
+  })
+  const canvas = {
+    width: Math.max(1200, Math.ceil(columnCursor * spacingX) + 180),
+    height: Math.max(680, maxRowsPerColumn * spacingY + 180),
+  }
+  return { canvas, positions }
+}
 
 function shorten(value: string, limit: number) {
   return value.length > limit ? `${value.slice(0, limit - 1)}...` : value
@@ -352,22 +554,77 @@ function closeContextMenu() {
   contextMenu.open = false
 }
 
+function openCanvasContextMenu(event: MouseEvent) {
+  if ((event.target as Element).closest('.graph-node, .graph-tools, .graph-context-menu, .graph-tip')) return
+  contextMenu.open = true
+  contextMenu.x = event.clientX
+  contextMenu.y = event.clientY
+  contextMenu.nodeId = ''
+  contextMenu.target = 'canvas'
+}
+
 function openContextMenu(event: MouseEvent, nodeId: string) {
   selectGraphNode(nodeId)
   contextMenu.open = true
   contextMenu.x = event.clientX
   contextMenu.y = event.clientY
   contextMenu.nodeId = nodeId
+  contextMenu.target = 'node'
 }
 
-function focusContextNode() {
-  if (contextMenu.nodeId) selectGraphNode(contextMenu.nodeId)
+function actionMatchesContext(action: RelationContextAction) {
+  const target = action.target || 'node'
+  if (target === 'canvas') {
+    return contextMenu.target === 'canvas'
+  }
+  if (contextMenu.target !== 'node') {
+    return false
+  }
+  if (target === 'node') {
+    return Boolean(contextMenuNode.value)
+  }
+  return hasContextNodeClass(target)
+}
+
+function hasContextNodeClass(target: Exclude<NonNullable<RelationContextAction['target']>, 'canvas' | 'node'>) {
+  const node = contextMenuNode.value
+  if (!node) return false
+  const tokens = `${node.type || ''} ${(node.classes || []).join(' ')}`.toLowerCase().split(/\s+/).filter(Boolean)
+  if (target === 'remote') return tokens.some((item) => item.includes('remote') || item.includes('dubbo'))
+  if (target === 'code') return tokens.some((item) => item.includes('code'))
+  return tokens.some((item) => item === target || item.includes(target))
+}
+
+function runContextAction(action: RelationContextAction) {
+  if (action.disabled) return
+  const node = contextMenuNode.value
+  if (action.id === 'find') {
+    focusSearchInput()
+    closeContextMenu()
+    return
+  }
+  if (action.id === 'fit') {
+    fitGraph()
+    closeContextMenu()
+    return
+  }
+  if (action.id === 'relayout') {
+    resetGraphLayout()
+    closeContextMenu()
+    return
+  }
+  if (action.id === 'tip') {
+    if (node) selectGraphNode(node.id)
+    showSelectedTip()
+    closeContextMenu()
+    return
+  }
+  emit('context-action', action.id, node)
   closeContextMenu()
 }
 
-async function copyContextNodeId() {
-  if (contextMenu.nodeId) await navigator.clipboard?.writeText(contextMenu.nodeId)
-  closeContextMenu()
+function focusSearchInput() {
+  searchInputRef.value?.focus()
 }
 
 function clampGraphZoom(value: number) {
@@ -379,7 +636,6 @@ function zoomGraph(delta: number) {
 }
 
 function fitGraph() {
-  viewBox.value = `0 0 ${graphCanvas.width} ${graphCanvas.height}`
   graphZoom.value = 1
   graphOffset.value = { x: 0, y: 0 }
 }
@@ -391,8 +647,8 @@ function resetGraphLayout() {
 
 function graphPointerDelta(event: PointerEvent, startX: number, startY: number) {
   const rect = relationGraphRef.value?.getBoundingClientRect()
-  const scaleX = rect?.width ? graphCanvas.width / rect.width : 1
-  const scaleY = rect?.height ? graphCanvas.height / rect.height : 1
+  const scaleX = rect?.width ? graphCanvas.value.width / rect.width : 1
+  const scaleY = rect?.height ? graphCanvas.value.height / rect.height : 1
   return {
     x: (event.clientX - startX) * scaleX / graphZoom.value,
     y: (event.clientY - startY) * scaleY / graphZoom.value,
@@ -449,6 +705,48 @@ function startNodeDrag(event: PointerEvent, node: GraphNode) {
   }
 }
 
+function selectSearchMatch(nodeId?: string) {
+  if (!nodeId) return
+  selectGraphNode(nodeId)
+  centerGraphOnNode(nodeId)
+}
+
+function centerGraphOnNode(nodeId: string) {
+  const node = graphNodeMap.value.get(nodeId)
+  if (!node) return
+  graphZoom.value = Math.max(graphZoom.value, denseGraph.value ? 1.15 : 1)
+  graphOffset.value = {
+    x: graphCanvas.value.width / 2 - node.x * graphZoom.value,
+    y: graphCanvas.value.height / 2 - node.y * graphZoom.value,
+  }
+}
+
+function showNodeLabel(node: GraphNode) {
+  if (!denseGraph.value) return true
+  return selectedId.value === node.id || searchMatchIds.value.has(node.id) || relatedNodeIds.value.has(node.id)
+}
+
+function showEdgeLabel(edge: { id: string }) {
+  const showByDefault = props.showEdgeLabels ?? !denseGraph.value
+  return showByDefault || relatedEdgeIds.value.has(edge.id)
+}
+
+function nodeRelated(node: GraphNode) {
+  return Boolean(props.highlightRelated && relatedNodeIds.value.has(node.id))
+}
+
+function nodeDimmed(node: GraphNode) {
+  return Boolean(props.highlightRelated && selectedId.value && !relatedNodeIds.value.has(node.id))
+}
+
+function edgeRelated(edge: { id: string }) {
+  return Boolean(props.highlightRelated && relatedEdgeIds.value.has(edge.id))
+}
+
+function edgeDimmed(edge: { id: string }) {
+  return Boolean(props.highlightRelated && selectedId.value && !relatedEdgeIds.value.has(edge.id))
+}
+
 function showSelectedTip() {
   if (!selectedNode.value) return
   tip.open = true
@@ -457,16 +755,21 @@ function showSelectedTip() {
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.ctrlKey && event.key.toLowerCase() === 'f') {
-    const input = document.querySelector<HTMLInputElement>('.search-box input')
-    if (input) {
-      event.preventDefault()
-      input.focus()
-    }
+    event.preventDefault()
+    focusSearchInput()
   }
   if (event.key === 'F2') {
     showSelectedTip()
   }
 }
+
+watchEffect(() => {
+  const firstMatch = searchMatches.value[0]
+  if (keyword.value && firstMatch && selectedId.value !== firstMatch.id) {
+    selectedId.value = firstMatch.id
+    emit('node-select', firstMatch)
+  }
+})
 
 onMounted(() => window.addEventListener('keydown', handleKeydown))
 onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
@@ -548,10 +851,60 @@ watchEffect(() => {
   margin-top: 6px;
 }
 
+.graph-search-block {
+  position: relative;
+  margin: 18px 0;
+}
+
 .search-box {
   display: grid;
   gap: 8px;
-  margin: 18px 0;
+  margin: 0;
+}
+
+.graph-search-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 25;
+  display: grid;
+  gap: 5px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, .10);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+}
+
+.graph-search-results button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: transparent;
+  color: #172033;
+  cursor: pointer;
+}
+
+.graph-search-results button:hover,
+.graph-search-results button.active {
+  background: rgba(15, 118, 110, .08);
+  color: #0f766e;
+}
+
+.graph-search-results span,
+.empty-search-result {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.empty-search-result {
+  padding: 8px 10px;
 }
 
 .text-input {
@@ -708,6 +1061,19 @@ watchEffect(() => {
   padding: 7px 10px;
   background: rgba(15, 23, 42, 0.08);
   cursor: pointer;
+  transition: transform .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
+}
+
+.graph-tools button:hover:not(:disabled),
+.graph-tools button:focus-visible {
+  background: #0f766e;
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgba(15, 118, 110, .18);
+}
+
+.graph-tools button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .graph-tools button:disabled {
@@ -729,7 +1095,16 @@ watchEffect(() => {
 .graph-edge line {
   stroke: #94a3b8;
   stroke-width: 1.8;
-  opacity: .78;
+  opacity: .62;
+}
+
+.graph-edge.related line {
+  stroke-width: 3;
+  opacity: 1;
+}
+
+.graph-edge.dimmed line {
+  opacity: .12;
 }
 
 .graph-edge.insert line { stroke: #16a34a; }
@@ -771,6 +1146,19 @@ watchEffect(() => {
   stroke-width: 6;
 }
 
+.graph-node.related circle {
+  filter: drop-shadow(0 0 14px rgba(15, 118, 110, .28));
+}
+
+.graph-node.dimmed {
+  opacity: .28;
+}
+
+.graph-node.find-match circle {
+  stroke: #06b6d4;
+  stroke-width: 5;
+}
+
 .graph-node.snapshot circle { fill: #0f766e; }
 .graph-node.table circle { fill: #b45309; }
 .graph-node.code circle { fill: #1d4ed8; }
@@ -796,7 +1184,7 @@ watchEffect(() => {
   z-index: 30;
   display: grid;
   gap: 6px;
-  min-width: 150px;
+  min-width: 190px;
   padding: 8px;
   border-radius: 14px;
   background: rgba(15, 23, 42, 0.94);
@@ -804,13 +1192,32 @@ watchEffect(() => {
 }
 
 .graph-context-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   color: #e2e8f0;
   text-align: left;
   background: transparent;
 }
 
-.graph-context-menu button:hover {
+.graph-context-menu button small {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.graph-context-menu button:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+.graph-context-menu button.danger {
+  color: #fecaca;
+}
+
+.graph-context-menu button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
 }
 
 .graph-tip {
@@ -828,9 +1235,19 @@ watchEffect(() => {
   box-shadow: 0 18px 40px rgba(15, 23, 42, .24);
 }
 
-.graph-tip span {
+.graph-tip span,
+.tip-meta {
   color: #cbd5e1;
   line-height: 1.5;
+}
+
+.tip-line {
+  overflow-wrap: anywhere;
+}
+
+.tip-meta {
+  margin: 0;
+  padding-left: 18px;
 }
 
 .compact-board .graph-panel {

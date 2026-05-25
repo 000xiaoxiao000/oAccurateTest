@@ -4,7 +4,7 @@
       <div>
         <div class="eyebrow">Version List</div>
         <h1>{{ payload?.app.name || appId }}</h1>
-        <p class="subtext">版本创建、当前版本切换、文件清理都切到新前端完成。</p>
+        <p class="subtext">管理版本创建、当前版本切换和文件清理。</p>
       </div>
       <div class="header-actions">
         <RouterLink class="ghost-link" :to="`/p/${projectId}/apps/${appId}/versions/new`">新增版本</RouterLink>

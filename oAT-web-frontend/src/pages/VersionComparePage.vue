@@ -4,7 +4,7 @@
       <div>
         <div class="eyebrow">Compare & Reports</div>
         <h1>{{ center?.app.name || appId }}</h1>
-        <p class="subtext">版本比对、制品上传、Git Commit 选择、覆盖率报告和历史比对报告统一迁入新前端。</p>
+        <p class="subtext">版本比对、制品上传、Git Commit 选择、覆盖率报告和历史比对报告集中管理。</p>
       </div>
       <div class="header-actions">
         <RouterLink class="secondary-link" :to="`/p/${projectId}/apps/${appId}/versions`">返回版本列表</RouterLink>
