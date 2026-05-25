@@ -56,20 +56,41 @@
         <div class="panel-head">
           <h2>报告元信息</h2>
         </div>
-        <div class="info-grid">
-          <div class="info-item wide"><span>旧版本</span><strong>{{ payload.report.targetVersion || '-' }}</strong></div>
-          <div class="info-item wide"><span>新版本</span><strong>{{ payload.report.sourceVersion || '-' }}</strong></div>
-          <div class="info-item"><span>分支</span><strong>{{ payload.report.gitBranch || '-' }}</strong></div>
-          <div class="info-item"><span>旧 Commit</span><strong :title="payload.report.gitOldCommit">{{ shortText(payload.report.gitOldCommit) }}</strong></div>
-          <div class="info-item"><span>新 Commit</span><strong :title="payload.report.gitNewCommit">{{ shortText(payload.report.gitNewCommit) }}</strong></div>
+        <div class="revision-flow">
+          <article class="revision-card old">
+            <span>{{ oldRevisionLabel }}</span>
+            <strong :title="oldRevisionValue">{{ shortText(oldRevisionValue) }}</strong>
+            <small>{{ isGitReport ? '基线版本 / oldCommit' : '基线制品 / 旧版本文件' }}</small>
+          </article>
+          <div class="revision-arrow" aria-hidden="true">→</div>
+          <article class="revision-card new">
+            <span>{{ newRevisionLabel }}</span>
+            <strong :title="newRevisionValue">{{ shortText(newRevisionValue) }}</strong>
+            <small>{{ isGitReport ? '目标版本 / newCommit' : '目标制品 / 新版本文件' }}</small>
+          </article>
+        </div>
+        <div class="info-grid compact-info-grid">
+          <div v-if="payload.report.gitBranch" class="info-item"><span>分支</span><strong>{{ payload.report.gitBranch }}</strong></div>
+          <div class="info-item"><span>报告类型</span><strong>{{ isGitReport ? 'Git 版本比对' : '制品包比对' }}</strong></div>
           <div class="info-item"><span>生成时间</span><strong>{{ payload.report.createTimeText || '-' }}</strong></div>
+          <div class="info-item"><span>说明</span><strong>{{ versionMetaNote }}</strong></div>
         </div>
       </section>
 
-      <section class="panel toolbar-panel">
+      <nav class="report-section-nav" aria-label="报告内容导航">
+        <a href="#report-differences">变更项 {{ filteredDifferences.length }}</a>
+        <a href="#report-usecases">影响用例 {{ displayUsecaseCount }}</a>
+        <a href="#report-endpoints">影响接口 {{ endpointCount }}</a>
+        <a href="#report-logs">比对日志 {{ logGroups.length }}</a>
+        <button v-if="filteredDifferences.length > differencePreviewLimit" type="button" @click="showAllDifferences = !showAllDifferences">
+          {{ showAllDifferences ? '收起变更' : `显示全部 ${filteredDifferences.length} 项` }}
+        </button>
+      </nav>
+
+      <section id="report-differences" class="panel toolbar-panel">
         <div>
           <h2>变更项</h2>
-          <p class="subtext">按老前端的类/方法结构展示，支持搜索和新增、修改、删除筛选。</p>
+          <p class="subtext">按老前端的类/方法结构展示，支持搜索和新增、修改、删除筛选；默认收起长列表以便快速查看重点。</p>
         </div>
         <div class="filter-actions">
           <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索类名、方法名或描述" />
@@ -80,10 +101,15 @@
       <section class="panel">
         <div class="panel-head">
           <h2>差异清单</h2>
-          <span>{{ filteredDifferences.length }}</span>
+          <div class="panel-head-actions">
+            <span>{{ visibleDifferences.length }} / {{ filteredDifferences.length }}</span>
+            <button v-if="filteredDifferences.length > differencePreviewLimit" class="ghost-button small" type="button" @click="showAllDifferences = !showAllDifferences">
+              {{ showAllDifferences ? '只看前 30 项' : '展开全部' }}
+            </button>
+          </div>
         </div>
         <div class="diff-list compact-list">
-          <article v-for="item in filteredDifferences" :key="item.className" class="diff-card" :class="[modelClass(item.model), selectedClass === item.className && 'selected']">
+          <article v-for="item in visibleDifferences" :key="item.className" class="diff-card" :class="[modelClass(item.model), selectedClass === item.className && 'selected']">
             <button class="diff-top" type="button" @click="toggleClass(item.className)">
               <span class="class-name"><i :class="modelIconClass(item.model)"></i>{{ item.className }}</span>
               <span :class="['tag', modelClass(item.model)]">{{ modelText(item.model) }}</span>
@@ -101,10 +127,10 @@
       </section>
 
       <section class="impact-grid">
-        <div class="panel">
+        <div id="report-usecases" class="panel">
           <div class="panel-head"><h2>影响用例</h2><span>{{ displayUsecaseCount }}</span></div>
           <div v-if="usecaseDisplayMismatch" class="info-message">
-            原始命中 {{ payload.report.impactCaseCount }} 条，当前展示 {{ payload.usecases?.length || 0 }} 条；已自动跳过已删除或不可访问的用例，不影响当前报告查看。
+            报告原始命中 {{ payload.report.impactCaseCount }} 条，当前可展示详情 {{ payload.usecases?.length || 0 }} 条；未展示的通常是历史报告未保存用例明细、用例已删除或索引未刷新，可展开比对日志核对命中用例 ID。
           </div>
           <div v-if="showImpactHints" class="impact-hint-card">
             <button class="impact-hint-toggle" type="button" @click="impactHintOpen = !impactHintOpen">
@@ -128,7 +154,8 @@
               <div v-show="openUsecaseGroups.has(group.directory)" class="impact-list">
                 <article v-for="item in group.items" :key="item.id" class="impact-card usecase-card">
                   <div class="impact-top">
-                    <RouterLink class="result-link" :to="`/p/${projectId}/usecases/${item.id}`">{{ item.title }}</RouterLink>
+                    <RouterLink v-if="item.available !== false" class="result-link" :to="`/p/${projectId}/usecases/${item.id}`">{{ item.title }}</RouterLink>
+                    <span v-else class="result-link unavailable">{{ item.title }}</span>
                     <button class="inline-link" type="button" @click="toggleUsecase(item.id)">影响点：{{ item.differences.length }}</button>
                   </div>
                   <div v-if="item.labels?.length" class="label-list">
@@ -141,11 +168,13 @@
                 </article>
               </div>
             </article>
-            <div v-if="!usecaseGroups.length" class="empty-card">未发现影响用例。</div>
+            <div v-if="!usecaseGroups.length" class="empty-card">
+              {{ usecaseDetailsMissing ? `报告记录了 ${displayUsecaseCount} 条影响用例，但未能加载用例详情；请展开比对日志查看命中用例 ID，重新生成报告后会保存完整影响用例。` : '未发现影响用例。' }}
+            </div>
           </div>
         </div>
 
-        <div class="panel">
+        <div id="report-endpoints" class="panel">
           <div class="panel-head"><h2>影响接口</h2><span>{{ endpointCount }}</span></div>
           <div class="impact-list">
             <article v-for="endpoint in payload.endpoints || []" :key="endpoint.id || `${endpoint.endpointType}-${endpoint.url}-${endpoint.methodName}`" class="impact-card endpoint-card">
@@ -176,7 +205,7 @@
         </div>
       </section>
 
-      <section class="panel log-panel">
+      <section id="report-logs" class="panel log-panel">
         <div class="panel-head">
           <div>
             <h2>比对日志</h2>
@@ -230,9 +259,11 @@ const openClasses = ref(new Set<string>())
 const openUsecaseGroups = ref(new Set<string>())
 const openUsecases = ref(new Set<string>())
 const impactHintOpen = ref(false)
-const logCollapsed = ref(false)
+const logCollapsed = ref(true)
+const showAllDifferences = ref(false)
 const pendingRetryCount = ref(0)
 const maxPendingRetries = 5
+const differencePreviewLimit = 30
 let pendingTimer: number | undefined
 
 const diffModes = [
@@ -244,6 +275,11 @@ const diffModes = [
 
 const reportTitle = computed(() => compactReportTitle(payload.value?.report?.jobName || reportId.value))
 const isGitReport = computed(() => Boolean(payload.value?.report?.gitBranch || payload.value?.report?.gitOldCommit || payload.value?.report?.gitNewCommit))
+const oldRevisionValue = computed(() => payload.value?.report?.gitOldCommit || payload.value?.report?.sourceVersion || '')
+const newRevisionValue = computed(() => payload.value?.report?.gitNewCommit || payload.value?.report?.targetVersion || '')
+const oldRevisionLabel = computed(() => (isGitReport.value ? '旧 Commit' : '旧版本'))
+const newRevisionLabel = computed(() => (isGitReport.value ? '新 Commit' : '新版本'))
+const versionMetaNote = computed(() => (isGitReport.value ? '旧/新 Commit 与旧/新版本为同一组 Git ref' : '旧/新版本对应制品包比对方向'))
 const classDiffCount = computed(() => {
   const report = payload.value?.report
   return report ? report.addClassCount + report.updateClassCount + report.deleteClassCount : 0
@@ -254,7 +290,8 @@ const methodDiffCount = computed(() => {
 })
 const totalDiffCount = computed(() => classDiffCount.value + methodDiffCount.value)
 const endpointCount = computed(() => payload.value?.endpoints?.length || 0)
-const displayUsecaseCount = computed(() => payload.value?.usecases?.length || payload.value?.report?.impactCaseCount || 0)
+const displayUsecaseCount = computed(() => Math.max(payload.value?.usecases?.length || 0, payload.value?.report?.impactCaseCount || 0))
+const usecaseDetailsMissing = computed(() => (payload.value?.report?.impactCaseCount || 0) > 0 && !(payload.value?.usecases?.length))
 const usecaseDisplayMismatch = computed(() => {
   const reportCount = payload.value?.report?.impactCaseCount || 0
   const displayedCount = payload.value?.usecases?.length || 0
@@ -278,6 +315,12 @@ const filteredDifferences = computed(() => {
       .includes(needle)
   })
 })
+const visibleDifferences = computed(() => {
+  if (showAllDifferences.value || filteredDifferences.value.length <= differencePreviewLimit) {
+    return filteredDifferences.value
+  }
+  return filteredDifferences.value.slice(0, differencePreviewLimit)
+})
 const usecaseGroups = computed(() => {
   const groups = new Map<string, UsecaseImpactSummary[]>()
   for (const item of payload.value?.usecases || []) {
@@ -293,7 +336,12 @@ const logGroups = computed(() => groupLogLines(jobLogLines.value))
 
 watch(() => payload.value?.differences, (differences) => {
   openClasses.value = new Set((differences || []).slice(0, 12).map((item) => item.className).filter(Boolean))
+  showAllDifferences.value = false
 }, { immediate: true })
+
+watch([keyword, () => diffMode.value], () => {
+  showAllDifferences.value = false
+})
 
 watch(usecaseGroups, (groups) => {
   openUsecaseGroups.value = new Set(groups.map((group) => group.directory))
@@ -445,7 +493,9 @@ onBeforeUnmount(clearPendingTimer)
 .filter-actions,
 .hero-tags,
 .log-actions,
-.endpoint-state {
+.endpoint-state,
+.report-section-nav,
+.panel-head-actions {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -520,6 +570,11 @@ onBeforeUnmount(clearPendingTimer)
   font-weight: 800;
 }
 
+.result-link.unavailable {
+  color: #92400e;
+  cursor: default;
+}
+
 .status-card,
 .pending-card,
 .hero-card,
@@ -557,6 +612,7 @@ onBeforeUnmount(clearPendingTimer)
 
 .hero-grid,
 .info-grid,
+.revision-flow,
 .diff-list,
 .impact-list,
 .impact-grid,
@@ -609,12 +665,100 @@ onBeforeUnmount(clearPendingTimer)
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.compact-info-grid {
+  margin-top: 14px;
+}
+
+.revision-flow {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: 14px;
+}
+
+.revision-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 18px;
+  background: #f8fbfb;
+}
+
+.revision-card.old {
+  border-left: 4px solid #f59e0b;
+}
+
+.revision-card.new {
+  border-left: 4px solid #0f766e;
+}
+
+.revision-card span,
+.revision-card small {
+  color: #64748b;
+}
+
+.revision-card strong {
+  display: block;
+  margin: 8px 0 6px;
+  color: #111827;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.revision-arrow {
+  display: grid;
+  place-items: center;
+  min-width: 46px;
+  color: #0f766e;
+  font-size: 26px;
+  font-weight: 900;
+}
+
 .info-item.wide {
   grid-column: span 2;
 }
 
 .info-item strong {
   overflow-wrap: anywhere;
+}
+
+.report-section-nav {
+  position: sticky;
+  top: 76px;
+  z-index: 8;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .88);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+}
+
+.report-section-nav a,
+.report-section-nav button {
+  border: 1px solid rgba(15, 118, 110, .14);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(15, 118, 110, .06);
+  color: #0f766e;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  transition: transform .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.report-section-nav a:hover,
+.report-section-nav button:hover {
+  transform: translateY(-1px);
+  background: #0f766e;
+  color: #fff;
+  box-shadow: 0 10px 18px rgba(15, 118, 110, .16);
+}
+
+.panel-head-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .toolbar-panel {
@@ -1037,8 +1181,14 @@ onBeforeUnmount(clearPendingTimer)
 @media (max-width: 980px) {
   .hero-grid,
   .info-grid,
+  .revision-flow,
   .impact-grid {
     grid-template-columns: 1fr;
+  }
+
+  .revision-arrow {
+    min-height: 28px;
+    transform: rotate(90deg);
   }
 
   .info-item.wide {

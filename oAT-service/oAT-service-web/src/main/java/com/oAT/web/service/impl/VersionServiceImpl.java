@@ -679,6 +679,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         job.getProgress().next("分析用例影响", 80);
         job.getProgress().total = difference.size();
         job.getData().setImpactSnapshot(new HashMap<>());
+        job.getData().setImpactUsecases(new LinkedHashMap<>());
         for (CompareResult compareResult : difference) {
             // 新增的类也可能会产生影响（例如新增的接口实现），建议分析所有非 same 的类
             if (compareResult.getModel() != CompareResult.Model.same) {

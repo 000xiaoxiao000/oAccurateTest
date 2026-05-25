@@ -54,7 +54,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.regex.Matcher;
@@ -531,33 +530,93 @@ public class VersionApiControl {
     }
 
     private List<UsecaseImpactSummary> buildUsecaseImpacts(String reportId, VersionCompareReport report) {
-        List<UsecaseImpactSummary> result = new ArrayList<>();
-        AtomicInteger skippedDeletedUsecaseCount = new AtomicInteger();
-        if (report.getCases() == null) {
-            return result;
-        }
-        for (VersionCompareReport.ImpactCase impactCase : report.getCases()) {
-            if (impactCase == null || !StringUtils.hasText(impactCase.getCaseId())) {
-                continue;
-            }
-            try {
-                UsecaseVo usecase = usecaseService.getUsecase(report.getProjectId(), impactCase.getCaseId());
-                UsecaseImpactSummary summary = new UsecaseImpactSummary();
-                summary.setId(usecase.getId());
-                summary.setTitle(usecase.getTitle());
-                summary.setDirectoryPath(resolveUsecaseDirectoryPath(report.getProjectId(),
-                        Optional.ofNullable(usecase.getDirectory()).orElse("root")));
-                summary.setDifferences(impactCase.getDifferences() == null ? new String[0] : impactCase.getDifferences());
-                summary.setLabels(usecase.getLabels() == null ? new String[0] : usecase.getLabels());
-                result.add(summary);
-            } catch (IllegalArgumentException ex) {
-                skippedDeletedUsecaseCount.incrementAndGet();
-            } catch (Exception ignore) {
+        LinkedHashMap<String, UsecaseImpactSummary> resultMap = new LinkedHashMap<>();
+        if (report.getCases() != null) {
+            for (VersionCompareReport.ImpactCase impactCase : report.getCases()) {
+                if (impactCase == null || !StringUtils.hasText(impactCase.getCaseId())) {
+                    continue;
+                }
+                String[] differences = impactCase.getDifferences() == null ? new String[0] : impactCase.getDifferences();
+                try {
+                    UsecaseVo usecase = usecaseService.getUsecase(report.getProjectId(), impactCase.getCaseId());
+                    resultMap.put(usecase.getId(), toUsecaseImpactSummary(report, usecase, differences));
+                } catch (Exception ignore) {
+                    resultMap.putIfAbsent(impactCase.getCaseId(), toMissingUsecaseImpactSummary(impactCase.getCaseId(), differences));
+                }
             }
         }
+        if (resultMap.isEmpty() && report.getImpactCaseCount() > 0) {
+            buildUsecaseImpactsFromJobLog(report).forEach(summary -> resultMap.putIfAbsent(summary.getId(), summary));
+        }
+        List<UsecaseImpactSummary> result = new ArrayList<>(resultMap.values());
         result.sort(Comparator.comparing(UsecaseImpactSummary::getDirectoryPath, Comparator.nullsLast(String::compareToIgnoreCase))
                 .thenComparing(UsecaseImpactSummary::getTitle, Comparator.nullsLast(String::compareToIgnoreCase)));
         return result;
+    }
+
+    private UsecaseImpactSummary toUsecaseImpactSummary(VersionCompareReport report, UsecaseVo usecase, String[] differences) {
+        UsecaseImpactSummary summary = new UsecaseImpactSummary();
+        summary.setId(usecase.getId());
+        summary.setTitle(usecase.getTitle());
+        summary.setDirectoryPath(resolveUsecaseDirectoryPath(report.getProjectId(),
+                Optional.ofNullable(usecase.getDirectory()).orElse("root")));
+        summary.setDifferences(differences == null ? new String[0] : differences);
+        summary.setLabels(usecase.getLabels() == null ? new String[0] : usecase.getLabels());
+        summary.setAvailable(true);
+        return summary;
+    }
+
+    private List<UsecaseImpactSummary> buildUsecaseImpactsFromJobLog(VersionCompareReport report) {
+        List<UsecaseImpactSummary> result = new ArrayList<>();
+        if (!StringUtils.hasText(report.getJobLog())) {
+            return result;
+        }
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        Matcher matcher = Pattern.compile("命中用例ID：([^，,\\n\\r]+(?:[,，]\\s*[^，,\\n\\r]+)*)").matcher(report.getJobLog());
+        while (matcher.find()) {
+            Arrays.stream(matcher.group(1).split("[,，]"))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .filter(id -> !"-".equals(id))
+                    .forEach(ids::add);
+        }
+        for (String id : ids) {
+            try {
+                UsecaseVo usecase = usecaseService.getUsecase(report.getProjectId(), id);
+                result.add(toUsecaseImpactSummary(report, usecase, inferUsecaseDifferencesFromLog(report.getJobLog(), id)));
+            } catch (Exception ignore) {
+                result.add(toMissingUsecaseImpactSummary(id, inferUsecaseDifferencesFromLog(report.getJobLog(), id)));
+            }
+        }
+        return result;
+    }
+
+    private UsecaseImpactSummary toMissingUsecaseImpactSummary(String usecaseId, String[] differences) {
+        UsecaseImpactSummary summary = new UsecaseImpactSummary();
+        summary.setId(usecaseId);
+        summary.setTitle("用例 " + usecaseId + "（详情不可用）");
+        summary.setDirectoryPath("历史报告 / 用例详情不可用");
+        summary.setDifferences(differences == null ? new String[0] : differences);
+        summary.setLabels(new String[] { "详情不可用" });
+        summary.setAvailable(false);
+        return summary;
+    }
+
+    private String[] inferUsecaseDifferencesFromLog(String jobLog, String usecaseId) {
+        if (!StringUtils.hasText(jobLog) || !StringUtils.hasText(usecaseId)) {
+            return new String[0];
+        }
+        LinkedHashSet<String> differences = new LinkedHashSet<>();
+        for (String line : jobLog.split("\\r?\\n")) {
+            if (!line.contains(usecaseId)) {
+                continue;
+            }
+            Matcher matcher = Pattern.compile("类名：([^\\s，,]+)").matcher(line);
+            if (matcher.find()) {
+                differences.add(matcher.group(1));
+            }
+        }
+        return differences.toArray(new String[0]);
     }
 
     private List<EndpointImpactSummary> buildEndpointImpacts(VersionCompareReport report) {
@@ -1517,6 +1576,7 @@ public class VersionApiControl {
         private String directoryPath;
         private String[] differences;
         private String[] labels;
+        private boolean available = true;
 
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
@@ -1528,6 +1588,8 @@ public class VersionApiControl {
         public void setDifferences(String[] differences) { this.differences = differences; }
         public String[] getLabels() { return labels; }
         public void setLabels(String[] labels) { this.labels = labels; }
+        public boolean isAvailable() { return available; }
+        public void setAvailable(boolean available) { this.available = available; }
     }
 
     public static class EndpointImpactSummary {

@@ -983,6 +983,7 @@ export interface UsecaseImpactSummary {
   directoryPath?: string
   differences: string[]
   labels?: string[]
+  available?: boolean
 }
 
 export interface EndpointLinkedUsecaseSummary {

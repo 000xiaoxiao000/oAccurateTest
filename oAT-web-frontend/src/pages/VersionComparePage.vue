@@ -192,8 +192,8 @@
             <div class="record-meta">
               <span class="meta-chip">{{ item.gitBranch ? 'Git 比对' : '制品比对' }}</span>
               <span v-if="item.gitBranch" class="meta-chip">分支：{{ item.gitBranch }}</span>
-              <span class="meta-chip old">旧：{{ item.targetVersion || shortText(item.gitOldCommit) || '-' }}</span>
-              <span class="meta-chip new">新：{{ item.sourceVersion || shortText(item.gitNewCommit) || '-' }}</span>
+              <span class="meta-chip old">旧：{{ shortText(item.gitOldCommit || item.sourceVersion) || '-' }}</span>
+              <span class="meta-chip new">新：{{ shortText(item.gitNewCommit || item.targetVersion) || '-' }}</span>
             </div>
           </div>
           <div class="report-metrics">
