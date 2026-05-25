@@ -77,31 +77,47 @@
           <strong>▦</strong>
           <span>没有找到关联快照</span>
         </div>
-        <div class="graph-canvas">
+        <div
+          class="graph-canvas"
+          @wheel.prevent="handleTableWheel"
+          @pointerdown="startTablePan"
+          @pointermove="moveTablePan"
+          @pointerup="endTablePan"
+          @pointerleave="endTablePan"
+        >
+          <div class="table-graph-tools">
+            <span>滚轮缩放 · 拖拽平移</span>
+            <button type="button" @click="zoomTableGraph(0.15)">放大</button>
+            <button type="button" @click="zoomTableGraph(-0.15)">缩小</button>
+            <button type="button" @click="resetTableGraphView">重置</button>
+          </div>
           <svg class="table-graph" :viewBox="tableViewBox" role="img" aria-label="表结构关系图">
             <defs>
               <marker id="search-graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
                 <path d="M0,0 L0,6 L9,3 z" fill="currentColor" />
               </marker>
             </defs>
-            <g class="edge-layer">
-              <g v-for="edge in positionedEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge.action)]">
-                <line :x1="edge.source.x" :y1="edge.source.y" :x2="edge.target.x" :y2="edge.target.y" marker-end="url(#search-graph-arrow)" />
-                <text :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionLabel(edge.action) || '关联' }}</text>
+            <g :transform="tableGraphTransform">
+              <g class="edge-layer">
+                <g v-for="edge in positionedEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge.action)]">
+                  <line :x1="edge.source.x" :y1="edge.source.y" :x2="edge.target.x" :y2="edge.target.y" marker-end="url(#search-graph-arrow)" />
+                  <text :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionLabel(edge.action) || '关联' }}</text>
+                </g>
               </g>
-            </g>
-            <g class="node-layer">
-              <a
-                v-for="node in positionedNodes"
-                :key="node.id"
-                :href="nodeHref(node)"
-                :target="node.type === 'snapshot' ? '_blank' : undefined"
-                :class="['graph-node', node.type || 'node']"
-              >
-                <circle :cx="node.x" :cy="node.y" :r="node.type === 'table' ? 36 : 32" />
-                <image v-if="node.type === 'snapshot' && node.backgroundImage" :href="node.backgroundImage" :x="node.x - 25" :y="node.y - 25" width="50" height="50" preserveAspectRatio="xMidYMid slice" />
-                <text :x="node.x" :y="node.y + 52" text-anchor="middle">{{ node.label || node.id }}</text>
-              </a>
+              <g class="node-layer">
+                <a
+                  v-for="node in positionedNodes"
+                  :key="node.id"
+                  :href="nodeHref(node)"
+                  :target="node.type === 'snapshot' ? '_blank' : undefined"
+                  :class="['graph-node', node.type || 'node']"
+                  @pointerdown.stop
+                >
+                  <circle :cx="node.x" :cy="node.y" :r="node.type === 'table' ? 36 : 32" />
+                  <image v-if="node.type === 'snapshot' && node.backgroundImage" :href="node.backgroundImage" :x="node.x - 25" :y="node.y - 25" width="50" height="50" preserveAspectRatio="xMidYMid slice" />
+                  <text :x="node.x" :y="node.y + 52" text-anchor="middle">{{ node.label || node.id }}</text>
+                </a>
+              </g>
             </g>
           </svg>
         </div>
@@ -154,10 +170,14 @@ const keywordSearched = ref(false)
 const tableSearched = ref(false)
 const keywordResults = ref<Awaited<ReturnType<typeof searchKeyword>> | null>(null)
 const tableGraph = ref<Awaited<ReturnType<typeof searchTableGraph>> | null>(null)
+const tableGraphZoom = ref(1)
+const tableGraphOffset = ref({ x: 0, y: 0 })
+const tableGraphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
 
 const modeLabel = computed(() => (mode.value === 'table' ? '表结构图' : '用例'))
 const activeLoading = computed(() => (mode.value === 'keyword' ? loadingKeyword.value : loadingTable.value))
 const tableViewBox = computed(() => '0 0 1100 620')
+const tableGraphTransform = computed(() => `translate(${tableGraphOffset.value.x} ${tableGraphOffset.value.y}) scale(${tableGraphZoom.value})`)
 
 const positionedNodes = computed<PositionedNode[]>(() => {
   const nodes = tableGraph.value?.nodes || []
@@ -200,6 +220,7 @@ const positionedEdges = computed<PositionedEdge[]>(() => {
 })
 
 watch(mode, () => syncTextFromMode())
+watch(tableGraph, () => resetTableGraphView())
 
 onMounted(() => {
   if (mode.value === 'keyword' && keyword.value) {
@@ -217,6 +238,45 @@ function initialTableText() {
 function syncTextFromMode() {
   searchText.value = mode.value === 'table' ? initialTableText() : keyword.value
   error.value = ''
+}
+
+function clampTableZoom(value: number) {
+  return Math.min(3, Math.max(0.5, value))
+}
+
+function zoomTableGraph(delta: number) {
+  tableGraphZoom.value = clampTableZoom(tableGraphZoom.value + delta)
+}
+
+function resetTableGraphView() {
+  tableGraphZoom.value = 1
+  tableGraphOffset.value = { x: 0, y: 0 }
+}
+
+function handleTableWheel(event: WheelEvent) {
+  zoomTableGraph(event.deltaY > 0 ? -0.1 : 0.1)
+}
+
+function startTablePan(event: PointerEvent) {
+  if ((event.target as Element).closest('.table-graph-tools, .graph-node')) return
+  tableGraphPan.value = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: tableGraphOffset.value.x,
+    originY: tableGraphOffset.value.y,
+  }
+}
+
+function moveTablePan(event: PointerEvent) {
+  if (!tableGraphPan.value) return
+  tableGraphOffset.value = {
+    x: tableGraphPan.value.originX + event.clientX - tableGraphPan.value.startX,
+    y: tableGraphPan.value.originY + event.clientY - tableGraphPan.value.startY,
+  }
+}
+
+function endTablePan() {
+  tableGraphPan.value = null
 }
 
 function switchMode(next: SearchMode) {
@@ -319,9 +379,8 @@ function nodeLabel(id: string) {
 
 function nodeHref(node: PositionedNode) {
   if (node.type !== 'snapshot') return undefined
-  const appId = tableGraph.value?.edges.find((edge) => edge.source === node.id || edge.target === node.id) ? undefined : undefined
-  void appId
-  return undefined
+  if (!node.appId) return undefined
+  return `/p/${projectId.value}/apps/${node.appId}/snapshots/${node.id}`
 }
 
 function actionLabel(action?: string) {
@@ -614,6 +673,49 @@ function edgeTone(action?: string) {
     linear-gradient(90deg, rgba(15, 23, 42, .04) 1px, transparent 1px),
     #f7f7f7;
   background-size: 34px 34px;
+  cursor: grab;
+}
+
+.graph-canvas:active {
+  cursor: grabbing;
+}
+
+.table-graph-tools {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px;
+  border: 1px solid rgba(34, 36, 38, .12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, .14);
+}
+
+.table-graph-tools span {
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.table-graph-tools button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(33, 133, 208, .1);
+  color: #1e70bf;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.table-graph-tools button:hover {
+  background: #2185d0;
+  color: #fff;
 }
 
 .table-graph {

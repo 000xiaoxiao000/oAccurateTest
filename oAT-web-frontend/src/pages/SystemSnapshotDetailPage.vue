@@ -103,10 +103,7 @@
           </div>
           <div class="action-row">
             <RouterLink class="inline-link" :to="`/p/${projectId}/apps/${appId}/snapshots/${snapshotId}/graph`">
-              打开 SPA 链路图
-            </RouterLink>
-            <RouterLink class="inline-link" :to="`/p/${projectId}/apps/${appId}/snapshots/${snapshotId}/report`">
-              打开 SPA 覆盖率报告
+              打开完整链路图
             </RouterLink>
           </div>
           <div class="status-callout" :class="statusTone(payload.snapshot.reportStatus)">
@@ -137,6 +134,21 @@
                 <span>{{ usecase.updateTimeText || '-' }}</span>
               </RouterLink>
             </div>
+          </div>
+
+          <div class="subsection graph-preview-section graph-embed-section">
+            <GraphView
+              :eyebrow="'Snapshot Graph'"
+              :fallback-title="'系统快照链路图'"
+              :back-route="`/p/${projectId}/apps/${appId}/snapshots/${snapshotId}/graph`"
+              :back-label="'查看完整图谱'"
+              :loading="graphPreviewLoading"
+              :loading-text="'正在加载链路图...'"
+              :graph="graphPreview"
+              :arrow-marker-id="'graph-preview-system'"
+              compact
+            />
+            <div v-if="!graphPreviewLoading && !graphPreview" class="empty-card compact">暂无链路图数据</div>
           </div>
         </section>
 
@@ -202,6 +214,7 @@ import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
+import GraphView from '@/components/snapshot/GraphView.vue'
 import { useProjectStore } from '@/stores/project'
 import { reportStatusText } from '@/utils/snapshot'
 
@@ -213,6 +226,7 @@ const appId = computed(() => String(route.params.appId || ''))
 const snapshotId = computed(() => String(route.params.snapshotId || ''))
 const storeKey = computed(() => `${projectId.value}:${snapshotId.value}`)
 const payload = computed(() => projectStore.systemSnapshotDetailByKey[storeKey.value])
+const graphPreview = computed(() => projectStore.systemSnapshotGraphByKey[storeKey.value])
 const principalMembers = computed(() =>
   (payload.value?.members || []).filter((member) => payload.value?.selectedPrincipalIds.includes(member.memberId)),
 )
@@ -220,6 +234,7 @@ const loading = ref(false)
 const error = ref('')
 const commentText = ref('')
 const usecasePickerOpen = ref(false)
+const graphPreviewLoading = ref(false)
 
 const form = ref({
   title: '',
@@ -235,7 +250,7 @@ function reportStatusHint(status?: number) {
     case 1:
       return '报告任务正在处理，刷新当前页面或进入报告页可查看最新结果。'
     case 2:
-      return '覆盖率报告已完成，可直接进入 SPA 报告页查看类级和源码级详情。'
+      return '覆盖率报告已完成，可直接进入报告页查看类级和源码级详情。'
     case 3:
       return '最近一次报告生成失败，可在报告页重新触发计算。'
     default:
@@ -265,6 +280,12 @@ async function load() {
   error.value = ''
   try {
     await projectStore.loadSystemSnapshotDetail(projectId.value, appId.value, snapshotId.value)
+    graphPreviewLoading.value = true
+    projectStore.loadSystemSnapshotGraph(projectId.value, appId.value, snapshotId.value)
+      .catch(() => undefined)
+      .finally(() => {
+        graphPreviewLoading.value = false
+      })
     if (payload.value) {
       form.value = {
         title: payload.value.snapshot.title || '',
@@ -534,6 +555,10 @@ onMounted(load)
 .action-row {
   grid-template-columns: repeat(auto-fit, minmax(180px, max-content));
   margin-top: 16px;
+}
+
+.graph-embed-section {
+  margin-top: 18px;
 }
 
 .status-callout {

@@ -361,7 +361,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
                         (disableAutoSave ? "关闭" : "开启") + (systemSnapshot ? "自动保存系统快照" : "自动保存我的快照"),
                         "已" + (disableAutoSave ? "关闭" : "开启") + (systemSnapshot ? "自动保存系统快照" : "自动保存我的快照") + "。"));
             } else {
-                actions.add(new AIActionVo("link", "查看链路地图", "实时监控页尚未迁移到新前端，可先通过链路地图确认调用关系。", "/p/" + projectId + "/map/home", false, null));
+                actions.add(new AIActionVo("link", "打开实时监控", "进入新前端实时监控页查看调用关系并保存快照。", "/p/" + projectId + "/monitor", false, null));
             }
             actions.add(new AIActionVo("link", "我的快照", "查看已保存的个人快照", "/p/" + projectId + "/my-snapshots", false, null));
         }
@@ -586,7 +586,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         } else if (containsAny(questionText, "搜索")) {
             actions.add(buildAutoNavigateAction("打开搜索", "/p/" + projectId + "/search"));
         } else if (containsAny(questionText, "监控台", "实时监控", "监控页")) {
-            actions.add(buildAutoNavigateAction("打开链路地图", "/p/" + projectId + "/map/home"));
+            actions.add(buildAutoNavigateAction("打开实时监控", "/p/" + projectId + "/monitor"));
         } else if (containsAny(questionText, "ai interactive", "ai工作台", "ai interactive", "工作台")) {
             actions.add(buildAutoNavigateAction("打开 AI Interactive", "/p/" + projectId + "/ai"));
         } else if (containsAny(questionText, "应用中心", "应用列表")) {
@@ -604,7 +604,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         } else if (containsAny(questionText, "用户设置", "个人设置", "账号设置")) {
             actions.add(buildAutoNavigateAction("打开用户设置", "/account"));
         } else if (containsAny(questionText, "注销", "退出登录", "登出")) {
-            actions.add(new AIActionVo("navigate", "注销退出", "即将注销当前账号", "/user/logout", true, "确认要注销退出吗？"));
+            actions.add(new AIActionVo("logout", "注销退出", "通过新前端退出当前账号", "/api/auth/logout", true, "确认要注销退出吗？"));
         } else if (containsAny(questionText, "我的快照")) {
             actions.add(buildAutoNavigateAction("打开我的快照", "/p/" + projectId + "/my-snapshots"));
         } else if (appId != null && containsAny(questionText, "系统快照")) {

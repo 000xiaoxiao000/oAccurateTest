@@ -201,10 +201,10 @@
             <div v-if="reply.quickLinks?.length" class="subsection">
               <h3>推荐链接</h3>
               <div class="link-list">
-                <a v-for="link in reply.quickLinks" :key="link.title + link.url" class="link-card" :href="link.url">
+                <button v-for="link in reply.quickLinks" :key="link.title + link.url" class="link-card link-button" type="button" @click="openLink(link)">
                   <strong>{{ link.title }}</strong>
                   <span>{{ link.description }}</span>
-                </a>
+                </button>
               </div>
             </div>
 
@@ -214,7 +214,7 @@
                 <article v-for="action in reply.actions" :key="action.title + action.type" class="link-card">
                   <strong>{{ action.title }}</strong>
                   <span>{{ action.description }}</span>
-                  <a v-if="action.url" class="inline-link" :href="action.url">打开</a>
+                  <button class="inline-link action-inline-button" type="button" @click="executeAction(action)">执行</button>
                 </article>
               </div>
             </div>
@@ -227,14 +227,18 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { backendApiUrl } from '@/api/http'
 import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useProjectStore } from '@/stores/project'
+import { useAuthStore } from '@/stores/auth'
+import type { AIAction, AIQuickLink } from '@/api/types'
 
 const route = useRoute()
+const router = useRouter()
 const projectStore = useProjectStore()
+const authStore = useAuthStore()
 const projectId = computed(() => String(route.params.projectId || ''))
 const context = computed(() => projectStore.aiContextByProjectId[projectId.value])
 const reply = computed(() => projectStore.aiLastReplyByProjectId[projectId.value])
@@ -472,6 +476,53 @@ async function submitAsk() {
 
 function stopAsk() {
   askAbortController?.abort()
+}
+
+function normalizeSpaUrl(url?: string) {
+  if (!url) return ''
+  if (url.startsWith('/api/')) return url
+  try {
+    const parsed = new URL(url, window.location.origin)
+    if (parsed.origin === window.location.origin) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`
+    }
+    return url
+  } catch {
+    return url.startsWith('/') ? url : `/${url}`
+  }
+}
+
+async function openLink(link: AIQuickLink) {
+  const target = normalizeSpaUrl(link.url)
+  if (!target) return
+  if (/^https?:\/\//.test(target)) {
+    window.open(target, '_blank', 'noopener,noreferrer')
+    return
+  }
+  await router.push(target)
+}
+
+async function executeAction(action: AIAction) {
+  if (action.requireConfirm && !window.confirm(action.confirmText || `确认执行${action.title}？`)) return
+  if (action.type === 'logout') {
+    await authStore.logout()
+    await router.replace('/login')
+    return
+  }
+  if (action.type === 'monitorPageAction') {
+    const event = new CustomEvent('oat:monitor-action', { detail: action.payload || {} })
+    window.dispatchEvent(event)
+    const target = `/p/${projectId.value}/monitor`
+    if (route.path !== target) await router.push(target)
+    return
+  }
+  const target = normalizeSpaUrl(action.url)
+  if (!target) return
+  if (/^https?:\/\//.test(target)) {
+    window.open(target, '_blank', 'noopener,noreferrer')
+    return
+  }
+  await router.push(target)
 }
 
 
@@ -1093,6 +1144,20 @@ onMounted(async () => {
 .inline-link {
   color: #0f766e;
   font-weight: 700;
+}
+
+.link-button,
+.action-inline-button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-button:hover,
+.action-inline-button:hover {
+  color: #0b5f59;
+  text-decoration: underline;
 }
 
 @media (max-width: 960px) {

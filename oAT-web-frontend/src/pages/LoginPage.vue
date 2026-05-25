@@ -42,8 +42,14 @@
               autocomplete="current-password"
               placeholder="请输入密码"
             />
-            <button class="password-toggle" type="button" @click="showLoginPassword = !showLoginPassword">
-              {{ showLoginPassword ? '👁' : '🙈' }}
+            <button
+              class="password-toggle auth-password-toggle"
+              type="button"
+              :aria-label="showLoginPassword ? '隐藏密码' : '显示密码'"
+              :title="showLoginPassword ? '隐藏密码' : '显示密码'"
+              @click="showLoginPassword = !showLoginPassword"
+            >
+              <span :class="showLoginPassword ? 'eye-icon eye-open' : 'eye-icon eye-slash'"></span>
             </button>
           </div>
         </label>
@@ -78,8 +84,14 @@
               :type="showRegisterPassword ? 'text' : 'password'"
               autocomplete="new-password"
             />
-            <button class="password-toggle" type="button" @click="showRegisterPassword = !showRegisterPassword">
-              {{ showRegisterPassword ? '隐藏' : '显示' }}
+            <button
+              class="password-toggle auth-password-toggle"
+              type="button"
+              :aria-label="showRegisterPassword ? '隐藏密码' : '显示密码'"
+              :title="showRegisterPassword ? '隐藏密码' : '显示密码'"
+              @click="showRegisterPassword = !showRegisterPassword"
+            >
+              <span :class="showRegisterPassword ? 'eye-icon eye-open' : 'eye-icon eye-slash'"></span>
             </button>
           </div>
         </label>
@@ -92,8 +104,14 @@
               :type="showRegisterConfirmPassword ? 'text' : 'password'"
               autocomplete="new-password"
             />
-            <button class="password-toggle" type="button" @click="showRegisterConfirmPassword = !showRegisterConfirmPassword">
-              {{ showRegisterConfirmPassword ? '隐藏' : '显示' }}
+            <button
+              class="password-toggle auth-password-toggle"
+              type="button"
+              :aria-label="showRegisterConfirmPassword ? '隐藏密码' : '显示密码'"
+              :title="showRegisterConfirmPassword ? '隐藏密码' : '显示密码'"
+              @click="showRegisterConfirmPassword = !showRegisterConfirmPassword"
+            >
+              <span :class="showRegisterConfirmPassword ? 'eye-icon eye-open' : 'eye-icon eye-slash'"></span>
             </button>
           </div>
         </label>
@@ -389,12 +407,54 @@ async function submitRegister() {
 
 .password-toggle {
   flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   border: none;
-  padding: 6px 0;
+  padding: 0;
   background: transparent;
   color: #9ca3af;
-  font-size: 18px;
   cursor: pointer;
+}
+
+.eye-icon {
+  position: relative;
+  display: inline-block;
+  width: 21px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 60% 60% 55% 55%;
+  transform: rotate(-2deg);
+}
+
+.eye-icon::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.eye-icon.eye-slash::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 5px;
+  width: 27px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-36deg);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .92);
+}
+
+.password-toggle:hover {
+  color: #4b5563;
 }
 
 .login-button {

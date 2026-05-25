@@ -62,7 +62,7 @@
                   </td>
                   <td class="metric-cell">{{ item.method.complexity }}</td>
                   <td class="status-cell">
-                    <span :class="['status-pill', coverageTone(item.method)]">
+                    <span class="status-pill" :data-tone="coverageTone(item.method)">
                       {{ coverageText(item.method) }}
                     </span>
                   </td>
@@ -125,6 +125,12 @@ function clearFilters() {
 }
 
 function scrollTop() {
+  const source = sourceRef.value
+  if (source) {
+    source.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+    source.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
@@ -133,7 +139,9 @@ async function jumpToMethod(methodName: string) {
   await nextTick()
   const source = sourceRef.value
   if (!source) return
-  source.querySelectorAll('.source-jump-highlight').forEach((node) => node.classList.remove('source-jump-highlight'))
+  source.querySelectorAll<HTMLElement>('[data-source-jump-highlight="true"]').forEach((node) => {
+    delete node.dataset.sourceJumpHighlight
+  })
   const escaped = methodName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const signaturePattern = new RegExp(`\\b${escaped}\\s*\\(`)
   const candidates = Array.from(source.querySelectorAll<HTMLElement>('tr, li, div, span'))
@@ -147,7 +155,7 @@ async function jumpToMethod(methodName: string) {
     source.scrollIntoView({ behavior: 'smooth', block: 'start' })
     return
   }
-  target.classList.add('source-jump-highlight')
+  target.dataset.sourceJumpHighlight = 'true'
   target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
 }
 
@@ -248,7 +256,6 @@ function coverageText(method: MethodCoverageSummary) {
 }
 
 .secondary-link,
-.table-link,
 .method-jump {
   color: #0f766e;
   font-weight: 700;
@@ -326,7 +333,10 @@ function coverageText(method: MethodCoverageSummary) {
 }
 
 .source-container {
-  max-height: calc(100vh - 220px);
+  --line-number-width: 3em;
+  min-height: 360px;
+  max-height: min(72vh, 760px);
+  scrollbar-gutter: stable both-edges;
   border: 1px solid rgba(15, 23, 42, .08);
   border-radius: 14px;
   background: #fff;
@@ -407,17 +417,17 @@ function coverageText(method: MethodCoverageSummary) {
   font-weight: 700;
 }
 
-.status-pill.success {
+.status-pill[data-tone="success"] {
   background: rgba(22, 163, 74, 0.12);
   color: #15803d;
 }
 
-.status-pill.warning {
+.status-pill[data-tone="warning"] {
   background: rgba(234, 88, 12, 0.12);
   color: #c2410c;
 }
 
-.status-pill.default {
+.status-pill[data-tone="default"] {
   background: rgba(100, 116, 139, 0.12);
   color: #475569;
 }
@@ -434,11 +444,11 @@ function coverageText(method: MethodCoverageSummary) {
   min-width: max-content;
 }
 
-:deep(.source-container .branch-line) {
+:deep(.source-container [class~="branch-line"]) {
   position: relative;
 }
 
-:deep(.source-container .branch-line .branch-flag) {
+:deep(.source-container [class~="branch-line"] [class~="branch-flag"]) {
   position: absolute;
   left: calc(var(--line-number-width, 3em) + 6px);
   top: 50%;
@@ -454,39 +464,39 @@ function coverageText(method: MethodCoverageSummary) {
   transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
 }
 
-:deep(.source-container .branch-line .branch-flag:hover) {
+:deep(.source-container [class~="branch-line"] [class~="branch-flag"]:hover) {
   transform: translateY(-50%) scale(1.2);
   box-shadow: 0 0 0 3px rgba(30, 136, 229, .26), 0 0 10px rgba(30, 136, 229, .28);
 }
 
-:deep(.source-container .branch-line.branch-green .branch-flag) {
+:deep(.source-container [class~="branch-line"][class~="branch-green"] [class~="branch-flag"]) {
   background: #2e7d32;
   box-shadow: 0 0 0 2px rgba(46, 125, 50, .18);
 }
 
-:deep(.source-container .branch-line.branch-green .branch-flag:hover) {
+:deep(.source-container [class~="branch-line"][class~="branch-green"] [class~="branch-flag"]:hover) {
   box-shadow: 0 0 0 3px rgba(46, 125, 50, .26), 0 0 10px rgba(46, 125, 50, .26);
 }
 
-:deep(.source-container .branch-line.branch-orange .branch-flag) {
+:deep(.source-container [class~="branch-line"][class~="branch-orange"] [class~="branch-flag"]) {
   background: #ef6c00;
   box-shadow: 0 0 0 2px rgba(239, 108, 0, .18);
 }
 
-:deep(.source-container .branch-line.branch-orange .branch-flag:hover) {
+:deep(.source-container [class~="branch-line"][class~="branch-orange"] [class~="branch-flag"]:hover) {
   box-shadow: 0 0 0 3px rgba(239, 108, 0, .26), 0 0 10px rgba(239, 108, 0, .26);
 }
 
-:deep(.source-container .branch-line.branch-red .branch-flag) {
+:deep(.source-container [class~="branch-line"][class~="branch-red"] [class~="branch-flag"]) {
   background: #c62828;
   box-shadow: 0 0 0 2px rgba(198, 40, 40, .18);
 }
 
-:deep(.source-container .branch-line.branch-red .branch-flag:hover) {
+:deep(.source-container [class~="branch-line"][class~="branch-red"] [class~="branch-flag"]:hover) {
   box-shadow: 0 0 0 3px rgba(198, 40, 40, .26), 0 0 10px rgba(198, 40, 40, .26);
 }
 
-:deep(.source-container .branch-tooltip) {
+:deep(.source-container [class~="branch-tooltip"]) {
   position: absolute;
   left: calc(var(--line-number-width, 3em) + 24px);
   top: 50%;
@@ -508,13 +518,13 @@ function coverageText(method: MethodCoverageSummary) {
   transition: opacity .12s ease;
 }
 
-:deep(.source-container .branch-line .branch-flag:hover + .branch-tooltip) {
+:deep(.source-container [class~="branch-line"] [class~="branch-flag"]:hover + [class~="branch-tooltip"]) {
   opacity: 1;
 }
 
 :deep(.source-container table),
-:deep(.source-container .source),
-:deep(.source-container .code) {
+:deep(.source-container [class~="source"]),
+:deep(.source-container [class~="code"]) {
   width: max-content;
   min-width: 100%;
 }
@@ -525,7 +535,7 @@ function coverageText(method: MethodCoverageSummary) {
   white-space: pre;
 }
 
-:deep(.source-jump-highlight) {
+:deep(.source-container [data-source-jump-highlight="true"]) {
   outline: 2px solid rgba(15, 118, 110, .42);
   outline-offset: -2px;
   background: rgba(15, 118, 110, .12) !important;
@@ -534,9 +544,9 @@ function coverageText(method: MethodCoverageSummary) {
 
 .back-to-top {
   position: fixed;
-  left: 18px;
-  bottom: 18px;
-  z-index: 50;
+  right: 24px;
+  bottom: 116px;
+  z-index: 70;
   border: 1px solid rgba(15, 118, 110, .18);
   border-radius: 999px;
   padding: 8px 12px;

@@ -35,6 +35,7 @@ public class NetworkGraphData implements java.io.Serializable{
         private String type;
         private String label;
         private String backgroundImage;
+        private String appId;
 
         public Node() {
         }
@@ -75,6 +76,14 @@ public class NetworkGraphData implements java.io.Serializable{
 
         public void setBackgroundImage(String backgroundImage) {
             this.backgroundImage = backgroundImage;
+        }
+
+        public String getAppId() {
+            return appId;
+        }
+
+        public void setAppId(String appId) {
+            this.appId = appId;
         }
     }
 

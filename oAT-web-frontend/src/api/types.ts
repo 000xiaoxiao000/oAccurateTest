@@ -793,6 +793,7 @@ export interface NetworkGraphNode {
   type?: string
   label?: string
   backgroundImage?: string
+  appId?: string
 }
 
 export interface NetworkGraphEdge {

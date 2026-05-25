@@ -68,6 +68,7 @@ public class SearchApiControl {
                 .map(snapshot -> {
                     NetworkGraphData.Node node = new NetworkGraphData.Node(snapshot.getId(), "snapshot", snapshot.getTitle());
                     node.setBackgroundImage("/r/" + snapshot.getTopicImage());
+                    node.setAppId(snapshot.getAppId());
                     return node;
                 })
                 .collect(Collectors.toList());

@@ -1,5 +1,5 @@
 <template>
-  <section>
+  <section :class="[compact && 'compact-graph-view']">
     <div class="page-header">
       <div>
         <div class="eyebrow">{{ eyebrow }}</div>
@@ -19,43 +19,56 @@
           <div class="card-title">
             <h2>节点拓扑</h2>
           </div>
-          <div class="graph-board">
-            <svg class="graph-svg" viewBox="0 0 1200 720" preserveAspectRatio="xMidYMid meet">
+          <div
+            class="graph-board"
+            @wheel.prevent="handleGraphWheel"
+            @pointerdown="startGraphPan"
+            @pointerleave="endGraphPan"
+            @pointerup="endGraphPan"
+            @pointermove="moveGraphPan"
+          >
+            <div class="graph-tools">
+              <button type="button" @click="zoomGraph(0.15)">放大</button>
+              <button type="button" @click="zoomGraph(-0.15)">缩小</button>
+              <button type="button" @click="resetGraphView">重置</button>
+            </div>
+            <svg class="graph-svg" :viewBox="graphViewBox" preserveAspectRatio="xMidYMid meet">
               <defs>
                 <marker :id="arrowMarkerId" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
                   <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
                 </marker>
               </defs>
-              <line
-                v-for="edge in edgePositions"
-                :key="`${edge.from}-${edge.to}-${edge.label}`"
-                :x1="edge.x1"
-                :y1="edge.y1"
-                :x2="edge.x2"
-                :y2="edge.y2"
-                class="graph-edge"
-                :marker-end="`url(#${arrowMarkerId})`"
-              />
-              <text
-                v-for="edge in edgePositions"
-                :key="`${edge.from}-${edge.to}-${edge.label}-text`"
-                :x="edge.mx"
-                :y="edge.my"
-                class="edge-label"
-              >
-                {{ edge.label }}
-              </text>
-              <g
-                v-for="node in nodePositions"
-                :key="node.id"
-                class="graph-node"
-                :class="[`node-${node.state || 'normal'}`, { active: selectedNodeId === node.id || graph.showDefaultNode?.id === node.id }]"
-                @click="$emit('select-node', node.id)"
-              >
-                <rect :x="node.x" :y="node.y" rx="18" ry="18" width="220" height="92" />
-                <text :x="node.x + 18" :y="node.y + 28" class="node-title">{{ node.title || node.id }}</text>
-                <text :x="node.x + 18" :y="node.y + 52" class="node-subtitle">{{ node.subTitle || node.type || '-' }}</text>
-                <text :x="node.x + 18" :y="node.y + 74" class="node-type">{{ node.type || 'unknown' }}</text>
+              <g :transform="graphTransform">
+                <path
+                  v-for="edge in edgePositions"
+                  :key="`${edge.from}-${edge.to}-${edge.label}`"
+                  :d="edge.path"
+                  class="graph-edge"
+                  :marker-end="`url(#${arrowMarkerId})`"
+                />
+                <text
+                  v-for="edge in edgePositions"
+                  :key="`${edge.from}-${edge.to}-${edge.label}-text`"
+                  :x="edge.mx"
+                  :y="edge.my"
+                  class="edge-label"
+                >
+                  {{ edge.label || edge.title || edge.type || edge.count }}
+                </text>
+                <g
+                  v-for="node in nodePositions"
+                  :key="node.id"
+                  class="graph-node"
+                  :class="[`node-${node.state || 'normal'}`, { active: selectedNodeId === node.id || graph.showDefaultNode?.id === node.id }]"
+                  @click.stop="$emit('select-node', node.id)"
+                >
+                  <rect :x="node.x" :y="node.y" rx="6" ry="6" :width="nodeWidth" :height="nodeHeight" />
+                  <circle :cx="node.x + 30" :cy="node.y + 33" r="18" class="node-icon-ring" />
+                  <text :x="node.x + 30" :y="node.y + 40" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
+                  <text :x="node.x + 58" :y="node.y + 30" class="node-title">{{ node.title || node.id }}</text>
+                  <text :x="node.x + 58" :y="node.y + 56" class="node-subtitle">{{ node.subTitle || '-' }}</text>
+                  <text :x="node.x + 14" :y="node.y + 82" class="node-type">{{ node.tips || node.type || 'unknown' }}</text>
+                </g>
               </g>
             </svg>
           </div>
@@ -96,21 +109,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 
-import type { GraphEdgeSummary, GraphNodeDetailPayload, GraphViewPayload } from '@/api/types'
+import type { GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload } from '@/api/types'
 import GraphNodeDetailCard from '@/components/snapshot/GraphNodeDetailCard.vue'
 
 type PositionedEdge = GraphEdgeSummary & {
-  x1: number
-  y1: number
-  x2: number
-  y2: number
+  path: string
   mx: number
   my: number
 }
+
+type PositionedNode = GraphNodeSummary & {
+  x: number
+  y: number
+  rank: number
+}
+
+const nodeWidth = 240
+const nodeHeight = 96
+const graphZoom = ref(1)
+const graphOffset = ref({ x: 0, y: 0 })
+const graphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
 
 const props = defineProps<{
   eyebrow: string
@@ -124,24 +146,72 @@ const props = defineProps<{
   selectedNodeId?: string
   selectedNodeDetail?: GraphNodeDetailPayload
   arrowMarkerId: string
+  compact?: boolean
 }>()
 
 defineEmits<{
   (event: 'select-node', nodeId: string): void
 }>()
 
-const nodePositions = computed(() => {
+const nodePositions = computed<PositionedNode[]>(() => {
   const nodes = props.graph?.nodes || []
+  const edges = props.graph?.edges || []
+  const incoming = new Map<string, number>()
+  const children = new Map<string, string[]>()
+  nodes.forEach((node) => {
+    incoming.set(node.id, 0)
+    children.set(node.id, [])
+  })
+  edges.forEach((edge) => {
+    if (!incoming.has(edge.from) || !incoming.has(edge.to)) return
+    incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1)
+    children.get(edge.from)?.push(edge.to)
+  })
+
+  const ranks = new Map<string, number>()
+  const roots = nodes.filter((node) => (incoming.get(node.id) || 0) === 0)
+  const queue = (roots.length ? roots : nodes.slice(0, 1)).map((node) => node.id)
+  queue.forEach((id) => ranks.set(id, 0))
+  for (let index = 0; index < queue.length; index += 1) {
+    const id = queue[index]
+    const nextRank = (ranks.get(id) || 0) + 1
+    ;(children.get(id) || []).forEach((childId) => {
+      if ((ranks.get(childId) ?? -1) < nextRank) {
+        ranks.set(childId, nextRank)
+        queue.push(childId)
+      }
+    })
+  }
+
+  const buckets = new Map<number, GraphNodeSummary[]>()
+  nodes.forEach((node, index) => {
+    const rank = ranks.get(node.id) ?? Math.floor(index / 5)
+    const list = buckets.get(rank) || []
+    list.push(node)
+    buckets.set(rank, list)
+  })
+
   return nodes.map((node, index) => {
-    const column = index % 4
-    const row = Math.floor(index / 4)
+    const rank = ranks.get(node.id) ?? Math.floor(index / 5)
+    const bucket = buckets.get(rank) || []
+    const row = Math.max(0, bucket.findIndex((item) => item.id === node.id))
+    const columnHeight = Math.max(1, bucket.length)
     return {
       ...node,
-      x: 40 + column * 285,
-      y: 40 + row * 150,
+      rank,
+      x: 42 + rank * 318,
+      y: 42 + row * 132 + Math.max(0, 4 - columnHeight) * 36,
     }
   })
 })
+
+const graphViewBox = computed(() => {
+  const maxX = Math.max(1200, ...nodePositions.value.map((node) => node.x + nodeWidth + 80))
+  const maxY = Math.max(720, ...nodePositions.value.map((node) => node.y + nodeHeight + 80))
+  return `0 0 ${maxX} ${maxY}`
+})
+
+const graphTransform = computed(() => `translate(${graphOffset.value.x} ${graphOffset.value.y}) scale(${graphZoom.value})`)
 
 const edgePositions = computed(() => {
   const nodeMap = new Map(nodePositions.value.map((node) => [node.id, node]))
@@ -152,22 +222,72 @@ const edgePositions = computed(() => {
       if (!from || !to) {
         return null
       }
-      const x1 = from.x + 220
-      const y1 = from.y + 46
+      const x1 = from.x + nodeWidth
+      const y1 = from.y + nodeHeight / 2
       const x2 = to.x
-      const y2 = to.y + 46
+      const y2 = to.y + nodeHeight / 2
+      const dx = Math.max(56, Math.abs(x2 - x1) / 2)
       return {
         ...edge,
-        x1,
-        y1,
-        x2,
-        y2,
+        path: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`,
         mx: (x1 + x2) / 2,
-        my: (y1 + y2) / 2 - 8,
+        my: (y1 + y2) / 2 - 10,
       }
     })
     .filter((edge): edge is PositionedEdge => edge !== null)
 })
+
+watch(() => props.graph, resetGraphView)
+
+function clampZoom(value: number) {
+  return Math.min(2.2, Math.max(0.45, value))
+}
+
+function zoomGraph(delta: number) {
+  graphZoom.value = clampZoom(graphZoom.value + delta)
+}
+
+function resetGraphView() {
+  graphZoom.value = 0.92
+  graphOffset.value = { x: 0, y: 0 }
+}
+
+function handleGraphWheel(event: WheelEvent) {
+  const direction = event.deltaY > 0 ? -0.1 : 0.1
+  zoomGraph(direction)
+}
+
+function startGraphPan(event: PointerEvent) {
+  if ((event.target as Element).closest('.graph-tools, .graph-node')) return
+  graphPan.value = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: graphOffset.value.x,
+    originY: graphOffset.value.y,
+  }
+}
+
+function moveGraphPan(event: PointerEvent) {
+  if (!graphPan.value) return
+  graphOffset.value = {
+    x: graphPan.value.originX + (event.clientX - graphPan.value.startX),
+    y: graphPan.value.originY + (event.clientY - graphPan.value.startY),
+  }
+}
+
+function endGraphPan() {
+  graphPan.value = null
+}
+
+function iconGlyph(value?: string) {
+  const normalized = (value || '').toLowerCase()
+  if (normalized.includes('database') || normalized.includes('sql')) return 'DB'
+  if (normalized.includes('redis')) return 'R'
+  if (normalized.includes('server') || normalized.includes('application')) return 'A'
+  if (normalized.includes('http') || normalized.includes('client')) return 'H'
+  if (normalized.includes('cloud')) return 'C'
+  return 'N'
+}
 
 </script>
 
@@ -224,12 +344,45 @@ const edgePositions = computed(() => {
 }
 
 .graph-board {
-  overflow: auto;
+  position: relative;
+  overflow: hidden;
   border-radius: 18px;
   background:
-    radial-gradient(circle at top, rgba(15, 118, 110, 0.08), transparent 55%),
-    linear-gradient(180deg, #f8fbfb, #eef6f6);
+    linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+    #f8fbfb;
+  background-size: 28px 28px;
   border: 1px solid rgba(15, 23, 42, 0.06);
+  cursor: grab;
+}
+
+.graph-board:active {
+  cursor: grabbing;
+}
+
+.graph-tools {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.graph-tools button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #eef7f7;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .graph-svg {
@@ -239,6 +392,7 @@ const edgePositions = computed(() => {
 }
 
 .graph-edge {
+  fill: none;
   stroke: #94a3b8;
   stroke-width: 2;
 }
@@ -255,30 +409,52 @@ const edgePositions = computed(() => {
 
 .graph-node rect {
   fill: #ffffff;
-  stroke: rgba(15, 23, 42, 0.12);
-  stroke-width: 1.5;
+  stroke: rgba(15, 23, 42, 0.16);
+  stroke-width: 1.4;
+  filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.10));
 }
 
 .graph-node.active rect {
-  stroke: #0f766e;
-  stroke-width: 2.5;
+  stroke: dodgerblue;
+  stroke-width: 2.6;
 }
 
 .graph-node.node-error rect {
   fill: rgba(254, 242, 242, 0.96);
-  stroke: rgba(185, 28, 28, 0.4);
+  stroke: rgba(185, 28, 28, 0.42);
+}
+
+.node-icon-ring {
+  fill: #ecfeff;
+  stroke: rgba(15, 118, 110, 0.22);
+}
+
+.graph-node.node-error .node-icon-ring {
+  fill: #fff1f2;
+  stroke: rgba(185, 28, 28, 0.28);
+}
+
+.node-icon {
+  fill: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+  text-anchor: middle;
 }
 
 .node-title {
   fill: #0f172a;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .node-subtitle,
 .node-type {
   fill: #64748b;
   font-size: 12px;
+}
+
+.node-type {
+  font-size: 11px;
 }
 
 .side-stack,
@@ -310,6 +486,34 @@ const edgePositions = computed(() => {
 .node-button.selected {
   border-color: rgba(15, 118, 110, 0.32);
   box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.14);
+}
+
+
+.compact-graph-view .page-header {
+  margin-bottom: 12px;
+}
+
+.compact-graph-view .page-header h1 {
+  margin: 2px 0;
+  font-size: 20px;
+}
+
+.compact-graph-view .graph-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.compact-graph-view .side-stack {
+  display: none;
+}
+
+.compact-graph-view .panel {
+  padding: 12px;
+  border-radius: 16px;
+}
+
+.compact-graph-view .graph-svg {
+  min-width: 780px;
+  height: 420px;
 }
 
 @media (max-width: 1100px) {

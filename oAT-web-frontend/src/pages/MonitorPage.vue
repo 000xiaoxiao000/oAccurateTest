@@ -190,37 +190,51 @@
           </div>
         </div>
         <template v-else>
-          <div class="graph-board">
-            <svg class="graph-svg" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet">
+          <div
+            class="graph-board monitor-graph-board"
+            @wheel.prevent="handleGraphWheel"
+            @pointerdown="startGraphPan"
+            @pointermove="moveGraphPan"
+            @pointerup="endGraphPan"
+            @pointerleave="endGraphPan"
+          >
+            <div class="graph-tools">
+              <span>滚轮缩放 · 拖拽平移</span>
+              <button type="button" @click="zoomGraph(0.15)">放大</button>
+              <button type="button" @click="zoomGraph(-0.15)">缩小</button>
+              <button type="button" @click="resetGraphView">重置</button>
+            </div>
+            <svg class="graph-svg" :viewBox="graphViewBox" preserveAspectRatio="xMidYMid meet">
               <defs>
                 <marker id="monitorArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
                   <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
                 </marker>
               </defs>
-              <line
-                v-for="edge in edgePositions"
-                :key="`${edge.from}-${edge.to}-${edge.label}`"
-                :x1="edge.x1"
-                :y1="edge.y1"
-                :x2="edge.x2"
-                :y2="edge.y2"
-                class="graph-edge"
-                marker-end="url(#monitorArrow)"
-              />
-              <text v-for="edge in edgePositions" :key="`${edge.from}-${edge.to}-label`" :x="edge.mx" :y="edge.my" class="edge-label">
-                {{ edge.label || edge.type || edge.count }}
-              </text>
-              <g
-                v-for="node in nodePositions"
-                :key="node.id"
-                class="graph-node"
-                :class="{ selected: selectedNodeId === node.id }"
-                @click="selectNode(node.id)"
-              >
-                <rect :x="node.x" :y="node.y" rx="18" ry="18" width="220" height="92" />
-                <text :x="node.x + 16" :y="node.y + 28" class="node-title">{{ node.title || node.id }}</text>
-                <text :x="node.x + 16" :y="node.y + 54" class="node-subtitle">{{ node.subTitle || node.type || '-' }}</text>
-                <text :x="node.x + 16" :y="node.y + 76" class="node-type">{{ node.type || 'node' }}</text>
+              <g :transform="graphTransform">
+                <path
+                  v-for="edge in edgePositions"
+                  :key="`${edge.from}-${edge.to}-${edge.label}`"
+                  :d="edge.path"
+                  class="graph-edge"
+                  marker-end="url(#monitorArrow)"
+                />
+                <text v-for="edge in edgePositions" :key="`${edge.from}-${edge.to}-label`" :x="edge.mx" :y="edge.my" class="edge-label">
+                  {{ edge.label || edge.type || edge.count }}
+                </text>
+                <g
+                  v-for="node in nodePositions"
+                  :key="node.id"
+                  class="graph-node"
+                  :class="{ selected: selectedNodeId === node.id }"
+                  @click.stop="selectNode(node.id)"
+                >
+                  <rect :x="node.x" :y="node.y" rx="6" ry="6" :width="graphNodeWidth" :height="graphNodeHeight" />
+                  <circle :cx="node.x + 30" :cy="node.y + 33" r="18" class="node-icon-ring" />
+                  <text :x="node.x + 30" :y="node.y + 40" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
+                  <text :x="node.x + 58" :y="node.y + 30" class="node-title">{{ node.title || node.id }}</text>
+                  <text :x="node.x + 58" :y="node.y + 56" class="node-subtitle">{{ node.subTitle || '-' }}</text>
+                  <text :x="node.x + 14" :y="node.y + 82" class="node-type">{{ node.tips || node.type || 'node' }}</text>
+                </g>
               </g>
             </svg>
           </div>
@@ -328,7 +342,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { fetchMonitorSnapshotContext, saveMonitorSystemSnapshot, uploadResource } from '@/api/bootstrap'
 import { useProjectStore } from '@/stores/project'
@@ -336,10 +350,14 @@ import { apiGet, apiGetRaw, apiPost } from '@/api/http'
 import type { AppSummary, GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload, MonitorSnapshotContextPayload, OnlineSessionSummary, TraceItemSummary } from '@/api/types'
 import GraphNodeDetailCard from '@/components/snapshot/GraphNodeDetailCard.vue'
 
-type PositionedNode = GraphNodeSummary & { x: number; y: number }
-type PositionedEdge = GraphEdgeSummary & { x1: number; y1: number; x2: number; y2: number; mx: number; my: number }
+type PositionedNode = GraphNodeSummary & { x: number; y: number; rank: number }
+type PositionedEdge = GraphEdgeSummary & { path: string; mx: number; my: number }
+
+const graphNodeWidth = 240
+const graphNodeHeight = 96
 
 const route = useRoute()
+const router = useRouter()
 const projectStore = useProjectStore()
 const projectId = computed(() => String(route.params.projectId || ''))
 const selectedAppId = computed(() => String(route.query.appId || ''))
@@ -349,6 +367,9 @@ const projectApps = computed<AppSummary[]>(() => projectContext.value?.apps || [
 const probes = ref<OnlineSessionSummary[]>([])
 const traces = ref<TraceItemSummary[]>([])
 const graph = ref<GraphViewPayload | null>(null)
+const graphZoom = ref(0.92)
+const graphOffset = ref({ x: 0, y: 0 })
+const graphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
 const selectedTraceId = ref('')
 const selectedNodeId = ref('')
 const selectedNodeDetail = ref<GraphNodeDetailPayload | null>(null)
@@ -447,12 +468,62 @@ const wavePoints = computed(() => filteredTraces.value.slice(0, 80).map((trace, 
 
 const nodePositions = computed<PositionedNode[]>(() => {
   const nodes = graph.value?.nodes || []
-  return nodes.map((node, index) => ({
-    ...node,
-    x: 36 + (index % 4) * 290,
-    y: 40 + Math.floor(index / 4) * 150,
-  }))
+  const edges = graph.value?.edges || []
+  const incoming = new Map<string, number>()
+  const children = new Map<string, string[]>()
+  nodes.forEach((node) => {
+    incoming.set(node.id, 0)
+    children.set(node.id, [])
+  })
+  edges.forEach((edge) => {
+    if (!incoming.has(edge.from) || !incoming.has(edge.to)) return
+    incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1)
+    children.get(edge.from)?.push(edge.to)
+  })
+
+  const ranks = new Map<string, number>()
+  const roots = nodes.filter((node) => (incoming.get(node.id) || 0) === 0)
+  const queue = (roots.length ? roots : nodes.slice(0, 1)).map((node) => node.id)
+  queue.forEach((id) => ranks.set(id, 0))
+  for (let index = 0; index < queue.length; index += 1) {
+    const id = queue[index]
+    const nextRank = (ranks.get(id) || 0) + 1
+    ;(children.get(id) || []).forEach((childId) => {
+      if ((ranks.get(childId) ?? -1) < nextRank) {
+        ranks.set(childId, nextRank)
+        queue.push(childId)
+      }
+    })
+  }
+
+  const buckets = new Map<number, GraphNodeSummary[]>()
+  nodes.forEach((node, index) => {
+    const rank = ranks.get(node.id) ?? Math.floor(index / 5)
+    const list = buckets.get(rank) || []
+    list.push(node)
+    buckets.set(rank, list)
+  })
+
+  return nodes.map((node, index) => {
+    const rank = ranks.get(node.id) ?? Math.floor(index / 5)
+    const bucket = buckets.get(rank) || []
+    const row = Math.max(0, bucket.findIndex((item) => item.id === node.id))
+    return {
+      ...node,
+      rank,
+      x: 42 + rank * 318,
+      y: 42 + row * 132 + Math.max(0, 4 - bucket.length) * 36,
+    }
+  })
 })
+
+const graphViewBox = computed(() => {
+  const maxX = Math.max(1200, ...nodePositions.value.map((node) => node.x + graphNodeWidth + 80))
+  const maxY = Math.max(700, ...nodePositions.value.map((node) => node.y + graphNodeHeight + 80))
+  return `0 0 ${maxX} ${maxY}`
+})
+
+const graphTransform = computed(() => `translate(${graphOffset.value.x} ${graphOffset.value.y}) scale(${graphZoom.value})`)
 
 const edgePositions = computed<PositionedEdge[]>(() => {
   const nodeMap = new Map(nodePositions.value.map((node) => [node.id, node]))
@@ -461,11 +532,17 @@ const edgePositions = computed<PositionedEdge[]>(() => {
       const from = nodeMap.get(edge.from)
       const to = nodeMap.get(edge.to)
       if (!from || !to) return null
-      const x1 = from.x + 220
-      const y1 = from.y + 46
+      const x1 = from.x + graphNodeWidth
+      const y1 = from.y + graphNodeHeight / 2
       const x2 = to.x
-      const y2 = to.y + 46
-      return { ...edge, x1, y1, x2, y2, mx: (x1 + x2) / 2, my: (y1 + y2) / 2 - 8 }
+      const y2 = to.y + graphNodeHeight / 2
+      const dx = Math.max(56, Math.abs(x2 - x1) / 2)
+      return {
+        ...edge,
+        path: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`,
+        mx: (x1 + x2) / 2,
+        my: (y1 + y2) / 2 - 10,
+      }
     })
     .filter((edge): edge is PositionedEdge => edge !== null)
 })
@@ -598,6 +675,79 @@ function clearMonitorFilters() {
   loadTraces()
 }
 
+type MonitorActionDetail = { name?: string; seconds?: number }
+
+async function handleMonitorAction(event: Event) {
+  const detail = (event as CustomEvent<MonitorActionDetail>).detail || {}
+  switch (detail.name) {
+    case 'refreshMonitorList':
+      await loadTraces()
+      break
+    case 'refreshProbeStatus':
+      await loadProbes()
+      break
+    case 'enableAutoRefresh':
+      autoRefresh.value = true
+      break
+    case 'disableAutoRefresh':
+      autoRefresh.value = false
+      break
+    case 'setAutoRefreshSeconds':
+      refreshSeconds.value = Math.min(120, Math.max(1, Number(detail.seconds) || refreshSeconds.value))
+      autoRefresh.value = true
+      break
+    case 'enableAutoSaveMy':
+      autoSaveMySnapshot.value = true
+      break
+    case 'disableAutoSaveMy':
+      autoSaveMySnapshot.value = false
+      break
+    case 'enableAutoSaveSystem':
+      autoSaveSystemSnapshot.value = true
+      break
+    case 'disableAutoSaveSystem':
+      autoSaveSystemSnapshot.value = false
+      break
+    case 'openMySnapshots':
+      await router.push(`/p/${projectId.value}/my-snapshots`)
+      break
+    case 'openCreateMySnapshot':
+      await saveMySnapshot()
+      break
+    case 'openCreateSystemSnapshot':
+      await openSnapshotDialog()
+      break
+    case 'batchSaveMySnapshots':
+      await batchSaveMySnapshots()
+      break
+    case 'batchSaveSystemSnapshots':
+      await batchSaveSystemSnapshots()
+      break
+    case 'clearMonitorList':
+      traces.value = []
+      graph.value = null
+      selectedTraceId.value = ''
+      selectedNodeId.value = ''
+      selectedNodeDetail.value = null
+      break
+    case 'setScopeAggregate':
+      setScopeMode('aggregate')
+      break
+    case 'setScopeCurrent':
+      if (!selectedClientIps.value.length && latestTrace.value) {
+        const ip = latestTrace.value.clientIp || latestTrace.value.addressIp || ''
+        selectedClientIps.value = ip ? [ip] : []
+      }
+      setScopeMode('single')
+      break
+    case 'setScopeLanes':
+      setScopeMode('lanes')
+      break
+    default:
+      break
+  }
+}
+
 async function loadGraph() {
   if (!selectedTraceId.value) return
   graphLoading.value = true
@@ -606,6 +756,7 @@ async function loadGraph() {
     const query = new URLSearchParams()
     query.set('traceId', selectedTraceId.value)
     graph.value = await apiGetRaw<GraphViewPayload>(`/api/projects/${projectId.value}/monitor/getTraceGraph?${query.toString()}`)
+    resetGraphView()
     selectedNodeId.value = graph.value?.showDefaultNode?.id || graph.value?.nodes[0]?.id || ''
     if (selectedNodeId.value) {
       await loadNodeDetail(selectedNodeId.value)
@@ -620,6 +771,54 @@ async function loadGraph() {
 function selectNode(nodeId: string) {
   selectedNodeId.value = nodeId
   loadNodeDetail(nodeId)
+}
+
+function clampGraphZoom(value: number) {
+  return Math.min(2.4, Math.max(0.45, value))
+}
+
+function zoomGraph(delta: number) {
+  graphZoom.value = clampGraphZoom(graphZoom.value + delta)
+}
+
+function resetGraphView() {
+  graphZoom.value = 0.92
+  graphOffset.value = { x: 0, y: 0 }
+}
+
+function handleGraphWheel(event: WheelEvent) {
+  zoomGraph(event.deltaY > 0 ? -0.1 : 0.1)
+}
+
+function startGraphPan(event: PointerEvent) {
+  if ((event.target as Element).closest('.graph-tools, .graph-node')) return
+  graphPan.value = {
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: graphOffset.value.x,
+    originY: graphOffset.value.y,
+  }
+}
+
+function moveGraphPan(event: PointerEvent) {
+  if (!graphPan.value) return
+  graphOffset.value = {
+    x: graphPan.value.originX + event.clientX - graphPan.value.startX,
+    y: graphPan.value.originY + event.clientY - graphPan.value.startY,
+  }
+}
+
+function endGraphPan() {
+  graphPan.value = null
+}
+
+function iconGlyph(value?: string) {
+  const normalized = (value || '').toLowerCase()
+  if (normalized.includes('database') || normalized.includes('sql')) return 'DB'
+  if (normalized.includes('redis')) return 'R'
+  if (normalized.includes('server') || normalized.includes('application')) return 'A'
+  if (normalized.includes('http') || normalized.includes('client')) return 'H'
+  return 'N'
 }
 
 async function loadNodeDetail(nodeId: string) {
@@ -691,6 +890,22 @@ async function runAutoSaveForNewTraces(items: TraceItemSummary[]) {
       selectedTraceId.value = item.traceId
       await autoSaveSnapshot()
     }
+  }
+}
+
+async function batchSaveMySnapshots() {
+  for (const trace of filteredTraces.value.slice(0, 10)) {
+    if (!trace.traceId) continue
+    selectedTraceId.value = trace.traceId
+    await saveMySnapshot()
+  }
+}
+
+async function batchSaveSystemSnapshots() {
+  for (const trace of filteredTraces.value.slice(0, 10)) {
+    if (!trace.traceId) continue
+    selectedTraceId.value = trace.traceId
+    await autoSaveSnapshot()
   }
 }
 
@@ -839,10 +1054,14 @@ function startResize(event: PointerEvent) {
 onMounted(async () => {
   const savedWidth = Number(localStorage.getItem(`monitor:list-width:${projectId.value}`))
   if (savedWidth) monitorListWidth.value = savedWidth
+  window.addEventListener('oat:monitor-action', handleMonitorAction)
   await refreshAll()
   await applyInitialRouteState()
 })
-onBeforeUnmount(stopRefreshTimer)
+onBeforeUnmount(() => {
+  stopRefreshTimer()
+  window.removeEventListener('oat:monitor-action', handleMonitorAction)
+})
 </script>
 
 <style scoped>
@@ -1340,13 +1559,57 @@ onBeforeUnmount(stopRefreshTimer)
 }
 
 .graph-board {
-  overflow: auto;
+  position: relative;
+  overflow: hidden;
   border-radius: 20px;
   background:
     linear-gradient(rgba(15, 23, 42, .04) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 23, 42, .04) 1px, transparent 1px),
     #f8fbfc;
   background-size: 28px 28px;
+  cursor: grab;
+}
+
+.graph-board:active {
+  cursor: grabbing;
+}
+
+.graph-tools {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, .10);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, .14);
+}
+
+.graph-tools span {
+  padding: 0 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.graph-tools button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #eef7f7;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.graph-tools button:hover {
+  background: #0f766e;
+  color: #fff;
 }
 
 .graph-svg {
@@ -1356,6 +1619,7 @@ onBeforeUnmount(stopRefreshTimer)
 }
 
 .graph-edge {
+  fill: none;
   stroke: #94a3b8;
   stroke-width: 2;
 }
@@ -1373,13 +1637,26 @@ onBeforeUnmount(stopRefreshTimer)
 .graph-node rect {
   fill: #fff;
   stroke: #cbd5e1;
-  stroke-width: 2;
+  stroke-width: 1.6;
   filter: drop-shadow(0 10px 18px rgba(15, 23, 42, .08));
 }
 
 .graph-node.selected rect {
   fill: #ecfdf5;
-  stroke: #0f766e;
+  stroke: dodgerblue;
+  stroke-width: 2.6;
+}
+
+.node-icon-ring {
+  fill: #ecfeff;
+  stroke: rgba(15, 118, 110, .24);
+}
+
+.node-icon {
+  fill: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+  text-anchor: middle;
 }
 
 .node-title {
@@ -1392,6 +1669,10 @@ onBeforeUnmount(stopRefreshTimer)
 .node-type {
   fill: #64748b;
   font-size: 12px;
+}
+
+.node-type {
+  font-size: 11px;
 }
 
 .node-detail-grid {

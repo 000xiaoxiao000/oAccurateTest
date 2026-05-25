@@ -3,7 +3,7 @@
     <button v-if="mascotHidden" class="restore-button" type="button" @pointerdown="startDrag" @click="showMascot">显示 AI 助手</button>
 
     <button v-else class="launcher" type="button" title="打开 AI 助手" data-tooltip="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
-      <MascotCanvas :size="78" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="true" />
+      <MascotCanvas :size="88" :color="mascotColor" :seed="projectId" :mood="asking ? 'thinking' : mood" :interactive="true" />
       <span v-if="!panelOpen" class="launcher-bubble">{{ launcherHint }}</span>
     </button>
 
@@ -52,10 +52,10 @@
           <span>{{ isSectionCollapsed('links') ? '展开' : '收起' }}</span>
         </button>
         <div v-show="!isSectionCollapsed('links')" class="quick-links">
-          <RouterLink v-for="link in normalizedQuickLinks" :key="link.title + link.url" :to="link.url">
+          <button v-for="link in normalizedQuickLinks" :key="link.title + link.url" type="button" @click="openQuickLink(link)">
             <strong>{{ link.title }}</strong>
             <span>{{ link.description }}</span>
-          </RouterLink>
+          </button>
         </div>
       </div>
 
@@ -90,7 +90,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
 import MascotCanvas from '@/components/MascotCanvas.vue'
@@ -114,6 +114,7 @@ type SpeechRecognitionLike = {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
 const route = useRoute()
+const router = useRouter()
 const projectStore = useProjectStore()
 const question = ref('')
 const messages = ref<Message[]>([])
@@ -492,6 +493,30 @@ function normalizeLinks(links: AIQuickLink[]) {
   }).slice(0, 6)
 }
 
+function normalizeSpaUrl(url?: string) {
+  if (!url) return ''
+  try {
+    const parsed = new URL(url, window.location.origin)
+    if (parsed.origin === window.location.origin) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`
+    }
+    return url
+  } catch {
+    return url.startsWith('/') ? url : `/${url}`
+  }
+}
+
+async function openQuickLink(link: AIQuickLink) {
+  const target = normalizeSpaUrl(link.url)
+  if (!target) return
+  if (/^https?:\/\//.test(target)) {
+    window.open(target, '_blank', 'noopener,noreferrer')
+    return
+  }
+  await router.push(target)
+  panelOpen.value = false
+}
+
 function routeQuickLinks(path: string): AIQuickLink[] {
   const base = `/p/${projectId.value}`
   if (path.includes('/monitor')) {
@@ -533,13 +558,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .ai-floating {
   position: fixed;
-  right: 10px;
-  bottom: 10px;
+  right: 22px;
+  bottom: 24px;
   z-index: 1000;
   display: flex;
   flex-direction: row-reverse;
   align-items: flex-end;
-  gap: 10px;
+  gap: 12px;
   color: #111827;
   user-select: none;
 }
@@ -556,16 +581,16 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 58px;
-  height: 58px;
+  width: 82px;
+  height: 82px;
   padding: 0;
   border-radius: 999px;
   background: transparent;
 }
 
 .launcher :deep(.mascot-canvas) {
-  width: 56px;
-  height: 56px;
+  width: 76px;
+  height: 76px;
   display: block;
   filter: drop-shadow(0 12px 24px rgba(15, 23, 42, .16));
   transition: transform .16s ease;
@@ -577,8 +602,8 @@ onBeforeUnmount(() => {
 
 .launcher-bubble {
   position: absolute;
-  right: 60px;
-  bottom: 34px;
+  right: 82px;
+  bottom: 46px;
   width: max-content;
   max-width: 136px;
   padding: 6px 9px;
@@ -607,8 +632,8 @@ onBeforeUnmount(() => {
 
 .restore-button {
   position: fixed;
-  right: 10px;
-  bottom: 10px;
+  right: 22px;
+  bottom: 24px;
   z-index: 1001;
   display: inline-flex;
   align-items: center;
@@ -622,8 +647,8 @@ onBeforeUnmount(() => {
 
 .assistant-panel {
   position: relative;
-  width: min(370px, calc(100vw - 96px));
-  height: min(540px, calc(100vh - 42px));
+  width: min(380px, calc(100vw - 108px));
+  height: min(560px, calc(100vh - 48px));
   min-width: min(340px, calc(100vw - 132px));
   min-height: 420px;
   max-width: min(640px, calc(100vw - 132px));
@@ -640,8 +665,8 @@ onBeforeUnmount(() => {
 
 .resize-handle {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 22px;
+  bottom: 24px;
   z-index: 3;
   width: 18px;
   height: 18px;
@@ -833,7 +858,7 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.quick-links a,
+.quick-links button,
 .starters button,
 .tool-button,
 .send-button {
@@ -844,7 +869,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.quick-links a {
+.quick-links button {
   display: grid;
   gap: 3px;
   padding: 8px 10px;

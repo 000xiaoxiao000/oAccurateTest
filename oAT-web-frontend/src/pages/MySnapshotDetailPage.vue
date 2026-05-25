@@ -48,9 +48,6 @@
               <span>共享链接</span>
               <input :checked="Boolean(payload.snapshot.share)" type="checkbox" @change="toggleShare" />
             </label>
-            <RouterLink class="utility-link" :to="`/p/${projectId}/my-snapshots/${snapshotId}/report`">
-              打开 SPA 覆盖率报告
-            </RouterLink>
             <a
               v-if="payload.shareUrl && payload.snapshot.share"
               class="utility-link"
@@ -65,6 +62,21 @@
             <span>分享地址</span>
             <input :value="absoluteShareUrl" class="text-input" readonly @focus="selectCurrentTarget" />
           </div>
+        </section>
+
+        <section class="panel graph-preview-panel graph-embed-panel">
+          <GraphView
+            :eyebrow="'My Snapshot Graph'"
+            :fallback-title="'我的快照链路图'"
+            :back-route="`/p/${projectId}/my-snapshots/${snapshotId}/graph`"
+            :back-label="'打开完整图谱'"
+            :loading="graphPreviewLoading"
+            :loading-text="'正在加载链路图...'"
+            :graph="graphPreview"
+            :arrow-marker-id="'graph-preview-my'"
+            compact
+          />
+          <div v-if="!graphPreviewLoading && !graphPreview" class="empty-card compact">暂无链路图数据</div>
         </section>
 
         <aside class="side-stack">
@@ -123,6 +135,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
+import GraphView from '@/components/snapshot/GraphView.vue'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -132,6 +145,7 @@ const projectId = computed(() => String(route.params.projectId || ''))
 const snapshotId = computed(() => String(route.params.snapshotId || ''))
 const storeKey = computed(() => `${projectId.value}:${snapshotId.value}`)
 const payload = computed(() => projectStore.mySnapshotDetailByKey[storeKey.value])
+const graphPreview = computed(() => projectStore.mySnapshotGraphByKey[storeKey.value])
 const absoluteShareUrl = computed(() => {
   if (!payload.value?.shareUrl) {
     return ''
@@ -141,6 +155,7 @@ const absoluteShareUrl = computed(() => {
 const loading = ref(false)
 const error = ref('')
 const usecasePickerOpen = ref(false)
+const graphPreviewLoading = ref(false)
 
 const form = reactive({
   name: '',
@@ -166,6 +181,12 @@ async function load() {
   error.value = ''
   try {
     await projectStore.loadMySnapshotDetail(projectId.value, snapshotId.value)
+    graphPreviewLoading.value = true
+    projectStore.loadMySnapshotGraph(projectId.value, snapshotId.value)
+      .catch(() => undefined)
+      .finally(() => {
+        graphPreviewLoading.value = false
+      })
     syncForm()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载我的快照详情失败'
@@ -323,6 +344,14 @@ onMounted(load)
 .utility-grid {
   display: grid;
   gap: 12px;
+}
+
+.graph-preview-panel {
+  grid-column: 1 / -1;
+}
+
+.graph-embed-panel {
+  padding: 12px;
 }
 
 .form-grid {

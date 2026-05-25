@@ -7,7 +7,7 @@
           <img class="brand-logo-image" src="/images/logo.png" alt="oAccurateTest" />
         </RouterLink>
         <nav class="shell-nav">
-          <RouterLink v-if="projectId" :to="`/p/${projectId}/search`">搜索</RouterLink>
+          <RouterLink v-if="projectId" :to="`/p/${projectId}/map/home`">搜索</RouterLink>
           <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'monitor' }" @mouseenter="openNavMenu('monitor')" @mouseleave="closeMenus">
             <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu compact">
@@ -29,12 +29,9 @@
                   {{ app.name }} <small>({{ appVersionText(app) }})</small>
                 </RouterLink>
                 <span class="sub-menu-actions">
-                  <RouterLink title="系统快照" :to="`/p/${projectId}/apps/${app.id}/snapshots`" @click="closeMenus">📷</RouterLink>
-                  <RouterLink title="版本" :to="`/p/${projectId}/apps/${app.id}/versions`" @click="closeMenus">V</RouterLink>
-                  <RouterLink title="版本比对" :to="`/p/${projectId}/apps/${app.id}/compare`" @click="closeMenus">⚖</RouterLink>
-                  <RouterLink title="覆盖率报告" :to="`/p/${projectId}/apps/${app.id}/coverage`" @click="closeMenus">📊</RouterLink>
-                  <RouterLink title="接口扫描" :to="`/p/${projectId}/apps/${app.id}/api-endpoints`" @click="closeMenus">API</RouterLink>
-                  <RouterLink title="应用设置" :to="`/p/${projectId}/apps/${app.id}/settings`" @click="closeMenus">⚙</RouterLink>
+                  <RouterLink title="系统快照" :to="`/p/${projectId}/apps/${app.id}/snapshots`" @click="closeMenus">快照</RouterLink>
+                  <RouterLink title="版本比对" :to="`/p/${projectId}/apps/${app.id}/compare`" @click="closeMenus">比对</RouterLink>
+                  <RouterLink title="覆盖率报告" :to="`/p/${projectId}/apps/${app.id}/coverage`" @click="closeMenus">覆盖率</RouterLink>
                 </span>
               </div>
               <div v-if="!filteredApps.length" class="empty-menu-item">暂无应用</div>
@@ -399,7 +396,7 @@ async function handleLogout() {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  padding-right: 138px !important;
+  padding-right: 120px !important;
 }
 
 .app-menu-item small {
@@ -421,19 +418,29 @@ async function handleLogout() {
   right: 10px;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
+  opacity: 0;
+  pointer-events: none;
   transform: translateY(-50%);
+  transition: opacity .12s ease;
+}
+
+.app-menu-item:hover .sub-menu-actions,
+.app-menu-item:focus-within .sub-menu-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .sub-menu-actions a {
   width: auto;
-  min-width: 20px;
-  padding: 2px 3px;
+  min-width: 22px;
+  padding: 2px 4px;
   border-radius: 3px;
   text-align: center;
   color: #111827;
   background: transparent;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .sub-menu-actions a:hover {
