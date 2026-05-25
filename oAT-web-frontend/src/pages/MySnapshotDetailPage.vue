@@ -136,11 +136,13 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
 import GraphView from '@/components/snapshot/GraphView.vue'
+import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const snapshotId = computed(() => String(route.params.snapshotId || ''))
 const storeKey = computed(() => `${projectId.value}:${snapshotId.value}`)
@@ -251,7 +253,12 @@ function selectCurrentTarget(event: Event) {
 }
 
 async function removeSnapshot() {
-  const confirmed = window.confirm('确认删除该快照？')
+  const confirmed = await dialog.confirm({
+    title: '删除我的快照',
+    message: '确认删除该快照？删除后覆盖率报告、链路图和关联用例信息将不可恢复。',
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
   if (!confirmed) {
     return
   }

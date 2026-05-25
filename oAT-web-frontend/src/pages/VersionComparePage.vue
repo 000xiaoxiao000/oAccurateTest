@@ -57,13 +57,35 @@
         <label class="field">
           <span>分支</span>
           <div class="input-action">
-            <select v-model="gitCompare.branch" class="text-input branch-select" :disabled="!repositoryConfigured" @change="handleBranchChange">
-              <option value="">请选择分支</option>
-              <option v-for="branch in branchOptions" :key="branch" :value="branch">{{ branch }}</option>
-            </select>
+            <input
+              v-model.trim="gitCompare.branch"
+              class="text-input branch-input"
+              type="text"
+              list="versionCompareBranchOptions"
+              placeholder="例如 master / release/1.2.x"
+              :disabled="!repositoryConfigured"
+              @input="persistDraft"
+              @change="handleBranchChange"
+            />
+            <datalist id="versionCompareBranchOptions">
+              <option v-for="branch in branchOptions" :key="branch" :value="branch" />
+            </datalist>
             <button class="ghost-button small" type="button" :disabled="busy || !repositoryConfigured" @click="loadBranches()">刷新</button>
           </div>
-          <small class="field-help">优先使用应用当前分支；切换分支会清空已选择的 Commit，避免跨分支误比对。</small>
+          <div v-if="branchOptions.length" class="branch-suggestions" aria-label="分支建议">
+            <button
+              v-for="branch in branchOptions.slice(0, 8)"
+              :key="branch"
+              class="branch-chip"
+              type="button"
+              :class="{ active: branch === gitCompare.branch }"
+              :disabled="!repositoryConfigured"
+              @click="selectBranch(branch)"
+            >
+              {{ branch }}
+            </button>
+          </div>
+          <small class="field-help">支持直接录入分支、tag 或 ref；下方建议来自应用当前分支、远端分支和已有版本记录。</small>
         </label>
         <label class="field">
           <span>旧 Commit</span>
@@ -140,9 +162,20 @@
 
       <div ref="jobLogRef" class="job-log" :class="{ empty: !jobLogLines.length }">
         <div v-if="!jobLogLines.length" class="log-placeholder">任务日志尚未输出，正在等待后端执行...</div>
-        <div v-for="(line, index) in jobLogLines" :key="`${index}-${line}`" :class="['log-line', line.includes('error') || line.includes('失败') ? 'error' : '']">
-          {{ line }}
-        </div>
+        <article v-for="group in jobLogGroups" :key="group.name" class="job-log-group">
+          <div class="job-log-group-head">
+            <strong>{{ group.name }}</strong>
+            <span>{{ group.lines.length }}</span>
+          </div>
+          <div class="job-log-group-body">
+            <div v-for="(line, index) in group.lines" :key="`${group.name}-${index}-${line.raw}`" class="job-log-line">
+              <span :class="['job-log-marker', line.type]"></span>
+              <span class="job-log-time">{{ line.time }}</span>
+              <span :class="['job-log-tag', line.type]">{{ jobLogTypeText(line.type) }}</span>
+              <span class="job-log-text">{{ line.content }}</span>
+            </div>
+          </div>
+        </article>
       </div>
       <p v-if="jobPollError" class="error-text">{{ jobPollError }}</p>
     </section>
@@ -152,22 +185,29 @@
         <h2>比对报告</h2>
         <span>{{ center?.compareReports.length || 0 }}</span>
       </div>
-      <div class="card-grid">
-        <article v-for="item in center?.compareReports || []" :key="item.id" class="card">
-          <div class="card-top">
-            <strong>{{ item.name || item.id }}</strong>
-            <span class="tag">{{ item.createTimeRelativeText || item.createTimeText || '-' }}</span>
+      <div class="report-table-list">
+        <article v-for="item in center?.compareReports || []" :key="item.id" class="report-row compare-row">
+          <div class="report-main">
+            <RouterLink class="report-title-link" :to="`/p/${projectId}/version/reports/${item.id}?appId=${appId}`">{{ item.name || item.id }}</RouterLink>
+            <div class="record-meta">
+              <span class="meta-chip">{{ item.gitBranch ? 'Git 比对' : '制品比对' }}</span>
+              <span v-if="item.gitBranch" class="meta-chip">分支：{{ item.gitBranch }}</span>
+              <span class="meta-chip old">旧：{{ item.targetVersion || shortText(item.gitOldCommit) || '-' }}</span>
+              <span class="meta-chip new">新：{{ item.sourceVersion || shortText(item.gitNewCommit) || '-' }}</span>
+            </div>
           </div>
-          <div class="meta-list">
-            <span>源 {{ item.sourceVersion || item.gitNewCommit || '-' }}</span>
-            <span>目标 {{ item.targetVersion || item.gitOldCommit || '-' }}</span>
-            <span>类 {{ item.addClassCount + item.updateClassCount + item.deleteClassCount }}</span>
-            <span>方法 {{ item.addMethodCount + item.updateMethodCount + item.deleteMethodCount }}</span>
-            <span>用例 {{ item.impactCaseCount }}</span>
+          <div class="report-metrics">
+            <span><b>{{ item.addClassCount + item.updateClassCount + item.deleteClassCount }}</b>类</span>
+            <span><b>{{ item.addMethodCount + item.updateMethodCount + item.deleteMethodCount }}</b>方法</span>
+            <span><b>{{ item.impactCaseCount }}</b>用例</span>
           </div>
-          <div class="action-row">
-            <RouterLink class="table-link" :to="`/p/${projectId}/version/reports/${item.id}?appId=${appId}`">查看报告</RouterLink>
-            <button class="text-danger" type="button" :disabled="busy" @click="removeCompareReport(item.id)">删除</button>
+          <div class="report-time">
+            <strong>{{ item.createTimeRelativeText || '-' }}</strong>
+            <small>{{ item.createTimeText || '-' }}</small>
+          </div>
+          <div class="row-actions">
+            <RouterLink class="primary-button small" :to="`/p/${projectId}/version/reports/${item.id}?appId=${appId}`">查看</RouterLink>
+            <button class="danger-button small" type="button" :disabled="busy" @click="removeCompareReport(item.id)">删除</button>
           </div>
         </article>
         <div v-if="!center?.compareReports.length" class="empty-card">暂无比对报告</div>
@@ -179,32 +219,50 @@
         <h2>覆盖率报告</h2>
         <span>{{ center?.coverageReports.length || 0 }}</span>
       </div>
-      <div class="card-grid">
-        <article v-for="item in center?.coverageReports || []" :key="item.id" class="card">
-          <div class="card-top">
-            <strong>{{ item.versionNumber || '-' }}</strong>
-            <span :class="['tag', item.reportType === 1 ? 'increment' : 'full']">
-              {{ item.reportType === 1 ? '增量' : '全量' }}{{ item.hasNewerData ? ' · 需重算' : '' }}
-            </span>
-          </div>
-          <div class="meta-list">
-            <span>类 {{ item.coveredClasses }} / {{ item.totalClasses }}</span>
-            <span>方法 {{ item.coveredMethods }} / {{ item.totalMethods }}</span>
-            <span>代码行 {{ item.coveredLines }} / {{ item.totalLines }}</span>
-            <span>快照 {{ item.snapshotCount || 0 }}</span>
-          </div>
-          <div class="action-row">
+      <div class="report-table-list">
+        <article v-for="item in center?.coverageReports || []" :key="item.id" class="report-row coverage-row">
+          <div class="report-main">
             <RouterLink
-              class="table-link"
+              class="report-title-link"
               :to="{
                 name: 'coverage-overview',
                 params: { projectId, appId },
                 query: { versionNumber: item.versionNumber, reportId: item.id, commitId: item.repoCommitId || undefined },
               }"
             >
-              打开报告
+              {{ item.versionNumber || '-' }}
             </RouterLink>
-            <button class="text-danger" type="button" :disabled="busy" @click="removeCoverage(item.id)">删除</button>
+            <div class="record-meta">
+              <span :class="['tag', item.reportType === 1 ? 'increment' : 'full']">
+                {{ item.reportType === 1 ? '增量覆盖率' : '全量覆盖率' }}{{ item.hasNewerData ? ' · 需重算' : '' }}
+              </span>
+              <span v-if="item.repoBranch" class="meta-chip">分支：{{ item.repoBranch }}</span>
+              <span v-if="item.repoCommitId" class="meta-chip">Commit：{{ shortText(item.repoCommitId) }}</span>
+              <span v-if="item.baseVersionNumber" class="meta-chip old">基于：{{ item.baseVersionNumber }}</span>
+            </div>
+          </div>
+          <div class="report-metrics coverage-metrics">
+            <span><b>{{ coveragePercent(item.coveredClasses, item.totalClasses) }}</b>类</span>
+            <span><b>{{ coveragePercent(item.coveredMethods, item.totalMethods) }}</b>方法</span>
+            <span><b>{{ coveragePercent(item.coveredLines, item.totalLines) }}</b>行</span>
+            <span><b>{{ item.snapshotCount || 0 }}</b>快照</span>
+          </div>
+          <div class="report-time">
+            <strong>{{ item.createTimeRelativeText || '-' }}</strong>
+            <small>{{ item.createTimeText || '-' }}</small>
+          </div>
+          <div class="row-actions">
+            <RouterLink
+              class="primary-button small"
+              :to="{
+                name: 'coverage-overview',
+                params: { projectId, appId },
+                query: { versionNumber: item.versionNumber, reportId: item.id, commitId: item.repoCommitId || undefined },
+              }"
+            >
+              查看
+            </RouterLink>
+            <button class="danger-button small" type="button" :disabled="busy" @click="removeCoverage(item.id)">删除</button>
           </div>
         </article>
         <div v-if="!center?.coverageReports.length" class="empty-card">暂无覆盖率报告</div>
@@ -231,6 +289,20 @@
         </div>
       </section>
     </div>
+
+    <div v-if="confirmDialog.visible" class="modal-mask" @click.self="cancelConfirm">
+      <section class="modal-card confirm-card" role="dialog" aria-modal="true" aria-labelledby="versionConfirmTitle">
+        <div class="confirm-icon">!</div>
+        <div class="confirm-copy">
+          <h2 id="versionConfirmTitle">{{ confirmDialog.title }}</h2>
+          <p>{{ confirmDialog.message }}</p>
+        </div>
+        <div class="confirm-actions">
+          <button class="ghost-button" type="button" @click="cancelConfirm">取消</button>
+          <button :class="['danger-button', 'confirm-danger']" type="button" @click="acceptConfirm">确认删除</button>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -254,6 +326,14 @@ import type { CompareJobSummary, GitCommitOption, VersionCenterPayload } from '@
 
 type PackageRole = 'source' | 'target'
 type UploadedPackage = { value: string; label: string; uploaded: boolean }
+type JobLogLine = { raw: string; time: string; content: string; type: string }
+type JobLogGroup = { name: string; lines: JobLogLine[] }
+type ConfirmDialogState = {
+  visible: boolean
+  title: string
+  message: string
+  resolve?: (confirmed: boolean) => void
+}
 
 const route = useRoute()
 const projectId = computed(() => String(route.params.projectId || ''))
@@ -279,12 +359,16 @@ const activeJobId = ref('')
 const jobPolling = ref(false)
 const jobPollError = ref('')
 const autoScrollLog = ref(true)
+const confirmDialog = ref<ConfirmDialogState>({ visible: false, title: '', message: '' })
 let pollTimer: number | undefined
 
 const repositoryConfigured = computed(() => Boolean(center.value?.app.repoConfigured))
 const currentAppBranch = computed(() => center.value?.app.currentBranch || '')
 const branchOptions = computed(() => {
-  const ordered = [currentAppBranch.value, ...branches.value]
+  const historyBranches = (center.value?.versions || [])
+    .map((item) => item.repoBranch || '')
+    .filter(Boolean)
+  const ordered = [currentAppBranch.value, ...branches.value, ...historyBranches]
   return ordered.filter((branch, index, list) => branch && list.indexOf(branch) === index)
 })
 const packageOptions = computed(() => {
@@ -328,6 +412,7 @@ const methodDiffCount = computed(() => {
   return (current.addMethodCount || 0) + (current.updateMethodCount || 0) + (current.deleteMethodCount || 0)
 })
 const jobLogLines = computed(() => sanitizeJobLog(job.value?.log || ''))
+const jobLogGroups = computed(() => groupJobLogLines(jobLogLines.value))
 const reportRoute = computed(() => `/p/${projectId.value}/version/reports/${activeJobId.value || job.value?.id || ''}?appId=${appId.value}`)
 
 watch(jobLogLines, async () => {
@@ -363,6 +448,61 @@ function sanitizeJobLog(rawLog: string) {
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter(Boolean)
+}
+
+function groupJobLogLines(lines: string[]) {
+  const groups: JobLogGroup[] = []
+  const groupMap = new Map<string, JobLogGroup>()
+  for (const raw of lines) {
+    const parsed = parseJobLogLine(raw)
+    const groupName = detectJobLogGroup(parsed.content)
+    let group = groupMap.get(groupName)
+    if (!group) {
+      group = { name: groupName, lines: [] }
+      groupMap.set(groupName, group)
+      groups.push(group)
+    }
+    group.lines.push(parsed)
+  }
+  return groups
+}
+
+function parseJobLogLine(raw: string): JobLogLine {
+  const match = raw.match(/^(\d{2}:\d{2}:\d{2})\s*(.*)$/)
+  const content = match ? match[2] : raw
+  return { raw, time: match ? match[1] : '日志', content, type: detectJobLogType(content) }
+}
+
+function detectJobLogType(line: string) {
+  if (line.includes('新增')) return 'add'
+  if (line.includes('修改')) return 'update'
+  if (line.includes('删除')) return 'delete'
+  if (line.includes('失败') || line.toLowerCase().includes('error')) return 'error'
+  if (line.includes('比对完成') || line.includes('分析完成') || line.includes('报告已生成')) return 'done'
+  if (line.includes('查找') || line.includes('检索') || line.includes('命中') || line.includes('影响')) return 'search'
+  return 'default'
+}
+
+function detectJobLogGroup(line: string) {
+  if (line.includes('发现 [新增]') || line.includes('发现 [修改]') || line.includes('发现 [删除]') || line.includes('新增方法')) return '变更发现'
+  if (line.includes('比对完成') || line.includes('变更统计') || line.includes('当前应用快照数')) return '比对汇总'
+  if (line.includes('开始分析用例影响') || line.includes('查找快照影响') || line.includes('查找影响用例') || line.includes('命中用例')) return '影响分析'
+  return '运行日志'
+}
+
+function jobLogTypeText(type: string) {
+  const labels: Record<string, string> = { add: '新增', update: '修改', delete: '删除', done: '完成', search: '分析', error: '错误', default: '日志' }
+  return labels[type] || '日志'
+}
+
+function shortText(value?: string) {
+  if (!value) return ''
+  return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-6)}` : value
+}
+
+function coveragePercent(covered: number, total: number) {
+  if (!total) return '0%'
+  return `${Math.round((covered / total) * 100)}%`
 }
 
 function clearPollTimer() {
@@ -487,7 +627,9 @@ async function uploadPackageFile(role: PackageRole, event: Event) {
 
 async function deleteSelectedPackage(role: PackageRole) {
   const filePath = role === 'source' ? packageCompare.value.sourceFile : packageCompare.value.targetFile
-  if (!filePath || !window.confirm(`确认删除文件 ${filePath}？`)) return
+  if (!filePath) return
+  const confirmed = await askConfirm('删除制品文件', `确认删除文件 ${filePath}？删除后本地缓存文件将不可恢复。`)
+  if (!confirmed) return
   busy.value = true
   error.value = ''
   try {
@@ -507,7 +649,9 @@ async function loadBranches(showError = true) {
   if (!repositoryConfigured.value) return
   try {
     branches.value = await fetchRepositoryBranches(projectId.value, appId.value)
-    if (!gitCompare.value.branch) gitCompare.value.branch = currentAppBranch.value || branches.value[0] || ''
+    if (!gitCompare.value.branch) {
+      gitCompare.value.branch = currentAppBranch.value || branches.value[0] || ''
+    }
     persistDraft()
   } catch (err) {
     if (showError) error.value = err instanceof Error ? err.message : '加载 Git 分支失败'
@@ -519,6 +663,12 @@ function handleBranchChange() {
   gitCompare.value.newCommit = ''
   commits.value = []
   persistDraft()
+}
+
+function selectBranch(branch: string) {
+  if (gitCompare.value.branch === branch) return
+  gitCompare.value.branch = branch
+  handleBranchChange()
 }
 
 async function openCommitPicker(target: 'old' | 'new') {
@@ -602,7 +752,8 @@ async function submitCompare() {
 }
 
 async function removeCompareReport(reportId: string) {
-  if (!window.confirm('确认删除该比对报告？')) return
+  const confirmed = await askConfirm('删除比对报告', '确认删除该比对报告？删除后历史比对结果和任务日志将不可恢复。')
+  if (!confirmed) return
   busy.value = true
   error.value = ''
   try {
@@ -616,7 +767,8 @@ async function removeCompareReport(reportId: string) {
 }
 
 async function removeCoverage(reportId: string) {
-  if (!window.confirm('确认删除该覆盖率报告？')) return
+  const confirmed = await askConfirm('删除覆盖率报告', '确认删除该覆盖率报告？删除后需要重新生成才能查看。')
+  if (!confirmed) return
   busy.value = true
   error.value = ''
   try {
@@ -629,8 +781,31 @@ async function removeCoverage(reportId: string) {
   }
 }
 
+function askConfirm(title: string, message: string) {
+  return new Promise<boolean>((resolve) => {
+    confirmDialog.value = { visible: true, title, message, resolve }
+  })
+}
+
+function closeConfirm(confirmed: boolean) {
+  const resolve = confirmDialog.value.resolve
+  confirmDialog.value = { visible: false, title: '', message: '' }
+  resolve?.(confirmed)
+}
+
+function cancelConfirm() {
+  closeConfirm(false)
+}
+
+function acceptConfirm() {
+  closeConfirm(true)
+}
+
 onBeforeUnmount(() => {
   clearPollTimer()
+  if (confirmDialog.value.visible) {
+    closeConfirm(false)
+  }
 })
 
 onMounted(load)
@@ -701,6 +876,7 @@ onMounted(load)
   border-radius: 999px;
   padding: 10px 14px;
   cursor: pointer;
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease;
 }
 
 .tab-button,
@@ -710,13 +886,41 @@ onMounted(load)
 
 .tab-button.active,
 .primary-button {
-  background: #0f172a;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
   color: #fff;
+  box-shadow: 0 12px 22px rgba(20, 184, 166, .22);
 }
 
 .danger-button {
-  background: rgba(185, 28, 28, .1);
+  background: rgba(185, 28, 28, .12);
   color: #b91c1c;
+}
+
+.primary-button:hover:not(:disabled),
+.tab-button.active:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0b5f59, #0f9f94);
+  box-shadow: 0 14px 26px rgba(20, 184, 166, .30);
+}
+
+.ghost-button:hover:not(:disabled),
+.tab-button:hover:not(:disabled) {
+  background: rgba(15, 118, 110, .12);
+  color: #0f766e;
+}
+
+.danger-button:hover:not(:disabled),
+.text-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  color: #fff;
+  box-shadow: 0 12px 22px rgba(185, 28, 28, .18);
+}
+
+.primary-button:hover:not(:disabled),
+.ghost-button:hover:not(:disabled),
+.danger-button:hover:not(:disabled),
+.tab-button:hover:not(:disabled),
+.text-danger:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
 .small {
@@ -766,8 +970,32 @@ button:disabled {
   padding: 10px 12px;
 }
 
-.branch-select {
+.branch-input {
   min-width: min(360px, 100%);
+}
+
+.branch-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.branch-chip {
+  border: 1px solid rgba(37, 99, 235, .18);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(37, 99, 235, .06);
+  color: #1d4ed8;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.branch-chip:hover:not(:disabled),
+.branch-chip.active {
+  border-color: rgba(15, 118, 110, .32);
+  background: rgba(15, 118, 110, .12);
+  color: #0f766e;
 }
 
 .field-help {
@@ -931,17 +1159,92 @@ button:disabled {
   min-height: 128px;
 }
 
-.log-line {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.log-line.error {
-  color: #fecaca;
-}
-
 .log-placeholder {
   color: #93a4bb;
+}
+
+.job-log-group {
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .02);
+}
+
+.job-log-group + .job-log-group {
+  margin-top: 12px;
+}
+
+.job-log-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(30, 41, 59, .88);
+  color: #f8fafc;
+}
+
+.job-log-group-head span {
+  color: #93c5fd;
+  font-size: 12px;
+}
+
+.job-log-group-body {
+  display: grid;
+  padding: 6px 12px 8px;
+}
+
+.job-log-line {
+  display: grid;
+  grid-template-columns: 10px 64px auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px dashed rgba(148, 163, 184, .14);
+}
+
+.job-log-line:last-child {
+  border-bottom: none;
+}
+
+.job-log-marker {
+  width: 10px;
+  height: 10px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: #64748b;
+}
+
+.job-log-marker.add { background: #22c55e; }
+.job-log-marker.update { background: #f59e0b; }
+.job-log-marker.delete { background: #ef4444; }
+.job-log-marker.done { background: #38bdf8; }
+.job-log-marker.search { background: #a78bfa; }
+.job-log-marker.error { background: #ef4444; }
+
+.job-log-time {
+  color: #93c5fd;
+}
+
+.job-log-tag {
+  width: fit-content;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.job-log-tag.add { background: rgba(34, 197, 94, .15); color: #86efac; }
+.job-log-tag.update { background: rgba(245, 158, 11, .15); color: #fcd34d; }
+.job-log-tag.delete,
+.job-log-tag.error { background: rgba(239, 68, 68, .15); color: #fca5a5; }
+.job-log-tag.done { background: rgba(56, 189, 248, .16); color: #7dd3fc; }
+.job-log-tag.search { background: rgba(167, 139, 250, .16); color: #c4b5fd; }
+.job-log-tag.default { background: rgba(100, 116, 139, .16); color: #cbd5e1; }
+
+.job-log-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #e5eefc;
 }
 
 @keyframes pulse-dot {
@@ -955,10 +1258,126 @@ button:disabled {
   }
 }
 
-.card-grid,
+.report-table-list,
 .commit-list {
   display: grid;
   gap: 12px;
+}
+
+.report-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(260px, 1fr) minmax(128px, auto) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .92));
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.report-row:hover {
+  transform: translateY(-1px);
+  border-color: rgba(15, 118, 110, .22);
+  box-shadow: 0 12px 26px rgba(15, 23, 42, .08);
+}
+
+.report-main {
+  min-width: 0;
+}
+
+.report-title-link {
+  display: block;
+  overflow: hidden;
+  color: #172033;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-title-link:hover {
+  color: #0f766e;
+}
+
+.record-meta,
+.report-metrics,
+.row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.record-meta {
+  margin-top: 8px;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  overflow: hidden;
+  padding: 4px 9px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, .88);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-chip.old {
+  border-color: rgba(234, 88, 12, .18);
+  background: rgba(234, 88, 12, .08);
+  color: #c2410c;
+}
+
+.meta-chip.new {
+  border-color: rgba(33, 133, 208, .18);
+  background: rgba(33, 133, 208, .08);
+  color: #1f5f96;
+}
+
+.report-metrics span {
+  display: grid;
+  min-width: 62px;
+  gap: 3px;
+  justify-items: center;
+  padding: 7px 9px;
+  border-radius: 12px;
+  background: rgba(15, 118, 110, .07);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-metrics b {
+  color: #172033;
+  font-size: 17px;
+}
+
+.coverage-metrics span {
+  background: rgba(33, 133, 208, .08);
+  color: #1f5f96;
+}
+
+.report-time {
+  display: grid;
+  gap: 3px;
+  color: #64748b;
+  font-size: 12px;
+  text-align: right;
+}
+
+.report-time strong {
+  color: #172033;
+}
+
+.row-actions {
+  justify-content: flex-end;
 }
 
 .tag {
@@ -1011,6 +1430,52 @@ button:disabled {
   overflow: auto;
 }
 
+.confirm-card {
+  width: min(460px, calc(100vw - 32px));
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+  background:
+    radial-gradient(circle at top, rgba(248, 113, 113, .14), transparent 38%),
+    #fff;
+}
+
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: rgba(185, 28, 28, .10);
+  color: #b91c1c;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.confirm-copy h2 {
+  margin: 0 0 8px;
+  color: #172033;
+}
+
+.confirm-copy p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.confirm-danger {
+  min-width: 108px;
+}
+
 .commit-item {
   display: grid;
   grid-template-columns: 120px 1fr auto;
@@ -1027,8 +1492,15 @@ button:disabled {
 @media (max-width: 840px) {
   .grid-two,
   .commit-item,
-  .job-summary-grid {
+  .job-summary-grid,
+  .report-row {
     grid-template-columns: 1fr;
+  }
+
+  .report-time,
+  .row-actions {
+    justify-content: flex-start;
+    text-align: left;
   }
 
   .job-head,

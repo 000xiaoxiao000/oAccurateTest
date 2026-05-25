@@ -982,6 +982,28 @@ export interface UsecaseImpactSummary {
   title: string
   directoryPath?: string
   differences: string[]
+  labels?: string[]
+}
+
+export interface EndpointLinkedUsecaseSummary {
+  id: string
+  title?: string
+  directory?: string
+}
+
+export interface EndpointImpactSummary {
+  id?: string
+  endpointType?: string
+  url?: string
+  httpMethod?: string
+  className?: string
+  methodName?: string
+  coverageStatus?: string
+  covered?: boolean
+  hitCount?: number
+  matchedClasses: string[]
+  matchedMethods: string[]
+  linkedUsecases?: EndpointLinkedUsecaseSummary[]
 }
 
 export interface ImpactHintSummary {
@@ -997,6 +1019,7 @@ export interface VersionReportDetailPayload {
   report?: CompareReportDetailSummary
   differences?: DifferenceGroupSummary[]
   usecases?: UsecaseImpactSummary[]
+  endpoints?: EndpointImpactSummary[]
   impactHints?: ImpactHintSummary
 }
 

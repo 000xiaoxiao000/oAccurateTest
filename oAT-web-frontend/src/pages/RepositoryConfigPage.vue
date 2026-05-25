@@ -28,8 +28,10 @@
         </div>
 
         <div class="actions">
-          <button class="primary-button" type="submit">保存</button>
-          <button class="secondary-button" type="button" @click="loadBranches">读取远端分支</button>
+          <button class="primary-button" type="submit" :disabled="loading">{{ loading ? '处理中...' : '保存' }}</button>
+          <button class="secondary-button" type="button" :disabled="loading || !form.repoAddress.trim()" @click="loadBranches">
+            {{ loading ? '读取中...' : '读取远端分支' }}
+          </button>
         </div>
 
         <div v-if="branches.length" class="branch-card">
@@ -47,10 +49,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { fetchRepositoryBranchesPreview } from '@/api/bootstrap'
+import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
 const projectStore = useProjectStore()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const storeKey = computed(() => `${projectId.value}:${appId.value}`)
@@ -97,6 +102,7 @@ async function save() {
   try {
     await projectStore.updateRepository(projectId.value, appId.value, { ...form })
     syncForm()
+    await dialog.alert({ title: '仓库配置已保存', message: '仓库地址和认证信息已更新，可继续读取远端分支或进行 Git 版本比对。', tone: 'success' })
   } catch (err) {
     error.value = err instanceof Error ? err.message : '保存仓库配置失败'
   } finally {
@@ -105,10 +111,21 @@ async function save() {
 }
 
 async function loadBranches() {
+  if (!form.repoAddress.trim()) {
+    error.value = '请先填写仓库地址'
+    return
+  }
   loading.value = true
   error.value = ''
   try {
-    branches.value = await projectStore.loadRepositoryBranches(projectId.value, appId.value)
+    branches.value = await fetchRepositoryBranchesPreview(projectId.value, {
+      repoUrl: form.repoAddress.trim(),
+      username: form.repoUserName.trim() || undefined,
+      password: form.repoPassword || undefined,
+    })
+    if (!branches.value.length) {
+      error.value = '远端仓库未返回分支，请检查仓库地址或认证信息'
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '读取远端分支失败'
   } finally {

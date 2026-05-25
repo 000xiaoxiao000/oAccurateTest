@@ -154,11 +154,13 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import type { SnapshotOption } from '@/api/types'
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
+import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const payload = computed(() => projectStore.mySnapshotListByProjectId[projectId.value])
 const sortDraft = ref(String(route.query.sort || 'updateTime'))
@@ -353,7 +355,12 @@ async function submitUsecaseBinding(usecaseIds: string[]) {
 }
 
 async function remove(snapshotId: string) {
-  const confirmed = window.confirm('确认删除该快照？')
+  const confirmed = await dialog.confirm({
+    title: '删除我的快照',
+    message: '确认删除该快照？删除后覆盖率报告、链路图和关联用例信息将不可恢复。',
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
   if (!confirmed) {
     return
   }

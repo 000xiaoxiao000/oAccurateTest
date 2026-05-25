@@ -6,6 +6,7 @@ import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
 import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
+import com.oAT.web.service.ApiEndpointAnalysisService;
 import com.oAT.web.service.CoverageService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.GitService;
@@ -15,6 +16,7 @@ import com.oAT.web.service.SystemLogService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.VersionService;
 import com.oAT.web.service.entity.AppVo;
+import com.oAT.web.service.entity.ApiEndpointViewVo;
 import com.oAT.web.service.entity.CompareJobVo;
 import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitJobVo;
@@ -71,6 +73,7 @@ public class VersionApiControl {
     private final CoverageService coverageService;
     private final UsecaseService usecaseService;
     private final GitService gitService;
+    private final ApiEndpointAnalysisService apiEndpointAnalysisService;
     private final ResourceService resourceService;
     private final ClientSessionService clientSessionService;
     private final SystemLogService systemLogService;
@@ -81,6 +84,7 @@ public class VersionApiControl {
                              CoverageService coverageService,
                              UsecaseService usecaseService,
                              GitService gitService,
+                             ApiEndpointAnalysisService apiEndpointAnalysisService,
                              ResourceService resourceService,
                              ClientSessionService clientSessionService,
                              SystemLogService systemLogService) {
@@ -90,6 +94,7 @@ public class VersionApiControl {
         this.coverageService = coverageService;
         this.usecaseService = usecaseService;
         this.gitService = gitService;
+        this.apiEndpointAnalysisService = apiEndpointAnalysisService;
         this.resourceService = resourceService;
         this.clientSessionService = clientSessionService;
         this.systemLogService = systemLogService;
@@ -438,6 +443,7 @@ public class VersionApiControl {
             payload.setReport(toCompareReportDetailSummary(report));
             payload.setDifferences(buildDifferenceGroups(report));
             payload.setUsecases(buildUsecaseImpacts(reportId, report));
+            payload.setEndpoints(buildEndpointImpacts(report));
             payload.setImpactHints(buildImpactHintSummary(report.getJobLog()));
             return new ResultNotified<>(true, "获取比对报告成功", payload);
         } catch (IllegalArgumentException ex) {
@@ -542,6 +548,7 @@ public class VersionApiControl {
                 summary.setDirectoryPath(resolveUsecaseDirectoryPath(report.getProjectId(),
                         Optional.ofNullable(usecase.getDirectory()).orElse("root")));
                 summary.setDifferences(impactCase.getDifferences() == null ? new String[0] : impactCase.getDifferences());
+                summary.setLabels(usecase.getLabels() == null ? new String[0] : usecase.getLabels());
                 result.add(summary);
             } catch (IllegalArgumentException ex) {
                 skippedDeletedUsecaseCount.incrementAndGet();
@@ -551,6 +558,171 @@ public class VersionApiControl {
         result.sort(Comparator.comparing(UsecaseImpactSummary::getDirectoryPath, Comparator.nullsLast(String::compareToIgnoreCase))
                 .thenComparing(UsecaseImpactSummary::getTitle, Comparator.nullsLast(String::compareToIgnoreCase)));
         return result;
+    }
+
+    private List<EndpointImpactSummary> buildEndpointImpacts(VersionCompareReport report) {
+        List<EndpointImpactSummary> result = new ArrayList<>();
+        if (report == null || !StringUtils.hasText(report.getAppId())) {
+            return result;
+        }
+
+        List<DifferenceGroupSummary> differences = buildDifferenceGroups(report);
+        if (differences.isEmpty()) {
+            return result;
+        }
+
+        Map<String, DifferenceGroupSummary> classMap = new LinkedHashMap<>();
+        for (DifferenceGroupSummary group : differences) {
+            if (group != null && StringUtils.hasText(group.getClassName())) {
+                classMap.put(normalizeClassKey(group.getClassName()), group);
+            }
+        }
+        if (classMap.isEmpty()) {
+            return result;
+        }
+
+        List<ApiEndpointViewVo> endpoints;
+        try {
+            endpoints = apiEndpointAnalysisService.listByAppId(report.getAppId());
+        } catch (Exception ex) {
+            return result;
+        }
+        if (endpoints == null || endpoints.isEmpty()) {
+            return result;
+        }
+        for (ApiEndpointViewVo endpoint : endpoints) {
+            if (endpoint == null) {
+                continue;
+            }
+            EndpointImpactSummary matched = matchEndpointImpact(endpoint, classMap);
+            if (matched != null) {
+                result.add(matched);
+            }
+        }
+        result.sort(Comparator.comparing(EndpointImpactSummary::getEndpointType, Comparator.nullsLast(String::compareToIgnoreCase))
+                .thenComparing(EndpointImpactSummary::getUrl, Comparator.nullsLast(String::compareToIgnoreCase)));
+        return result;
+    }
+
+    private EndpointImpactSummary matchEndpointImpact(ApiEndpointViewVo endpoint, Map<String, DifferenceGroupSummary> classMap) {
+        LinkedHashSet<String> matchedClasses = new LinkedHashSet<>();
+        LinkedHashSet<String> matchedMethods = new LinkedHashSet<>();
+
+        List<String> endpointClasses = endpoint.getClassNameList() != null && !endpoint.getClassNameList().isEmpty()
+                ? endpoint.getClassNameList()
+                : Collections.singletonList(endpoint.getClassName());
+        List<String> endpointMethods = endpoint.getMethodNameList() != null && !endpoint.getMethodNameList().isEmpty()
+                ? endpoint.getMethodNameList()
+                : Collections.singletonList(endpoint.getMethodName());
+
+        List<String> normalizedEndpointMethods = endpointMethods.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+        for (String className : endpointClasses) {
+            DifferenceGroupSummary group = findDifferenceGroupByClass(classMap, className);
+            if (group == null) {
+                continue;
+            }
+            matchedClasses.add(group.getClassName());
+            if (group.getMethods() == null || group.getMethods().isEmpty()) {
+                matchedMethods.add(group.getModel() == null ? "class" : group.getModel());
+                continue;
+            }
+            for (MethodDifferenceSummary method : group.getMethods()) {
+                if (!normalizedEndpointMethods.isEmpty() && normalizedEndpointMethods.stream()
+                        .noneMatch(name -> name.equals(method.getMethodName()))) {
+                    continue;
+                }
+                matchedMethods.add(method.getMethodName());
+            }
+        }
+
+        if (matchedClasses.isEmpty()) {
+            return null;
+        }
+        EndpointImpactSummary summary = new EndpointImpactSummary();
+        summary.setId(endpoint.getId());
+        summary.setEndpointType(endpoint.getEndpointType());
+        summary.setUrl(endpoint.getUrl());
+        summary.setHttpMethod(endpoint.getHttpMethod());
+        summary.setClassName(endpoint.getClassName());
+        summary.setMethodName(endpoint.getMethodName());
+        summary.setCoverageStatus(endpoint.getCoverageStatus());
+        summary.setCovered(endpoint.isCovered());
+        summary.setHitCount(endpoint.getHitCount());
+        summary.setMatchedClasses(new ArrayList<>(matchedClasses));
+        summary.setMatchedMethods(new ArrayList<>(matchedMethods));
+        summary.setLinkedUsecases(toEndpointLinkedUsecases(endpoint.getLinkedUsecases()));
+        return summary;
+    }
+
+    private List<EndpointLinkedUsecaseSummary> toEndpointLinkedUsecases(List<ApiEndpointViewVo.UsecaseLinkVo> links) {
+        if (links == null || links.isEmpty()) {
+            return Collections.emptyList();
+        }
+        LinkedHashMap<String, EndpointLinkedUsecaseSummary> result = new LinkedHashMap<>();
+        for (ApiEndpointViewVo.UsecaseLinkVo link : links) {
+            if (link == null || !StringUtils.hasText(link.getId()) || result.containsKey(link.getId())) {
+                continue;
+            }
+            EndpointLinkedUsecaseSummary summary = new EndpointLinkedUsecaseSummary();
+            summary.setId(link.getId());
+            summary.setTitle(link.getTitle());
+            summary.setDirectory(link.getDirectory());
+            result.put(link.getId(), summary);
+        }
+        return new ArrayList<>(result.values());
+    }
+
+    private DifferenceGroupSummary findDifferenceGroupByClass(Map<String, DifferenceGroupSummary> classMap, String className) {
+        String normalized = normalizeClassKey(className);
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        DifferenceGroupSummary exact = classMap.get(normalized);
+        if (exact != null) {
+            return exact;
+        }
+        for (Map.Entry<String, DifferenceGroupSummary> entry : classMap.entrySet()) {
+            String changedClass = entry.getKey();
+            if (normalized.endsWith("." + changedClass) || changedClass.endsWith("." + normalized)) {
+                return entry.getValue();
+            }
+            int lastDot = changedClass.lastIndexOf('.');
+            String changedSimpleName = lastDot >= 0 ? changedClass.substring(lastDot + 1) : changedClass;
+            int endpointLastDot = normalized.lastIndexOf('.');
+            String endpointSimpleName = endpointLastDot >= 0 ? normalized.substring(endpointLastDot + 1) : normalized;
+            if (StringUtils.hasText(changedSimpleName) && changedSimpleName.equals(endpointSimpleName)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private String normalizeClassKey(String className) {
+        if (!StringUtils.hasText(className)) {
+            return "";
+        }
+        String normalized = className.trim().replace('\\', '/');
+        if (normalized.endsWith(".java")) {
+            normalized = normalized.substring(0, normalized.length() - ".java".length());
+        }
+        if (normalized.endsWith(".class")) {
+            normalized = normalized.substring(0, normalized.length() - ".class".length());
+        }
+        if (normalized.contains("/")) {
+            normalized = normalized.replace('/', '.');
+        }
+        String[] sourceMarkers = {"targetes.", "target.classes.", "classes.", "src.main.java.", "src.test.java.", "main.java.", "test.java."};
+        for (String marker : sourceMarkers) {
+            int index = normalized.indexOf(marker);
+            if (index >= 0) {
+                normalized = normalized.substring(index + marker.length());
+            }
+        }
+        return normalized.replaceAll("^\\.+", "");
     }
 
     private String resolveUsecaseDirectoryPath(String projectId, String directoryId) {
@@ -992,6 +1164,7 @@ public class VersionApiControl {
         private CompareReportDetailSummary report;
         private List<DifferenceGroupSummary> differences;
         private List<UsecaseImpactSummary> usecases;
+        private List<EndpointImpactSummary> endpoints;
         private ImpactHintSummary impactHints;
 
         public String getState() { return state; }
@@ -1006,6 +1179,8 @@ public class VersionApiControl {
         public void setDifferences(List<DifferenceGroupSummary> differences) { this.differences = differences; }
         public List<UsecaseImpactSummary> getUsecases() { return usecases; }
         public void setUsecases(List<UsecaseImpactSummary> usecases) { this.usecases = usecases; }
+        public List<EndpointImpactSummary> getEndpoints() { return endpoints; }
+        public void setEndpoints(List<EndpointImpactSummary> endpoints) { this.endpoints = endpoints; }
         public ImpactHintSummary getImpactHints() { return impactHints; }
         public void setImpactHints(ImpactHintSummary impactHints) { this.impactHints = impactHints; }
     }
@@ -1341,6 +1516,7 @@ public class VersionApiControl {
         private String title;
         private String directoryPath;
         private String[] differences;
+        private String[] labels;
 
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
@@ -1350,6 +1526,61 @@ public class VersionApiControl {
         public void setDirectoryPath(String directoryPath) { this.directoryPath = directoryPath; }
         public String[] getDifferences() { return differences; }
         public void setDifferences(String[] differences) { this.differences = differences; }
+        public String[] getLabels() { return labels; }
+        public void setLabels(String[] labels) { this.labels = labels; }
+    }
+
+    public static class EndpointImpactSummary {
+        private String id;
+        private String endpointType;
+        private String url;
+        private String httpMethod;
+        private String className;
+        private String methodName;
+        private String coverageStatus;
+        private boolean covered;
+        private int hitCount;
+        private List<String> matchedClasses = Collections.emptyList();
+        private List<String> matchedMethods = Collections.emptyList();
+        private List<EndpointLinkedUsecaseSummary> linkedUsecases = Collections.emptyList();
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        public String getEndpointType() { return endpointType; }
+        public void setEndpointType(String endpointType) { this.endpointType = endpointType; }
+        public String getUrl() { return url; }
+        public void setUrl(String url) { this.url = url; }
+        public String getHttpMethod() { return httpMethod; }
+        public void setHttpMethod(String httpMethod) { this.httpMethod = httpMethod; }
+        public String getClassName() { return className; }
+        public void setClassName(String className) { this.className = className; }
+        public String getMethodName() { return methodName; }
+        public void setMethodName(String methodName) { this.methodName = methodName; }
+        public String getCoverageStatus() { return coverageStatus; }
+        public void setCoverageStatus(String coverageStatus) { this.coverageStatus = coverageStatus; }
+        public boolean isCovered() { return covered; }
+        public void setCovered(boolean covered) { this.covered = covered; }
+        public int getHitCount() { return hitCount; }
+        public void setHitCount(int hitCount) { this.hitCount = hitCount; }
+        public List<String> getMatchedClasses() { return matchedClasses; }
+        public void setMatchedClasses(List<String> matchedClasses) { this.matchedClasses = matchedClasses; }
+        public List<String> getMatchedMethods() { return matchedMethods; }
+        public void setMatchedMethods(List<String> matchedMethods) { this.matchedMethods = matchedMethods; }
+        public List<EndpointLinkedUsecaseSummary> getLinkedUsecases() { return linkedUsecases; }
+        public void setLinkedUsecases(List<EndpointLinkedUsecaseSummary> linkedUsecases) { this.linkedUsecases = linkedUsecases; }
+    }
+
+    public static class EndpointLinkedUsecaseSummary {
+        private String id;
+        private String title;
+        private String directory;
+
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getDirectory() { return directory; }
+        public void setDirectory(String directory) { this.directory = directory; }
     }
 
     public static class ImpactHintSummary {

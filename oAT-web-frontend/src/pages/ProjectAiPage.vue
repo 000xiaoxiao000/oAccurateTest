@@ -231,6 +231,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { backendApiUrl } from '@/api/http'
 import MascotCanvas from '@/components/MascotCanvas.vue'
+import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
 import type { AIAction, AIQuickLink } from '@/api/types'
@@ -239,6 +240,7 @@ const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
 const authStore = useAuthStore()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const context = computed(() => projectStore.aiContextByProjectId[projectId.value])
 const reply = computed(() => projectStore.aiLastReplyByProjectId[projectId.value])
@@ -396,20 +398,32 @@ function newSession() {
   syncSessionState()
 }
 
-function renameSession(sessionId: string) {
+async function renameSession(sessionId: string) {
   const session = sessions.value.find((item) => item.id === sessionId)
   if (!session) return
-  const nextTitle = window.prompt('请输入会话名称', session.title)
+  const nextTitle = await dialog.prompt({
+    title: '重命名会话',
+    message: '请输入新的会话名称，便于在左侧会话列表中快速定位。',
+    defaultValue: session.title,
+    placeholder: '会话名称',
+    confirmText: '保存名称',
+  })
   if (!nextTitle?.trim()) return
   session.title = nextTitle.trim().slice(0, 40)
   touchSession(session)
   syncSessionState()
 }
 
-function deleteSession(sessionId: string) {
+async function deleteSession(sessionId: string) {
   const session = sessions.value.find((item) => item.id === sessionId)
   if (!session) return
-  if (!window.confirm(`确认删除会话「${session.title}」？`)) return
+  const confirmed = await dialog.confirm({
+    title: '删除 AI 会话',
+    message: `确认删除会话「${session.title}」？该会话中的问题、回答和图片上下文将从当前项目记忆中移除。`,
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
+  if (!confirmed) return
   sessions.value = sessions.value.filter((item) => item.id !== sessionId)
   if (!sessions.value.length) {
     const fresh = createSession()
@@ -503,7 +517,15 @@ async function openLink(link: AIQuickLink) {
 }
 
 async function executeAction(action: AIAction) {
-  if (action.requireConfirm && !window.confirm(action.confirmText || `确认执行${action.title}？`)) return
+  if (action.requireConfirm) {
+    const confirmed = await dialog.confirm({
+      title: action.title || '执行 AI 建议动作',
+      message: action.confirmText || `确认执行${action.title}？`,
+      confirmText: '确认执行',
+      tone: action.type === 'logout' ? 'danger' : 'warning',
+    })
+    if (!confirmed) return
+  }
   if (action.type === 'logout') {
     await authStore.logout()
     await router.replace('/login')
@@ -626,6 +648,13 @@ async function saveSession() {
 }
 
 async function clearMemory() {
+  const confirmed = await dialog.confirm({
+    title: '清空 AI 记忆',
+    message: '确认清空当前项目 AI 工作台的会话记忆？清空后会重新创建一个空会话。',
+    confirmText: '确认清空',
+    tone: 'danger',
+  })
+  if (!confirmed) return
   try {
     await projectStore.resetAiSessionState(projectId.value)
     hydrateSessions('')

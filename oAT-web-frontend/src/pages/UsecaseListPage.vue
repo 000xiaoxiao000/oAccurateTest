@@ -127,11 +127,13 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { backendApiUrl } from '@/api/http'
+import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const payload = computed(() => projectStore.usecaseListByProjectId[projectId.value])
 const currentDirectory = computed(() => String(route.query.directory || 'root'))
@@ -226,7 +228,12 @@ async function applyFilters() {
 }
 
 async function remove(usecaseId: string, title: string) {
-  const confirmed = window.confirm(`确认删除用例“${title}”？`)
+  const confirmed = await dialog.confirm({
+    title: '删除用例',
+    message: `确认删除用例“${title}”？删除后关联快照中的引用也会受到影响。`,
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
   if (!confirmed) {
     return
   }
@@ -270,7 +277,7 @@ async function handleImportFile(event: Event) {
   try {
     const result = await projectStore.importUsecases(projectId.value, currentDirectory.value, file)
     const successCount = result?.successCount ?? 0
-    window.alert(`用例上传成功，导入 ${successCount} 条`)
+    await dialog.alert({ title: '用例上传成功', message: `已导入 ${successCount} 条用例。`, tone: 'success' })
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '用例上传失败'
@@ -281,7 +288,12 @@ async function handleImportFile(event: Event) {
 }
 
 async function rebuildSearchData() {
-  const confirmed = window.confirm('确认重建当前项目的用例检索数据？')
+  const confirmed = await dialog.confirm({
+    title: '重建检索数据',
+    message: '确认重建当前项目的用例检索数据？重建期间搜索结果可能短暂延迟更新。',
+    confirmText: '开始重建',
+    tone: 'warning',
+  })
   if (!confirmed) {
     return
   }
@@ -289,7 +301,7 @@ async function rebuildSearchData() {
   error.value = ''
   try {
     const updated = await projectStore.rebuildUsecaseSearch(projectId.value)
-    window.alert(`已回填用例检索数据，更新数量：${updated}`)
+    await dialog.alert({ title: '检索数据已重建', message: `已回填用例检索数据，更新数量：${updated}。`, tone: 'success' })
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '重建检索数据失败'
@@ -346,15 +358,23 @@ async function deleteDirectory(directoryId: string, name: string, parentId: stri
     const preview = await projectStore.previewUsecaseDirectoryDelete(projectId.value, directoryId)
     let deleteUsecases = false
     if (preview.requiresCascade) {
-      deleteUsecases = window.confirm(
-        `目录“${name}”下还有 ${preview.directoryCount} 个子目录、${preview.usecaseCount} 个用例。确认级联删除吗？`,
-      )
+      deleteUsecases = await dialog.confirm({
+        title: '级联删除目录',
+        message: `目录“${name}”下还有 ${preview.directoryCount} 个子目录、${preview.usecaseCount} 个用例。确认级联删除吗？`,
+        confirmText: '级联删除',
+        tone: 'danger',
+      })
       if (!deleteUsecases) {
         loading.value = false
         return
       }
     } else {
-      const confirmed = window.confirm(`确认删除目录“${name}”？`)
+      const confirmed = await dialog.confirm({
+        title: '删除目录',
+        message: `确认删除目录“${name}”？`,
+        confirmText: '确认删除',
+        tone: 'danger',
+      })
       if (!confirmed) {
         loading.value = false
         return

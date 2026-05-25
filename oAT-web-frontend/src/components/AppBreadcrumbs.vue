@@ -26,7 +26,11 @@ const router = useRouter()
 const projectStore = useProjectStore()
 
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
-const appId = computed(() => typeof route.params.appId === 'string' ? route.params.appId : '')
+const appId = computed(() => {
+  if (typeof route.params.appId === 'string') return route.params.appId
+  if (typeof route.query.appId === 'string') return route.query.appId
+  return ''
+})
 const context = computed(() => projectId.value ? projectStore.contextByProjectId[projectId.value] : undefined)
 const currentApp = computed(() => context.value?.apps.find((app) => app.id === appId.value))
 const backTarget = computed(() => {

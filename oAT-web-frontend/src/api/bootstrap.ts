@@ -272,6 +272,21 @@ export function fetchRepositoryBranches(projectId: string, appId: string) {
   return apiGet<string[]>(`/api/projects/${projectId}/apps/${appId}/repository/branches`)
 }
 
+export function fetchRepositoryBranchesPreview(
+  projectId: string,
+  payload: { repoUrl: string; username?: string; password?: string },
+) {
+  const query = new URLSearchParams()
+  query.set('repoUrl', payload.repoUrl)
+  if (payload.username) {
+    query.set('username', payload.username)
+  }
+  if (payload.password) {
+    query.set('password', payload.password)
+  }
+  return apiGet<string[]>(`/api/projects/${projectId}/repository/branches?${query.toString()}`)
+}
+
 export function fetchCoverageOverview(
   projectId: string,
   params: { appId: string; versionNumber: string; reportId?: string; commitId?: string },

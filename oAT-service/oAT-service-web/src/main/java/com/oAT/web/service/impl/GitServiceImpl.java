@@ -10,7 +10,7 @@ import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitDiffVo;
 import com.oAT.web.service.entity.GitJobVo;
 import com.oAT.web.service.entity.GitPullEstimateVo;
-import org.eclipse.jgit.api.CloneCommand;
+import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.LsRemoteCommand;
 import org.eclipse.jgit.diff.DiffEntry;
@@ -25,7 +25,9 @@ import org.eclipse.jgit.patch.HunkHeader;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider;
+import org.eclipse.jgit.transport.URIish;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -161,6 +163,7 @@ public class GitServiceImpl implements GitService {
     @Override
     public void checkGitPull(String repoUrl, String username, String password, String branch, String commitId) {
         String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
+        String finalBranch = normalizeBranchName(branch);
         try {
             LsRemoteCommand lsRemoteCommand = Git.lsRemoteRepository()
                     .setRemote(normalizedRepoUrl)
@@ -174,11 +177,11 @@ public class GitServiceImpl implements GitService {
 
             Collection<org.eclipse.jgit.lib.Ref> refs = lsRemoteCommand.call();
             boolean branchFound = false;
-            String branchRef = "refs/heads/" + branch;
+            String branchRef = "refs/heads/" + finalBranch;
 
             for (org.eclipse.jgit.lib.Ref ref : refs) {
                 String name = ref.getName();
-                if (name.equals(branchRef) || name.equals(branch)) {
+                if (name.equals(branchRef) || name.equals(finalBranch)) {
                     branchFound = true;
                     // Check if specified Commit ID is exactly this branch's HEAD
                     if (StringUtils.hasText(commitId) && ref.getObjectId().name().equalsIgnoreCase(commitId)) {
@@ -189,7 +192,7 @@ public class GitServiceImpl implements GitService {
             }
 
             if (!branchFound) {
-                throw new RuntimeException("远程分支 " + branch + " 不存在");
+                throw new RuntimeException("远程分支 " + finalBranch + " 不存在");
             }
 
             // Depth validation for Commit ID if it's not the branch HEAD
@@ -282,19 +285,22 @@ public class GitServiceImpl implements GitService {
         Path tempDir = null;
         try {
             tempDir = Files.createTempDirectory("oAT_git_commits");
-            CloneCommand cloneCommand = Git.cloneRepository()
-                    .setURI(normalizedRepoUrl)
-                    .setDirectory(tempDir.toFile())
-                    .setBranchesToClone(Collections.singletonList(branchRef))
-                    .setBranch(branchRef)
-                    .setNoCheckout(true)
-                    .setCloneAllBranches(false);
-            UsernamePasswordCredentialsProvider credentialsProvider = getCredentials(username, password);
-            if (credentialsProvider != null) {
-                cloneCommand.setCredentialsProvider(credentialsProvider);
-            }
+            try (Git git = Git.init().setDirectory(tempDir.toFile()).call()) {
+                git.remoteAdd()
+                        .setName("origin")
+                        .setUri(new URIish(normalizedRepoUrl))
+                        .call();
 
-            try (Git git = cloneCommand.call()) {
+                FetchCommand fetch = git.fetch()
+                        .setRemote("origin")
+                        .setRefSpecs(new RefSpec(branchRef + ":refs/remotes/origin/" + finalBranch))
+                        .setRemoveDeletedRefs(true);
+                UsernamePasswordCredentialsProvider credentialsProvider = getCredentials(username, password);
+                if (credentialsProvider != null) {
+                    fetch.setCredentialsProvider(credentialsProvider);
+                }
+                fetch.call();
+
                 ObjectId startId = resolveBranchHead(git.getRepository(), finalBranch);
                 if (startId == null) {
                     throw new RuntimeException("分支 " + finalBranch + " 不存在或未拉取到提交对象");

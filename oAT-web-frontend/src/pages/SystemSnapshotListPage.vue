@@ -123,12 +123,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
+import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 import { reportStatusText } from '@/utils/snapshot'
 
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const storeKey = computed(() => `${projectId.value}:${appId.value}`)
@@ -240,7 +242,12 @@ async function submitDirectoryEditor() {
 }
 
 async function removeDirectory(id: string) {
-  const confirmed = window.confirm('确认删除该目录？')
+  const confirmed = await dialog.confirm({
+    title: '删除目录',
+    message: '确认删除该目录？目录删除后快照会回到默认目录或按后端规则重新归档。',
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
   if (!confirmed) {
     return
   }
@@ -293,7 +300,13 @@ function batchBindUsecases() {
 }
 
 async function removeSnapshot(snapshotId: string, title?: string) {
-  if (!window.confirm(`确认删除系统快照「${title || snapshotId}」？`)) return
+  const confirmed = await dialog.confirm({
+    title: '删除系统快照',
+    message: `确认删除系统快照「${title || snapshotId}」？覆盖率报告、链路图和用例关联将同步删除。`,
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
+  if (!confirmed) return
   loading.value = true
   error.value = ''
   try {

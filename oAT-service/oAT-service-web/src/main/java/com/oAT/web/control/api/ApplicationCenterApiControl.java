@@ -14,6 +14,8 @@ import com.oAT.web.service.entity.ProbeAlertDashboardVo;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -36,6 +38,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/projects/{projectId}")
 public class ApplicationCenterApiControl {
+
+    private static final Logger logger = LoggerFactory.getLogger(ApplicationCenterApiControl.class);
 
     private final AppService appService;
     private final ProjectService projectService;
@@ -184,7 +188,11 @@ public class ApplicationCenterApiControl {
         existingApp.setRepoUserName(request.getRepoUserName());
         existingApp.setRepoPassword(request.getRepoPassword());
         appService.updateApp(projectId, existingApp);
-        elasticsearchOperations.indexOps(SystemIndex.class).refresh();
+        try {
+            elasticsearchOperations.indexOps(SystemIndex.class).refresh();
+        } catch (Exception e) {
+            logger.warn("刷新应用索引失败，不影响仓库配置保存: appId={}", appId, e);
+        }
         return repository(projectId, appId, user);
     }
 
@@ -211,8 +219,13 @@ public class ApplicationCenterApiControl {
                                                                   @RequestParam(required = false) String username,
                                                                   @RequestParam(required = false) String password) {
         ensureProjectAccess(projectId, user);
-        List<String> branches = gitService.getRemoteBranches(repoUrl, username, password);
-        return new ResultNotified<>(true, "获取分支成功", branches);
+        try {
+            Assert.isTrue(StringUtils.hasText(repoUrl), "Git仓库地址不能为空");
+            List<String> branches = gitService.getRemoteBranches(repoUrl, username, password);
+            return new ResultNotified<>(true, "获取分支成功", branches);
+        } catch (Exception e) {
+            return new ResultNotified<>(false, e.getMessage(), Collections.emptyList());
+        }
     }
 
     private ProjectVo ensureProjectAccess(String projectId, UserVo user) {

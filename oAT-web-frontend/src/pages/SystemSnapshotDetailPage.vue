@@ -215,12 +215,14 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
 import GraphView from '@/components/snapshot/GraphView.vue'
+import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 import { reportStatusText } from '@/utils/snapshot'
 
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const snapshotId = computed(() => String(route.params.snapshotId || ''))
@@ -360,7 +362,12 @@ async function addComment() {
 }
 
 async function removeComment(content: string, dateTime: string) {
-  const confirmed = window.confirm('确认删除这条评论？')
+  const confirmed = await dialog.confirm({
+    title: '删除评论',
+    message: '确认删除这条评论？删除后系统快照动态中将不再显示该记录。',
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
   if (!confirmed) {
     return
   }
@@ -380,7 +387,12 @@ async function removeComment(content: string, dateTime: string) {
 }
 
 async function removeSnapshot() {
-  const confirmed = window.confirm('确认删除该系统快照？')
+  const confirmed = await dialog.confirm({
+    title: '删除系统快照',
+    message: '确认删除该系统快照？覆盖率报告、链路图、评论和关联用例将不可恢复。',
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
   if (!confirmed) {
     return
   }
