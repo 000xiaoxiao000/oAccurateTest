@@ -1,7 +1,7 @@
 import type { ApiResponse } from './types'
 
 const AUTH_REQUIRED_CODE = 'AUTH_REQUIRED'
-const DEFAULT_BACKEND_BASE_URL = import.meta.env.VITE_OAT_BACKEND_BASE_URL || 'http://localhost:8899'
+const BACKEND_BASE_URL = (import.meta.env.VITE_OAT_BACKEND_BASE_URL || '').replace(/\/$/, '')
 
 let authRedirectPending = false
 
@@ -20,7 +20,24 @@ function backendUrl(input: string) {
   if (/^https?:\/\//.test(input)) {
     return input
   }
-  return `${DEFAULT_BACKEND_BASE_URL}${input.startsWith('/') ? input : `/${input}`}`
+
+  const normalized = input.startsWith('/') ? input : `/${input}`
+  return BACKEND_BASE_URL ? `${BACKEND_BASE_URL}${normalized}` : normalized
+}
+
+async function fetchApi(input: string, init?: RequestInit) {
+  try {
+    return await fetch(backendUrl(input), {
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        ...(init?.headers || {}),
+      },
+      ...init,
+    })
+  } catch {
+    throw new ApiError('无法连接后端服务，请确认后端已启动，并检查前端代理或跨域配置', 0)
+  }
 }
 
 function redirectToLogin() {
@@ -34,14 +51,7 @@ function redirectToLogin() {
 }
 
 async function request<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(backendUrl(input), {
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers || {}),
-    },
-    ...init,
-  })
+  const response = await fetchApi(input, init)
 
   if (response.status === 401) {
     redirectToLogin()
@@ -71,14 +81,7 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
 }
 
 async function requestRawJson<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(backendUrl(input), {
-    credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers || {}),
-    },
-    ...init,
-  })
+  const response = await fetchApi(input, init)
 
   if (response.status === 401) {
     redirectToLogin()

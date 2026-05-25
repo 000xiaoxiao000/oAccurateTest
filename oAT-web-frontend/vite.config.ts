@@ -43,6 +43,21 @@ const backendProxy: ProxyOptions = {
   },
 }
 
+const backendProxyMap = {
+  '/api': backendProxy,
+  '/share/api': backendProxy,
+  '^/p/[^/]+/coverage/(generate|generate-incremental|job|trend-data|export|export-methods)(/|\\?|$)': backendProxy,
+  '^/p/[^/]+/monitor/(systemSnapshotContext|doSaveSystemSnapshot)(/|\\?|$)': backendProxy,
+  '^/p/[^/]+/map/(home|app|code)/data(/|\\?|$)': backendProxy,
+  '^/p/[^/]+/app/[^/]+/oAT\\.key$': backendProxy,
+  '^/p/[^/]+/[^/]+/version/(doAdd|setCurrent|delete|report/delete|coverageReport/delete|file/delete|checkGitPull|git/commits|git/commit|git/pull|git/status|git/deleteCode|package/verifyCommit)(/|\\?|$)': backendProxy,
+  '/css': backendProxy,
+  '/js': backendProxy,
+  '/images': backendProxy,
+  '/user': backendProxy,
+  '/r': backendProxy,
+}
+
 function distAssetFallbackPlugin() {
   const contentTypes: Record<string, string> = {
     '.css': 'text/css; charset=utf-8',
@@ -116,23 +131,11 @@ export default defineConfig({
   preview: {
     port: 5176,
     headers: htmlNoStoreHeaders,
+    proxy: backendProxyMap,
   },
   server: {
     port: 5176,
     headers: htmlNoStoreHeaders,
-    proxy: {
-      '/api': backendProxy,
-      '/share/api': backendProxy,
-      '^/p/[^/]+/coverage/(generate|generate-incremental|job|trend-data|export|export-methods)(/|\\?|$)': backendProxy,
-      '^/p/[^/]+/monitor/(systemSnapshotContext|doSaveSystemSnapshot)(/|\\?|$)': backendProxy,
-      '^/p/[^/]+/map/(home|app|code)/data(/|\\?|$)': backendProxy,
-      '^/p/[^/]+/app/[^/]+/oAT\\.key$': backendProxy,
-      '^/p/[^/]+/[^/]+/version/(doAdd|setCurrent|delete|report/delete|coverageReport/delete|file/delete|checkGitPull|git/commits|git/commit|git/pull|git/status|git/deleteCode|package/verifyCommit)(/|\\?|$)': backendProxy,
-      '/css': backendProxy,
-      '/js': backendProxy,
-      '/images': backendProxy,
-      '/user': backendProxy,
-      '/r': backendProxy,
-    },
+    proxy: backendProxyMap,
   },
 })

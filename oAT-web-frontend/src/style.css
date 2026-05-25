@@ -45,6 +45,11 @@ body,
   min-height: 100vh;
 }
 
+html {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
 body {
   color: #1f2937;
 }
@@ -52,6 +57,16 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+a,
+button,
+input,
+select,
+textarea,
+[role='button'],
+[tabindex] {
+  -webkit-tap-highlight-color: rgba(var(--oat-primary-rgb), .14);
 }
 
 
@@ -86,6 +101,7 @@ select[multiple] option:checked {
 
 button {
   cursor: pointer;
+  user-select: none;
 }
 
 button:disabled,
@@ -112,6 +128,18 @@ a:focus-visible {
 
 ::selection {
   background: rgba(15, 118, 110, .18);
+}
+
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity .18s ease, transform .18s ease, filter .18s ease;
+}
+
+.page-fade-enter-from,
+.page-fade-leave-to {
+  opacity: 0;
+  filter: blur(2px);
+  transform: translateY(8px);
 }
 
 .page-shell {
@@ -186,13 +214,27 @@ a:focus-visible {
   line-height: 1.65;
 }
 
-.shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item) {
+.shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card) {
   border-color: rgba(15, 23, 42, .08);
   box-shadow: var(--oat-shadow-xs);
 }
 
-.shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card) {
+.shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card) {
   background: var(--page-card-bg);
+}
+
+.shell-main :is(.summary-card, .hero-card, .empty-card, .metric-card, .info-item, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card) {
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease, opacity .18s ease;
+}
+
+.shell-main :is(.card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .session-card, .node-card, .edge-card, .relation-row, .link-card):hover {
+  border-color: rgba(var(--oat-primary-rgb), .24);
+  box-shadow: var(--oat-shadow-sm);
+  transform: translateY(-2px);
+}
+
+.shell-main :is(.card, .project-card, .snapshot-card, .node-card, .trace-item, .probe-card, .session-card, .message-card, .relation-row, .edge-card, .link-card):active {
+  transform: translateY(0) scale(.995);
 }
 
 .shell-main :is(.panel, .toolbar-card, .status-card) {
@@ -239,12 +281,27 @@ a:focus-visible {
   background: rgba(var(--oat-accent-rgb), .035);
 }
 
-.shell-main :is(.primary-button, .danger-button, .ghost-button, .secondary-link, .table-link, .link-button, .chip-button) {
-  transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease;
+.shell-main :is(.primary-button, .danger-button, .ghost-button, .secondary-link, .table-link, .link-button, .chip-button, .action-button, .refresh-button, .submit-button, .search-button, .page-button, .filter-chip, .badge, .mode-trigger, .inline-link, .danger-link, .text-danger, .route) {
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease, opacity .16s ease;
 }
 
-.shell-main :is(.primary-button, .ghost-button, .chip-button):hover:not(:disabled) {
+.shell-main :is(.primary-button, .danger-button, .ghost-button, .secondary-link, .table-link, .link-button, .chip-button, .action-button, .refresh-button, .submit-button, .search-button, .page-button, .filter-chip, .badge, .mode-trigger, .inline-link, .danger-link, .text-danger, .route):hover:not(:disabled) {
   transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .10);
+}
+
+.shell-main :is(.primary-button, .danger-button, .ghost-button, .secondary-link, .table-link, .link-button, .chip-button, .action-button, .refresh-button, .submit-button, .search-button, .page-button, .filter-chip, .badge, .mode-trigger, .inline-link, .danger-link, .text-danger, .route):active:not(:disabled) {
+  transform: translateY(0) scale(.98);
+  box-shadow: none;
+}
+
+.shell-main :is(.primary-button, .action-button, .submit-button, .search-button):not(:disabled) {
+  box-shadow: 0 10px 22px rgba(var(--oat-primary-rgb), .18);
+}
+
+.shell-main :is(.ghost-button, .secondary-link, .link-button, .table-link, .chip-button, .page-button, .filter-chip, .badge):focus-visible {
+  outline: 3px solid rgba(var(--oat-accent-rgb), .20);
+  outline-offset: 2px;
 }
 
 .shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], select, textarea) {
@@ -256,6 +313,100 @@ a:focus-visible {
   border-color: rgba(var(--oat-primary-rgb), .65);
   box-shadow: 0 0 0 3px rgba(var(--oat-primary-rgb), .12);
   outline: none;
+}
+
+.shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], input[type='number'], input[type='email'], input[type='url'], select, textarea):hover:not(:disabled) {
+  border-color: rgba(var(--oat-primary-rgb), .36);
+}
+
+.shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], input[type='number'], input[type='email'], input[type='url'], select, textarea)::placeholder {
+  color: #a3acba;
+}
+
+.shell-main :is(.checkbox-row, .auto-refresh, .snapshot-select) {
+  cursor: pointer;
+  transition: color .16s ease, background .16s ease;
+}
+
+.shell-main :is(.checkbox-row, .auto-refresh, .snapshot-select):hover {
+  color: var(--oat-primary-dark);
+}
+
+.shell-main :is(.table-shell, .source-shell, .trace-list, .node-list, .edge-list, .branch-list, .project-menu, .app-menu) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, .34) rgba(15, 23, 42, .04);
+}
+
+.shell-main :is(.table-shell, .source-shell, .trace-list, .node-list, .edge-list, .branch-list, .project-menu, .app-menu)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.shell-main :is(.table-shell, .source-shell, .trace-list, .node-list, .edge-list, .branch-list, .project-menu, .app-menu)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, .34);
+  background-clip: padding-box;
+}
+
+.shell-main :is(.table-shell, .source-shell, .trace-list, .node-list, .edge-list, .branch-list, .project-menu, .app-menu)::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, .04);
+}
+
+.shell-main :is(.trace-item, .probe-card, .node-button, .node-card, .snapshot-card, .project-card, .card, .relation-row, .edge-card, .app-menu-item, .dir-link) {
+  position: relative;
+}
+
+.shell-main :is(.trace-item, .probe-card, .node-button, .node-card, .snapshot-card, .project-card, .card, .relation-row, .edge-card, .app-menu-item, .dir-link)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(135deg, rgba(var(--oat-primary-rgb), .10), transparent 42%);
+  transition: opacity .16s ease;
+}
+
+.shell-main :is(.trace-item, .probe-card, .node-button, .node-card, .snapshot-card, .project-card, .card, .relation-row, .edge-card, .app-menu-item, .dir-link):hover::before,
+.shell-main :is(.trace-item, .probe-card, .node-button, .node-card, .snapshot-card, .project-card, .card, .relation-row, .edge-card, .app-menu-item, .dir-link).active::before,
+.shell-main :is(.trace-item, .probe-card, .node-button, .node-card, .snapshot-card, .project-card, .card, .relation-row, .edge-card, .app-menu-item, .dir-link).selected::before {
+  opacity: 1;
+}
+
+.shell-main :is(.graph-node, .graph-edge, .table-node, .table-edge, .relation-graph g, .graph-svg g) {
+  transition: opacity .16s ease, filter .16s ease, transform .16s ease;
+}
+
+.shell-main :is(.graph-node, .table-node) {
+  cursor: grab;
+}
+
+.shell-main :is(.graph-node, .table-node):active {
+  cursor: grabbing;
+}
+
+.shell-main :is(.graph-node, .table-node):hover {
+  filter: drop-shadow(0 10px 16px rgba(15, 23, 42, .20));
+}
+
+.shell-main :is(.graph-edge, .table-edge):hover {
+  filter: drop-shadow(0 3px 6px rgba(15, 118, 110, .24));
+}
+
+.shell-main :is(.status-card, .empty-card) {
+  animation: soft-enter .22s ease both;
+}
+
+@keyframes soft-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .shell-main .status-card.error {
@@ -272,5 +423,16 @@ a:focus-visible {
 
   .shell-main :is(.page-header h1, .hero h1) {
     font-size: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }

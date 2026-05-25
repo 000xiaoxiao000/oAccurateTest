@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -192,11 +193,15 @@ public class ApplicationCenterApiControl {
                                                            @PathVariable String appId,
                                                            @SessionAttribute UserVo user) {
         ensureProjectAccess(projectId, user);
-        AppVo app = appService.getApp(appId);
-        Assert.notNull(app, "应用不存在");
-        Assert.isTrue(StringUtils.hasText(app.getRepoAddress()), "Git仓库地址未配置");
-        List<String> branches = gitService.getRemoteBranches(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword());
-        return new ResultNotified<>(true, "获取分支成功", branches);
+        try {
+            AppVo app = appService.getApp(appId);
+            Assert.notNull(app, "应用不存在");
+            Assert.isTrue(StringUtils.hasText(app.getRepoAddress()), "Git仓库地址未配置");
+            List<String> branches = gitService.getRemoteBranches(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword());
+            return new ResultNotified<>(true, "获取分支成功", branches);
+        } catch (Exception e) {
+            return new ResultNotified<>(false, e.getMessage(), Collections.emptyList());
+        }
     }
 
     @GetMapping("/repository/branches")

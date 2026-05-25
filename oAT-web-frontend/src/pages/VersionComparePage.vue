@@ -57,12 +57,13 @@
         <label class="field">
           <span>分支</span>
           <div class="input-action">
-            <input v-model.trim="gitCompare.branch" class="text-input" type="text" list="git-branch-list" :disabled="!repositoryConfigured" @input="persistDraft" />
+            <select v-model="gitCompare.branch" class="text-input branch-select" :disabled="!repositoryConfigured" @change="handleBranchChange">
+              <option value="">请选择分支</option>
+              <option v-for="branch in branchOptions" :key="branch" :value="branch">{{ branch }}</option>
+            </select>
             <button class="ghost-button small" type="button" :disabled="busy || !repositoryConfigured" @click="loadBranches()">刷新</button>
           </div>
-          <datalist id="git-branch-list">
-            <option v-for="branch in branches" :key="branch" :value="branch" />
-          </datalist>
+          <small class="field-help">优先使用应用当前分支；切换分支会清空已选择的 Commit，避免跨分支误比对。</small>
         </label>
         <label class="field">
           <span>旧 Commit</span>
@@ -231,6 +232,11 @@ const busy = ref(false)
 const error = ref('')
 
 const repositoryConfigured = computed(() => Boolean(center.value?.app.repoConfigured))
+const currentAppBranch = computed(() => center.value?.app.currentBranch || '')
+const branchOptions = computed(() => {
+  const ordered = [currentAppBranch.value, ...branches.value]
+  return ordered.filter((branch, index, list) => branch && list.indexOf(branch) === index)
+})
 const packageOptions = computed(() => {
   const versionItems = (center.value?.packageVersions || []).map((item) => ({
     value: item.programFile || '',
@@ -302,7 +308,11 @@ function restoreDraft() {
     mode.value = draft.mode === 'git' && repositoryConfigured.value ? 'git' : 'package'
     packageName.value = draft.packageName || ''
     packageCompare.value = { sourceFile: draft.packageCompare?.sourceFile || '', targetFile: draft.packageCompare?.targetFile || '' }
-    gitCompare.value = { branch: draft.gitCompare?.branch || '', oldCommit: draft.gitCompare?.oldCommit || '', newCommit: draft.gitCompare?.newCommit || '' }
+    gitCompare.value = {
+      branch: currentAppBranch.value || draft.gitCompare?.branch || '',
+      oldCommit: draft.gitCompare?.branch === (currentAppBranch.value || draft.gitCompare?.branch || '') ? draft.gitCompare?.oldCommit || '' : '',
+      newCommit: draft.gitCompare?.branch === (currentAppBranch.value || draft.gitCompare?.branch || '') ? draft.gitCompare?.newCommit || '' : '',
+    }
     uploadedPackages.value = draft.uploadedPackages || []
   } catch {
     clearDraft()
@@ -360,11 +370,18 @@ async function loadBranches(showError = true) {
   if (!repositoryConfigured.value) return
   try {
     branches.value = await fetchRepositoryBranches(projectId.value, appId.value)
-    if (!gitCompare.value.branch && branches.value.length) gitCompare.value.branch = branches.value[0]
+    if (!gitCompare.value.branch) gitCompare.value.branch = currentAppBranch.value || branches.value[0] || ''
     persistDraft()
   } catch (err) {
     if (showError) error.value = err instanceof Error ? err.message : '加载 Git 分支失败'
   }
+}
+
+function handleBranchChange() {
+  gitCompare.value.oldCommit = ''
+  gitCompare.value.newCommit = ''
+  commits.value = []
+  persistDraft()
 }
 
 async function openCommitPicker(target: 'old' | 'new') {
@@ -616,6 +633,16 @@ button:disabled {
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   padding: 10px 12px;
+}
+
+.branch-select {
+  min-width: min(360px, 100%);
+}
+
+.field-help {
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .input-action .text-input {

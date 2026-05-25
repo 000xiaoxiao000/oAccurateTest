@@ -10,6 +10,7 @@ import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitDiffVo;
 import com.oAT.web.service.entity.GitJobVo;
 import com.oAT.web.service.entity.GitPullEstimateVo;
+import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.LsRemoteCommand;
 import org.eclipse.jgit.diff.DiffEntry;
@@ -18,10 +19,7 @@ import org.eclipse.jgit.diff.Edit;
 import org.eclipse.jgit.diff.RawTextComparator;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.ProgressMonitor;
-import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
-import org.eclipse.jgit.internal.storage.dfs.DfsRepositoryDescription;
-import org.eclipse.jgit.internal.storage.dfs.InMemoryRepository;
 import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.patch.HunkHeader;
 import org.eclipse.jgit.revwalk.RevCommit;
@@ -242,6 +240,7 @@ public class GitServiceImpl implements GitService {
     @Override
     public String getLatestCommitId(String repoUrl, String username, String password, String branch) {
         String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
+        String finalBranch = normalizeBranchName(branch);
         try {
             LsRemoteCommand lsRemoteCommand = Git.lsRemoteRepository()
                     .setRemote(normalizedRepoUrl)
@@ -258,11 +257,11 @@ public class GitServiceImpl implements GitService {
             Collection<org.eclipse.jgit.lib.Ref> refs = lsRemoteCommand.call();
             for (org.eclipse.jgit.lib.Ref ref : refs) {
                 String name = ref.getName();
-                if (name.equals("refs/heads/" + branch)) {
+                if (name.equals("refs/heads/" + finalBranch)) {
                     return ref.getObjectId().name();
                 }
             }
-            throw new RuntimeException("分支 " + branch + " 不存在");
+            throw new RuntimeException("分支 " + finalBranch + " 不存在");
         } catch (Exception e) {
             logger.error("Failed to get commit id: {}", e.getMessage(), e);
             throw new RuntimeException("获取 CommitID失败: " + getFriendlyErrorMessage(e));
@@ -278,49 +277,83 @@ public class GitServiceImpl implements GitService {
 
         String normalizedRepoUrl = normalizeGitRemoteUrl(repoUrl);
         int finalLimit = limit > 0 ? limit : 20;
+        String finalBranch = normalizeBranchName(branch);
+        String branchRef = "refs/heads/" + finalBranch;
+        Path tempDir = null;
         try {
-            Collection<Ref> refs = Git.lsRemoteRepository()
-                    .setRemote(normalizedRepoUrl)
-                    .setHeads(true)
-                    .setTags(false)
-                    .setCredentialsProvider(getCredentials(username, password))
-                    .call();
+            tempDir = Files.createTempDirectory("oAT_git_commits");
+            CloneCommand cloneCommand = Git.cloneRepository()
+                    .setURI(normalizedRepoUrl)
+                    .setDirectory(tempDir.toFile())
+                    .setBranchesToClone(Collections.singletonList(branchRef))
+                    .setBranch(branchRef)
+                    .setNoCheckout(true)
+                    .setCloneAllBranches(false);
+            UsernamePasswordCredentialsProvider credentialsProvider = getCredentials(username, password);
+            if (credentialsProvider != null) {
+                cloneCommand.setCredentialsProvider(credentialsProvider);
+            }
 
-            Ref targetRef = null;
-            for (Ref ref : refs) {
-                if (("refs/heads/" + branch).equals(ref.getName())) {
-                    targetRef = ref;
-                    break;
+            try (Git git = cloneCommand.call()) {
+                ObjectId startId = resolveBranchHead(git.getRepository(), finalBranch);
+                if (startId == null) {
+                    throw new RuntimeException("分支 " + finalBranch + " 不存在或未拉取到提交对象");
                 }
-            }
-            if (targetRef == null || targetRef.getObjectId() == null) {
-                throw new RuntimeException("分支 " + branch + " 不存在");
-            }
-
-            try (InMemoryRepository repository = new InMemoryRepository(new DfsRepositoryDescription(normalizedRepoUrl + "#" + branch));
-                 RevWalk revWalk = new RevWalk(repository)) {
-                RevCommit startCommit = revWalk.parseCommit(targetRef.getObjectId());
-                revWalk.markStart(startCommit);
-                int count = 0;
-                for (RevCommit commit : revWalk) {
-                    if (count++ >= finalLimit) {
-                        break;
-                    }
-                    String commitId = commit.getName();
-                    String shortCommitId = commitId.length() > 8 ? commitId.substring(0, 8) : commitId;
-                    String message = commit.getShortMessage();
-                    if (!StringUtils.hasText(message)) {
-                        message = "-";
-                    }
-                    String author = commit.getAuthorIdent() != null ? commit.getAuthorIdent().getName() : "";
-                    commits.add(new GitCommitOptionVo(commitId, shortCommitId, message, author));
+                Iterable<RevCommit> log = git.log().add(startId).setMaxCount(finalLimit).call();
+                for (RevCommit commit : log) {
+                    commits.add(toCommitOption(commit));
                 }
             }
         } catch (Exception e) {
-            logger.error("Failed to get recent commits for repo: {} branch: {}", normalizedRepoUrl, branch, e);
+            logger.error("Failed to get recent commits for repo: {} branch: {}", normalizedRepoUrl, finalBranch, e);
             throw new RuntimeException("获取 Commit 列表失败: " + getFriendlyErrorMessage(e));
+        } finally {
+            if (tempDir != null) {
+                deleteFile(tempDir.toFile());
+            }
         }
         return commits;
+    }
+
+    private String normalizeBranchName(String branch) {
+        String value = branch == null ? "" : branch.trim();
+        if (value.startsWith("refs/heads/")) {
+            return value.substring("refs/heads/".length());
+        }
+        if (value.startsWith("refs/remotes/origin/")) {
+            return value.substring("refs/remotes/origin/".length());
+        }
+        if (value.startsWith("origin/")) {
+            return value.substring("origin/".length());
+        }
+        return value;
+    }
+
+    private ObjectId resolveBranchHead(Repository repository, String branch) throws IOException {
+        List<String> candidates = Arrays.asList(
+                "refs/remotes/origin/" + branch,
+                "refs/heads/" + branch,
+                "origin/" + branch,
+                branch
+        );
+        for (String candidate : candidates) {
+            ObjectId objectId = repository.resolve(candidate);
+            if (objectId != null) {
+                return objectId;
+            }
+        }
+        return null;
+    }
+
+    private GitCommitOptionVo toCommitOption(RevCommit commit) {
+        String commitId = commit.getName();
+        String shortCommitId = commitId.length() > 8 ? commitId.substring(0, 8) : commitId;
+        String message = commit.getShortMessage();
+        if (!StringUtils.hasText(message)) {
+            message = "-";
+        }
+        String author = commit.getAuthorIdent() != null ? commit.getAuthorIdent().getName() : "";
+        return new GitCommitOptionVo(commitId, shortCommitId, message, author);
     }
 
     @Override

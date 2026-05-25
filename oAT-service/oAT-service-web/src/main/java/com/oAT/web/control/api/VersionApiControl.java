@@ -285,8 +285,14 @@ public class VersionApiControl {
                                                @SessionAttribute UserVo user,
                                                @RequestParam String branch) {
         ensureProjectAccess(projectId, user);
-        AppVo app = appService.getApp(appId);
-        return new ResultNotified<>(true, "获取成功", gitService.getLatestCommitId(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), branch));
+        try {
+            AppVo app = appService.getApp(appId);
+            Assert.notNull(app, "应用不存在");
+            Assert.isTrue(StringUtils.hasText(app.getRepoAddress()), "Git仓库地址未配置");
+            return new ResultNotified<>(true, "获取成功", gitService.getLatestCommitId(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), branch));
+        } catch (Exception e) {
+            return new ResultNotified<>(false, e.getMessage(), null);
+        }
     }
 
     @GetMapping("/apps/{appId}/git/commits")
@@ -296,8 +302,14 @@ public class VersionApiControl {
                                                            @RequestParam String branch,
                                                            @RequestParam(defaultValue = "20") int limit) {
         ensureProjectAccess(projectId, user);
-        AppVo app = appService.getApp(appId);
-        return new ResultNotified<>(true, "获取成功", gitService.getRecentCommits(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), branch, limit));
+        try {
+            AppVo app = appService.getApp(appId);
+            Assert.notNull(app, "应用不存在");
+            Assert.isTrue(StringUtils.hasText(app.getRepoAddress()), "Git仓库地址未配置");
+            return new ResultNotified<>(true, "获取成功", gitService.getRecentCommits(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), branch, limit));
+        } catch (Exception e) {
+            return new ResultNotified<>(false, e.getMessage(), Collections.emptyList());
+        }
     }
 
     @PostMapping("/apps/{appId}/git/pull")

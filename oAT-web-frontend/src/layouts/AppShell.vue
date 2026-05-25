@@ -1,5 +1,5 @@
 <template>
-  <div ref="shellRef" class="shell">
+  <div ref="shellRef" class="shell" @keydown.esc="closeMenus">
     <header class="shell-header">
       <div class="page-shell shell-header-inner">
         <RouterLink class="brand-block" :to="projectId ? `/p/${projectId}/home` : '/projects'" aria-label="oAccurateTest" @click="closeMenus">
@@ -9,7 +9,7 @@
         <nav class="shell-nav">
           <RouterLink v-if="projectId" :to="`/p/${projectId}/search`">搜索</RouterLink>
           <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'monitor' }" @mouseenter="openNavMenu('monitor')" @mouseleave="closeMenus">
-            <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret">⌄</span></button>
+            <button class="nav-dropdown-trigger" type="button" :aria-expanded="openMenu === 'monitor'" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu compact">
               <RouterLink :to="`/p/${projectId}/monitor`" @click="closeMenus">实时监控</RouterLink>
               <RouterLink :to="`/p/${projectId}/my-snapshots`" @click="closeMenus">我的快照</RouterLink>
@@ -18,7 +18,7 @@
             </div>
           </div>
           <div v-if="projectId" class="nav-dropdown app-center" :class="{ open: openMenu === 'app' }" @mouseenter="openNavMenu('app')" @mouseleave="closeMenus">
-            <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('app')">应用中心 <span class="menu-caret">⌄</span></button>
+            <button class="nav-dropdown-trigger" type="button" :aria-expanded="openMenu === 'app'" @click.stop="toggleMenu('app')">应用中心 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu app-menu">
               <RouterLink class="menu-entry" :to="`/p/${projectId}/apps`" @click="closeMenus">应用总览</RouterLink>
               <input v-model.trim="appKeyword" class="menu-search" type="text" placeholder="搜索应用..." />
@@ -40,7 +40,7 @@
           <RouterLink v-if="projectId && aiEnabled" :to="`/p/${projectId}/ai`">AI Interactive</RouterLink>
           <template v-if="currentUser">
             <div v-if="projectId" class="nav-dropdown create-menu" :class="{ open: openMenu === 'create' }" @mouseenter="openNavMenu('create')" @mouseleave="closeMenus">
-              <button class="icon-trigger" type="button" @click.stop="toggleMenu('create')">＋</button>
+              <button class="icon-trigger" type="button" :aria-expanded="openMenu === 'create'" @click.stop="toggleMenu('create')">＋</button>
               <div class="nav-menu compact right-aligned">
                 <RouterLink to="/projects?create=1" @click="closeMenus">创建新项目</RouterLink>
                 <RouterLink :to="`/p/${projectId}/apps?create=1`" @click="closeMenus">添加应用</RouterLink>
@@ -60,7 +60,7 @@
               </div>
             </div>
             <div class="nav-dropdown user-menu" :class="{ open: openMenu === 'user' }" @mouseenter="openNavMenu('user')" @mouseleave="closeMenus">
-              <button class="icon-trigger" type="button" @click.stop="toggleMenu('user')">👤</button>
+              <button class="icon-trigger" type="button" :aria-expanded="openMenu === 'user'" @click.stop="toggleMenu('user')">👤</button>
               <div class="nav-menu compact right-aligned">
                 <RouterLink class="shell-user-link" to="/account" @click="closeMenus">用户设置</RouterLink>
                 <button type="button" @click="handleLogout">注销退出</button>
@@ -72,8 +72,18 @@
     </header>
     <main class="page-shell shell-main" :class="mainModeClass">
       <AppBreadcrumbs />
-      <RouterView />
+      <RouterView v-slot="{ Component, route: activeRoute }">
+        <Transition name="page-fade" mode="out-in">
+          <component :is="Component" :key="activeRoute.fullPath" />
+        </Transition>
+      </RouterView>
     </main>
+    <Transition name="back-top-fade">
+      <button v-if="showBackTop" class="back-top-button" type="button" aria-label="回到页面顶部" @click="scrollToTop">
+        <span>↑</span>
+        <small>顶部</small>
+      </button>
+    </Transition>
     <AiFloatingAssistant v-if="route.name !== 'project-ai'" />
   </div>
 </template>
@@ -98,6 +108,7 @@ const { projects } = storeToRefs(projectStore)
 const projectKeyword = ref('')
 const appKeyword = ref('')
 const shellRef = ref<HTMLElement | null>(null)
+const showBackTop = ref(false)
 const openMenu = ref<'monitor' | 'app' | 'create' | 'project' | 'user' | ''>('')
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
 const routeAppId = computed(() => typeof route.params.appId === 'string' ? route.params.appId : '')
@@ -136,6 +147,7 @@ watch(projectId, async (value) => {
 
 watch(() => route.fullPath, () => {
   closeMenus()
+  requestAnimationFrame(updateBackTopVisibility)
 })
 
 function toggleMenu(name: typeof openMenu.value) {
@@ -157,15 +169,27 @@ function handleDocumentClick(event: MouseEvent) {
   }
 }
 
+function updateBackTopVisibility() {
+  if (typeof window === 'undefined') return
+  showBackTop.value = window.scrollY > 420
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
 onMounted(() => {
   if (currentUser.value && projects.value.length === 0) {
     projectStore.loadProjects().catch(() => undefined)
   }
   document.addEventListener('click', handleDocumentClick)
+  window.addEventListener('scroll', updateBackTopVisibility, { passive: true })
+  updateBackTopVisibility()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocumentClick)
+  window.removeEventListener('scroll', updateBackTopVisibility)
 })
 
 function appVersionText(app: AppSummary) {
@@ -477,6 +501,57 @@ async function handleLogout() {
   width: min(1380px, calc(100vw - 32px));
 }
 
+.back-top-button {
+  position: fixed;
+  right: 26px;
+  bottom: 94px;
+  z-index: 850;
+  display: inline-grid;
+  place-items: center;
+  gap: 2px;
+  width: 50px;
+  height: 50px;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .94);
+  color: #0f766e;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .16);
+  backdrop-filter: blur(14px);
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.back-top-button span {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.back-top-button small {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.back-top-button:hover {
+  border-color: rgba(15, 118, 110, .42);
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .2);
+  transform: translateY(-3px);
+}
+
+.back-top-button:active {
+  transform: translateY(0) scale(.96);
+}
+
+.back-top-fade-enter-active,
+.back-top-fade-leave-active {
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.back-top-fade-enter-from,
+.back-top-fade-leave-to {
+  opacity: 0;
+  transform: translateY(12px) scale(.94);
+}
+
 @media (max-width: 900px) {
   .shell-header-inner {
     align-items: flex-start;
@@ -484,6 +559,11 @@ async function handleLogout() {
 
   .shell-nav {
     gap: 4px;
+  }
+
+  .back-top-button {
+    right: 16px;
+    bottom: 82px;
   }
 }
 </style>
