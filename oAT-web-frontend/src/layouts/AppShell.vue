@@ -8,16 +8,16 @@
         </RouterLink>
         <nav class="shell-nav">
           <RouterLink v-if="projectId" :to="`/p/${projectId}/search`">搜索</RouterLink>
-          <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'monitor' }">
+          <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'monitor' }" @mouseenter="openNavMenu('monitor')" @mouseleave="closeMenus">
             <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu compact">
               <RouterLink :to="`/p/${projectId}/monitor`" @click="closeMenus">实时监控</RouterLink>
               <RouterLink :to="`/p/${projectId}/my-snapshots`" @click="closeMenus">我的快照</RouterLink>
-              <RouterLink :to="`/p/${projectId}/apps`" @click="closeMenus">系统快照</RouterLink>
+              <RouterLink :to="systemSnapshotRoute" @click="closeMenus">系统快照</RouterLink>
               <RouterLink :to="`/p/${projectId}/map/home`" @click="closeMenus">链路地图</RouterLink>
             </div>
           </div>
-          <div v-if="projectId" class="nav-dropdown app-center" :class="{ open: openMenu === 'app' }">
+          <div v-if="projectId" class="nav-dropdown app-center" :class="{ open: openMenu === 'app' }" @mouseenter="openNavMenu('app')" @mouseleave="closeMenus">
             <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('app')">应用中心 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu app-menu">
               <RouterLink class="menu-entry" :to="`/p/${projectId}/apps`" @click="closeMenus">应用总览</RouterLink>
@@ -42,7 +42,7 @@
           </div>
           <RouterLink v-if="projectId && aiEnabled" :to="`/p/${projectId}/ai`">AI Interactive</RouterLink>
           <template v-if="currentUser">
-            <div v-if="projectId" class="nav-dropdown create-menu" :class="{ open: openMenu === 'create' }">
+            <div v-if="projectId" class="nav-dropdown create-menu" :class="{ open: openMenu === 'create' }" @mouseenter="openNavMenu('create')" @mouseleave="closeMenus">
               <button class="icon-trigger" type="button" @click.stop="toggleMenu('create')">＋</button>
               <div class="nav-menu compact right-aligned">
                 <RouterLink to="/projects?create=1" @click="closeMenus">创建新项目</RouterLink>
@@ -52,7 +52,7 @@
               </div>
             </div>
             <RouterLink v-if="projectId" class="icon-trigger" :to="`/projects?edit=${projectId}`" title="设置" @click="closeMenus">⚙</RouterLink>
-            <div class="nav-dropdown project-switcher" :class="{ open: openMenu === 'project' }">
+            <div class="nav-dropdown project-switcher" :class="{ open: openMenu === 'project' }" @mouseenter="openNavMenu('project')" @mouseleave="closeMenus">
               <button class="project-trigger" type="button" :aria-expanded="openMenu === 'project'" @click.stop="toggleMenu('project')">{{ currentProjectName }} <span>⌄</span></button>
               <div class="nav-menu project-menu right-aligned">
                 <input v-model.trim="projectKeyword" class="menu-search" type="text" placeholder="搜索项目..." />
@@ -62,7 +62,7 @@
                 <div v-if="!filteredProjects.length" class="empty-menu-item">暂无项目</div>
               </div>
             </div>
-            <div class="nav-dropdown user-menu" :class="{ open: openMenu === 'user' }">
+            <div class="nav-dropdown user-menu" :class="{ open: openMenu === 'user' }" @mouseenter="openNavMenu('user')" @mouseleave="closeMenus">
               <button class="icon-trigger" type="button" @click.stop="toggleMenu('user')">👤</button>
               <div class="nav-menu compact right-aligned">
                 <RouterLink class="shell-user-link" to="/account" @click="closeMenus">用户设置</RouterLink>
@@ -103,6 +103,7 @@ const appKeyword = ref('')
 const shellRef = ref<HTMLElement | null>(null)
 const openMenu = ref<'monitor' | 'app' | 'create' | 'project' | 'user' | ''>('')
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
+const routeAppId = computed(() => typeof route.params.appId === 'string' ? route.params.appId : '')
 const context = computed(() => projectId.value ? projectStore.contextByProjectId[projectId.value] : undefined)
 const apps = computed(() => context.value?.apps || projectStore.appsByProjectId[projectId.value] || [])
 const aiEnabled = computed(() => context.value?.ai.enabled !== false)
@@ -114,6 +115,10 @@ const filteredProjects = computed(() => {
 const filteredApps = computed(() => {
   const keyword = appKeyword.value.toLowerCase()
   return apps.value.filter((app) => !keyword || `${app.name} ${app.srcName || ''} ${app.currentVersion || ''}`.toLowerCase().includes(keyword)).slice(0, 12)
+})
+const systemSnapshotRoute = computed(() => {
+  const targetAppId = routeAppId.value || apps.value[0]?.id
+  return targetAppId ? `/p/${projectId.value}/apps/${targetAppId}/snapshots` : `/p/${projectId.value}/apps`
 })
 
 watch(projectId, async (value) => {
@@ -127,6 +132,10 @@ watch(() => route.fullPath, () => {
 
 function toggleMenu(name: typeof openMenu.value) {
   openMenu.value = openMenu.value === name ? '' : name
+}
+
+function openNavMenu(name: typeof openMenu.value) {
+  openMenu.value = name
 }
 
 function closeMenus() {
@@ -262,6 +271,8 @@ async function handleLogout() {
   position: relative;
   display: inline-flex;
   align-items: center;
+  padding-bottom: 8px;
+  margin-bottom: -8px;
 }
 
 .icon-trigger {
@@ -282,7 +293,7 @@ async function handleLogout() {
 
 .nav-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: 100%;
   left: 0;
   z-index: 160;
   min-width: 220px;
@@ -435,7 +446,7 @@ async function handleLogout() {
 }
 
 .shell-main {
-  padding: 24px 0 40px;
+  padding: 24px 0 112px;
 }
 
 @media (max-width: 900px) {

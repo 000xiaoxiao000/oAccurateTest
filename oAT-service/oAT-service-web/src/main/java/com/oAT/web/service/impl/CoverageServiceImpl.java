@@ -1709,14 +1709,13 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 style += "background-color: #f5c6cb;";
             }
             String branchClassAttr = "";
-            String branchDataAttr = "";
             if (branchLineDetails.containsKey(lineNum)) {
                 branchClassAttr = " class='branch-line branch-" + (color == null ? "green" : color) + "'";
-                branchDataAttr = " style='--line-number-width: " + lineWidth + ".2em;'";
+                style += "--line-number-width: " + lineWidth + ".2em;";
             }
             sb.append("<div style='display:flex;min-width:max-content;").append(style).append("'");
             if (StringUtils.hasText(branchClassAttr)) {
-                sb.append(branchClassAttr).append(branchDataAttr);
+                sb.append(branchClassAttr);
             }
             sb.append(">");
             sb.append("<span style='color: #999; flex-shrink:0; width: ").append(lineWidth).append(".2em; text-align: right; display: inline-block; user-select:none; margin-right: 20px;'>").append(lineNum).append("</span>")

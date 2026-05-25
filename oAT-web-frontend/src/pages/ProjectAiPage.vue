@@ -1,5 +1,5 @@
 <template>
-  <section>
+  <section class="ai-page">
     <div class="page-header">
       <div>
         <div class="eyebrow">AI Workspace</div>
@@ -29,7 +29,7 @@
         <div class="hero-mascot">
           <div class="stage-ring one"></div>
           <div class="stage-ring two"></div>
-          <MascotCanvas :size="170" :color="context.mascot?.mascotPrimary || '#0f766e'" :seed="projectId" :mood="asking ? 'thinking' : error ? 'error' : 'happy'" />
+          <MascotCanvas :size="170" :color="context.mascot?.mascotPrimary || '#0f766e'" :seed="projectId" :mood="asking ? 'thinking' : error ? 'error' : 'happy'" :interactive="true" />
           <span>{{ context.mascot?.mascotName || 'AI Assistant' }}</span>
         </div>
         <div class="hero-meta">
@@ -50,7 +50,7 @@
 
       <div class="page-grid">
         <aside class="side-stack">
-          <section class="panel">
+          <section class="panel ask-panel">
             <div class="card-title">
               <h2>会话</h2>
               <button class="ghost-button small" type="button" @click="newSession">新会话</button>
@@ -650,6 +650,37 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.ai-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.ai-page::before,
+.ai-page::after {
+  position: fixed;
+  z-index: -1;
+  content: '';
+  border-radius: 999px;
+  pointer-events: none;
+  filter: blur(2px);
+}
+
+.ai-page::before {
+  width: 360px;
+  height: 360px;
+  left: -120px;
+  top: 64px;
+  background: radial-gradient(circle, rgba(20, 184, 166, .14), transparent 70%);
+}
+
+.ai-page::after {
+  width: 420px;
+  height: 420px;
+  right: -150px;
+  bottom: 40px;
+  background: radial-gradient(circle, rgba(182, 217, 0, .16), transparent 72%);
+}
+
 .page-header,
 .header-actions,
 .card-title,
@@ -727,6 +758,7 @@ onMounted(async () => {
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, .06);
 }
 
 .status-card.error {
@@ -736,15 +768,32 @@ onMounted(async () => {
 .hero-card {
   --hero-accent: #0f766e;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) 320px;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) minmax(240px, .62fr);
   gap: 18px;
-  padding: 22px;
+  position: relative;
+  overflow: hidden;
+  padding: 24px;
   border-radius: 24px;
   margin-bottom: 18px;
   background:
+    linear-gradient(90deg, rgba(255, 255, 255, .13) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, .13) 1px, transparent 1px),
     radial-gradient(circle at top right, color-mix(in srgb, var(--hero-accent) 20%, white) 0%, transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(239, 247, 248, 0.94));
-  border: 1px solid rgba(15, 23, 42, 0.08);
+    linear-gradient(135deg, color-mix(in srgb, var(--hero-accent) 82%, #0f172a), #0f172a 68%);
+  background-size: 38px 38px, 38px 38px, auto, auto;
+  border: 1px solid color-mix(in srgb, var(--hero-accent) 28%, transparent);
+  color: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .18);
+}
+
+.hero-card h2,
+.hero-card p,
+.hero-card .hero-kicker {
+  color: #fff;
+}
+
+.hero-card p {
+  opacity: .84;
 }
 
 .hero-meta {
@@ -755,8 +804,9 @@ onMounted(async () => {
 .hero-chip {
   padding: 16px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
 }
 
 .hero-chip strong {
@@ -766,8 +816,9 @@ onMounted(async () => {
 
 .page-grid {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
   gap: 18px;
+  align-items: start;
 }
 
 .side-stack,
@@ -787,8 +838,15 @@ onMounted(async () => {
   gap: 6px;
   padding: 14px;
   border-radius: 16px;
-  background: #f8fbfb;
+  background: linear-gradient(180deg, #ffffff, #f8fbfb);
   border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.ability-card,
+.session-card,
+.message-card,
+.link-card {
+  min-width: 0;
 }
 
 .ability-value {
@@ -942,6 +1000,44 @@ onMounted(async () => {
 
 .message-card.assistant {
   background: #f8fbfb;
+  border-color: rgba(20, 184, 166, .16);
+}
+
+.ask-panel {
+  position: sticky;
+  top: 92px;
+}
+
+.message-history {
+  max-height: min(44vh, 460px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.message-card {
+  position: relative;
+  padding-left: 44px;
+}
+
+.message-card::before {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #fff;
+  content: 'AI';
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.message-card.user::before {
+  background: #0f172a;
+  content: '我';
 }
 
 .message-role {
@@ -966,8 +1062,16 @@ onMounted(async () => {
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 14px;
   padding: 12px 14px;
+  min-height: 150px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .98));
   resize: vertical;
   font: inherit;
+}
+
+.text-area:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, .38);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, .10);
 }
 
 .answer-block {
@@ -1003,12 +1107,6 @@ onMounted(async () => {
     flex-direction: column;
     align-items: stretch;
   }
-}
-
-
-.hero-card {
-  --hero-accent: #0f766e;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) minmax(260px, .65fr);
 }
 
 .hero-actions {
@@ -1085,9 +1183,60 @@ onMounted(async () => {
   display: none;
 }
 
+.hero-mascot :deep(.mascot-canvas) {
+  filter: drop-shadow(0 22px 36px rgba(0, 0, 0, .22));
+}
+
+.side-stack {
+  position: sticky;
+  top: 92px;
+}
+
+.content-stack {
+  min-width: 0;
+}
+
+.session-list,
+.timeline-list,
+.ability-list,
+.question-list {
+  max-height: 330px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.question-list .ghost-button {
+  border-radius: 14px;
+  text-align: left;
+}
+
+.primary-button,
+.ghost-button,
+.secondary-button,
+.action-button {
+  font-weight: 800;
+}
+
+.form-actions,
+.ask-tools,
+.ask-submit-actions {
+  min-width: 0;
+}
+
+.ask-tools,
+.ask-submit-actions {
+  row-gap: 8px;
+}
+
+@media (max-width: 1200px) {
+  .side-stack,
+  .ask-panel {
+    position: static;
+  }
+}
+
 @media (max-width: 980px) {
   .hero-card {
-  --hero-accent: #0f766e;
     grid-template-columns: 1fr;
   }
 }

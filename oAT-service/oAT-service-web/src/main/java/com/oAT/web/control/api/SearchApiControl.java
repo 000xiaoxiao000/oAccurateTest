@@ -85,11 +85,16 @@ public class SearchApiControl {
         result.setId(item.getId());
         result.setAppId(item.getAppId());
         result.setTitle(StringUtils.hasText(item.getTitleFragment()) ? item.getTitleFragment() : item.getTitle());
+        result.setPlainTitle(item.getTitle());
+        result.setTitleFragment(item.getTitleFragment());
         result.setSubTitle(item.getSubTitle());
         result.setHeadImage(item.getHeadImage());
         result.setImagePath(StringUtils.hasText(item.getHeadImage()) ? "/r/" + item.getHeadImage() : "/images/image.png");
         result.setDirectoryPath(item.getDirectoryPath());
         result.setUpdateTimeText(item.getUpdateTime() == null ? null : item.getUpdateTime().toString());
+        result.setDescribeFragments(item.getDescribeFragments());
+        result.setSqlContentFragments(item.getSqlContentFragments());
+        result.setRemoteContentFragments(item.getRemoteContentFragments());
         if (item.getDescribeFragments() != null) {
             result.setDescription(String.join("</br>", item.getDescribeFragments()));
         } else if (item.getSqlContentFragments() != null) {
@@ -153,10 +158,15 @@ public class SearchApiControl {
         private String id;
         private String appId;
         private String title;
+        private String plainTitle;
+        private String titleFragment;
         private String subTitle;
         private String headImage;
         private String imagePath;
         private String description;
+        private String[] describeFragments;
+        private String[] sqlContentFragments;
+        private String[] remoteContentFragments;
         private String directoryPath;
         private String updateTimeText;
         private String targetPath;
@@ -167,6 +177,10 @@ public class SearchApiControl {
         public void setAppId(String appId) { this.appId = appId; }
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
+        public String getPlainTitle() { return plainTitle; }
+        public void setPlainTitle(String plainTitle) { this.plainTitle = plainTitle; }
+        public String getTitleFragment() { return titleFragment; }
+        public void setTitleFragment(String titleFragment) { this.titleFragment = titleFragment; }
         public String getSubTitle() { return subTitle; }
         public void setSubTitle(String subTitle) { this.subTitle = subTitle; }
         public String getHeadImage() { return headImage; }
@@ -175,6 +189,12 @@ public class SearchApiControl {
         public void setImagePath(String imagePath) { this.imagePath = imagePath; }
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
+        public String[] getDescribeFragments() { return describeFragments; }
+        public void setDescribeFragments(String[] describeFragments) { this.describeFragments = describeFragments; }
+        public String[] getSqlContentFragments() { return sqlContentFragments; }
+        public void setSqlContentFragments(String[] sqlContentFragments) { this.sqlContentFragments = sqlContentFragments; }
+        public String[] getRemoteContentFragments() { return remoteContentFragments; }
+        public void setRemoteContentFragments(String[] remoteContentFragments) { this.remoteContentFragments = remoteContentFragments; }
         public String getDirectoryPath() { return directoryPath; }
         public void setDirectoryPath(String directoryPath) { this.directoryPath = directoryPath; }
         public String getUpdateTimeText() { return updateTimeText; }

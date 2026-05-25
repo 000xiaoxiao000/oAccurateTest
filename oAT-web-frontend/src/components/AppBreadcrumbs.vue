@@ -162,22 +162,37 @@ function goBack() {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 4px;
+  margin-bottom: 12px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .breadcrumbs a,
 .back-button {
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 999px;
-  padding: 7px 10px;
-  background: rgba(255, 255, 255, .82);
   color: #0f766e;
   font: inherit;
   font-weight: 800;
   cursor: pointer;
+}
+
+.breadcrumbs a {
+  border: none;
+  border-radius: 8px;
+  padding: 3px 4px;
+  background: transparent;
+}
+
+.back-button {
+  border: 1px solid rgba(15, 118, 110, .14);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, .76);
+}
+
+.breadcrumbs a:hover,
+.back-button:hover {
+  background: rgba(15, 118, 110, .07);
 }
 
 .breadcrumbs a::after {

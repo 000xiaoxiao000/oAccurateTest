@@ -1,5 +1,5 @@
 <template>
-  <section>
+  <section class="my-snapshot-page">
     <div class="page-header">
       <div>
         <div class="eyebrow">My Snapshots</div>
@@ -15,21 +15,38 @@
     <div v-if="loading" class="status-card">正在加载我的快照...</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="payload">
-      <section class="toolbar-card">
-        <div class="toolbar-actions">
-          <input v-model="keywordDraft" class="text-input" type="text" placeholder="搜索快照名称..." />
-          <select v-model="sortDraft" class="select">
-            <option value="updateTime">按更新时间</option>
-            <option value="name">按快照名称</option>
-          </select>
-          <select v-model="labelDrafts" class="select" multiple>
-            <option v-for="label in payload.snapshotLabels" :key="label.name" :value="label.name">{{ label.name }}</option>
-          </select>
-          <button class="submit-button" type="button" @click="applyFilters">查询</button>
-          <button class="ghost-button" type="button" @click="batchBindUsecases">批量关联用例</button>
-          <button class="ghost-button" type="button" @click="selectAll">全选</button>
-          <button class="ghost-button" type="button" @click="clearSelection">清空选择</button>
-          <span class="selected-badge">已选 {{ selectedSnapshotIds.length }} 项</span>
+      <section class="snapshot-toolbar">
+        <details class="filter-menu">
+          <summary>
+            <span class="filter-icon">#</span>
+            <span>{{ labelFilterText }}</span>
+          </summary>
+          <div class="filter-popover">
+            <label v-for="label in payload.snapshotLabels" :key="label.name" class="label-option">
+              <input v-model="labelDrafts" type="checkbox" :value="label.name" />
+              <span class="label-dot" :style="labelDotStyle(label.color)"></span>
+              <span>{{ label.name }}</span>
+            </label>
+            <div v-if="!payload.snapshotLabels.length" class="filter-empty">暂无标签</div>
+          </div>
+        </details>
+        <label class="search-field">
+          <input v-model="keywordDraft" type="text" placeholder="搜索快照名称..." @keyup.enter="applyFilters" />
+          <span>⌕</span>
+        </label>
+        <select v-model="sortDraft" class="sort-select" aria-label="排序">
+          <option value="updateTime">更新时间</option>
+          <option value="name">快照名称</option>
+        </select>
+        <button class="submit-button" type="button" @click="applyFilters">查询</button>
+        <button v-if="hasActiveFilters" class="mini-button" type="button" @click="clearFilters">清空</button>
+        <div class="toolbar-spacer"></div>
+        <div class="bulk-group">
+          <button class="submit-button compact" type="button" @click="batchBindUsecases">批量关联用例</button>
+          <button class="mini-button" type="button" @click="selectAll">全选</button>
+          <button class="mini-button" type="button" @click="clearSelection">清空选择</button>
+          <span class="selected-badge coverage" title="当前列表快照覆盖接口并集 / 应用总接口数">接口覆盖 {{ payload.apiCoverageSummaryText || '0 / 0' }}</span>
+          <span :class="['selected-badge', { active: selectedSnapshotIds.length > 0 }]">已选 {{ selectedSnapshotIds.length }} 项</span>
         </div>
       </section>
 
@@ -43,58 +60,91 @@
         @submit="submitUsecaseBinding"
       />
 
-      <div v-if="!payload.snapshots.length" class="empty-card">暂无我的快照</div>
-      <div v-else class="snapshot-list">
-        <article v-for="snapshot in payload.snapshots" :key="snapshot.id" class="snapshot-card">
-          <label class="snapshot-select">
-            <input v-model="selectedSnapshotIds" type="checkbox" :value="snapshot.id" />
-          </label>
-          <div class="snapshot-body">
-            <div class="snapshot-top">
-              <RouterLink class="snapshot-link" :to="`/p/${projectId}/my-snapshots/${snapshot.id}`">
-                {{ snapshot.name || snapshot.id }}
-              </RouterLink>
-              <span class="meta-line">{{ snapshot.updateTimeText || '-' }}</span>
-            </div>
-            <p class="snapshot-desc">{{ snapshot.describe || '暂无说明' }}</p>
-            <div class="tag-row">
-              <span class="tag">标签 {{ snapshot.labels?.length || 0 }}</span>
-              <span class="tag">覆盖 {{ snapshot.apiCoverageText || '-' }}</span>
-            </div>
-            <div class="snapshot-actions">
-              <RouterLink class="ghost-button small" :to="`/p/${projectId}/my-snapshots/${snapshot.id}/report`">报告</RouterLink>
-              <RouterLink class="ghost-button small" :to="`/p/${projectId}/my-snapshots/${snapshot.id}/graph`">链路图</RouterLink>
-              <RouterLink class="ghost-button small" :to="`/p/${projectId}/my-snapshots/${snapshot.id}/report/code`">源码</RouterLink>
-              <button class="ghost-button small" type="button" @click="openSingleUsecasePicker(snapshot.id)">关联用例</button>
-              <button class="ghost-button small" type="button" @click="startEdit(snapshot)">编辑</button>
-              <button class="ghost-button small" type="button" @click="toggleShare(snapshot)">{{ snapshot.share ? '关闭共享' : '开启共享' }}</button>
-              <a v-if="snapshot.share" class="ghost-button small" :href="`/share/snapshot/${snapshot.id}`" target="_blank" rel="noreferrer">共享链接</a>
-              <button class="danger-link" type="button" @click="remove(snapshot.id)">删除</button>
-            </div>
+      <section class="snapshot-panel">
+        <div class="snapshot-panel-header">
+          <nav class="snapshot-tabs" aria-label="快照导航">
+            <RouterLink class="snapshot-tab" :to="`/p/${projectId}/monitor`">实时监控</RouterLink>
+            <RouterLink class="snapshot-tab active" :to="`/p/${projectId}/my-snapshots`">我的快照</RouterLink>
+          </nav>
+          <button class="icon-button" type="button" title="刷新列表" @click="load">↻</button>
+        </div>
 
-            <form v-if="editingId === snapshot.id" class="edit-form" @submit.prevent="submitEdit(snapshot.id)">
-              <label class="field">
-                <span>快照名称</span>
-                <input v-model.trim="editForm.name" class="text-input" type="text" />
-              </label>
-              <label class="field">
-                <span>快照描述</span>
-                <textarea v-model.trim="editForm.describe" class="text-input" rows="3" />
-              </label>
-              <label class="field">
-                <span>标签</span>
-                <select v-model="editForm.labels" class="select" multiple>
-                  <option v-for="label in payload.snapshotLabels" :key="label.name" :value="label.name">{{ label.name }}</option>
-                </select>
-              </label>
-              <div class="snapshot-actions">
-                <button class="submit-button" type="submit">保存</button>
-                <button class="ghost-button small" type="button" @click="cancelEdit">取消</button>
-              </div>
-            </form>
-          </div>
-        </article>
-      </div>
+        <div v-if="!payload.snapshots.length" class="empty-card">暂无数据</div>
+        <div v-else class="snapshot-table-shell">
+          <table class="snapshot-table">
+            <colgroup>
+              <col class="select-col" />
+              <col />
+              <col class="coverage-col" />
+              <col class="time-col" />
+              <col class="action-col" />
+            </colgroup>
+            <tbody>
+              <template v-for="snapshot in payload.snapshots" :key="snapshot.id">
+                <tr :class="['snapshot-row', { selected: selectedSnapshotIds.includes(snapshot.id), editing: editingId === snapshot.id }]">
+                  <td class="select-cell">
+                    <input v-model="selectedSnapshotIds" type="checkbox" :value="snapshot.id" :aria-label="`选择 ${snapshot.name || snapshot.id}`" />
+                  </td>
+                  <td class="snapshot-name-cell">
+                    <RouterLink class="snapshot-title" :to="`/p/${projectId}/my-snapshots/${snapshot.id}`" :title="snapshot.name || snapshot.id">
+                      <span class="file-icon">▱</span>
+                      <span>{{ snapshot.name || snapshot.id }}</span>
+                    </RouterLink>
+                    <div class="snapshot-meta-row">
+                      <span v-if="snapshot.describe" class="snapshot-desc">{{ snapshot.describe }}</span>
+                      <span v-if="snapshot.labels?.length" class="label-summary">标签 {{ snapshot.labels.length }}</span>
+                    </div>
+                  </td>
+                  <td class="coverage-cell">{{ snapshot.apiCoverageText || '-' }}</td>
+                  <td class="time-cell">
+                    <span :title="snapshot.updateTimeText || '-'">{{ snapshot.updateTimeRelativeText || snapshot.updateTimeText || '-' }}</span>
+                  </td>
+                  <td class="snapshot-action-cell">
+                    <details class="row-menu">
+                      <summary title="设置">⚙</summary>
+                      <div class="row-menu-panel">
+                        <RouterLink :to="`/p/${projectId}/my-snapshots/${snapshot.id}/report`">报告</RouterLink>
+                        <RouterLink :to="`/p/${projectId}/my-snapshots/${snapshot.id}/graph`">链路图</RouterLink>
+                        <RouterLink :to="`/p/${projectId}/my-snapshots/code-report`">源码</RouterLink>
+                        <button type="button" @click="openSingleUsecasePicker(snapshot.id)">关联用例</button>
+                        <button type="button" @click="startEdit(snapshot)">编辑</button>
+                        <button type="button" @click="toggleShare(snapshot)">{{ snapshot.share ? '关闭共享' : '开启共享' }}</button>
+                        <a v-if="snapshot.share" :href="`/share/snapshot/${snapshot.id}`" target="_blank" rel="noreferrer">访问共享页</a>
+                        <button class="danger-link" type="button" @click="remove(snapshot.id)">删除</button>
+                      </div>
+                    </details>
+                  </td>
+                </tr>
+                <tr v-if="editingId === snapshot.id" class="edit-row">
+                  <td></td>
+                  <td colspan="4">
+                    <form class="edit-form" @submit.prevent="submitEdit(snapshot.id)">
+                      <label class="field">
+                        <span>快照名称</span>
+                        <input v-model.trim="editForm.name" class="text-input" type="text" />
+                      </label>
+                      <label class="field wide">
+                        <span>快照描述</span>
+                        <textarea v-model.trim="editForm.describe" class="text-input" rows="2" />
+                      </label>
+                      <label class="field">
+                        <span>标签</span>
+                        <select v-model="editForm.labels" class="select" multiple>
+                          <option v-for="label in payload.snapshotLabels" :key="label.name" :value="label.name">{{ label.name }}</option>
+                        </select>
+                      </label>
+                      <div class="edit-actions">
+                        <button class="submit-button compact" type="submit">保存</button>
+                        <button class="mini-button" type="button" @click="cancelEdit">取消</button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </template>
   </section>
 </template>
@@ -123,6 +173,10 @@ const usecasePickerOpen = ref(false)
 const usecasePickerMode = ref<'single' | 'batch'>('single')
 const usecasePickerSnapshotId = ref('')
 const usecasePickerSelectedIds = ref<string[]>([])
+const labelFilterText = computed(() => (labelDrafts.value.length ? `标签过滤 ${labelDrafts.value.length}` : '标签过滤'))
+const hasActiveFilters = computed(
+  () => Boolean(keywordDraft.value.trim()) || sortDraft.value !== 'updateTime' || labelDrafts.value.length > 0,
+)
 const usecasePickerTitle = computed(() => (usecasePickerMode.value === 'batch' ? '批量关联用例' : '关联用例'))
 const usecasePickerDescription = computed(() =>
   usecasePickerMode.value === 'batch'
@@ -169,6 +223,32 @@ async function applyFilters() {
   }
   await router.push({ name: 'my-snapshot-list', params: { projectId: projectId.value }, query })
   await load()
+}
+
+async function clearFilters() {
+  keywordDraft.value = ''
+  sortDraft.value = 'updateTime'
+  labelDrafts.value = []
+  await applyFilters()
+}
+
+function labelDotStyle(color?: string) {
+  const palette: Record<string, string> = {
+    red: '#db2828',
+    orange: '#f2711c',
+    yellow: '#fbbd08',
+    olive: '#b5cc18',
+    green: '#21ba45',
+    teal: '#00b5ad',
+    blue: '#2185d0',
+    violet: '#6435c9',
+    purple: '#a333c8',
+    pink: '#e03997',
+    brown: '#a5673f',
+    grey: '#767676',
+    black: '#1b1c1d',
+  }
+  return { background: palette[color || ''] || color || '#2185d0' }
 }
 
 function syncFilterDrafts() {
@@ -302,19 +382,30 @@ onMounted(load)
 </script>
 
 <style scoped>
+.my-snapshot-page {
+  min-width: 0;
+}
+
 .page-header,
 .header-actions,
-.toolbar-actions,
-.snapshot-top,
-.snapshot-actions {
+.snapshot-toolbar,
+.bulk-group,
+.snapshot-panel-header,
+.snapshot-tabs,
+.edit-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .page-header {
-  margin-bottom: 20px;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.page-header h1 {
+  margin: 6px 0 8px;
+  font-size: 30px;
 }
 
 .eyebrow {
@@ -326,44 +417,79 @@ onMounted(load)
 }
 
 .subtext,
-.meta-line,
-.snapshot-desc {
+.snapshot-desc,
+.snapshot-meta-row {
   color: #64748b;
+}
+
+.action-button,
+.submit-button,
+.ghost-button,
+.mini-button,
+.icon-button {
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
 }
 
 .action-button,
 .submit-button {
   border: none;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: #0f172a;
+  padding: 9px 14px;
+  background: #0f766e;
   color: #fff;
-  cursor: pointer;
 }
 
-.submit-button {
-  background: #0f766e;
+.action-button {
+  background: #0f172a;
+}
+
+.submit-button.compact {
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.ghost-button,
+.mini-button,
+.icon-button {
+  border: 1px solid rgba(15, 118, 110, .18);
+  background: rgba(15, 118, 110, .06);
+  color: #0f766e;
 }
 
 .ghost-button {
-  border: 1px solid rgba(15, 118, 110, 0.18);
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: rgba(15, 118, 110, 0.06);
-  color: #0f766e;
-  cursor: pointer;
+  padding: 9px 14px;
+  text-decoration: none;
 }
 
-.ghost-button.small {
-  padding: 8px 12px;
+.mini-button {
+  padding: 7px 11px;
+  background: #fff;
+  font-size: 13px;
 }
 
-.status-card,
-.toolbar-card {
-  padding: 18px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+.icon-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.action-button:hover,
+.submit-button:hover,
+.ghost-button:hover,
+.mini-button:hover,
+.icon-button:hover {
+  transform: translateY(-1px);
+}
+
+.status-card {
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .96);
+  border: 1px solid rgba(15, 23, 42, .08);
 }
 
 .status-card.error,
@@ -371,21 +497,392 @@ onMounted(load)
   color: #b91c1c;
 }
 
-.toolbar-card {
-  margin-bottom: 18px;
+.snapshot-toolbar {
+  position: relative;
+  z-index: 12;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .05);
 }
 
-.toolbar-actions,
-.snapshot-actions {
+.toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.filter-menu {
+  position: relative;
+}
+
+.filter-menu summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 999px;
+  background: rgba(15, 118, 110, .06);
+  color: #0f766e;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.filter-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-icon {
+  font-weight: 900;
+}
+
+.filter-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  min-width: 220px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+}
+
+.label-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 9px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.label-option:hover {
+  background: rgba(15, 118, 110, .07);
+}
+
+.label-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, .06);
+}
+
+.filter-empty {
+  padding: 10px;
+  color: #94a3b8;
+}
+
+.search-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  min-width: 230px;
+  padding: 0 10px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.search-field input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #0f172a;
+}
+
+.search-field span {
+  color: #94a3b8;
+}
+
+.sort-select,
+.text-input,
+.select {
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.sort-select {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.text-input,
+.select {
+  padding: 9px 10px;
+}
+
+.bulk-group {
   flex-wrap: wrap;
+  padding: 4px;
+  border: 1px solid rgba(15, 118, 110, .14);
+  border-radius: 999px;
+  background: rgba(15, 118, 110, .05);
 }
 
 .selected-badge {
-  padding: 9px 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(15, 23, 42, .08);
   border-radius: 999px;
-  background: rgba(15, 118, 110, 0.08);
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.selected-badge.active,
+.selected-badge.coverage {
+  border-color: rgba(15, 118, 110, .2);
+  background: rgba(15, 118, 110, .09);
+  color: #0f766e;
+}
+
+.snapshot-panel {
+  overflow: visible;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 14px 36px rgba(15, 23, 42, .05);
+}
+
+.snapshot-panel-header {
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, .08);
+  background: #fbfcfd;
+}
+
+.snapshot-tabs {
+  flex-wrap: wrap;
+  padding: 2px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.snapshot-tab {
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.snapshot-tab.active {
+  background: rgba(15, 118, 110, .1);
+  color: #0f766e;
+}
+
+.snapshot-table-shell {
+  position: relative;
+  z-index: 1;
+  max-height: calc(100vh - 278px);
+  overflow: auto;
+}
+
+.snapshot-table {
+  width: 100%;
+  min-width: 760px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.select-col {
+  width: 34px;
+}
+
+.coverage-col {
+  width: 92px;
+}
+
+.time-col {
+  width: 132px;
+}
+
+.action-col {
+  width: 44px;
+}
+
+.snapshot-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(15, 23, 42, .07);
+  vertical-align: middle;
+}
+
+.snapshot-row:hover td {
+  background: rgba(15, 118, 110, .035);
+}
+
+.snapshot-row.selected td {
+  background: #fff4bd;
+}
+
+.snapshot-row.editing td {
+  border-bottom-color: transparent;
+}
+
+.select-cell {
+  text-align: center;
+}
+
+.snapshot-name-cell {
+  min-width: 0;
+}
+
+.snapshot-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: #0f172a;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.snapshot-title span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-icon {
+  color: #64748b;
+  font-size: 16px;
+}
+
+.snapshot-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.snapshot-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.label-summary,
+.coverage-cell {
+  color: #0f766e;
+}
+
+.label-summary {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, .08);
+  font-weight: 700;
+}
+
+.coverage-cell,
+.time-cell {
+  color: #64748b;
+  font-size: 13px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.coverage-cell {
   color: #0f766e;
   font-weight: 800;
+}
+
+.snapshot-action-cell {
+  position: relative;
+  overflow: visible;
+  text-align: center;
+}
+
+.row-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.row-menu summary {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #64748b;
+  cursor: pointer;
+  list-style: none;
+}
+
+.row-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.row-menu[open] summary,
+.row-menu summary:hover {
+  background: rgba(15, 118, 110, .08);
+  color: #0f766e;
+}
+
+.row-menu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+  text-align: left;
+}
+
+.row-menu-panel a,
+.row-menu-panel button {
+  display: block;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #334155;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.row-menu-panel a:hover,
+.row-menu-panel button:hover {
+  background: rgba(15, 118, 110, .07);
+  color: #0f766e;
+}
+
+.row-menu-panel .danger-link {
+  color: #b91c1c;
+}
+
+.edit-row td {
+  padding-top: 0;
+  background: #fffdf2;
 }
 
 .field,
@@ -397,75 +894,25 @@ onMounted(load)
 .field span {
   color: #475569;
   font-size: 13px;
-}
-
-.edit-form {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.snapshot-actions a {
-  text-decoration: none;
-}
-
-.text-input,
-.select {
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #fff;
-}
-
-.snapshot-list {
-  display: grid;
-  gap: 12px;
-}
-
-.snapshot-card {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 12px;
-  padding: 14px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.snapshot-select {
-  padding-top: 6px;
-}
-
-.tag-row {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.tag {
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(15, 118, 110, 0.09);
-  color: #0f766e;
-  font-size: 12px;
-}
-
-.snapshot-link {
-  color: #0f172a;
   font-weight: 700;
 }
 
-.danger-link {
-  border: none;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
+.edit-form {
+  grid-template-columns: minmax(180px, 1fr) minmax(260px, 2fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid rgba(15, 118, 110, .12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .88);
+}
+
+.edit-form .select {
+  min-height: 38px;
+  max-height: 80px;
 }
 
 .empty-card {
-  padding: 22px;
-  border-radius: 16px;
-  background: #f8fafc;
+  padding: 28px;
   color: #64748b;
   text-align: center;
 }
@@ -473,11 +920,27 @@ onMounted(load)
 @media (max-width: 960px) {
   .page-header,
   .header-actions,
-  .toolbar-actions,
-  .snapshot-top,
-  .snapshot-actions {
-    flex-direction: column;
+  .snapshot-toolbar,
+  .bulk-group,
+  .snapshot-panel-header {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar-spacer {
+    display: none;
+  }
+
+  .search-field {
+    min-width: 100%;
+  }
+
+  .bulk-group {
+    border-radius: 14px;
+  }
+
+  .edit-form {
+    grid-template-columns: 1fr;
   }
 }
 </style>

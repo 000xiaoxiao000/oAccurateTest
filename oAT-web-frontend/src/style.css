@@ -36,6 +36,28 @@ textarea {
   font: inherit;
 }
 
+select[multiple] {
+  min-height: 118px;
+  border-color: rgba(15, 118, 110, .16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .98));
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, .36) transparent;
+}
+
+select[multiple] option {
+  margin: 3px 0;
+  border-radius: 10px;
+  padding: 7px 9px;
+  color: #334155;
+}
+
+select[multiple] option:checked {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: #fff;
+  font-weight: 800;
+}
+
 button {
   cursor: pointer;
 }

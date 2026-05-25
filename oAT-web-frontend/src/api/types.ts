@@ -511,6 +511,7 @@ export interface MySnapshotListPayload {
   snapshots: SnapshotOption[]
   allUsecases: UsecaseSummary[]
   snapshotLabels: LabelSummary[]
+  apiCoverageSummaryText?: string
   currentUserRole: string
 }
 
@@ -767,10 +768,15 @@ export interface SearchKeywordResult {
   id: string
   appId?: string
   title: string
+  plainTitle?: string
+  titleFragment?: string
   subTitle?: string
   headImage?: string
   imagePath?: string
   description?: string
+  describeFragments?: string[]
+  sqlContentFragments?: string[]
+  remoteContentFragments?: string[]
   directoryPath?: string
   updateTimeText?: string
   targetPath: string

@@ -62,24 +62,41 @@
     </section>
 
     <section class="monitor-toolbar panel">
-      <div class="toolbar-left">
-        <strong>条件过滤：</strong>
-        <select v-model.number="upToTime" class="text-input time-select">
-          <option :value="60">一分钟内</option>
-          <option :value="180">三分钟内</option>
-          <option :value="300">五分钟内</option>
-          <option :value="1800">三十分钟内</option>
-        </select>
-        <select v-model="selectedAppIds" class="text-input app-select" multiple>
-          <option v-for="app in projectApps" :key="app.id" :value="app.id">{{ app.name }}</option>
-        </select>
-        <select v-model="selectedClientIps" class="text-input app-select" multiple>
-          <option v-for="ip in availableClientIps" :key="ip" :value="ip">{{ ip }}</option>
-        </select>
-        <input v-model.number="maxSize" class="text-input size-input" type="number" min="10" max="500" />
-        <button class="ghost-button" type="button" @click="loadTraces">查询</button>
+      <div class="toolbar-main">
+        <div class="toolbar-group compact-group">
+          <span class="toolbar-label">时间窗口</span>
+          <select v-model.number="upToTime" class="text-input time-select">
+            <option :value="60">一分钟内</option>
+            <option :value="180">三分钟内</option>
+            <option :value="300">五分钟内</option>
+            <option :value="1800">三十分钟内</option>
+          </select>
+        </div>
+        <div class="toolbar-group filter-group">
+          <span class="toolbar-label">应用</span>
+          <div class="filter-chip-row" role="listbox" aria-label="应用过滤">
+            <button class="filter-chip" :class="{ active: selectedAppIds.length === 0 }" type="button" @click="clearAppFilter">全部</button>
+            <button v-for="app in projectApps" :key="app.id" class="filter-chip" :class="{ active: selectedAppIds.includes(app.id) }" type="button" @click="toggleAppFilter(app.id)">
+              {{ app.name }}
+            </button>
+          </div>
+        </div>
+        <div class="toolbar-group filter-group">
+          <span class="toolbar-label">探针 IP</span>
+          <div class="filter-chip-row" role="listbox" aria-label="探针 IP 过滤">
+            <button class="filter-chip" :class="{ active: selectedClientIps.length === 0 }" type="button" @click="clearIpFilter">全部</button>
+            <button v-for="ip in availableClientIps" :key="ip" class="filter-chip" :class="{ active: selectedClientIps.includes(ip) }" type="button" @click="toggleIpFilter(ip)">
+              {{ ip }}
+            </button>
+          </div>
+        </div>
+        <div class="toolbar-group compact-group">
+          <span class="toolbar-label">数量</span>
+          <input v-model.number="maxSize" class="text-input size-input" type="number" min="10" max="500" />
+        </div>
+        <button class="ghost-button query-button" type="button" @click="loadTraces">查询</button>
       </div>
-      <div class="toolbar-right">
+      <div class="toolbar-actions">
         <div class="snapshot-actions" :class="{ disabled: !selectedTraceId }">
           <button class="action-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">保存快照</button>
           <div class="snapshot-menu">
@@ -535,15 +552,33 @@ function showOscilloscope() {
 function toggleProbeFilter(probe: OnlineSessionSummary) {
   const ip = probe.addressIp
   if (!ip) return
-  if (scopeMode.value === 'single') {
-    selectedClientIps.value = [ip]
-  } else if (selectedClientIps.value.includes(ip)) {
-    selectedClientIps.value = selectedClientIps.value.filter((item) => item !== ip)
-  } else {
-    selectedClientIps.value = [...selectedClientIps.value, ip]
-  }
+  selectedClientIps.value = [ip]
   scopeMode.value = 'single'
   loadTraces()
+}
+
+function toggleAppFilter(appId: string) {
+  if (!appId) return
+  selectedAppIds.value = selectedAppIds.value.includes(appId)
+    ? selectedAppIds.value.filter((item) => item !== appId)
+    : [...selectedAppIds.value, appId]
+}
+
+function clearAppFilter() {
+  selectedAppIds.value = []
+}
+
+function toggleIpFilter(ip: string) {
+  if (!ip) return
+  selectedClientIps.value = selectedClientIps.value.includes(ip)
+    ? selectedClientIps.value.filter((item) => item !== ip)
+    : [...selectedClientIps.value, ip]
+  scopeMode.value = selectedClientIps.value.length === 1 ? 'single' : selectedClientIps.value.length > 1 ? 'lanes' : 'aggregate'
+}
+
+function clearIpFilter() {
+  selectedClientIps.value = []
+  scopeMode.value = 'aggregate'
 }
 
 function setScopeMode(mode: 'aggregate' | 'single' | 'lanes') {
@@ -975,12 +1010,6 @@ onBeforeUnmount(stopRefreshTimer)
   width: 130px;
 }
 
-.app-select {
-  min-width: 150px;
-  max-width: 220px;
-  min-height: 42px;
-}
-
 .probe-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -1019,17 +1048,17 @@ onBeforeUnmount(stopRefreshTimer)
   position: sticky;
   top: 76px;
   z-index: 8;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 14px;
   margin-bottom: 16px;
-  padding: 12px 16px;
+  padding: 12px 14px;
   backdrop-filter: blur(14px);
 }
 
-.toolbar-left,
-.toolbar-right,
+.toolbar-main,
+.toolbar-actions,
 .auto-refresh-controls {
   display: flex;
   align-items: center;
@@ -1037,8 +1066,74 @@ onBeforeUnmount(stopRefreshTimer)
   gap: 10px;
 }
 
-.toolbar-right {
+.toolbar-main {
+  min-width: 0;
+}
+
+.toolbar-actions {
   justify-content: flex-end;
+  max-width: 420px;
+}
+
+.toolbar-group {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.compact-group {
+  flex: 0 0 auto;
+}
+
+.filter-group {
+  flex: 1 1 210px;
+  max-width: 330px;
+}
+
+.toolbar-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.filter-chip-row {
+  display: flex;
+  gap: 6px;
+  min-height: 38px;
+  max-height: 78px;
+  overflow: auto;
+  padding: 2px;
+  border: 1px solid #d9e5ea;
+  border-radius: 14px;
+  background: #fbfdfe;
+}
+
+.filter-chip {
+  flex: 0 0 auto;
+  max-width: 138px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .04);
+}
+
+.filter-chip.active {
+  border-color: rgba(15, 118, 110, .24);
+  background: #0f766e;
+  color: #fff;
+}
+
+.query-button {
+  align-self: end;
 }
 
 .snapshot-actions {
@@ -1444,8 +1539,12 @@ onBeforeUnmount(stopRefreshTimer)
 
   .monitor-toolbar {
     position: static;
-    align-items: flex-start;
-    flex-direction: column;
+    grid-template-columns: 1fr;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-start;
+    max-width: none;
   }
 
   .page-header,

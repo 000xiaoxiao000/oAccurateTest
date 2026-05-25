@@ -1,6 +1,6 @@
 <template>
-  <section>
-    <div class="page-header">
+  <section :class="['relation-board', compact && 'compact-board']">
+    <div v-if="!compact" class="page-header">
       <div>
         <div class="eyebrow">{{ eyebrow }}</div>
         <h1>{{ title }}</h1>
@@ -14,7 +14,7 @@
     <div v-if="loading" class="status-card">{{ loadingText || '正在加载...' }}</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else>
-      <div class="summary-grid">
+      <div v-if="!compact" class="summary-grid">
         <article class="summary-card">
           <span>节点</span>
           <strong>{{ filteredNodes.length }}</strong>
@@ -25,7 +25,7 @@
         </article>
       </div>
 
-      <label class="search-box">
+      <label v-if="!compact" class="search-box">
         <span>关键字筛选</span>
         <input v-model.trim="keyword" class="text-input" type="text" placeholder="输入名称、类型或描述" />
       </label>
@@ -195,7 +195,10 @@ const props = defineProps<{
   edges: RelationEdge[]
   backRoute?: RouteLocationRaw
   backLabel?: string
+  compact?: boolean
 }>()
+
+const compact = computed(() => Boolean(props.compact))
 
 const keyword = ref('')
 const selectedId = ref('')
@@ -695,6 +698,18 @@ watchEffect(() => {
 .graph-tip span {
   color: #cbd5e1;
   line-height: 1.5;
+}
+
+.compact-board .graph-panel {
+  margin-top: 0;
+}
+
+.compact-board .relation-graph {
+  min-height: min(620px, calc(100vh - 250px));
+}
+
+.compact-board .layout-grid {
+  grid-template-columns: minmax(260px, .72fr) minmax(320px, 1fr);
 }
 
 @media (max-width: 760px) {

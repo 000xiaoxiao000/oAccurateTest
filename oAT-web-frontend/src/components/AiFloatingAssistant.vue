@@ -533,13 +533,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .ai-floating {
   position: fixed;
-  right: 22px;
-  bottom: 24px;
+  right: 10px;
+  bottom: 10px;
   z-index: 1000;
   display: flex;
   flex-direction: row-reverse;
   align-items: flex-end;
-  gap: 12px;
+  gap: 10px;
   color: #111827;
   user-select: none;
 }
@@ -556,16 +556,16 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 82px;
-  height: 82px;
+  width: 58px;
+  height: 58px;
   padding: 0;
   border-radius: 999px;
   background: transparent;
 }
 
 .launcher :deep(.mascot-canvas) {
-  width: 76px;
-  height: 76px;
+  width: 56px;
+  height: 56px;
   display: block;
   filter: drop-shadow(0 12px 24px rgba(15, 23, 42, .16));
   transition: transform .16s ease;
@@ -577,11 +577,11 @@ onBeforeUnmount(() => {
 
 .launcher-bubble {
   position: absolute;
-  right: 82px;
-  bottom: 48px;
+  right: 60px;
+  bottom: 34px;
   width: max-content;
-  max-width: 168px;
-  padding: 8px 12px;
+  max-width: 136px;
+  padding: 6px 9px;
   border: 1px solid rgba(20, 184, 166, .18);
   border-radius: 14px 14px 4px;
   background: rgba(255, 255, 255, .98);
@@ -607,8 +607,8 @@ onBeforeUnmount(() => {
 
 .restore-button {
   position: fixed;
-  right: 22px;
-  bottom: 24px;
+  right: 10px;
+  bottom: 10px;
   z-index: 1001;
   display: inline-flex;
   align-items: center;
@@ -622,8 +622,8 @@ onBeforeUnmount(() => {
 
 .assistant-panel {
   position: relative;
-  width: min(380px, calc(100vw - 132px));
-  height: min(560px, calc(100vh - 48px));
+  width: min(370px, calc(100vw - 96px));
+  height: min(540px, calc(100vh - 42px));
   min-width: min(340px, calc(100vw - 132px));
   min-height: 420px;
   max-width: min(640px, calc(100vw - 132px));

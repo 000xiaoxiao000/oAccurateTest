@@ -17,6 +17,8 @@ import com.oAT.web.service.entity.SystemLogVo;
 import com.oAT.web.service.entity.UserVo;
 import com.oAT.web.service.entity.UserRegisterVo;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -98,10 +100,16 @@ public class FrontendContextApiControl {
     }
 
     @GetMapping("/auth/me")
-    public ResultNotified<UserSummary> currentUser(@SessionAttribute UserVo user) {
+    public ResponseEntity<ResultNotified<UserSummary>> currentUser(HttpSession session) {
+        UserVo user = (UserVo) session.getAttribute("user");
+        if (user == null) {
+            ResultNotified<UserSummary> unauthorized = new ResultNotified<>(false, "未登录或登录已过期");
+            unauthorized.setErrorMessage("AUTH_REQUIRED");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(unauthorized);
+        }
         UserVo latestUser = userService.getUser(user.getId());
         UserVo effectiveUser = latestUser != null ? latestUser : user;
-        return new ResultNotified<>(true, "获取当前用户成功", toUserSummary(effectiveUser));
+        return ResponseEntity.ok(new ResultNotified<>(true, "获取当前用户成功", toUserSummary(effectiveUser)));
     }
 
     @PostMapping("/auth/logout")

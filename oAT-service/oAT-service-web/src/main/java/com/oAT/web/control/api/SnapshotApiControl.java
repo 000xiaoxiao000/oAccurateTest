@@ -39,6 +39,7 @@ import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.service.AppService;
+import com.oAT.web.service.ApiEndpointAnalysisService;
 import com.oAT.web.service.CoverageService;
 import com.oAT.web.service.ClientSessionService;
 import com.oAT.web.service.ProjectService;
@@ -47,6 +48,7 @@ import com.oAT.web.service.SystemSnapshotService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.UserService;
 import com.oAT.web.service.entity.AppVo;
+import com.oAT.web.service.entity.ApiEndpointCoverageVo;
 import com.oAT.web.service.entity.LableType;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.ProjectVo;
@@ -98,6 +100,7 @@ public class SnapshotApiControl {
     private final UsecaseService usecaseService;
     private final StaticInfoRepository staticInfoRepository;
     private final CoverageService coverageService;
+    private final ApiEndpointAnalysisService apiEndpointAnalysisService;
     private final ApiEndpointRepository apiEndpointRepository;
     private final ClientSessionService clientSessionService;
 
@@ -109,6 +112,7 @@ public class SnapshotApiControl {
                               UsecaseService usecaseService,
                               StaticInfoRepository staticInfoRepository,
                               CoverageService coverageService,
+                              ApiEndpointAnalysisService apiEndpointAnalysisService,
                               ApiEndpointRepository apiEndpointRepository,
                               ClientSessionService clientSessionService) {
         this.snapshotService = snapshotService;
@@ -119,6 +123,7 @@ public class SnapshotApiControl {
         this.usecaseService = usecaseService;
         this.staticInfoRepository = staticInfoRepository;
         this.coverageService = coverageService;
+        this.apiEndpointAnalysisService = apiEndpointAnalysisService;
         this.apiEndpointRepository = apiEndpointRepository;
         this.clientSessionService = clientSessionService;
     }
@@ -449,6 +454,7 @@ public class SnapshotApiControl {
         payload.setSnapshots(snapshots);
         payload.setAllUsecases(collectAllProjectUsecases(projectId));
         payload.setSnapshotLabels(projectService.getLables(projectId, LableType.snapshot));
+        payload.setApiCoverageSummaryText(buildSnapshotApiCoverageSummaryText(snapshots));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取我的快照成功", payload);
     }
@@ -1116,6 +1122,24 @@ public class SnapshotApiControl {
         return Arrays.stream(filters)
                 .filter(StringUtils::hasText)
                 .allMatch(labelSet::contains);
+    }
+
+    private String buildSnapshotApiCoverageSummaryText(List<SnapshotVo> snapshots) {
+        String appId = snapshots.stream()
+                .map(SnapshotVo::getAppId)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
+        if (!StringUtils.hasText(appId)) {
+            return "0 / 0";
+        }
+        List<String> traceIds = snapshots.stream()
+                .map(SnapshotVo::getTraceId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(appId, traceIds);
+        return coverage.getDisplayText();
     }
 
     private RemoteCallResolver buildRemoteCallResolver(String projectId) {
@@ -2449,6 +2473,7 @@ public class SnapshotApiControl {
         private List<SnapshotVo> snapshots;
         private List<UsecaseVo> allUsecases;
         private List<LabelGroup.Label> snapshotLabels;
+        private String apiCoverageSummaryText;
         private String currentUserRole;
 
         public List<SnapshotVo> getSnapshots() { return snapshots; }
@@ -2457,6 +2482,8 @@ public class SnapshotApiControl {
         public void setAllUsecases(List<UsecaseVo> allUsecases) { this.allUsecases = allUsecases; }
         public List<LabelGroup.Label> getSnapshotLabels() { return snapshotLabels; }
         public void setSnapshotLabels(List<LabelGroup.Label> snapshotLabels) { this.snapshotLabels = snapshotLabels; }
+        public String getApiCoverageSummaryText() { return apiCoverageSummaryText; }
+        public void setApiCoverageSummaryText(String apiCoverageSummaryText) { this.apiCoverageSummaryText = apiCoverageSummaryText; }
         public String getCurrentUserRole() { return currentUserRole; }
         public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
     }
