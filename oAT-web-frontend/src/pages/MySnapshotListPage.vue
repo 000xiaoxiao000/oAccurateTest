@@ -40,6 +40,11 @@
         </select>
         <button class="submit-button" type="button" @click="applyFilters">查询</button>
         <button v-if="hasActiveFilters" class="mini-button" type="button" @click="clearFilters">清空</button>
+        <select v-model.number="pageSize" class="sort-select" aria-label="每页条数">
+          <option :value="10">每页 10 条</option>
+          <option :value="20">每页 20 条</option>
+          <option :value="50">每页 50 条</option>
+        </select>
         <div class="toolbar-spacer"></div>
         <div class="bulk-group">
           <button class="submit-button compact" type="button" @click="batchBindUsecases">批量关联用例</button>
@@ -80,7 +85,7 @@
               <col class="action-col" />
             </colgroup>
             <tbody>
-              <template v-for="snapshot in payload.snapshots" :key="snapshot.id">
+              <template v-for="snapshot in paginatedSnapshots" :key="snapshot.id">
                 <tr :class="['snapshot-row', { selected: selectedSnapshotIds.includes(snapshot.id), editing: editingId === snapshot.id }]">
                   <td class="select-cell">
                     <input v-model="selectedSnapshotIds" type="checkbox" :value="snapshot.id" :aria-label="`选择 ${snapshot.name || snapshot.id}`" />
@@ -143,6 +148,13 @@
             </tbody>
           </table>
         </div>
+        <AppPagination
+          v-if="payload.snapshots.length > pageSize"
+          v-model:page="currentPage"
+          v-model:page-size="pageSize"
+          :total="payload.snapshots.length"
+          item-name="个快照"
+        />
       </section>
     </template>
   </section>
@@ -153,6 +165,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import type { SnapshotOption } from '@/api/types'
+import AppPagination from '@/components/AppPagination.vue'
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
@@ -168,6 +181,8 @@ const keywordDraft = ref(String(route.query.keyword || ''))
 const labelDrafts = ref<string[]>(String(route.query.labels || '').split(',').filter(Boolean))
 const selectedSnapshotIds = ref<string[]>([])
 const editingId = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
 const error = ref('')
 const usecasePickerOpen = ref(false)
@@ -188,6 +203,11 @@ const editForm = reactive({
   name: '',
   describe: '',
   labels: [] as string[],
+})
+const paginatedSnapshots = computed(() => {
+  const snapshots = payload.value?.snapshots || []
+  const start = (currentPage.value - 1) * pageSize.value
+  return snapshots.slice(start, start + pageSize.value)
 })
 
 async function load() {
@@ -259,7 +279,7 @@ function syncFilterDrafts() {
 }
 
 function selectAll() {
-  selectedSnapshotIds.value = payload.value?.snapshots.map((snapshot) => snapshot.id) || []
+  selectedSnapshotIds.value = paginatedSnapshots.value.map((snapshot) => snapshot.id)
 }
 
 function clearSelection() {
@@ -380,9 +400,14 @@ watch(
   () => route.fullPath,
   () => {
     syncFilterDrafts()
+    currentPage.value = 1
     load()
   },
 )
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
 
 onMounted(load)
 </script>

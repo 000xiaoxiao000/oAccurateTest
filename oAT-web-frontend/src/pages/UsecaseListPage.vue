@@ -54,7 +54,12 @@
         <aside class="side-card">
           <div class="card-title">
             <h2>目录</h2>
-            <span>{{ payload.directories.length }}</span>
+            <div class="title-actions">
+              <span>{{ payload.directories.length }}</span>
+              <button v-if="payload.directories.length > directoryPreviewLimit" class="mini-button" type="button" @click="directoriesExpanded = !directoriesExpanded">
+                {{ directoriesExpanded ? '收起' : '展开' }}
+              </button>
+            </div>
           </div>
           <div class="dir-list">
             <RouterLink
@@ -65,7 +70,7 @@
               / ROOT
             </RouterLink>
             <RouterLink
-              v-for="dir in payload.directories"
+              v-for="dir in visibleDirectories"
               :key="dir.id"
               class="dir-link"
               :to="directoryLink(dir.id)"
@@ -89,7 +94,7 @@
           </div>
           <div v-if="!payload.usecases.length" class="empty-card">当前目录暂无用例</div>
           <div v-else class="list-grid">
-            <article v-for="usecase in payload.usecases" :key="usecase.id" class="usecase-card">
+            <article v-for="usecase in paginatedUsecases" :key="usecase.id" class="usecase-card">
               <div class="usecase-top">
                 <div>
                   <RouterLink class="usecase-title" :to="`/p/${projectId}/usecases/${usecase.id}`">
@@ -116,6 +121,13 @@
               </div>
             </article>
           </div>
+          <AppPagination
+            v-if="payload.usecases.length > pageSize"
+            v-model:page="currentPage"
+            v-model:page-size="pageSize"
+            :total="payload.usecases.length"
+            item-name="个用例"
+          />
         </section>
       </div>
     </template>
@@ -127,6 +139,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { backendApiUrl } from '@/api/http'
+import AppPagination from '@/components/AppPagination.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 
@@ -148,6 +161,21 @@ const rebuildingSearch = ref(false)
 const directoryEditorOpen = ref(false)
 const directoryEditorId = ref('')
 const directoryEditorName = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
+const directoriesExpanded = ref(false)
+const directoryPreviewLimit = 12
+
+const visibleDirectories = computed(() => {
+  const directories = payload.value?.directories || []
+  return directoriesExpanded.value ? directories : directories.slice(0, directoryPreviewLimit)
+})
+
+const paginatedUsecases = computed(() => {
+  const usecases = payload.value?.usecases || []
+  const start = (currentPage.value - 1) * pageSize.value
+  return usecases.slice(start, start + pageSize.value)
+})
 
 const newUsecaseLink = computed(() => {
   const query = currentDirectory.value !== 'root' ? `?directory=${encodeURIComponent(currentDirectory.value)}` : ''
@@ -396,9 +424,14 @@ async function deleteDirectory(directoryId: string, name: string, parentId: stri
 watch(
   () => route.fullPath,
   () => {
+    currentPage.value = 1
     load()
   },
 )
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
 
 onMounted(load)
 </script>
@@ -409,6 +442,7 @@ onMounted(load)
 .toolbar-card,
 .toolbar-actions,
 .card-title,
+.title-actions,
 .usecase-top {
   display: flex;
   justify-content: space-between;
@@ -437,7 +471,8 @@ onMounted(load)
 .action-button,
 .submit-button,
 .primary-link,
-.ghost-button {
+.ghost-button,
+.mini-button {
   border-radius: 999px;
   padding: 10px 14px;
 }
@@ -471,11 +506,23 @@ onMounted(load)
   color: #fff;
 }
 
-.ghost-button {
+.ghost-button,
+.mini-button {
   border: 1px solid rgba(15, 118, 110, 0.18);
   background: rgba(15, 118, 110, 0.06);
   color: #0f766e;
   cursor: pointer;
+}
+
+.mini-button {
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.title-actions {
+  align-items: center;
+  gap: 8px;
 }
 
 .status-card,

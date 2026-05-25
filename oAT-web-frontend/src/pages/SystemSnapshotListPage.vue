@@ -56,11 +56,16 @@
         <aside class="side-card">
           <div class="card-title">
             <h2>目录</h2>
-            <span>{{ payload.directories.length }}</span>
+            <div class="title-actions">
+              <span>{{ payload.directories.length }}</span>
+              <button v-if="payload.directories.length > directoryPreviewLimit" class="mini-button" type="button" @click="directoriesExpanded = !directoriesExpanded">
+                {{ directoriesExpanded ? '收起' : '展开' }}
+              </button>
+            </div>
           </div>
           <div class="dir-list">
             <RouterLink class="dir-link root" :to="`/p/${projectId}/apps/${appId}/snapshots`">/ ROOT</RouterLink>
-            <article v-for="dir in payload.directories" :key="dir.id" class="dir-link">
+            <article v-for="dir in visibleDirectories" :key="dir.id" class="dir-link">
               <RouterLink :to="directoryLink(dir.id)">
                 <strong>{{ dir.name }}</strong>
               </RouterLink>
@@ -84,7 +89,7 @@
           </div>
           <div v-if="!payload.snapshots.length" class="empty-card">当前目录暂无系统快照</div>
           <div v-else class="snapshot-list">
-            <article v-for="snapshot in payload.snapshots" :key="snapshot.id" class="snapshot-card">
+            <article v-for="snapshot in paginatedSnapshots" :key="snapshot.id" class="snapshot-card">
               <label class="snapshot-select">
                 <input v-model="selectedSnapshotIds" type="checkbox" :value="snapshot.id" />
               </label>
@@ -112,6 +117,13 @@
               </div>
             </article>
           </div>
+          <AppPagination
+            v-if="payload.snapshots.length > pageSize"
+            v-model:page="currentPage"
+            v-model:page-size="pageSize"
+            :total="payload.snapshots.length"
+            item-name="个快照"
+          />
         </section>
       </div>
     </template>
@@ -123,6 +135,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
+import AppPagination from '@/components/AppPagination.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 import { reportStatusText } from '@/utils/snapshot'
@@ -150,12 +163,25 @@ const usecasePickerOpen = ref(false)
 const usecasePickerMode = ref<'single' | 'batch'>('single')
 const usecasePickerSnapshotId = ref('')
 const usecasePickerSelectedIds = ref<string[]>([])
+const currentPage = ref(1)
+const pageSize = ref(10)
+const directoriesExpanded = ref(false)
+const directoryPreviewLimit = 12
 const usecasePickerTitle = computed(() => (usecasePickerMode.value === 'batch' ? '批量关联用例' : '关联用例'))
 const usecasePickerDescription = computed(() =>
   usecasePickerMode.value === 'batch'
     ? `将选中的 ${selectedSnapshotIds.value.length} 个系统快照统一关联到这些用例。`
     : '从项目用例中选择当前系统快照需要关联的条目。',
 )
+const visibleDirectories = computed(() => {
+  const directories = payload.value?.directories || []
+  return directoriesExpanded.value ? directories : directories.slice(0, directoryPreviewLimit)
+})
+const paginatedSnapshots = computed(() => {
+  const snapshots = payload.value?.snapshots || []
+  const start = (currentPage.value - 1) * pageSize.value
+  return snapshots.slice(start, start + pageSize.value)
+})
 
 function directoryLink(directoryId: string) {
   const query = new URLSearchParams()
@@ -281,7 +307,7 @@ async function openSingleUsecasePicker(snapshotId: string) {
 }
 
 function selectAllSnapshots() {
-  selectedSnapshotIds.value = payload.value?.snapshots.map((snapshot) => snapshot.id) || []
+  selectedSnapshotIds.value = paginatedSnapshots.value.map((snapshot) => snapshot.id)
 }
 
 function clearSelection() {
@@ -345,9 +371,14 @@ async function submitUsecaseBinding(usecaseIds: string[]) {
 watch(
   () => route.fullPath,
   () => {
+    currentPage.value = 1
     load()
   },
 )
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
 
 onMounted(load)
 </script>
@@ -358,6 +389,7 @@ onMounted(load)
 .toolbar-card,
 .toolbar-actions,
 .card-title,
+.title-actions,
 .snapshot-top,
 .snapshot-actions,
 .batch-actions,
@@ -387,7 +419,8 @@ onMounted(load)
 }
 
 .action-button,
-.submit-button {
+.submit-button,
+.mini-button {
   border: none;
   border-radius: 999px;
   padding: 10px 14px;
@@ -407,6 +440,21 @@ onMounted(load)
   background: rgba(15, 118, 110, 0.06);
   color: #0f766e;
   cursor: pointer;
+}
+
+.mini-button {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  padding: 5px 9px;
+  background: rgba(15, 118, 110, 0.06);
+  color: #0f766e;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.title-actions {
+  align-items: center;
+  gap: 8px;
 }
 
 .ghost-button.small {

@@ -183,10 +183,15 @@
     <section class="panel">
       <div class="panel-head">
         <h2>比对报告</h2>
-        <span>{{ center?.compareReports.length || 0 }}</span>
+        <div class="panel-head-actions">
+          <span>{{ center?.compareReports.length || 0 }}</span>
+          <button v-if="(center?.compareReports.length || 0) > reportPageSize" class="ghost-button small" type="button" @click="compareReportsCollapsed = !compareReportsCollapsed">
+            {{ compareReportsCollapsed ? '展开' : '收起' }}
+          </button>
+        </div>
       </div>
-      <div class="report-table-list">
-        <article v-for="item in center?.compareReports || []" :key="item.id" class="report-row compare-row">
+      <div v-show="!compareReportsCollapsed" class="report-table-list">
+        <article v-for="item in paginatedCompareReports" :key="item.id" class="report-row compare-row">
           <div class="report-main">
             <RouterLink class="report-title-link" :to="`/p/${projectId}/version/reports/${item.id}?appId=${appId}`">{{ item.name || item.id }}</RouterLink>
             <div class="record-meta">
@@ -212,15 +217,27 @@
         </article>
         <div v-if="!center?.compareReports.length" class="empty-card">暂无比对报告</div>
       </div>
+      <AppPagination
+        v-if="!compareReportsCollapsed && (center?.compareReports.length || 0) > reportPageSize"
+        v-model:page="compareReportPage"
+        v-model:page-size="reportPageSize"
+        :total="center?.compareReports.length || 0"
+        item-name="份比对报告"
+      />
     </section>
 
     <section class="panel">
       <div class="panel-head">
         <h2>覆盖率报告</h2>
-        <span>{{ center?.coverageReports.length || 0 }}</span>
+        <div class="panel-head-actions">
+          <span>{{ center?.coverageReports.length || 0 }}</span>
+          <button v-if="(center?.coverageReports.length || 0) > coveragePageSize" class="ghost-button small" type="button" @click="coverageReportsCollapsed = !coverageReportsCollapsed">
+            {{ coverageReportsCollapsed ? '展开' : '收起' }}
+          </button>
+        </div>
       </div>
-      <div class="report-table-list">
-        <article v-for="item in center?.coverageReports || []" :key="item.id" class="report-row coverage-row">
+      <div v-show="!coverageReportsCollapsed" class="report-table-list">
+        <article v-for="item in paginatedCoverageReports" :key="item.id" class="report-row coverage-row">
           <div class="report-main">
             <RouterLink
               class="report-title-link"
@@ -267,6 +284,13 @@
         </article>
         <div v-if="!center?.coverageReports.length" class="empty-card">暂无覆盖率报告</div>
       </div>
+      <AppPagination
+        v-if="!coverageReportsCollapsed && (center?.coverageReports.length || 0) > coveragePageSize"
+        v-model:page="coverageReportPage"
+        v-model:page-size="coveragePageSize"
+        :total="center?.coverageReports.length || 0"
+        item-name="份覆盖率报告"
+      />
     </section>
 
     <div v-if="commitPicker.visible" class="modal-mask" @click.self="closeCommitPicker">
@@ -280,13 +304,20 @@
           <label class="check-inline"><input v-model="commitPicker.onlySelectable" type="checkbox" /> 只看可选</label>
         </div>
         <div class="commit-list">
-          <button v-for="item in filteredCommits" :key="item.commitId" class="commit-item" type="button" @click="selectCommit(item.commitId)">
+          <button v-for="item in paginatedCommits" :key="item.commitId" class="commit-item" type="button" @click="selectCommit(item.commitId)">
             <strong>{{ item.shortCommitId || item.commitId.slice(0, 10) }}</strong>
             <span>{{ item.message || '-' }}</span>
             <small>{{ item.author || '-' }}</small>
           </button>
           <div v-if="!filteredCommits.length" class="empty-card">未找到匹配 Commit</div>
         </div>
+        <AppPagination
+          v-if="filteredCommits.length > commitPageSize"
+          v-model:page="commitPage"
+          v-model:page-size="commitPageSize"
+          :total="filteredCommits.length"
+          item-name="个 Commit"
+        />
       </section>
     </div>
 
@@ -323,6 +354,7 @@ import {
   uploadResource,
 } from '@/api/bootstrap'
 import type { CompareJobSummary, GitCommitOption, VersionCenterPayload } from '@/api/types'
+import AppPagination from '@/components/AppPagination.vue'
 
 type PackageRole = 'source' | 'target'
 type UploadedPackage = { value: string; label: string; uploaded: boolean }
@@ -360,6 +392,14 @@ const jobPolling = ref(false)
 const jobPollError = ref('')
 const autoScrollLog = ref(true)
 const confirmDialog = ref<ConfirmDialogState>({ visible: false, title: '', message: '' })
+const compareReportPage = ref(1)
+const coverageReportPage = ref(1)
+const reportPageSize = ref(10)
+const coveragePageSize = ref(10)
+const compareReportsCollapsed = ref(false)
+const coverageReportsCollapsed = ref(false)
+const commitPage = ref(1)
+const commitPageSize = ref(12)
 let pollTimer: number | undefined
 
 const repositoryConfigured = computed(() => Boolean(center.value?.app.repoConfigured))
@@ -394,6 +434,20 @@ const filteredCommits = computed(() => {
     return [item.commitId, item.shortCommitId, item.message, item.author].join(' ').toLowerCase().includes(needle)
   })
 })
+const paginatedCommits = computed(() => {
+  const start = (commitPage.value - 1) * commitPageSize.value
+  return filteredCommits.value.slice(start, start + commitPageSize.value)
+})
+const paginatedCompareReports = computed(() => {
+  const reports = center.value?.compareReports || []
+  const start = (compareReportPage.value - 1) * reportPageSize.value
+  return reports.slice(start, start + reportPageSize.value)
+})
+const paginatedCoverageReports = computed(() => {
+  const reports = center.value?.coverageReports || []
+  const start = (coverageReportPage.value - 1) * coveragePageSize.value
+  return reports.slice(start, start + coveragePageSize.value)
+})
 const jobProgress = computed(() => Math.max(0, Math.min(100, job.value?.progress || 0)))
 const jobStateText = computed(() => {
   if (!job.value) return '未启动'
@@ -421,6 +475,18 @@ watch(jobLogLines, async () => {
   if (jobLogRef.value) {
     jobLogRef.value.scrollTop = jobLogRef.value.scrollHeight
   }
+})
+
+watch([() => commitPicker.value.keyword, () => commitPicker.value.onlySelectable, commitPageSize], () => {
+  commitPage.value = 1
+})
+
+watch(reportPageSize, () => {
+  compareReportPage.value = 1
+})
+
+watch(coveragePageSize, () => {
+  coverageReportPage.value = 1
 })
 
 async function load() {
@@ -832,6 +898,13 @@ onMounted(load)
 .card-top {
   justify-content: space-between;
   align-items: center;
+}
+
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .meta-list,

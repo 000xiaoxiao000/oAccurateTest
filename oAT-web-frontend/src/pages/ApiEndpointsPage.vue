@@ -93,6 +93,11 @@
         <button class="ghost-button" type="button" @click="collapseAllCurrentView">全部收起</button>
         <button class="ghost-button" type="button" @click="copyUncovered">复制未覆盖接口</button>
         <button class="ghost-button" type="button" @click="exportCsv">导出 CSV</button>
+        <select v-model.number="pageSize" class="text-input compact" aria-label="每页条数">
+          <option :value="10">每页 10 条</option>
+          <option :value="20">每页 20 条</option>
+          <option :value="50">每页 50 条</option>
+        </select>
       </div>
 
       <div v-if="activeFilterChips.length" class="filter-chips">
@@ -149,13 +154,7 @@
           </div>
         </article>
 
-        <div class="pagination">
-          <span>第 {{ currentPage }} / {{ totalPages }} 页</span>
-          <div>
-            <button class="ghost-button" type="button" :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
-            <button class="ghost-button" type="button" :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
-          </div>
-        </div>
+        <AppPagination v-model:page="currentPage" v-model:page-size="pageSize" :total="filteredEndpoints.length" item-name="个接口" />
       </template>
     </section>
   </section>
@@ -167,6 +166,7 @@ import { RouterLink, useRoute } from 'vue-router'
 
 import { apiGetRaw, apiPost } from '@/api/http'
 import type { ApiEndpointItem, PulledZipItem } from '@/api/types'
+import AppPagination from '@/components/AppPagination.vue'
 
 interface DisplayEndpoint {
   key: string
@@ -216,7 +216,7 @@ const coverage = ref('')
 const hitRange = ref('')
 const viewMode = ref<'detail' | 'group'>('detail')
 const currentPage = ref(1)
-const pageSize = 10
+const pageSize = ref(10)
 const expandedKeys = ref(new Set<string>())
 
 const storageKey = computed(() => `api-endpoints-view-state-${projectId.value}-${appId.value}`)
@@ -251,13 +251,12 @@ const filteredEndpoints = computed(() => {
     .sort(sortEndpoint)
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredEndpoints.value.length / pageSize)))
 const pagedItems = computed(() => {
-  const start = (currentPage.value - 1) * pageSize
-  return filteredEndpoints.value.slice(start, start + pageSize)
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredEndpoints.value.slice(start, start + pageSize.value)
 })
 
-watch([keyword, endpointType, coverage, hitRange, viewMode], () => {
+watch([keyword, endpointType, coverage, hitRange, viewMode, pageSize], () => {
   currentPage.value = 1
   persistViewState()
 })
@@ -501,6 +500,7 @@ function persistViewState() {
     hitRange: hitRange.value,
     viewMode: viewMode.value,
     currentPage: currentPage.value,
+    pageSize: pageSize.value,
     expandedKeys: Array.from(expandedKeys.value).slice(0, 500),
   }))
 }
@@ -509,13 +509,14 @@ function restoreViewState() {
   try {
     const raw = localStorage.getItem(storageKey.value)
     if (!raw) return
-    const state = JSON.parse(raw) as { keyword?: string; endpointType?: string; coverage?: string; hitRange?: string; viewMode?: 'detail' | 'group'; currentPage?: number; expandedKeys?: string[] }
+    const state = JSON.parse(raw) as { keyword?: string; endpointType?: string; coverage?: string; hitRange?: string; viewMode?: 'detail' | 'group'; currentPage?: number; pageSize?: number; expandedKeys?: string[] }
     keyword.value = state.keyword || ''
     endpointType.value = state.endpointType || ''
     coverage.value = state.coverage || ''
     hitRange.value = state.hitRange || ''
     viewMode.value = state.viewMode === 'group' ? 'group' : 'detail'
     currentPage.value = state.currentPage || 1
+    pageSize.value = state.pageSize && state.pageSize > 0 ? state.pageSize : 10
     expandedKeys.value = new Set(state.expandedKeys || [])
   } catch {
     // Ignore incompatible persisted state.

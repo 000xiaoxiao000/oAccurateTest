@@ -41,7 +41,7 @@
         </div>
         <div v-else class="search-items">
           <RouterLink
-            v-for="item in keywordResults.results"
+            v-for="item in paginatedKeywordResults"
             :key="item.id"
             class="search-item"
             :to="item.targetPath"
@@ -61,6 +61,13 @@
             </div>
           </RouterLink>
         </div>
+        <AppPagination
+          v-if="keywordResultItems.length > keywordPageSize"
+          v-model:page="keywordPage"
+          v-model:page-size="keywordPageSize"
+          :total="keywordResultItems.length"
+          item-name="条结果"
+        />
       </template>
     </section>
 
@@ -145,8 +152,13 @@
           </div>
         </div>
         <aside v-if="tableGraph?.edges.length" class="relation-list">
-          <div class="relation-head">{{ tableGraph.nodes.length }} 个节点 / {{ tableGraph.edges.length }} 条关系</div>
-          <article v-for="edge in tableGraph.edges" :key="edge.id" :class="['relation-row', edgeTone(edge.action)]">
+          <div class="relation-head">
+            <span>{{ tableGraph.nodes.length }} 个节点 / {{ tableGraph.edges.length }} 条关系</span>
+            <button v-if="tableGraph.edges.length > relationPreviewLimit" class="relation-toggle" type="button" @click="relationExpanded = !relationExpanded">
+              {{ relationExpanded ? '收起' : '展开全部' }}
+            </button>
+          </div>
+          <article v-for="edge in visibleTableEdges" :key="edge.id" :class="['relation-row', edgeTone(edge.action)]">
             <strong>{{ edge.label || actionLabel(edge.action) || '关联' }}</strong>
             <span>{{ nodeLabel(edge.source) }} → {{ nodeLabel(edge.target) }}</span>
           </article>
@@ -162,6 +174,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { searchKeyword, searchTableGraph } from '@/api/bootstrap'
 import type { NetworkGraphEdge, NetworkGraphNode, SearchKeywordResult } from '@/api/types'
+import AppPagination from '@/components/AppPagination.vue'
 
 type SearchMode = 'keyword' | 'table'
 
@@ -204,6 +217,10 @@ const suppressTableNodeClick = ref(false)
 const tableContextMenu = reactive({ open: false, x: 0, y: 0, nodeId: '' })
 const tableNodeTip = reactive({ open: false })
 const tableCanvas = { width: 1400, height: 780 }
+const keywordPage = ref(1)
+const keywordPageSize = ref(10)
+const relationExpanded = ref(false)
+const relationPreviewLimit = 12
 
 const modeLabel = computed(() => (mode.value === 'table' ? '表结构图' : '用例'))
 const activeLoading = computed(() => (mode.value === 'keyword' ? loadingKeyword.value : loadingTable.value))
@@ -242,6 +259,15 @@ const tableContextNode = computed(() => positionedNodes.value.find((node) => nod
 const tableContextEdges = computed(() =>
   positionedEdges.value.filter((edge) => edge.source.id === tableContextMenu.nodeId || edge.target.id === tableContextMenu.nodeId),
 )
+const keywordResultItems = computed(() => keywordResults.value?.results || [])
+const paginatedKeywordResults = computed(() => {
+  const start = (keywordPage.value - 1) * keywordPageSize.value
+  return keywordResultItems.value.slice(start, start + keywordPageSize.value)
+})
+const visibleTableEdges = computed(() => {
+  const edges = tableGraph.value?.edges || []
+  return relationExpanded.value ? edges : edges.slice(0, relationPreviewLimit)
+})
 
 const positionedEdges = computed<PositionedEdge[]>(() => {
   const nodeMap = new Map(positionedNodes.value.map((node) => [node.id, node]))
@@ -265,6 +291,10 @@ watch(mode, () => syncTextFromMode())
 watch(tableGraph, () => {
   resetTableGraphLayout()
   resetTableGraphView()
+  relationExpanded.value = false
+})
+watch([keywordResults, keywordPageSize], () => {
+  keywordPage.value = 1
 })
 
 function handleSearchKeydown(event: KeyboardEvent) {
@@ -467,6 +497,7 @@ async function submitKeywordSearch() {
   error.value = ''
   try {
     keywordResults.value = await searchKeyword(projectId.value, value)
+    keywordPage.value = 1
     updateQuery({ keyword: value, tab: undefined, q: undefined, database: undefined, table: undefined, tableKeyword: undefined })
   } catch (err) {
     error.value = err instanceof Error ? err.message : '搜索失败，请稍后重试'
@@ -1065,7 +1096,22 @@ function edgeTone(action?: string) {
 }
 
 .relation-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: #334155;
+  font-weight: 800;
+}
+
+.relation-toggle {
+  border: 1px solid rgba(33, 133, 208, .18);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(33, 133, 208, .08);
+  color: #1e70bf;
+  cursor: pointer;
+  font-size: 12px;
   font-weight: 800;
 }
 

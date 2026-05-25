@@ -43,15 +43,18 @@
         </div>
         <div class="header-actions">
           <input v-model.trim="probeKeyword" class="text-input compact" type="text" placeholder="搜索应用、IP、PID、Agent" />
+          <button v-if="filteredProbes.length > probePreviewLimit" class="ghost-button" type="button" @click="probesExpanded = !probesExpanded">
+            {{ probesExpanded ? '收起探针' : '展开探针' }}
+          </button>
           <button class="ghost-button" type="button" @click="loadProbes">刷新探针状态</button>
         </div>
       </div>
-      <div class="probe-summary">在线 {{ filteredProbes.length }} / {{ probes.length }} 个探针</div>
+      <div class="probe-summary">在线 {{ filteredProbes.length }} / {{ probes.length }} 个探针，当前展示 {{ visibleProbes.length }} 个</div>
       <div v-if="probeLoading" class="status-card">正在加载探针...</div>
       <div v-else-if="probeError" class="status-card error">{{ probeError }}</div>
       <div v-else-if="filteredProbes.length === 0" class="status-card">暂无在线探针</div>
       <div v-else class="probe-grid">
-        <button v-for="probe in filteredProbes" :key="probeKey(probe)" class="probe-card" :class="{ active: selectedClientIps.includes(probe.addressIp || '') }" type="button" @click="toggleProbeFilter(probe)">
+        <button v-for="probe in visibleProbes" :key="probeKey(probe)" class="probe-card" :class="{ active: selectedClientIps.includes(probe.addressIp || '') }" type="button" @click="toggleProbeFilter(probe)">
           <span class="probe-status-dot"></span>
           <strong>{{ probe.appName || '未定义应用' }}</strong>
           <span>{{ probe.addressIp || '-' }} · PID {{ probe.pid || '-' }}</span>
@@ -125,6 +128,11 @@
 
         <div class="toolbar">
           <input v-model.trim="traceKeyword" class="text-input" type="text" placeholder="搜索 URL / traceId / IP" />
+          <select v-model.number="tracePageSize" class="text-input compact" aria-label="Trace 每页条数">
+            <option :value="20">每页 20 条</option>
+            <option :value="50">每页 50 条</option>
+            <option :value="100">每页 100 条</option>
+          </select>
           <button class="ghost-button" type="button" @click="clearMonitorFilters">清空过滤</button>
         </div>
 
@@ -133,7 +141,7 @@
         <div v-else-if="filteredTraces.length === 0" class="status-card">暂无 trace 数据</div>
         <div v-else class="trace-list">
           <button
-            v-for="trace in filteredTraces"
+            v-for="trace in paginatedTraces"
             :key="trace.traceId"
             class="trace-item"
             :class="{ active: selectedTraceId === trace.traceId }"
@@ -145,6 +153,14 @@
             <small>{{ trace.traceId }} · #{{ trace.index }}</small>
           </button>
         </div>
+        <AppPagination
+          v-if="filteredTraces.length > tracePageSize"
+          v-model:page="tracePage"
+          v-model:page-size="tracePageSize"
+          :total="filteredTraces.length"
+          item-name="条 Trace"
+          :page-sizes="[20, 50, 100]"
+        />
       </section>
 
       <div class="monitor-resizer" @pointerdown="startResize"><span>拖拽调整宽度</span></div>
@@ -349,6 +365,7 @@ import { useProjectStore } from '@/stores/project'
 import { apiGet, apiGetRaw, apiPost } from '@/api/http'
 import type { AppSummary, GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload, MonitorSnapshotContextPayload, OnlineSessionSummary, TraceItemSummary } from '@/api/types'
 import GraphNodeDetailCard from '@/components/snapshot/GraphNodeDetailCard.vue'
+import AppPagination from '@/components/AppPagination.vue'
 
 type PositionedNode = GraphNodeSummary & { x: number; y: number; rank: number }
 type PositionedEdge = GraphEdgeSummary & { path: string; mx: number; my: number }
@@ -385,6 +402,10 @@ const autoSaveSystemSnapshot = ref(false)
 const refreshSeconds = ref(5)
 const scopeMode = ref<'aggregate' | 'single' | 'lanes'>('aggregate')
 const monitorListWidth = ref(380)
+const tracePage = ref(1)
+const tracePageSize = ref(50)
+const probesExpanded = ref(false)
+const probePreviewLimit = 8
 const probeLoading = ref(false)
 const traceLoading = ref(false)
 const graphLoading = ref(false)
@@ -433,6 +454,7 @@ const filteredProbes = computed(() => {
     .toLowerCase()
     .includes(needle))
 })
+const visibleProbes = computed(() => probesExpanded.value ? filteredProbes.value : filteredProbes.value.slice(0, probePreviewLimit))
 
 const filteredTraces = computed(() => {
   const needle = traceKeyword.value.toLowerCase()
@@ -447,6 +469,10 @@ const filteredTraces = computed(() => {
     return matchesApp && (!needle || haystack.includes(needle))
       && matchesIp
   })
+})
+const paginatedTraces = computed(() => {
+  const start = (tracePage.value - 1) * tracePageSize.value
+  return filteredTraces.value.slice(start, start + tracePageSize.value)
 })
 
 const latestTrace = computed(() => filteredTraces.value[0])
@@ -554,6 +580,10 @@ watch(autoRefresh, (enabled) => {
 
 watch(refreshSeconds, () => {
   if (autoRefresh.value) startRefreshTimer()
+})
+
+watch([traceKeyword, tracePageSize, selectedAppIds, selectedClientIps], () => {
+  tracePage.value = 1
 })
 
 async function refreshAll() {
