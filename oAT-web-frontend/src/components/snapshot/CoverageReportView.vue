@@ -102,9 +102,14 @@
       <section v-if="codeRelationships?.length" class="panel interface-panel">
         <div class="card-title">
           <h2>接口聚合</h2>
-          <span class="table-count">{{ codeRelationships.length }} 个请求入口</span>
+          <div class="title-actions">
+            <span class="table-count">{{ filteredRelationships.length }} / {{ codeRelationships.length }} 个请求入口</span>
+            <button class="ghost-button small" type="button" @click="relationshipGraphOpen = !relationshipGraphOpen">
+              {{ relationshipGraphOpen ? '收起图谱' : '展开图谱' }}
+            </button>
+          </div>
         </div>
-        <div class="relationship-graph-card">
+        <div v-show="relationshipGraphOpen" class="relationship-graph-card">
           <div class="relationship-graph-head">
             <div>
               <strong>接口-类-方法关系图</strong>
@@ -122,8 +127,22 @@
             hide-lists
           />
         </div>
+        <div class="list-toolbar">
+          <label class="search-box compact-search">
+            <span>接口/类/方法筛选</span>
+            <input v-model.trim="relationshipKeyword" class="text-input" type="text" placeholder="输入 URL、类名或方法名" />
+          </label>
+          <label class="select-box">
+            <span>每页</span>
+            <select v-model.number="relationshipPageSize" class="text-input">
+              <option :value="5">5 个入口</option>
+              <option :value="10">10 个入口</option>
+              <option :value="20">20 个入口</option>
+            </select>
+          </label>
+        </div>
         <div class="relationship-list">
-          <article v-for="group in codeRelationships" :key="group.requestUrl" class="relationship-card">
+          <article v-for="group in paginatedRelationships" :key="group.requestUrl" class="relationship-card">
             <div class="relationship-top">
               <div>
                 <strong class="relationship-url">{{ group.requestUrl || '-' }}</strong>
@@ -134,7 +153,12 @@
                   <span>分支目标 {{ summarizeGroup(group.methods).coveredBranchTargets }} / {{ summarizeGroup(group.methods).totalBranchTargets }}</span>
                 </div>
               </div>
-              <span class="group-rate">{{ summarizeGroup(group.methods).totalBranchTargets > 0 ? formatRate(summarizeGroup(group.methods).coveredBranchTargets, summarizeGroup(group.methods).totalBranchTargets) : 'N/A' }}</span>
+              <div class="relationship-actions">
+                <span class="group-rate">{{ summarizeGroup(group.methods).totalBranchTargets > 0 ? formatRate(summarizeGroup(group.methods).coveredBranchTargets, summarizeGroup(group.methods).totalBranchTargets) : 'N/A' }}</span>
+                <button v-if="group.methods.length > relationshipMethodPreviewLimit" class="ghost-button small" type="button" @click="toggleRelationshipGroup(group.requestUrl)">
+                  {{ expandedRelationshipGroups.has(relationshipGroupKey(group.requestUrl)) ? '收起' : `展开 ${group.methods.length} 个方法` }}
+                </button>
+              </div>
             </div>
             <div class="table-shell relationship-shell">
               <table class="report-table relationship-table">
@@ -149,7 +173,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="method in group.methods" :key="`${method.className}-${method.methodName}-${method.methodDescriptor}`">
+                  <tr v-for="method in visibleRelationshipMethods(group)" :key="`${method.className}-${method.methodName}-${method.methodDescriptor}`">
                     <td class="class-cell" :title="method.className">{{ method.className }}</td>
                     <td>
                       <strong>{{ method.methodName }}</strong>
@@ -173,6 +197,15 @@
             </div>
           </article>
         </div>
+        <div v-if="!filteredRelationships.length" class="empty-card">没有匹配的接口聚合数据</div>
+        <AppPagination
+          v-if="filteredRelationships.length > relationshipPageSize"
+          v-model:page="relationshipPage"
+          v-model:page-size="relationshipPageSize"
+          :total="filteredRelationships.length"
+          item-name="个请求入口"
+          :page-sizes="[5, 10, 20]"
+        />
       </section>
 
       <section class="panel class-panel">
@@ -180,10 +213,20 @@
           <h2>类级统计</h2>
           <span class="table-count">{{ filteredClassStats.length }} 个类</span>
         </div>
-        <label class="search-box">
-          <span>类名筛选</span>
-          <input v-model.trim="classKeyword" class="text-input" type="text" placeholder="输入类名关键字" />
-        </label>
+        <div class="list-toolbar">
+          <label class="search-box compact-search">
+            <span>类名筛选</span>
+            <input v-model.trim="classKeyword" class="text-input" type="text" placeholder="输入类名关键字" />
+          </label>
+          <label class="select-box">
+            <span>每页</span>
+            <select v-model.number="classPageSize" class="text-input">
+              <option :value="10">10 个类</option>
+              <option :value="20">20 个类</option>
+              <option :value="50">50 个类</option>
+            </select>
+          </label>
+        </div>
         <div v-if="!filteredClassStats.length" class="empty-card">暂无类级统计数据</div>
         <div v-else class="table-shell">
           <table class="report-table">
@@ -201,7 +244,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in filteredClassStats" :key="item.className">
+              <tr v-for="item in paginatedClassStats" :key="item.className">
                 <td class="class-cell" :title="item.className">{{ item.className }}</td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
                 <td>{{ formatRate(item.coveredMethods, item.totalMethods) }}</td>
@@ -217,6 +260,13 @@
             </tbody>
           </table>
         </div>
+        <AppPagination
+          v-if="filteredClassStats.length > classPageSize"
+          v-model:page="classPage"
+          v-model:page-size="classPageSize"
+          :total="filteredClassStats.length"
+          item-name="个类"
+        />
       </section>
 
     </template>
@@ -228,10 +278,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import RelationBoard from '@/components/map/RelationBoard.vue'
+import AppPagination from '@/components/AppPagination.vue'
 import type { RouteLocationRaw } from 'vue-router'
 
 import type {
@@ -272,12 +323,48 @@ defineEmits<{
 }>()
 
 const classKeyword = ref('')
+const classPage = ref(1)
+const classPageSize = ref(20)
+const relationshipKeyword = ref('')
+const relationshipPage = ref(1)
+const relationshipPageSize = ref(5)
+const relationshipGraphOpen = ref(false)
+const expandedRelationshipGroups = ref(new Set<string>())
+const relationshipMethodPreviewLimit = 8
 const filteredClassStats = computed(() => {
   const source = props.classStats || []
   if (!classKeyword.value) {
     return source
   }
   return source.filter((item) => item.className.toLowerCase().includes(classKeyword.value.toLowerCase()))
+})
+
+const paginatedClassStats = computed(() => {
+  const start = (classPage.value - 1) * classPageSize.value
+  return filteredClassStats.value.slice(start, start + classPageSize.value)
+})
+
+const filteredRelationships = computed(() => {
+  const source = props.codeRelationships || []
+  const needle = relationshipKeyword.value.toLowerCase()
+  if (!needle) return source
+  return source.filter((group) => [
+    group.requestUrl,
+    ...group.methods.flatMap((method) => [method.className, method.methodName, method.methodDescriptor]),
+  ].join(' ').toLowerCase().includes(needle))
+})
+
+const paginatedRelationships = computed(() => {
+  const start = (relationshipPage.value - 1) * relationshipPageSize.value
+  return filteredRelationships.value.slice(start, start + relationshipPageSize.value)
+})
+
+watch([classKeyword, classPageSize], () => {
+  classPage.value = 1
+})
+
+watch([relationshipKeyword, relationshipPageSize], () => {
+  relationshipPage.value = 1
 })
 
 const relationshipGraphNodes = computed(() => {
@@ -388,6 +475,26 @@ function pushEdge<T extends { id: string }>(target: T[], seen: Set<string>, edge
   target.push(edge)
 }
 
+function relationshipGroupKey(requestUrl?: string) {
+  return requestUrl || '-'
+}
+
+function toggleRelationshipGroup(requestUrl?: string) {
+  const key = relationshipGroupKey(requestUrl)
+  const next = new Set(expandedRelationshipGroups.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  expandedRelationshipGroups.value = next
+}
+
+function visibleRelationshipMethods(group: SnapshotCodeRelationshipGroupSummary) {
+  const methods = group.methods || []
+  if (expandedRelationshipGroups.value.has(relationshipGroupKey(group.requestUrl))) {
+    return methods
+  }
+  return methods.slice(0, relationshipMethodPreviewLimit)
+}
+
 function shortClassName(className?: string) {
   if (!className) {
     return '-'
@@ -468,11 +575,25 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
 <style scoped>
 .page-header,
 .header-actions,
-.card-title {
+.card-title,
+.title-actions,
+.list-toolbar,
+.relationship-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 12px;
+}
+
+.page-header,
+.card-title {
+  justify-content: space-between;
+}
+
+.header-actions,
+.title-actions,
+.list-toolbar,
+.relationship-actions {
+  flex-wrap: wrap;
 }
 
 .page-header {
@@ -508,6 +629,11 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
   padding: 10px 14px;
   background: rgba(15, 118, 110, 0.06);
   cursor: pointer;
+}
+
+.ghost-button.small {
+  padding: 7px 10px;
+  font-size: 12px;
 }
 
 .status-card,
@@ -589,10 +715,24 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
   color: #0f172a;
 }
 
-.search-box {
+.search-box,
+.select-box {
   display: grid;
   gap: 8px;
-  margin-bottom: 16px;
+}
+
+.list-toolbar {
+  justify-content: space-between;
+  margin: 14px 0 16px;
+}
+
+.compact-search {
+  min-width: min(460px, 100%);
+  flex: 1 1 360px;
+}
+
+.select-box {
+  min-width: 150px;
 }
 
 .text-input {
@@ -604,12 +744,16 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
 
 .table-shell {
   overflow: auto;
+  max-width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
 }
 
 .report-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 960px;
+  min-width: 1040px;
+  table-layout: fixed;
 }
 
 .report-table th,
@@ -625,9 +769,34 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
   font-size: 13px;
 }
 
+.report-table th:first-child,
+.report-table td:first-child {
+  width: 34%;
+  min-width: 300px;
+}
+
+.report-table th:nth-child(2),
+.report-table td:nth-child(2) {
+  width: 26%;
+}
+
+.relationship-table th:first-child,
+.relationship-table td:first-child {
+  width: 32%;
+}
+
+.relationship-table th:nth-child(2),
+.relationship-table td:nth-child(2) {
+  width: 30%;
+}
+
 .class-cell {
-  max-width: 360px;
-  word-break: break-word;
+  max-width: none;
+  min-width: 300px;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
 }
 
 .interface-panel {
@@ -701,6 +870,10 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
   white-space: nowrap;
 }
 
+.relationship-actions {
+  justify-content: flex-end;
+}
+
 .relationship-shell {
   background: transparent;
 }
@@ -734,7 +907,9 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
   .page-header,
   .header-actions,
   .card-title,
-  .relationship-graph-head {
+  .relationship-graph-head,
+  .list-toolbar,
+  .relationship-actions {
     flex-direction: column;
     align-items: stretch;
   }
