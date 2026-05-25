@@ -1,6 +1,5 @@
 package com.oAT.web.control.api;
 
-import com.oAT.web.control.SearchResult;
 import com.oAT.web.control.entity.NetworkGraphData;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.SystemSnapshot;

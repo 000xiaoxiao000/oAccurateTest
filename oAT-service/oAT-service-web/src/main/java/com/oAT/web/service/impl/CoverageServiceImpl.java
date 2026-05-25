@@ -35,6 +35,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -782,7 +783,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     public void exportReport(String reportId, HttpServletResponse response) throws IOException {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("utf-8");
-        String fileName = URLEncoder.encode("CoverageReport_" + reportId, "UTF-8").replaceAll("\\+", "%20");
+        String fileName = URLEncoder.encode("CoverageReport_" + reportId, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
         response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
 
         try (com.alibaba.excel.ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), ClassCoverageIndex.class).build()) {
@@ -804,7 +805,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     public void exportMethodReport(String reportId, HttpServletResponse response) throws IOException {
         response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
         response.setCharacterEncoding("utf-8");
-        String fileName = URLEncoder.encode("MethodCoverageReport_" + reportId, "UTF-8").replaceAll("\\+", "%20");
+        String fileName = URLEncoder.encode("MethodCoverageReport_" + reportId, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
         response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
 
         try (com.alibaba.excel.ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), MethodCoverageExportVo.class).build()) {
