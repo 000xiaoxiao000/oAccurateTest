@@ -965,7 +965,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     }
 
     private String buildMethodKey(String className, MethodCoverageDetail method) {
-        return String.valueOf(className) + "#" + buildMethodKey(method.getMethodName(), method.getMethodDesc());
+        return className + "#" + buildMethodKey(method.getMethodName(), method.getMethodDesc());
     }
 
     private String buildMethodKey(String methodName, String methodDesc) {
