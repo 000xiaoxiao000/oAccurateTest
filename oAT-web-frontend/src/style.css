@@ -1,7 +1,33 @@
 :root {
-  color: #1f2937;
+  --oat-primary: #00b5ad;
+  --oat-primary-rgb: 0, 181, 173;
+  --oat-primary-hover: #009c95;
+  --oat-primary-dark: #0f766e;
+  --oat-accent: #2185d0;
+  --oat-accent-rgb: 33, 133, 208;
+  --oat-accent-hover: #1b6fb8;
+  --oat-bg: #f5f7fb;
+  --oat-bg-soft: #f8fafc;
+  --oat-surface: #ffffff;
+  --oat-border: #e5eaf0;
+  --oat-border-strong: #d7dee8;
+  --oat-text: #1f2937;
+  --oat-text-secondary: #4b5563;
+  --oat-text-muted: #8a94a6;
+  --oat-success: #21ba45;
+  --oat-warning: #f2c037;
+  --oat-danger: #db2828;
+  --oat-radius-sm: 8px;
+  --oat-radius-md: 12px;
+  --oat-radius-lg: 16px;
+  --oat-radius-xl: 22px;
+  --oat-shadow-xs: 0 1px 2px rgba(15, 23, 42, .04);
+  --oat-shadow-sm: 0 6px 18px rgba(15, 23, 42, .06);
+  --oat-shadow-md: 0 14px 36px rgba(15, 23, 42, .1);
+  color: var(--oat-text);
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 32%),
+    radial-gradient(circle at 0% 0%, rgba(var(--oat-primary-rgb), 0.13), transparent 30%),
+    radial-gradient(circle at 90% 8%, rgba(var(--oat-accent-rgb), 0.08), transparent 28%),
     linear-gradient(180deg, #f7fbfc 0%, #edf4f7 100%);
   font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
   line-height: 1.5;
@@ -91,4 +117,160 @@ a:focus-visible {
 .page-shell {
   width: min(1200px, calc(100vw - 32px));
   margin: 0 auto;
+}
+
+
+/* Shared new-frontend page system. Mirrors the old Semantic UI hierarchy while keeping the SPA separated. */
+.shell-main {
+  --page-card-bg: rgba(255, 255, 255, .96);
+  --page-card-border: rgba(15, 23, 42, .08);
+}
+
+.shell-main :is(.page-header, .hero, .account-settings-hero) {
+  position: relative;
+  overflow: hidden;
+}
+
+.shell-main :is(.page-header, .hero):not(.plain-header) {
+  padding: 22px 24px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: var(--oat-radius-xl);
+  background:
+    radial-gradient(circle at top right, rgba(var(--oat-primary-rgb), .14), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, .98) 0%, rgba(244, 251, 255, .96) 100%);
+  box-shadow: var(--oat-shadow-sm);
+}
+
+.shell-main :is(.page-header, .hero):not(.plain-header)::after {
+  content: '';
+  position: absolute;
+  right: 34px;
+  bottom: -58px;
+  width: 176px;
+  height: 176px;
+  border-radius: 999px;
+  background: rgba(var(--oat-accent-rgb), .07);
+  pointer-events: none;
+}
+
+.shell-main :is(.page-header, .hero) > * {
+  position: relative;
+  z-index: 1;
+}
+
+.shell-main :is(.page-header h1, .hero h1) {
+  margin: 2px 0 6px;
+  color: #172033;
+  font-size: clamp(25px, 2.4vw, 34px);
+  line-height: 1.15;
+  letter-spacing: -.02em;
+}
+
+.shell-main :is(.eyebrow, .account-settings-eyebrow) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(var(--oat-primary-rgb), .10);
+  color: var(--oat-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.shell-main :is(.subtext, .panel-desc, .helper-text) {
+  color: var(--oat-text-muted);
+  line-height: 1.65;
+}
+
+.shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item) {
+  border-color: rgba(15, 23, 42, .08);
+  box-shadow: var(--oat-shadow-xs);
+}
+
+.shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card) {
+  background: var(--page-card-bg);
+}
+
+.shell-main :is(.panel, .toolbar-card, .status-card) {
+  backdrop-filter: blur(10px);
+}
+
+.shell-main :is(.panel-head, .card-title) h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.shell-main :is(.panel-head, .card-title) > span,
+.shell-main .table-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(var(--oat-accent-rgb), .08);
+  color: var(--oat-accent-hover);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.shell-main :is(.table-shell, .source-shell) {
+  border-radius: var(--oat-radius-lg);
+  border: 1px solid rgba(15, 23, 42, .07);
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+}
+
+.shell-main :is(table.report-table, table.edge-table) thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 800;
+}
+
+.shell-main :is(table.report-table, table.edge-table) tbody tr:hover {
+  background: rgba(var(--oat-accent-rgb), .035);
+}
+
+.shell-main :is(.primary-button, .danger-button, .ghost-button, .secondary-link, .table-link, .link-button, .chip-button) {
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease;
+}
+
+.shell-main :is(.primary-button, .ghost-button, .chip-button):hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], select, textarea) {
+  border-color: rgba(15, 23, 42, .12);
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], select, textarea):focus {
+  border-color: rgba(var(--oat-primary-rgb), .65);
+  box-shadow: 0 0 0 3px rgba(var(--oat-primary-rgb), .12);
+  outline: none;
+}
+
+.shell-main .status-card.error {
+  border-color: rgba(219, 40, 40, .20);
+  background: linear-gradient(135deg, rgba(254, 242, 242, .98), rgba(255, 255, 255, .96));
+  color: #b91c1c;
+}
+
+@media (max-width: 760px) {
+  .shell-main :is(.page-header, .hero):not(.plain-header) {
+    padding: 18px;
+    border-radius: var(--oat-radius-lg);
+  }
+
+  .shell-main :is(.page-header h1, .hero h1) {
+    font-size: 24px;
+  }
 }

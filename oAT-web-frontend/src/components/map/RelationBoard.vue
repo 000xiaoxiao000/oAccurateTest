@@ -76,7 +76,7 @@
         </div>
       </section>
 
-      <div id="relation-board-lists" class="layout-grid">
+      <div v-if="!hideLists" id="relation-board-lists" class="layout-grid">
         <section class="panel">
           <div class="panel-head">
             <h2>节点列表</h2>
@@ -90,7 +90,7 @@
               type="button"
               class="node-card"
               :class="{ active: selectedNode?.id === node.id }"
-              @click="selectedId = node.id"
+              @click="selectGraphNode(node.id)"
             >
               <div class="node-top">
                 <strong>{{ node.label || node.id }}</strong>
@@ -132,7 +132,7 @@
         </section>
       </div>
 
-      <section class="panel edge-panel">
+      <section v-if="!hideLists" class="panel edge-panel">
         <div class="panel-head">
           <h2>关系清单</h2>
           <span>{{ filteredEdges.length }}</span>
@@ -172,6 +172,8 @@ interface RelationNode {
   type?: string
   description?: string
   meta?: string[]
+  raw?: Record<string, unknown>
+  classes?: string[]
 }
 
 interface RelationEdge {
@@ -196,9 +198,15 @@ const props = defineProps<{
   backRoute?: RouteLocationRaw
   backLabel?: string
   compact?: boolean
+  hideLists?: boolean
+}>()
+
+const emit = defineEmits<{
+  (event: 'node-select', node: RelationNode | null): void
 }>()
 
 const compact = computed(() => Boolean(props.compact))
+const hideLists = computed(() => Boolean(props.hideLists))
 
 const keyword = ref('')
 const selectedId = ref('')
@@ -301,6 +309,7 @@ function actionText(action?: string) {
 function selectGraphNode(nodeId: string) {
   selectedId.value = nodeId
   tip.open = false
+  emit('node-select', filteredNodes.value.find((node) => node.id === nodeId) || null)
 }
 
 function closeContextMenu() {
@@ -308,7 +317,7 @@ function closeContextMenu() {
 }
 
 function openContextMenu(event: MouseEvent, nodeId: string) {
-  selectedId.value = nodeId
+  selectGraphNode(nodeId)
   contextMenu.open = true
   contextMenu.x = event.clientX
   contextMenu.y = event.clientY
@@ -316,7 +325,7 @@ function openContextMenu(event: MouseEvent, nodeId: string) {
 }
 
 function focusContextNode() {
-  if (contextMenu.nodeId) selectedId.value = contextMenu.nodeId
+  if (contextMenu.nodeId) selectGraphNode(contextMenu.nodeId)
   closeContextMenu()
 }
 
@@ -354,10 +363,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 watchEffect(() => {
   if (!selectedId.value && filteredNodes.value.length) {
     selectedId.value = filteredNodes.value[0].id
+    emit('node-select', filteredNodes.value[0])
     return
   }
   if (selectedId.value && !filteredNodes.value.some((node) => node.id === selectedId.value)) {
     selectedId.value = filteredNodes.value[0]?.id || ''
+    emit('node-select', filteredNodes.value[0] || null)
   }
 })
 </script>

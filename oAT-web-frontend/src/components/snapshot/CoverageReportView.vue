@@ -8,6 +8,7 @@
       </div>
       <div class="header-actions">
         <RouterLink class="ghost-button" :to="graphRoute">查看链路图</RouterLink>
+        <RouterLink v-if="codeGraphRoute" class="ghost-button" :to="codeGraphRoute">查看代码图层</RouterLink>
         <button v-if="secondaryActionLabel" class="ghost-button" type="button" @click="$emit('secondary-action')">
           {{ secondaryActionLabel }}
         </button>
@@ -98,54 +99,28 @@
         </section>
       </div>
 
-      <section class="panel class-panel">
-        <div class="card-title">
-          <h2>类级统计</h2>
-          <span class="table-count">{{ filteredClassStats.length }} 个类</span>
-        </div>
-        <label class="search-box">
-          <span>类名筛选</span>
-          <input v-model.trim="classKeyword" class="text-input" type="text" placeholder="输入类名关键字" />
-        </label>
-        <div v-if="!filteredClassStats.length" class="empty-card">暂无类级统计数据</div>
-        <div v-else class="table-shell">
-          <table class="report-table">
-            <thead>
-              <tr>
-                <th>类名</th>
-                <th>方法</th>
-                <th>方法覆盖率</th>
-                <th>分支</th>
-                <th>分支目标覆盖率</th>
-                <th>代码行</th>
-                <th>代码行覆盖率</th>
-                <th>复杂度</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in filteredClassStats" :key="item.className">
-                <td class="class-cell" :title="item.className">{{ item.className }}</td>
-                <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
-                <td>{{ formatRate(item.coveredMethods, item.totalMethods) }}</td>
-                <td>{{ item.coveredBranches }} / {{ item.totalBranches }}</td>
-                <td>{{ item.totalBranchTargets ? `${item.branchRate.toFixed(1)}%` : 'N/A' }}</td>
-                <td>{{ item.coveredLines }} / {{ item.totalLines }}</td>
-                <td>{{ formatRate(item.coveredLines, item.totalLines) }}</td>
-                <td>{{ item.totalComplexity }}</td>
-                <td>
-                  <RouterLink class="table-link" :to="buildCodeRoute(item.className)">源码</RouterLink>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       <section v-if="codeRelationships?.length" class="panel interface-panel">
         <div class="card-title">
           <h2>接口聚合</h2>
           <span class="table-count">{{ codeRelationships.length }} 个请求入口</span>
+        </div>
+        <div class="relationship-graph-card">
+          <div class="relationship-graph-head">
+            <div>
+              <strong>接口-类-方法关系图</strong>
+              <span>把请求入口、命中类、执行方法按调用关系展开，补齐老前端的代码关联图谱视图。</span>
+            </div>
+            <RouterLink v-if="codeGraphRoute" class="table-link" :to="codeGraphRoute">打开源码链路图</RouterLink>
+          </div>
+          <RelationBoard
+            eyebrow="Code Relationship"
+            title="代码关联图谱"
+            :loading="false"
+            :nodes="relationshipGraphNodes"
+            :edges="relationshipGraphEdges"
+            compact
+            hide-lists
+          />
         </div>
         <div class="relationship-list">
           <article v-for="group in codeRelationships" :key="group.requestUrl" class="relationship-card">
@@ -199,6 +174,51 @@
           </article>
         </div>
       </section>
+
+      <section class="panel class-panel">
+        <div class="card-title">
+          <h2>类级统计</h2>
+          <span class="table-count">{{ filteredClassStats.length }} 个类</span>
+        </div>
+        <label class="search-box">
+          <span>类名筛选</span>
+          <input v-model.trim="classKeyword" class="text-input" type="text" placeholder="输入类名关键字" />
+        </label>
+        <div v-if="!filteredClassStats.length" class="empty-card">暂无类级统计数据</div>
+        <div v-else class="table-shell">
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>类名</th>
+                <th>方法</th>
+                <th>方法覆盖率</th>
+                <th>分支</th>
+                <th>分支目标覆盖率</th>
+                <th>代码行</th>
+                <th>代码行覆盖率</th>
+                <th>复杂度</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in filteredClassStats" :key="item.className">
+                <td class="class-cell" :title="item.className">{{ item.className }}</td>
+                <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
+                <td>{{ formatRate(item.coveredMethods, item.totalMethods) }}</td>
+                <td>{{ item.coveredBranches }} / {{ item.totalBranches }}</td>
+                <td>{{ item.totalBranchTargets ? `${item.branchRate.toFixed(1)}%` : 'N/A' }}</td>
+                <td>{{ item.coveredLines }} / {{ item.totalLines }}</td>
+                <td>{{ formatRate(item.coveredLines, item.totalLines) }}</td>
+                <td>{{ item.totalComplexity }}</td>
+                <td>
+                  <RouterLink class="table-link" :to="buildCodeRoute(item.className)">源码</RouterLink>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
     </template>
     <div v-else class="status-card">
       <strong>{{ emptyTitle }}</strong>
@@ -210,6 +230,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
+
+import RelationBoard from '@/components/map/RelationBoard.vue'
 import type { RouteLocationRaw } from 'vue-router'
 
 import type {
@@ -229,6 +251,7 @@ const props = defineProps<{
   title: string
   subtext?: string
   graphRoute: RouteLocationRaw
+  codeGraphRoute?: RouteLocationRaw
   backRoute: RouteLocationRaw
   backLabel: string
   loading: boolean
@@ -256,6 +279,133 @@ const filteredClassStats = computed(() => {
   }
   return source.filter((item) => item.className.toLowerCase().includes(classKeyword.value.toLowerCase()))
 })
+
+const relationshipGraphNodes = computed(() => {
+  const nodes: Array<{ id: string; label: string; type: string; description?: string; meta?: string[] }> = []
+  const classIds = new Set<string>()
+
+  ;(props.codeRelationships || []).forEach((group, groupIndex) => {
+    const requestId = requestNodeId(group, groupIndex)
+    const summary = summarizeGroup(group.methods)
+    nodes.push({
+      id: requestId,
+      label: group.requestUrl || `请求入口 ${groupIndex + 1}`,
+      type: 'request entry snapshot',
+      description: '请求入口',
+      meta: [
+        `方法 ${summary.methodCount}`,
+        `行 ${summary.coveredLines}/${summary.totalLines}`,
+        `分支目标 ${summary.coveredBranchTargets}/${summary.totalBranchTargets}`,
+      ],
+    })
+
+    ;(group.methods || []).forEach((method, methodIndex) => {
+      const classId = classNodeId(groupIndex, method.className)
+      if (!classIds.has(classId)) {
+        classIds.add(classId)
+        nodes.push({
+          id: classId,
+          label: shortClassName(method.className),
+          type: 'code class',
+          description: method.className,
+          meta: [`类 ${method.className}`],
+        })
+      }
+      nodes.push({
+        id: methodNodeId(groupIndex, methodIndex, method),
+        label: method.methodName || '匿名方法',
+        type: 'code method',
+        description: method.methodDescriptor || method.className,
+        meta: [
+          `类 ${shortClassName(method.className)}`,
+          `行覆盖 ${formatRate(method.coveredLineCount, method.lineTotalCount)}`,
+          method.branchTargetTotalCount ? `分支目标 ${formatRate(method.branchTargetCoveredCount, method.branchTargetTotalCount)}` : '分支目标 N/A',
+        ],
+      })
+    })
+  })
+  return nodes
+})
+
+const relationshipGraphEdges = computed(() => {
+  const edges: Array<{ id: string; source: string; target: string; label: string; action?: string; sourceLabel?: string; targetLabel?: string }> = []
+  const edgeIds = new Set<string>()
+  const nodeLabelMap = new Map(relationshipGraphNodes.value.map((node) => [node.id, node.label]))
+
+  ;(props.codeRelationships || []).forEach((group, groupIndex) => {
+    const requestId = requestNodeId(group, groupIndex)
+    ;(group.methods || []).forEach((method, methodIndex) => {
+      const classId = classNodeId(groupIndex, method.className)
+      const methodId = methodNodeId(groupIndex, methodIndex, method)
+      pushEdge(edges, edgeIds, {
+        id: `${requestId}->${classId}`,
+        source: requestId,
+        target: classId,
+        label: '命中类',
+        action: 'select',
+        sourceLabel: nodeLabelMap.get(requestId),
+        targetLabel: nodeLabelMap.get(classId),
+      })
+      pushEdge(edges, edgeIds, {
+        id: `${classId}->${methodId}`,
+        source: classId,
+        target: methodId,
+        label: relationshipText(method),
+        action: relationshipAction(method),
+        sourceLabel: nodeLabelMap.get(classId),
+        targetLabel: nodeLabelMap.get(methodId),
+      })
+    })
+  })
+  return edges
+})
+
+
+function requestNodeId(group: SnapshotCodeRelationshipGroupSummary, groupIndex: number) {
+  return `request:${groupIndex}:${encodeURIComponent(group.requestUrl || 'unknown')}`
+}
+
+function classNodeId(groupIndex: number, className?: string) {
+  return `class:${groupIndex}:${encodeURIComponent(className || 'unknown')}`
+}
+
+function methodNodeId(groupIndex: number, methodIndex: number, method: SnapshotCodeRelationshipMethodSummary) {
+  return [
+    'method',
+    groupIndex,
+    methodIndex,
+    encodeURIComponent(method.className || 'unknown'),
+    encodeURIComponent(method.methodName || 'unknown'),
+    encodeURIComponent(method.methodDescriptor || ''),
+  ].join(':')
+}
+
+function pushEdge<T extends { id: string }>(target: T[], seen: Set<string>, edge: T) {
+  if (seen.has(edge.id)) {
+    return
+  }
+  seen.add(edge.id)
+  target.push(edge)
+}
+
+function shortClassName(className?: string) {
+  if (!className) {
+    return '-'
+  }
+  const parts = className.split('.')
+  return parts[parts.length - 1] || className
+}
+
+function relationshipAction(method: SnapshotCodeRelationshipMethodSummary) {
+  const tone = relationshipTone(method)
+  if (tone === 'success') {
+    return 'select'
+  }
+  if (tone === 'warning') {
+    return 'update'
+  }
+  return 'delete'
+}
 
 function formatRate(covered = 0, total = 0) {
   if (!total) {
@@ -484,6 +634,33 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
   margin-top: 18px;
 }
 
+.relationship-graph-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(37, 99, 235, 0.08)), #f8fbfb;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.relationship-graph-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.relationship-graph-head div {
+  display: grid;
+  gap: 4px;
+}
+
+.relationship-graph-head span {
+  color: #64748b;
+  line-height: 1.5;
+}
+
 .relationship-list {
   display: grid;
   gap: 14px;
@@ -556,7 +733,8 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
 
   .page-header,
   .header-actions,
-  .card-title {
+  .card-title,
+  .relationship-graph-head {
     flex-direction: column;
     align-items: stretch;
   }

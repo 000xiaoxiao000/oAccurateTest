@@ -252,6 +252,7 @@ public class SnapshotApiControl {
         payload.setSnapshot(toSystemSnapshotSummary(snapshot));
         payload.setReport(toCoverageReportSummary(snapshot.getCoverageReport()));
         payload.setClassStats(buildSystemSnapshotClassStats(appId, snapshot));
+        payload.setCodeRelationships(buildTraceCodeRelationships(snapshot.getTraceId(), appId));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取系统快照覆盖率报告成功", payload);
     }
@@ -494,6 +495,7 @@ public class SnapshotApiControl {
         payload.setSnapshot(snapshot);
         payload.setReport(aggregate.getSummary());
         payload.setClassStats(aggregate.getClassStats());
+        payload.setCodeRelationships(buildTraceCodeRelationships(snapshot.getTraceId(), resolveMySnapshotAppId(snapshot)));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取我的快照覆盖率报告成功", payload);
     }
@@ -1881,6 +1883,127 @@ public class SnapshotApiControl {
         return new MySnapshotCodeReportAggregate(report, classStats, groups, report.getAppId());
     }
 
+
+    private List<MySnapshotCodeRelationshipGroupSummary> buildTraceCodeRelationships(String traceId, String appId) {
+        if (!StringUtils.hasText(traceId)) {
+            return new ArrayList<>();
+        }
+        TraceNode traceNode = snapshotService.getTraceNode(traceId, "0");
+        if (!(traceNode instanceof HttpTraceNode)) {
+            return new ArrayList<>();
+        }
+        HttpTraceNode httpTraceNode = (HttpTraceNode) traceNode;
+        StackNodeVo[] codeNodes = httpTraceNode.getCodeNodes();
+        if (codeNodes == null || codeNodes.length == 0) {
+            return new ArrayList<>();
+        }
+
+        String currentAppId = StringUtils.hasText(appId) ? appId : null;
+        if (!StringUtils.hasText(currentAppId) && traceNode.getApp() != null) {
+            currentAppId = traceNode.getApp().getAppId();
+        }
+
+        Map<String, Map<String, List<MySnapshotCodeRelationshipMethodSummary>>> codeRelationships = new LinkedHashMap<>();
+        Map<String, Set<Integer>> methodCoveredLines = new HashMap<>();
+        Map<String, Set<Integer>> methodTotalLines = new HashMap<>();
+        Map<String, Set<Integer>> methodTotalBranches = new HashMap<>();
+        Map<String, Set<Integer>> methodCoveredBranches = new HashMap<>();
+        Map<String, Set<String>> methodTotalBranchTargets = new HashMap<>();
+        Map<String, Set<String>> methodCoveredBranchTargets = new HashMap<>();
+
+        String requestUrl = httpTraceNode.getRequestUrl();
+        Map<String, List<MySnapshotCodeRelationshipMethodSummary>> childNodes =
+                codeRelationships.computeIfAbsent(requestUrl, key -> new LinkedHashMap<>());
+
+        for (StackNodeVo node : codeNodes) {
+            if (node == null || !StringUtils.hasText(node.getClassName())) {
+                continue;
+            }
+            String methodKey = relationshipMethodKey(node.getClassName(), node.getMethodName(), node.getMethodDescriptor());
+            childNodes.computeIfAbsent(node.parentId(), key -> new ArrayList<>())
+                    .add(new MySnapshotCodeRelationshipMethodSummary(
+                            node.getClassName(),
+                            node.getMethodName(),
+                            node.getMethodDescriptor(),
+                            node.getDoLines() == null ? new ArrayList<>() : new ArrayList<>(node.getDoLines())));
+
+            if (node.getDoLines() != null) {
+                methodCoveredLines.computeIfAbsent(methodKey, key -> new LinkedHashSet<>()).addAll(node.getDoLines());
+            }
+            if (node.getExecuteBranch() != null) {
+                methodCoveredBranches.computeIfAbsent(methodKey, key -> new LinkedHashSet<>()).addAll(node.getExecuteBranch());
+            }
+            addBranchTargetKeys(methodCoveredBranchTargets, methodKey, node.getExecuteBranchTargetProbeMap(), null);
+        }
+
+        if (StringUtils.hasText(currentAppId)) {
+            for (StaticSourceInfo staticInfo : staticInfoRepository.findByAppId(currentAppId)) {
+                if (staticInfo.getClassInfo() == null || staticInfo.getClassInfo().getMethodMaps() == null) {
+                    continue;
+                }
+                String className = staticInfo.getClassInfo().getClassName();
+                for (StaticSourceMethodInfo methodInfo : staticInfo.getClassInfo().getMethodMaps().values()) {
+                    String methodKey = relationshipMethodKey(className, methodInfo.getMethodName(), methodInfo.getMethodDesc());
+                    if (!methodCoveredLines.containsKey(methodKey) && !methodCoveredBranches.containsKey(methodKey)) {
+                        continue;
+                    }
+                    methodTotalLines.computeIfAbsent(methodKey, key -> new LinkedHashSet<>())
+                            .addAll(methodInfo.getMethodLineNumberMap() != null ? methodInfo.getMethodLineNumberMap() : Collections.emptyList());
+                    methodTotalBranches.computeIfAbsent(methodKey, key -> new LinkedHashSet<>())
+                            .addAll(methodInfo.getBranchLineNumberSet() != null ? methodInfo.getBranchLineNumberSet() : Collections.emptyList());
+                    Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
+                            methodInfo.getBranchLineAndTargetProbeMap(),
+                            decodeBranchTargetKeys(methodCoveredBranchTargets.get(methodKey)));
+                    addBranchTargetKeys(methodTotalBranchTargets, methodKey, normalizedTotalBranchTargetProbeMap, null);
+                    if (methodCoveredBranchTargets.containsKey(methodKey)) {
+                        Set<String> normalizedKeys = new LinkedHashSet<>();
+                        addBranchTargetKeysToSet(normalizedKeys, normalizedTotalBranchTargetProbeMap,
+                                decodeBranchTargetKeys(methodCoveredBranchTargets.get(methodKey)));
+                        methodCoveredBranchTargets.put(methodKey, normalizedKeys);
+                    }
+                }
+            }
+        }
+
+        for (Map<String, List<MySnapshotCodeRelationshipMethodSummary>> groups : codeRelationships.values()) {
+            groups.values().stream().flatMap(List::stream).forEach(method -> {
+                String methodKey = relationshipMethodKey(method.getClassName(), method.getMethodName(), method.getMethodDescriptor());
+                method.setLineTotalCount(methodTotalLines.getOrDefault(methodKey, Collections.emptySet()).size());
+                method.setCoveredLineCount(methodCoveredLines.getOrDefault(methodKey, Collections.emptySet()).size());
+                method.setBranchTotalCount(methodTotalBranches.getOrDefault(methodKey, Collections.emptySet()).size());
+                method.setBranchCoveredCount(methodCoveredBranches.getOrDefault(methodKey, Collections.emptySet()).size());
+                method.setBranchTargetTotalCount(methodTotalBranchTargets.getOrDefault(methodKey, Collections.emptySet()).size());
+                method.setBranchTargetCoveredCount(methodCoveredBranchTargets.getOrDefault(methodKey, Collections.emptySet()).size());
+            });
+        }
+
+        List<MySnapshotCodeRelationshipGroupSummary> groups = new ArrayList<>();
+        for (Map.Entry<String, Map<String, List<MySnapshotCodeRelationshipMethodSummary>>> entry : codeRelationships.entrySet()) {
+            List<MySnapshotCodeRelationshipMethodSummary> methods = entry.getValue().values().stream()
+                    .flatMap(List::stream)
+                    .collect(Collectors.toList());
+            methods.sort((left, right) -> {
+                double leftRate = left.getLineTotalCount() > 0 ? (double) left.getCoveredLineCount() / left.getLineTotalCount() : 0;
+                double rightRate = right.getLineTotalCount() > 0 ? (double) right.getCoveredLineCount() / right.getLineTotalCount() : 0;
+                int compare = Double.compare(rightRate, leftRate);
+                if (compare != 0) {
+                    return compare;
+                }
+                return safeString(left.getClassName()).compareToIgnoreCase(safeString(right.getClassName()));
+            });
+            MySnapshotCodeRelationshipGroupSummary group = new MySnapshotCodeRelationshipGroupSummary();
+            group.setRequestUrl(entry.getKey());
+            group.setMethods(methods);
+            groups.add(group);
+        }
+        groups.sort((left, right) -> safeString(left.getRequestUrl()).compareToIgnoreCase(safeString(right.getRequestUrl())));
+        return groups;
+    }
+
+    private String relationshipMethodKey(String className, String methodName, String methodDescriptor) {
+        return safeString(className) + "#" + safeString(methodName) + "#" + safeString(methodDescriptor);
+    }
+
     private ClassCoverageIndex buildMySnapshotsClassCoverage(String appId, List<SnapshotVo> snapshots, String className) {
         ClassCoverageIndex aggregatedClassCov = new ClassCoverageIndex();
         aggregatedClassCov.setClassName(className);
@@ -2493,6 +2616,7 @@ public class SnapshotApiControl {
         private SystemSnapshotSummary snapshot;
         private CoverageReportSummary report;
         private List<ClassCoverageSummary> classStats;
+        private List<MySnapshotCodeRelationshipGroupSummary> codeRelationships;
         private String currentUserRole;
 
         public FrontendContextApiControl.AppSummary getApp() { return app; }
@@ -2503,6 +2627,8 @@ public class SnapshotApiControl {
         public void setReport(CoverageReportSummary report) { this.report = report; }
         public List<ClassCoverageSummary> getClassStats() { return classStats; }
         public void setClassStats(List<ClassCoverageSummary> classStats) { this.classStats = classStats; }
+        public List<MySnapshotCodeRelationshipGroupSummary> getCodeRelationships() { return codeRelationships; }
+        public void setCodeRelationships(List<MySnapshotCodeRelationshipGroupSummary> codeRelationships) { this.codeRelationships = codeRelationships; }
         public String getCurrentUserRole() { return currentUserRole; }
         public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
     }
@@ -2831,6 +2957,7 @@ public class SnapshotApiControl {
         private SnapshotVo snapshot;
         private CoverageReportSummary report;
         private List<ClassCoverageSummary> classStats;
+        private List<MySnapshotCodeRelationshipGroupSummary> codeRelationships;
         private String currentUserRole;
 
         public SnapshotVo getSnapshot() { return snapshot; }
@@ -2839,6 +2966,8 @@ public class SnapshotApiControl {
         public void setReport(CoverageReportSummary report) { this.report = report; }
         public List<ClassCoverageSummary> getClassStats() { return classStats; }
         public void setClassStats(List<ClassCoverageSummary> classStats) { this.classStats = classStats; }
+        public List<MySnapshotCodeRelationshipGroupSummary> getCodeRelationships() { return codeRelationships; }
+        public void setCodeRelationships(List<MySnapshotCodeRelationshipGroupSummary> codeRelationships) { this.codeRelationships = codeRelationships; }
         public String getCurrentUserRole() { return currentUserRole; }
         public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
     }

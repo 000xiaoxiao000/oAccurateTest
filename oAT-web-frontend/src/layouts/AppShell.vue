@@ -7,7 +7,7 @@
           <img class="brand-logo-image" src="/images/logo.png" alt="oAccurateTest" />
         </RouterLink>
         <nav class="shell-nav">
-          <RouterLink v-if="projectId" :to="`/p/${projectId}/map/home`">搜索</RouterLink>
+          <RouterLink v-if="projectId" :to="`/p/${projectId}/search`">搜索</RouterLink>
           <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'monitor' }" @mouseenter="openNavMenu('monitor')" @mouseleave="closeMenus">
             <button class="nav-dropdown-trigger" type="button" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret">⌄</span></button>
             <div class="nav-menu compact">
@@ -70,7 +70,7 @@
         </nav>
       </div>
     </header>
-    <main class="page-shell shell-main">
+    <main class="page-shell shell-main" :class="mainModeClass">
       <AppBreadcrumbs />
       <RouterView />
     </main>
@@ -116,6 +116,17 @@ const filteredApps = computed(() => {
 const systemSnapshotRoute = computed(() => {
   const targetAppId = routeAppId.value || apps.value[0]?.id
   return targetAppId ? `/p/${projectId.value}/apps/${targetAppId}/snapshots` : `/p/${projectId.value}/apps`
+})
+
+const mainModeClass = computed(() => {
+  const name = String(route.name || '')
+  if (['monitor', 'map-home', 'map-app', 'map-code', 'project-ai', 'search-center'].includes(name)) {
+    return 'shell-main-wide'
+  }
+  if (name.includes('graph') || name.includes('code') || name.includes('coverage')) {
+    return 'shell-main-focus'
+  }
+  return ''
 })
 
 watch(projectId, async (value) => {
@@ -181,9 +192,10 @@ async function handleLogout() {
   position: sticky;
   top: 0;
   z-index: 900;
-  background: rgba(255, 255, 255, .96);
+  background: rgba(255, 255, 255, .94);
   border-bottom: 1px solid rgba(15, 23, 42, .08);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .05);
+  backdrop-filter: blur(14px);
 }
 
 .shell-header-inner {
@@ -232,7 +244,7 @@ async function handleLogout() {
 .icon-trigger {
   min-height: 38px;
   border: none;
-  border-radius: 6px;
+  border-radius: 9px;
   padding: 10px 12px;
   background: transparent;
   color: #172033;
@@ -295,11 +307,12 @@ async function handleLogout() {
   z-index: 160;
   min-width: 220px;
   display: none;
-  padding: 7px 0;
+  padding: 8px;
   border: 1px solid rgba(15, 23, 42, .10);
-  border-radius: 4px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, .98);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, .13);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .15);
+  backdrop-filter: blur(16px);
 }
 
 .nav-dropdown:hover .nav-menu,
@@ -321,7 +334,7 @@ async function handleLogout() {
   display: block;
   width: 100%;
   border: none;
-  border-radius: 0;
+  border-radius: 10px;
   padding: 10px 14px;
   background: transparent;
   color: #172033;
@@ -377,7 +390,7 @@ async function handleLogout() {
   width: calc(100% - 22px);
   margin: 7px 11px 5px;
   border: 1px solid rgba(15, 23, 42, .12);
-  border-radius: 4px;
+  border-radius: 12px;
   padding: 9px 12px;
   outline: none;
   font: inherit;
@@ -454,6 +467,14 @@ async function handleLogout() {
 
 .shell-main {
   padding: 24px 0 112px;
+}
+
+.shell-main-wide {
+  width: min(1500px, calc(100vw - 32px));
+}
+
+.shell-main-focus {
+  width: min(1380px, calc(100vw - 32px));
 }
 
 @media (max-width: 900px) {

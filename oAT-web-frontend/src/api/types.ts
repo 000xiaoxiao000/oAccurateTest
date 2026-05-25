@@ -537,6 +537,7 @@ export interface MySnapshotReportPayload {
   snapshot: SnapshotOption
   report?: CoverageReportSummary
   classStats?: ClassCoverageSummary[]
+  codeRelationships?: SnapshotCodeRelationshipGroupSummary[]
   currentUserRole: string
 }
 
@@ -625,6 +626,7 @@ export interface SystemSnapshotReportPayload {
   snapshot: SystemSnapshotSummary
   report?: CoverageReportSummary
   classStats?: ClassCoverageSummary[]
+  codeRelationships?: SnapshotCodeRelationshipGroupSummary[]
   currentUserRole: string
 }
 
@@ -829,6 +831,16 @@ export interface MapElementData {
   unionCount?: number
   hotName?: string
   sqlContents?: string[]
+  weight?: number
+  appId?: string
+  database?: string
+  dataBaseType?: string
+  interfaceName?: string
+  action?: string
+  references?: string[]
+  image?: string
+  x?: number
+  y?: number
 }
 
 export interface MapElement {

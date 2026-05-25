@@ -637,6 +637,33 @@ export function fetchMapCode(projectId: string, traceId: string) {
   return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/code?${query.toString()}`)
 }
 
+export function fetchMapLayerAppSnapshots(projectId: string, appId: string) {
+  const query = new URLSearchParams({ appId })
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/layers/app-snapshots?${query.toString()}`)
+}
+
+export function fetchMapLayerSnapshotTables(projectId: string, snapshotId: string) {
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/layers/snapshots/${snapshotId}/tables`)
+}
+
+export function fetchMapLayerSnapshotRemote(projectId: string, snapshotId: string) {
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/layers/snapshots/${snapshotId}/remote`)
+}
+
+export function fetchMapLayerSnapshotCode(projectId: string, snapshotId: string) {
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/layers/snapshots/${snapshotId}/code`)
+}
+
+export function fetchMapLayerTableSnapshots(projectId: string, database: string, table: string) {
+  const query = new URLSearchParams({ database, table })
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/layers/tables/snapshots?${query.toString()}`)
+}
+
+export function fetchMapLayerDubboSnapshots(projectId: string, interfaceName: string, methodName: string) {
+  const query = new URLSearchParams({ interfaceName, methodName })
+  return apiGetRaw<MapElement[]>(`/api/projects/${projectId}/map/layers/dubbo/snapshots?${query.toString()}`)
+}
+
 export function fetchUsecaseList(projectId: string, params?: { directory?: string; sort?: string; keyword?: string }) {
   const query = new URLSearchParams()
   if (params?.directory) {

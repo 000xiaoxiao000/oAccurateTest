@@ -1,6 +1,6 @@
 <template>
   <section>
-    <div class="toolbar">
+    <div class="toolbar map-toolbar">
       <div class="chip-group">
         <button
           v-for="item in layerOptions"
@@ -12,69 +12,143 @@
           {{ item.label }}
         </button>
       </div>
+
+      <div class="layer-actions">
+        <div>
+          <strong>{{ selectedNode ? selectedNode.label || selectedNode.id : '图层操作' }}</strong>
+          <span>{{ selectedNode ? selectedTypeText : '先在图谱中选择应用、快照、表或远程服务节点' }}</span>
+        </div>
+        <div class="action-buttons">
+          <button v-if="canExpandAppSnapshots" type="button" :disabled="loadingLayer" @click="loadAppSnapshots">展开快照</button>
+          <button v-if="canLoadSnapshotLayer" type="button" :disabled="loadingLayer" @click="loadSnapshotTables">表结构图层</button>
+          <button v-if="canLoadSnapshotLayer" type="button" :disabled="loadingLayer" @click="loadSnapshotRemote">远程服务图层</button>
+          <button v-if="canLoadSnapshotLayer" type="button" :disabled="loadingLayer" @click="loadSnapshotCode">源码关联图谱</button>
+          <button v-if="canOpenSnapshot" type="button" :disabled="loadingLayer" @click="openSnapshotDetail">打开快照详情</button>
+          <button v-if="canExpandTableSnapshots" type="button" :disabled="loadingLayer" @click="loadTableSnapshots">展开关联快照</button>
+          <button v-if="canExpandRemoteSnapshots" type="button" :disabled="loadingLayer" @click="loadDubboSnapshots">展开关联快照</button>
+          <button v-if="extensionElements.length" type="button" class="danger" :disabled="loadingLayer" @click="clearExtensionLayers">清除扩展图层</button>
+        </div>
+      </div>
+      <div v-if="loadingLayer || activeExtensionLabel || layerError" :class="['layer-status', layerError && 'error']">
+        {{ layerError || (loadingLayer ? `正在加载${activeExtensionLabel || '图层'}...` : `已加载：${activeExtensionLabel}`) }}
+      </div>
     </div>
     <RelationBoard
       eyebrow="Application Map"
       :title="`应用链路图 · ${appId}`"
-      subtext="可切换代码层、数据表层等扩展信息。"
+      subtext="支持代码层、表结构层、快照表/远程服务/源码关联图谱等扩展图层。"
       :loading="loading"
       :error="error"
       :nodes="nodes"
       :edges="edges"
       :back-route="`/p/${projectId}/apps`"
       back-label="返回应用列表"
+      @node-select="handleNodeSelect"
     />
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import RelationBoard from '@/components/map/RelationBoard.vue'
-import { fetchMapApp } from '@/api/bootstrap'
+import {
+  fetchMapApp,
+  fetchMapLayerAppSnapshots,
+  fetchMapLayerDubboSnapshots,
+  fetchMapLayerSnapshotCode,
+  fetchMapLayerSnapshotRemote,
+  fetchMapLayerSnapshotTables,
+  fetchMapLayerTableSnapshots,
+} from '@/api/bootstrap'
+import type { MapElement, MapElementData } from '@/api/types'
+
+interface RelationNodeSelection {
+  id: string
+  label?: string
+  type?: string
+  raw?: Record<string, unknown>
+  classes?: string[]
+}
 
 const route = useRoute()
+const router = useRouter()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const loading = ref(false)
+const loadingLayer = ref(false)
 const error = ref('')
-const elements = ref<Awaited<ReturnType<typeof fetchMapApp>>>([])
+const layerError = ref('')
+const activeExtensionLabel = ref('')
+const elements = ref<MapElement[]>([])
+const extensionElements = ref<MapElement[]>([])
 const selectedLayers = ref<string[]>(['code'])
+const selectedNode = ref<RelationNodeSelection | null>(null)
 
 const layerOptions = [
   { label: '代码层', value: 'code' },
   { label: '表结构层', value: 'table' },
 ]
 
+const allElements = computed(() => mergeElements(elements.value, extensionElements.value))
+
 const nodes = computed(() =>
-  elements.value
+  allElements.value
     .filter((item) => item.group === 'nodes')
     .map((item) => ({
       id: item.data.id,
       label: item.data.name || item.data.id,
-      type: item.classes?.join(','),
+      type: item.classes?.join(' '),
       description: item.data.describe,
-      meta: [
-        item.data.coverageRate ? `覆盖率 ${item.data.coverageRate}%` : '',
-        item.data.cyclo ? `复杂度 ${item.data.cyclo}` : '',
-      ].filter(Boolean),
+      raw: item.data as unknown as Record<string, unknown>,
+      classes: item.classes,
+      meta: buildNodeMeta(item.data, item.classes),
     })),
 )
 
 const edges = computed(() => {
   const labelMap = new Map(nodes.value.map((node) => [node.id, node.label]))
-  return elements.value
+  return allElements.value
     .filter((item) => item.group === 'edges' && item.data.source && item.data.target)
     .map((item) => ({
       id: item.data.id,
       source: item.data.source as string,
       target: item.data.target as string,
-      label: item.data.hotName || item.data.methodName || item.data.name,
+      label: item.data.hotName || item.data.methodName || item.data.name || edgeAction(item.data),
+      action: edgeAction(item.data),
       sourceLabel: labelMap.get(item.data.source as string),
       targetLabel: labelMap.get(item.data.target as string),
     }))
 })
+
+const selectedRaw = computed(() => selectedNode.value?.raw as Partial<MapElementData> | undefined)
+const selectedClasses = computed(() => selectedNode.value?.classes || selectedNode.value?.type?.split(/\s+/).filter(Boolean) || [])
+const selectedTypeText = computed(() => selectedClasses.value.length ? `类型：${selectedClasses.value.join(' / ')}` : '节点')
+const canExpandAppSnapshots = computed(() => hasSelectedClass('app'))
+const canLoadSnapshotLayer = computed(() => hasSelectedClass('snapshot'))
+const canOpenSnapshot = computed(() => hasSelectedClass('snapshot'))
+const canExpandTableSnapshots = computed(() => hasSelectedClass('table') && Boolean(selectedRaw.value?.database && selectedRaw.value?.name))
+const canExpandRemoteSnapshots = computed(() => hasSelectedClass('dubbo') && Boolean(selectedRaw.value?.interfaceName && selectedRaw.value?.methodName))
+
+function buildNodeMeta(data: MapElementData, classes?: string[]) {
+  return [
+    classes?.length ? `图层 ${classes.join(' / ')}` : '',
+    typeof data.coverageRate === 'number' ? `覆盖率 ${data.coverageRate}%` : '',
+    data.cyclo ? `复杂度 ${data.cyclo}` : '',
+    data.appId ? `应用 ${data.appId}` : '',
+    data.database ? `库 ${data.database}` : '',
+    data.methodName ? `方法 ${data.methodName}` : '',
+  ].filter(Boolean)
+}
+
+function edgeAction(data: MapElementData) {
+  return String((data as MapElementData & { action?: string }).action || '')
+}
+
+function hasSelectedClass(className: string) {
+  return selectedClasses.value.some((item) => item === className || item.includes(className))
+}
 
 function toggleLayer(layer: string) {
   selectedLayers.value = selectedLayers.value.includes(layer)
@@ -82,9 +156,89 @@ function toggleLayer(layer: string) {
     : [...selectedLayers.value, layer]
 }
 
+function handleNodeSelect(node: RelationNodeSelection | null) {
+  selectedNode.value = node
+  layerError.value = ''
+}
+
+async function loadAppSnapshots() {
+  const targetAppId = String(selectedRaw.value?.id || appId.value)
+  await loadExtensionLayer('应用快照图层', () => fetchMapLayerAppSnapshots(projectId.value, targetAppId), false)
+}
+
+async function loadSnapshotTables() {
+  if (!selectedNode.value?.id) return
+  await loadExtensionLayer('快照表结构图层', () => fetchMapLayerSnapshotTables(projectId.value, selectedNode.value!.id), true)
+}
+
+async function loadSnapshotRemote() {
+  if (!selectedNode.value?.id) return
+  await loadExtensionLayer('快照远程服务图层', () => fetchMapLayerSnapshotRemote(projectId.value, selectedNode.value!.id), true)
+}
+
+async function loadSnapshotCode() {
+  if (!selectedNode.value?.id) return
+  await loadExtensionLayer('源码关联图谱', () => fetchMapLayerSnapshotCode(projectId.value, selectedNode.value!.id), true)
+}
+
+async function loadTableSnapshots() {
+  const database = selectedRaw.value?.database
+  const table = selectedRaw.value?.name
+  if (!database || !table) return
+  await loadExtensionLayer('表关联快照图层', () => fetchMapLayerTableSnapshots(projectId.value, database, table), false)
+}
+
+async function loadDubboSnapshots() {
+  const interfaceName = selectedRaw.value?.interfaceName
+  const methodName = selectedRaw.value?.methodName
+  if (!interfaceName || !methodName) return
+  await loadExtensionLayer('远程服务关联快照图层', () => fetchMapLayerDubboSnapshots(projectId.value, interfaceName, methodName), false)
+}
+
+async function loadExtensionLayer(label: string, loader: () => Promise<MapElement[]>, replaceSecondary: boolean) {
+  loadingLayer.value = true
+  layerError.value = ''
+  activeExtensionLabel.value = label
+  try {
+    const next = await loader()
+    extensionElements.value = replaceSecondary ? next : mergeElements(extensionElements.value, next)
+    if (!next.length) {
+      layerError.value = `${label}暂无数据`
+    }
+  } catch (err) {
+    layerError.value = err instanceof Error ? err.message : `${label}加载失败`
+  } finally {
+    loadingLayer.value = false
+  }
+}
+
+function clearExtensionLayers() {
+  extensionElements.value = []
+  activeExtensionLabel.value = ''
+  layerError.value = ''
+}
+
+function openSnapshotDetail() {
+  if (!selectedNode.value?.id) return
+  const snapshotAppId = String(selectedRaw.value?.appId || appId.value)
+  router.push(`/p/${projectId.value}/apps/${snapshotAppId}/snapshots/${selectedNode.value.id}`)
+}
+
+function mergeElements(base: MapElement[], incoming: MapElement[]) {
+  const map = new Map<string, MapElement>()
+  ;[...base, ...incoming].forEach((item) => {
+    const key = `${item.group || ''}:${item.data.id}:${item.data.source || ''}:${item.data.target || ''}`
+    map.set(key, item)
+  })
+  return Array.from(map.values())
+}
+
 async function load() {
   loading.value = true
   error.value = ''
+  layerError.value = ''
+  activeExtensionLabel.value = ''
+  extensionElements.value = []
   try {
     elements.value = await fetchMapApp(projectId.value, appId.value, selectedLayers.value)
   } catch (err) {
@@ -103,22 +257,80 @@ onMounted(load)
   margin-bottom: 14px;
 }
 
-.chip-group {
+.map-toolbar {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.chip-group,
+.action-buttons {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-.chip-button {
+.chip-button,
+.action-buttons button {
   border: none;
   border-radius: 999px;
   padding: 10px 14px;
   background: rgba(15, 23, 42, 0.08);
   cursor: pointer;
+  font-weight: 800;
 }
 
-.chip-button.active {
+.chip-button.active,
+.action-buttons button:hover:not(:disabled) {
   background: #0f172a;
   color: #fff;
+}
+
+.action-buttons button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.action-buttons .danger {
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.layer-actions {
+  display: grid;
+  grid-template-columns: minmax(220px, .4fr) 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.layer-actions div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.layer-actions span,
+.layer-status {
+  color: #64748b;
+}
+
+.layer-status {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(15, 118, 110, 0.08);
+  font-weight: 700;
+}
+
+.layer-status.error {
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+@media (max-width: 860px) {
+  .layer-actions {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

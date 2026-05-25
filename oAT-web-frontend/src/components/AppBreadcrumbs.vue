@@ -1,6 +1,7 @@
 <template>
   <nav v-if="items.length" class="breadcrumbs" aria-label="当前位置">
-    <button class="back-button" type="button" @click="goBack">返回</button>
+    <button class="back-button" type="button" @click="goBack">← 返回</button>
+    <span class="breadcrumb-label">当前位置</span>
     <RouterLink
       v-for="(item, index) in items"
       :key="`${item.label}-${index}`"
@@ -162,10 +163,23 @@ function goBack() {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, .07);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .72);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .03);
   color: #64748b;
   font-size: 12px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.breadcrumb-label {
+  padding: 0 4px;
+  color: #94a3b8;
+  font-weight: 800;
 }
 
 .breadcrumbs a,
@@ -178,16 +192,16 @@ function goBack() {
 
 .breadcrumbs a {
   border: none;
-  border-radius: 8px;
-  padding: 3px 4px;
+  border-radius: 999px;
+  padding: 4px 7px;
   background: transparent;
 }
 
 .back-button {
-  border: 1px solid rgba(15, 118, 110, .14);
+  border: 1px solid rgba(15, 118, 110, .16);
   border-radius: 999px;
-  padding: 5px 9px;
-  background: rgba(255, 255, 255, .76);
+  padding: 6px 10px;
+  background: rgba(15, 118, 110, .06);
 }
 
 .breadcrumbs a:hover,
@@ -202,12 +216,20 @@ function goBack() {
 }
 
 .breadcrumbs a.current {
-  color: #334155;
+  background: #0f766e;
+  color: #fff;
   pointer-events: none;
 }
 
 .breadcrumbs a.current::after {
   content: '';
   margin: 0;
+}
+
+@media (max-width: 760px) {
+  .breadcrumbs {
+    width: 100%;
+    border-radius: 16px;
+  }
 }
 </style>

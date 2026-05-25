@@ -4,6 +4,7 @@
     :title="payload?.snapshot.name || '我的快照覆盖率报告'"
     :subtext="`${payload?.snapshot.appId || '未识别应用'} · 单次快照运行视角`"
     :graph-route="`/p/${projectId}/my-snapshots/${snapshotId}/graph`"
+    :code-graph-route="codeGraphRoute"
     :back-route="`/p/${projectId}/my-snapshots/${snapshotId}`"
     :back-label="'返回快照详情'"
     :loading="loading"
@@ -11,6 +12,7 @@
     :error="error"
     :report="payload?.report"
     :class-stats="payload?.classStats"
+    :code-relationships="payload?.codeRelationships"
     :info-items="infoItems"
     :build-code-route="buildCodeRoute"
     :empty-title="'当前快照暂无覆盖率汇总'"
@@ -34,10 +36,13 @@ const payload = computed(() => projectStore.mySnapshotReportByKey[storeKey.value
 const loading = ref(false)
 const error = ref('')
 
+const codeGraphRoute = computed(() => payload.value?.snapshot.traceId ? `/p/${projectId.value}/map/code?traceId=${encodeURIComponent(payload.value.snapshot.traceId)}` : undefined)
+
 const infoItems = computed(() => [
   { label: '应用', value: payload.value?.report?.appId || payload.value?.snapshot.appId || '-' },
   { label: '快照数', value: payload.value?.report?.snapshotCount ?? 1 },
   { label: '代码类数', value: payload.value?.report?.totalClasses ?? 0 },
+  { label: '请求入口', value: payload.value?.codeRelationships?.length ?? 0 },
   { label: '圈复杂度总和', value: payload.value?.report?.totalComplexity ?? 0 },
 ])
 
