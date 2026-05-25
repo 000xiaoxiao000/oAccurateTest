@@ -46,8 +46,9 @@
         <section class="panel">
           <div class="card-title">
             <h2>报告元信息</h2>
+            <button class="ghost-button small" type="button" @click="metaOpen = !metaOpen">{{ metaOpen ? '收起' : '展开' }}</button>
           </div>
-          <div class="info-grid">
+          <div v-show="metaOpen" class="info-grid">
             <div v-for="item in infoItems" :key="item.label" class="info-item">
               <span>{{ item.label }}</span>
               <strong>{{ item.value }}</strong>
@@ -58,8 +59,9 @@
         <section class="panel">
           <div class="card-title">
             <h2>覆盖率明细</h2>
+            <button class="ghost-button small" type="button" @click="metricsOpen = !metricsOpen">{{ metricsOpen ? '收起' : '展开' }}</button>
           </div>
-          <div class="metric-list">
+          <div v-show="metricsOpen" class="metric-list">
             <article class="metric-card">
               <div>
                 <strong>类</strong>
@@ -107,6 +109,9 @@
             <button class="ghost-button small" type="button" @click="relationshipGraphOpen = !relationshipGraphOpen">
               {{ relationshipGraphOpen ? '收起图谱' : '展开图谱' }}
             </button>
+            <button class="ghost-button small" type="button" @click="relationshipsOpen = !relationshipsOpen">
+              {{ relationshipsOpen ? '收起列表' : '展开列表' }}
+            </button>
           </div>
         </div>
         <div v-show="relationshipGraphOpen" class="relationship-graph-card">
@@ -125,9 +130,10 @@
             :edges="relationshipGraphEdges"
             compact
             hide-lists
+            highlight-related
           />
         </div>
-        <div class="list-toolbar">
+        <div v-show="relationshipsOpen" class="list-toolbar">
           <label class="search-box compact-search">
             <span>接口/类/方法筛选</span>
             <input v-model.trim="relationshipKeyword" class="text-input" type="text" placeholder="输入 URL、类名或方法名" />
@@ -141,7 +147,7 @@
             </select>
           </label>
         </div>
-        <div class="relationship-list">
+        <div v-show="relationshipsOpen" class="relationship-list">
           <article v-for="group in paginatedRelationships" :key="group.requestUrl" class="relationship-card">
             <div class="relationship-top">
               <div>
@@ -197,9 +203,9 @@
             </div>
           </article>
         </div>
-        <div v-if="!filteredRelationships.length" class="empty-card">没有匹配的接口聚合数据</div>
+        <div v-if="relationshipsOpen && !filteredRelationships.length" class="empty-card">没有匹配的接口聚合数据</div>
         <AppPagination
-          v-if="filteredRelationships.length > relationshipPageSize"
+          v-if="relationshipsOpen && filteredRelationships.length > relationshipPageSize"
           v-model:page="relationshipPage"
           v-model:page-size="relationshipPageSize"
           :total="filteredRelationships.length"
@@ -211,9 +217,12 @@
       <section class="panel class-panel">
         <div class="card-title">
           <h2>类级统计</h2>
-          <span class="table-count">{{ filteredClassStats.length }} 个类</span>
+          <div class="title-actions">
+            <span class="table-count">{{ filteredClassStats.length }} 个类</span>
+            <button class="ghost-button small" type="button" @click="classStatsOpen = !classStatsOpen">{{ classStatsOpen ? '收起' : '展开' }}</button>
+          </div>
         </div>
-        <div class="list-toolbar">
+        <div v-show="classStatsOpen" class="list-toolbar">
           <label class="search-box compact-search">
             <span>类名筛选</span>
             <input v-model.trim="classKeyword" class="text-input" type="text" placeholder="输入类名关键字" />
@@ -227,8 +236,8 @@
             </select>
           </label>
         </div>
-        <div v-if="!filteredClassStats.length" class="empty-card">暂无类级统计数据</div>
-        <div v-else class="table-shell">
+        <div v-if="classStatsOpen && !filteredClassStats.length" class="empty-card">暂无类级统计数据</div>
+        <div v-else-if="classStatsOpen" class="table-shell">
           <table class="report-table">
             <thead>
               <tr>
@@ -261,7 +270,7 @@
           </table>
         </div>
         <AppPagination
-          v-if="filteredClassStats.length > classPageSize"
+          v-if="classStatsOpen && filteredClassStats.length > classPageSize"
           v-model:page="classPage"
           v-model:page-size="classPageSize"
           :total="filteredClassStats.length"
@@ -328,7 +337,11 @@ const classPageSize = ref(20)
 const relationshipKeyword = ref('')
 const relationshipPage = ref(1)
 const relationshipPageSize = ref(5)
-const relationshipGraphOpen = ref(false)
+const relationshipGraphOpen = ref(true)
+const relationshipsOpen = ref(true)
+const classStatsOpen = ref(true)
+const metaOpen = ref(false)
+const metricsOpen = ref(false)
 const expandedRelationshipGroups = ref(new Set<string>())
 const relationshipMethodPreviewLimit = 8
 const filteredClassStats = computed(() => {
@@ -371,7 +384,7 @@ const relationshipGraphNodes = computed(() => {
   const nodes: Array<{ id: string; label: string; type: string; description?: string; meta?: string[] }> = []
   const classIds = new Set<string>()
 
-  ;(props.codeRelationships || []).forEach((group, groupIndex) => {
+  ;(paginatedRelationships.value || []).forEach((group, groupIndex) => {
     const requestId = requestNodeId(group, groupIndex)
     const summary = summarizeGroup(group.methods)
     nodes.push({
@@ -419,7 +432,7 @@ const relationshipGraphEdges = computed(() => {
   const edgeIds = new Set<string>()
   const nodeLabelMap = new Map(relationshipGraphNodes.value.map((node) => [node.id, node.label]))
 
-  ;(props.codeRelationships || []).forEach((group, groupIndex) => {
+  ;(paginatedRelationships.value || []).forEach((group, groupIndex) => {
     const requestId = requestNodeId(group, groupIndex)
     ;(group.methods || []).forEach((method, methodIndex) => {
       const classId = classNodeId(groupIndex, method.className)

@@ -25,7 +25,7 @@
         </article>
       </div>
 
-      <div v-if="!compact" class="graph-search-block">
+      <div v-if="!compact || compactSearchOpen || keyword" :class="['graph-search-block', compact && 'compact-search-block']">
         <label class="search-box">
           <span>图谱搜索</span>
           <input
@@ -65,6 +65,7 @@
         <div class="graph-toolbar">
           <div>图形画布</div>
           <div class="graph-tools">
+            <button type="button" @click.stop="openSearchPanel">查找</button>
             <button type="button" @click.stop="fitGraph">适配视图</button>
             <button type="button" @click.stop="zoomGraph(0.15)">放大</button>
             <button type="button" @click.stop="zoomGraph(-0.15)">缩小</button>
@@ -213,7 +214,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watchEffect } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 
@@ -281,6 +282,7 @@ const compact = computed(() => Boolean(props.compact))
 const hideLists = computed(() => Boolean(props.hideLists))
 
 const keyword = ref('')
+const compactSearchOpen = ref(false)
 const selectedId = ref('')
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const contextMenu = reactive({ open: false, x: 0, y: 0, nodeId: '', target: 'canvas' as 'canvas' | 'node' })
@@ -480,9 +482,9 @@ function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
     buckets.set(rank, list)
   })
 
-  const maxRowsPerColumn = nodes.length > 80 ? 8 : 7
-  const spacingX = nodes.length > 80 ? 132 : 170
-  const spacingY = nodes.length > 80 ? 70 : 86
+  const maxRowsPerColumn = nodes.length > 80 ? 7 : 6
+  const spacingX = nodes.length > 80 ? 168 : 220
+  const spacingY = nodes.length > 80 ? 86 : 108
   const positions = new Map<string, { x: number; y: number }>()
   let columnCursor = 0
   Array.from(buckets.keys()).sort((a, b) => a - b).forEach((rank) => {
@@ -491,12 +493,12 @@ function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
     const chunkCount = Math.max(1, Math.ceil(sortedBucket.length / maxRowsPerColumn))
     for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
       const chunk = sortedBucket.slice(chunkIndex * maxRowsPerColumn, (chunkIndex + 1) * maxRowsPerColumn)
-      const x = 90 + columnCursor * spacingX
+      const x = 110 + columnCursor * spacingX
       const verticalOffset = Math.max(0, maxRowsPerColumn - chunk.length) * spacingY * 0.5
       chunk.forEach((node, row) => {
         positions.set(node.id, {
           x,
-          y: 92 + verticalOffset + row * spacingY,
+          y: 108 + verticalOffset + row * spacingY,
         })
       })
       columnCursor += 1
@@ -505,7 +507,7 @@ function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
   })
   const canvas = {
     width: Math.max(1200, Math.ceil(columnCursor * spacingX) + 180),
-    height: Math.max(680, maxRowsPerColumn * spacingY + 180),
+    height: Math.max(680, maxRowsPerColumn * spacingY + 220),
   }
   return { canvas, positions }
 }
@@ -599,7 +601,7 @@ function runContextAction(action: RelationContextAction) {
   if (action.disabled) return
   const node = contextMenuNode.value
   if (action.id === 'find') {
-    focusSearchInput()
+    openSearchPanel()
     closeContextMenu()
     return
   }
@@ -625,6 +627,13 @@ function runContextAction(action: RelationContextAction) {
 
 function focusSearchInput() {
   searchInputRef.value?.focus()
+}
+
+async function openSearchPanel() {
+  compactSearchOpen.value = true
+  await nextTick()
+  focusSearchInput()
+  searchInputRef.value?.select()
 }
 
 function clampGraphZoom(value: number) {
@@ -756,7 +765,7 @@ function showSelectedTip() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.ctrlKey && event.key.toLowerCase() === 'f') {
     event.preventDefault()
-    focusSearchInput()
+    openSearchPanel()
   }
   if (event.key === 'F2') {
     showSelectedTip()
@@ -856,6 +865,14 @@ watchEffect(() => {
   margin: 18px 0;
 }
 
+.compact-search-block {
+  margin: 0 0 10px;
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .90);
+}
+
 .search-box {
   display: grid;
   gap: 8px;
@@ -877,6 +894,12 @@ watchEffect(() => {
   border-radius: 14px;
   background: rgba(255, 255, 255, .98);
   box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
+}
+
+.compact-search-block .graph-search-results {
+  left: 10px;
+  right: 10px;
+  top: calc(100% + 4px);
 }
 
 .graph-search-results button {
@@ -1252,10 +1275,11 @@ watchEffect(() => {
 
 .compact-board .graph-panel {
   margin-top: 0;
+  padding: 14px;
 }
 
 .compact-board .relation-graph {
-  min-height: min(680px, calc(100vh - 230px));
+  min-height: 560px;
 }
 
 .compact-board .layout-grid {
