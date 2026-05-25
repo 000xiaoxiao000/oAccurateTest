@@ -311,6 +311,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         Future<?> f = compareJobExecutors.submit(() -> {
             jobInfo.setFinish(false);
             try {
+                job.getLogger().info("版本文件比对任务启动");
+                job.getLogger().info(String.format("源文件: %s ｜ 目标文件: %s ｜ 包范围: %s",
+                        sourceFile, targetFile, StringUtils.hasText(packageName) ? packageName : "*"));
                 startCompareJobInternal(packageName, job);
             } catch (Exception e) {
                 markCompareJobError(job, e, "版本文件比对失败，请检查选择的文件后重试。");
@@ -361,6 +364,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             job.state = Job.JobState.active;
             jobInfo.setFinish(false);
             try {
+                job.getLogger().info("Git 版本比对任务启动");
                 job.getLogger().info(String.format("分支: %s ｜ 旧: %s ｜ 新: %s", branch, shortCommit(oldCommit), shortCommit(newCommit)));
                 job.setProgress(new Job.JobProgress());
                 job.getProgress().next("获取Git差异", 50);
@@ -629,6 +633,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
             job.getProgress().updateName("比对失败");
         }
         job.getLogger().error(message);
+        if (e != null && StringUtils.hasText(e.getMessage()) && !e.getMessage().equals(message)) {
+            job.getLogger().error(e.getMessage());
+        }
     }
 
     private void startCompareJobInternal(String packageName, Job<CompareJobVo> job) {

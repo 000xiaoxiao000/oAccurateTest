@@ -94,13 +94,58 @@
       </div>
     </form>
 
-    <div v-if="job" class="panel">
-      <div class="panel-head">
-        <h2>当前任务</h2>
-        <span>{{ job.progress }}%</span>
+    <section v-if="job" class="panel job-panel" aria-live="polite">
+      <div class="panel-head job-head">
+        <div>
+          <h2>当前任务</h2>
+          <p class="subtext">{{ job.name || (mode === 'git' ? 'Git 版本比对' : '制品版本比对') }}</p>
+        </div>
+        <div class="job-state-stack">
+          <span :class="['job-state', job.error ? 'error' : job.finish ? 'done' : 'running']">{{ jobStateText }}</span>
+          <strong>{{ jobProgress }}%</strong>
+        </div>
       </div>
-      <p class="subtext">{{ job.progressName || job.errorMessage || '-' }}</p>
-    </div>
+
+      <div class="progress-track" role="progressbar" :aria-valuenow="jobProgress" aria-valuemin="0" aria-valuemax="100">
+        <span :style="{ width: `${jobProgress}%` }"></span>
+      </div>
+
+      <div class="job-summary-grid">
+        <div class="job-summary-item">
+          <span>当前阶段</span>
+          <strong>{{ job.progressName || job.errorMessage || '-' }}</strong>
+        </div>
+        <div class="job-summary-item">
+          <span>差异类</span>
+          <strong>{{ classDiffCount }}</strong>
+        </div>
+        <div class="job-summary-item">
+          <span>差异方法</span>
+          <strong>{{ methodDiffCount }}</strong>
+        </div>
+        <div class="job-summary-item">
+          <span>任务编号</span>
+          <strong class="mono-text">{{ activeJobId || job.id }}</strong>
+        </div>
+      </div>
+
+      <div v-if="job.error && job.errorMessage" class="job-error">{{ job.errorMessage }}</div>
+
+      <div class="job-toolbar">
+        <label class="check-inline"><input v-model="autoScrollLog" type="checkbox" /> 日志自动滚动</label>
+        <button class="ghost-button small" type="button" :disabled="!activeJobId || jobPolling" @click="refreshJobOnce">刷新任务</button>
+        <button class="ghost-button small" type="button" :disabled="!job.log" @click="copyJobLog">复制日志</button>
+        <RouterLink v-if="job.finish && !job.error" class="primary-button small" :to="reportRoute">查看报告</RouterLink>
+      </div>
+
+      <div ref="jobLogRef" class="job-log" :class="{ empty: !jobLogLines.length }">
+        <div v-if="!jobLogLines.length" class="log-placeholder">任务日志尚未输出，正在等待后端执行...</div>
+        <div v-for="(line, index) in jobLogLines" :key="`${index}-${line}`" :class="['log-line', line.includes('error') || line.includes('失败') ? 'error' : '']">
+          {{ line }}
+        </div>
+      </div>
+      <p v-if="jobPollError" class="error-text">{{ jobPollError }}</p>
+    </section>
 
     <section class="panel">
       <div class="panel-head">
@@ -190,8 +235,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute } from 'vue-router'
 
 import {
   deleteCompareReport,
@@ -211,7 +256,6 @@ type PackageRole = 'source' | 'target'
 type UploadedPackage = { value: string; label: string; uploaded: boolean }
 
 const route = useRoute()
-const router = useRouter()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const initialJobId = computed(() => String(route.query.jobId || ''))
@@ -227,9 +271,15 @@ const commits = ref<GitCommitOption[]>([])
 const commitPicker = ref({ visible: false, target: 'old' as 'old' | 'new', keyword: '', onlySelectable: true })
 const targetFileInput = ref<HTMLInputElement | null>(null)
 const sourceFileInput = ref<HTMLInputElement | null>(null)
+const jobLogRef = ref<HTMLElement | null>(null)
 const job = ref<CompareJobSummary | null>(null)
 const busy = ref(false)
 const error = ref('')
+const activeJobId = ref('')
+const jobPolling = ref(false)
+const jobPollError = ref('')
+const autoScrollLog = ref(true)
+let pollTimer: number | undefined
 
 const repositoryConfigured = computed(() => Boolean(center.value?.app.repoConfigured))
 const currentAppBranch = computed(() => center.value?.app.currentBranch || '')
@@ -260,6 +310,33 @@ const filteredCommits = computed(() => {
     return [item.commitId, item.shortCommitId, item.message, item.author].join(' ').toLowerCase().includes(needle)
   })
 })
+const jobProgress = computed(() => Math.max(0, Math.min(100, job.value?.progress || 0)))
+const jobStateText = computed(() => {
+  if (!job.value) return '未启动'
+  if (job.value.error) return '失败'
+  if (job.value.finish) return '已完成'
+  return jobPolling.value ? '执行中' : '等待刷新'
+})
+const classDiffCount = computed(() => {
+  const current = job.value
+  if (!current) return 0
+  return (current.addClassCount || 0) + (current.updateClassCount || 0) + (current.deleteClassCount || 0)
+})
+const methodDiffCount = computed(() => {
+  const current = job.value
+  if (!current) return 0
+  return (current.addMethodCount || 0) + (current.updateMethodCount || 0) + (current.deleteMethodCount || 0)
+})
+const jobLogLines = computed(() => sanitizeJobLog(job.value?.log || ''))
+const reportRoute = computed(() => `/p/${projectId.value}/version/reports/${activeJobId.value || job.value?.id || ''}?appId=${appId.value}`)
+
+watch(jobLogLines, async () => {
+  if (!autoScrollLog.value) return
+  await nextTick()
+  if (jobLogRef.value) {
+    jobLogRef.value.scrollTop = jobLogRef.value.scrollHeight
+  }
+})
 
 async function load() {
   busy.value = true
@@ -269,13 +346,73 @@ async function load() {
     restoreDraft()
     if (repositoryConfigured.value) await loadBranches(false)
     if (initialJobId.value) {
-      await pollCompare(initialJobId.value)
+      await startPollingJob(initialJobId.value)
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载比对中心失败'
   } finally {
     busy.value = false
   }
+}
+
+function sanitizeJobLog(rawLog: string) {
+  if (!rawLog) return []
+  return rawLog
+    .replace(/<em\s+class=['"]logger\s+error['"]>/g, '')
+    .replace(/<\/em>/g, '')
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter(Boolean)
+}
+
+function clearPollTimer() {
+  if (pollTimer !== undefined) {
+    window.clearTimeout(pollTimer)
+    pollTimer = undefined
+  }
+}
+
+async function refreshJobOnce() {
+  if (!activeJobId.value) return
+  jobPollError.value = ''
+  try {
+    job.value = await fetchCompareJob(projectId.value, appId.value, activeJobId.value)
+  } catch (err) {
+    jobPollError.value = err instanceof Error ? err.message : '刷新任务状态失败'
+  }
+}
+
+async function pollJobTick() {
+  if (!activeJobId.value) return
+  jobPolling.value = true
+  await refreshJobOnce()
+  const current = job.value
+  if (current?.finish || current?.error) {
+    jobPolling.value = false
+    await loadReportsOnly()
+    return
+  }
+  pollTimer = window.setTimeout(pollJobTick, 1500)
+}
+
+async function startPollingJob(jobId: string) {
+  activeJobId.value = jobId
+  clearPollTimer()
+  await pollJobTick()
+}
+
+async function loadReportsOnly() {
+  try {
+    const latest = await fetchVersionCenter(projectId.value, appId.value)
+    center.value = latest
+  } catch {
+    // Keep the visible job log even if refreshing report cards fails.
+  }
+}
+
+async function copyJobLog() {
+  if (!job.value?.log) return
+  await navigator.clipboard?.writeText(jobLogLines.value.join('\n'))
 }
 
 function setMode(nextMode: 'package' | 'git') {
@@ -426,21 +563,10 @@ async function fillLatestCommit() {
   }
 }
 
-async function pollCompare(jobId: string) {
-  while (true) {
-    job.value = await fetchCompareJob(projectId.value, appId.value, jobId)
-    if (job.value.finish) break
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-  }
-  if (job.value?.error) {
-    throw new Error(job.value.errorMessage || '比对失败')
-  }
-  await router.push(`/p/${projectId.value}/version/reports/${jobId}?appId=${appId.value}`)
-}
-
 async function submitCompare() {
   busy.value = true
   error.value = ''
+  jobPollError.value = ''
   try {
     if (mode.value === 'git' && !repositoryConfigured.value) throw new Error('当前应用未配置代码仓库')
     if (mode.value === 'git' && (!gitCompare.value.branch || !gitCompare.value.oldCommit || !gitCompare.value.newCommit)) {
@@ -466,7 +592,8 @@ async function submitCompare() {
             packageName: packageName.value || undefined,
           }
     const result = await startCompareJob(projectId.value, appId.value, payload)
-    await pollCompare(result.jobId)
+    job.value = result.job || null
+    await startPollingJob(result.jobId)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '启动比对失败'
   } finally {
@@ -501,6 +628,10 @@ async function removeCoverage(reportId: string) {
     busy.value = false
   }
 }
+
+onBeforeUnmount(() => {
+  clearPollTimer()
+})
 
 onMounted(load)
 </script>
@@ -655,6 +786,175 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.job-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.job-head {
+  gap: 18px;
+}
+
+.job-state-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.job-state-stack strong {
+  min-width: 54px;
+  color: #0f172a;
+  font-size: 24px;
+  text-align: right;
+}
+
+.job-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.job-state::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.job-state.running {
+  background: rgba(37, 99, 235, .10);
+  color: #1d4ed8;
+}
+
+.job-state.running::before {
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.job-state.done {
+  background: rgba(22, 163, 74, .12);
+  color: #15803d;
+}
+
+.job-state.error {
+  background: rgba(185, 28, 28, .12);
+  color: #b91c1c;
+}
+
+.progress-track {
+  overflow: hidden;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .08);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #14b8a6, #38bdf8);
+  box-shadow: 0 8px 18px rgba(20, 184, 166, .24);
+  transition: width .35s ease;
+}
+
+.job-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.job-summary-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, .86);
+}
+
+.job-summary-item span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.job-summary-item strong {
+  overflow: hidden;
+  color: #172033;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mono-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.job-error {
+  padding: 10px 12px;
+  border: 1px solid rgba(185, 28, 28, .18);
+  border-radius: 14px;
+  background: rgba(254, 242, 242, .82);
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.job-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.job-log {
+  max-height: 300px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid rgba(15, 23, 42, .10);
+  border-radius: 16px;
+  background: #0b1220;
+  color: #dbeafe;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+
+.job-log.empty {
+  display: grid;
+  place-items: center;
+  min-height: 128px;
+}
+
+.log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-line.error {
+  color: #fecaca;
+}
+
+.log-placeholder {
+  color: #93a4bb;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: .45;
+    transform: scale(.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+}
+
 .card-grid,
 .commit-list {
   display: grid;
@@ -726,8 +1026,19 @@ button:disabled {
 
 @media (max-width: 840px) {
   .grid-two,
-  .commit-item {
+  .commit-item,
+  .job-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .job-head,
+  .job-state-stack {
+    align-items: flex-start;
+  }
+
+  .job-state-stack {
+    width: 100%;
+    justify-content: space-between;
   }
 }
 </style>
