@@ -28,7 +28,7 @@
           <button type="button" class="danger-tool" title="清空当前助手对话" @click="clearConversation">清</button>
           <RouterLink :to="`/p/${projectId}/ai`">工作台</RouterLink>
           <button type="button" title="隐藏小人" @click="hideMascot">-</button>
-          <button type="button" title="收起助手" @click="panelOpen = false">x</button>
+          <button type="button" title="收起助手" @click="setPanelOpen(false)">x</button>
         </div>
       </header>
 
@@ -55,7 +55,7 @@
             <div class="message-body">
               <div class="message-name">{{ item.role === 'user' ? '你' : 'AI 助手' }}</div>
               <div class="message-card">
-                <button v-if="item.role === 'assistant'" class="copy-button" type="button" title="复制回复内容" @click="copyMessage(item.text)">复制</button>
+                <button v-if="item.role === 'assistant'" class="copy-button" type="button" aria-label="复制回复内容" @pointerdown.stop @click="copyMessage(item.text)">复制</button>
                 <div class="message-text">{{ item.text }}</div>
                 <div v-if="item.suggestions?.length" class="message-actions">
                   <button v-for="suggestion in item.suggestions" :key="suggestion" class="message-action" type="button" @click="sendPresetQuestion(suggestion)">{{ suggestion }}</button>
@@ -243,6 +243,7 @@ const layoutLocked = ref(false)
 const panelLayout = ref<Partial<Record<LayoutItemName, LayoutRect>>>({})
 const liveSignals = ref<LiveSignals>({ filters: [], tableHover: '', tableSelection: '' })
 const dragMoved = ref(false)
+const layoutDragMoved = ref(false)
 let layoutUndoSnapshot: { position: FloatingPosition | null; panelSize: PanelSize | null; collapsedSections: SectionName[]; panelLayout: Partial<Record<LayoutItemName, LayoutRect>> } | null = null
 let resizeObserver: ResizeObserver | null = null
 let recognition: SpeechRecognitionLike | null = null
@@ -462,21 +463,53 @@ function togglePanel() {
     dragMoved.value = false
     return
   }
-  panelOpen.value = !panelOpen.value
+  setPanelOpen(!panelOpen.value)
+}
+
+function setPanelOpen(value: boolean) {
+  if (panelOpen.value === value) return
+  const anchor = getFloatingAnchor()
+  panelOpen.value = value
+  preserveFloatingAnchor(anchor)
 }
 
 function hideMascot() {
+  const anchor = getFloatingAnchor()
   mascotHidden.value = true
   panelOpen.value = false
+  preserveFloatingAnchor(anchor)
   localStorage.setItem(`${storagePrefix.value}:hidden`, '1')
 }
 
 function showMascot() {
+  if (dragMoved.value) {
+    dragMoved.value = false
+    return
+  }
+  const anchor = getFloatingAnchor()
   mascotHidden.value = false
   panelOpen.value = true
-  position.value = null
-  if (storagePrefix.value) localStorage.removeItem(`${storagePrefix.value}:position`)
+  preserveFloatingAnchor(anchor)
   localStorage.setItem(`${storagePrefix.value}:hidden`, '0')
+}
+
+function getFloatingAnchor() {
+  if (!position.value) return null
+  const rect = rootRef.value?.getBoundingClientRect()
+  return rect ? { right: rect.right, bottom: rect.bottom } : null
+}
+
+function preserveFloatingAnchor(anchor: { right: number; bottom: number } | null) {
+  if (!anchor) return
+  nextTick(() => {
+    const root = rootRef.value
+    if (!root) return
+    position.value = clampPosition({
+      left: anchor.right - root.offsetWidth,
+      top: anchor.bottom - root.offsetHeight,
+    })
+    if (storagePrefix.value && position.value) localStorage.setItem(`${storagePrefix.value}:position`, JSON.stringify(position.value))
+  })
 }
 
 async function clearConversation() {
@@ -503,6 +536,7 @@ function isSectionCollapsed(section: SectionName) {
 }
 
 function toggleSection(section: SectionName) {
+  if (layoutDragMoved.value) return
   snapshotLayout()
   const next = new Set(collapsedSections.value)
   if (next.has(section)) next.delete(section)
@@ -671,17 +705,21 @@ function layoutItemStyle(item: LayoutItemName) {
 function startLayoutDrag(event: PointerEvent, item: LayoutItemName) {
   if (layoutLocked.value || !panelLayout.value[item]) return
   const target = event.target as HTMLElement | null
-  if (target?.closest('button, a, textarea, input, select, .section-body, .message-list, .quick-links, .starters, .layout-resizer')) return
+  const isSectionTitle = Boolean(target?.closest('.section-title'))
+  if (target?.closest('button, a, textarea, input, select, .section-body, .message-list, .quick-links, .starters, .layout-resizer') && !isSectionTitle) return
   const panel = panelRef.value
   const rect = panelLayout.value[item]
   if (!panel || !rect) return
-  event.preventDefault()
+  if (!isSectionTitle) event.preventDefault()
   event.stopPropagation()
   snapshotLayout()
   const bounds = layoutBounds(panel)
   const startX = event.clientX
   const startY = event.clientY
+  layoutDragMoved.value = false
   const move = (moveEvent: PointerEvent) => {
+    moveEvent.preventDefault()
+    if (Math.abs(moveEvent.clientX - startX) + Math.abs(moveEvent.clientY - startY) > 4) layoutDragMoved.value = true
     const next = {
       ...rect,
       left: rect.left + moveEvent.clientX - startX,
@@ -696,6 +734,7 @@ function startLayoutDrag(event: PointerEvent, item: LayoutItemName) {
     window.removeEventListener('pointermove', move)
     window.removeEventListener('pointerup', up)
     savePanelLayout()
+    window.setTimeout(() => { layoutDragMoved.value = false }, 0)
   }
   window.addEventListener('pointermove', move)
   window.addEventListener('pointerup', up)
@@ -1152,7 +1191,7 @@ async function openQuickLink(link: AIQuickLink) {
     return
   }
   await router.push(target)
-  panelOpen.value = false
+  setPanelOpen(false)
 }
 
 async function executeAction(action: AIAction) {
@@ -1168,7 +1207,7 @@ async function executeAction(action: AIAction) {
   if (action.type === 'logout') {
     await authStore.logout()
     await router.replace('/login')
-    panelOpen.value = false
+    setPanelOpen(false)
     return
   }
   if (action.type === 'monitorPageAction') {
@@ -1176,7 +1215,7 @@ async function executeAction(action: AIAction) {
     window.dispatchEvent(event)
     const target = `/p/${projectId.value}/monitor`
     if (route.path !== target) await router.push(target)
-    panelOpen.value = false
+    setPanelOpen(false)
     return
   }
   const target = normalizeSpaUrl(action.url)
@@ -1186,7 +1225,7 @@ async function executeAction(action: AIAction) {
     return
   }
   await router.push(target)
-  panelOpen.value = false
+  setPanelOpen(false)
 }
 
 async function executeAutoAction(actions?: AIAction[]) {
@@ -1321,10 +1360,8 @@ onBeforeUnmount(() => {
 }
 
 .restore-button {
-  position: fixed;
-  right: 22px;
-  bottom: 24px;
-  z-index: 1001;
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1706,6 +1743,10 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 
+.message.assistant .message-card {
+  padding-right: 58px;
+}
+
 .message.user .message-card {
   background: rgba(238, 242, 255, .9);
 }
@@ -1717,27 +1758,32 @@ onBeforeUnmount(() => {
 
 .copy-button {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 34px;
-  height: 24px;
-  border: 1px solid rgba(203, 213, 225, .62);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .88);
-  color: #94a3b8;
+  top: 7px;
+  right: 8px;
+  min-width: 42px;
+  height: 22px;
+  border: 1px solid rgba(20, 184, 166, .20);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .94);
+  color: #0f766e;
   font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
   cursor: pointer;
   opacity: 0;
-  transition: opacity .18s ease, color .16s ease, background .16s ease;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, .08);
+  transform: translateY(-2px);
+  transition: opacity .18s ease, color .16s ease, background .16s ease, transform .16s ease;
 }
 
 .message-card:hover .copy-button {
   opacity: 1;
+  transform: translateY(0);
 }
 
 .copy-button:hover {
-  background: rgba(20, 184, 166, .08);
-  color: #0f766e;
+  background: #0f766e;
+  color: #fff;
 }
 
 .message-actions {
