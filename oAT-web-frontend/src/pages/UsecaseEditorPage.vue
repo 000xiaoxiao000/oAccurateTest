@@ -95,8 +95,8 @@
               <p class="subtext">左侧编辑、右侧实时预览；保存按钮保持在首屏可见。</p>
             </div>
             <div class="toolbar-actions">
-              <button class="ghost-button" type="button" @click="previewMode = previewMode === 'split' ? 'preview' : 'split'">
-                {{ previewMode === 'split' ? '仅预览' : '分栏编辑' }}
+              <button class="ghost-button" type="button" @click="previewMode = previewMode === 'split' ? 'edit' : 'split'">
+                {{ previewMode === 'split' ? '隐藏预览' : '显示预览' }}
               </button>
               <button class="submit-button" type="submit">保存</button>
             </div>
@@ -141,7 +141,7 @@ const payload = computed(() => projectStore.usecaseBootstrapByKey[bootstrapKey.v
 const backLink = computed(() => `/p/${projectId.value}/usecases`)
 const loading = ref(false)
 const error = ref('')
-const previewMode = ref<'split' | 'preview'>('split')
+const previewMode = ref<'split' | 'edit'>('split')
 
 const form = reactive({
   title: '',
@@ -422,11 +422,11 @@ onMounted(load)
   gap: 14px;
 }
 
-.markdown-grid.preview {
+.markdown-grid.edit {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.markdown-grid.preview .editor-pane {
+.markdown-grid.edit .preview-pane {
   display: none;
 }
 
