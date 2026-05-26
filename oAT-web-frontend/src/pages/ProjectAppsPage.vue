@@ -99,12 +99,11 @@
     </div>
 
     <div class="toolbar-card app-toolbar">
-      <input v-model.trim="keyword" class="text-input" type="text" placeholder="搜索应用ID、名称、版本、工程或类型" />
-      <select v-model.number="pageSize" class="text-input select-input">
-        <option :value="10">每页 10 个</option>
-        <option :value="20">每页 20 个</option>
-        <option :value="50">每页 50 个</option>
-      </select>
+      <div>
+        <h2>应用清单</h2>
+        <p>搜索和主要结果保持在首屏，分页控件固定在列表底部。</p>
+      </div>
+      <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索应用 ID、名称、版本、工程或类型" aria-label="搜索应用" />
     </div>
 
     <div v-if="loading" class="status-card">正在加载应用列表...</div>
@@ -155,19 +154,14 @@
         </form>
       </article>
       </div>
-      <div v-if="filteredApps.length > pageSize" class="pagination-bar">
-        <button class="ghost-button" type="button" :disabled="currentPage === 1" @click="currentPage -= 1">上一页</button>
-        <button
-          v-for="page in pageNumbers"
-          :key="page"
-          class="page-button"
-          :class="{ active: currentPage === page }"
-          type="button"
-          @click="currentPage = page"
-        >{{ page }}</button>
-        <button class="ghost-button" type="button" :disabled="currentPage === totalPages" @click="currentPage += 1">下一页</button>
-        <span>共 {{ filteredApps.length }} 个应用</span>
-      </div>
+      <AppPagination
+        v-if="filteredApps.length > 0"
+        v-model:page="currentPage"
+        v-model:page-size="pageSize"
+        :total="filteredApps.length"
+        item-name="个应用"
+        :page-sizes="[10, 20, 50, 100]"
+      />
     </template>
   </section>
 </template>
@@ -177,6 +171,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { backendApiUrl } from '@/api/http'
+import AppPagination from '@/components/AppPagination.vue'
 import { useProjectStore } from '@/stores/project'
 
 const DEFAULT_APP_PROPERTIES = `#代码追踪范围包括
@@ -225,20 +220,12 @@ const filteredApps = computed(() => {
     .includes(needle))
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredApps.value.length / pageSize.value)))
-
 const paginatedApps = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredApps.value.slice(start, start + pageSize.value)
 })
 
-const pageNumbers = computed(() => {
-  const from = Math.max(1, currentPage.value - 2)
-  const to = Math.min(totalPages.value, currentPage.value + 2)
-  const pages: number[] = []
-  for (let page = from; page <= to; page += 1) pages.push(page)
-  return pages
-})
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredApps.value.length / pageSize.value)))
 
 const totalOnlineCount = computed(() => apps.value.reduce((sum, app) => sum + (app.onlineCount || 0), 0))
 
@@ -448,13 +435,29 @@ watch(totalPages, (pages) => {
 
 .app-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 140px;
+  grid-template-columns: minmax(220px, .8fr) minmax(260px, 1.2fr);
   gap: 12px;
+  align-items: end;
   margin-bottom: 18px;
+  position: sticky;
+  top: 82px;
+  z-index: 8;
+  backdrop-filter: saturate(180%) blur(14px);
 }
 
-.select-input {
-  border-radius: 999px;
+.app-toolbar h2,
+.app-toolbar p {
+  margin: 0;
+}
+
+.app-toolbar h2 {
+  margin-bottom: 6px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.app-toolbar p {
+  color: #64748b;
 }
 
 .editor-card {
@@ -503,6 +506,7 @@ watch(totalPages, (pages) => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
+  min-height: min(520px, calc(100vh - 360px));
 }
 
 .card {
@@ -587,31 +591,6 @@ watch(totalPages, (pages) => {
 .badge.offline {
   background: rgba(148, 163, 184, 0.18);
   color: #475569;
-}
-
-.pagination-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 18px;
-  color: #64748b;
-}
-
-.page-button {
-  border: none;
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #475569;
-  cursor: pointer;
-  font-weight: 800;
-}
-
-.page-button.active {
-  background: #0f766e;
-  color: #fff;
 }
 
 @media (max-width: 720px) {

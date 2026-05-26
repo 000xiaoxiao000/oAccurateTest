@@ -526,10 +526,58 @@ a:focus-visible {
   color: #b91c1c;
 }
 
+.page-standard-list {
+  min-height: min(560px, calc(100vh - 340px));
+}
+
+.page-standard-toolbar {
+  position: sticky;
+  top: 82px;
+  z-index: 8;
+  backdrop-filter: saturate(180%) blur(14px);
+}
+
+.page-standard-toolbar :is(input[type='search'], .text-input) {
+  min-height: var(--oat-min-target);
+}
+
+.page-standard-empty {
+  display: grid;
+  place-items: center;
+  min-height: 220px;
+  color: var(--oat-text-muted);
+  text-align: center;
+}
+
 @media (hover: none) and (pointer: coarse) {
   .shell-main :is(.primary-button, .danger-button, .ghost-button, .action-button, .refresh-button, .submit-button, .search-button, .page-button, .filter-chip, .chip-button),
   .shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], select, textarea) {
     min-height: var(--oat-min-touch-target);
+  }
+
+  .shell-main :is(.sub-menu-actions, .message-copy-button, .copy-button, .row-menu-panel, .code-line-actions) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .page-shell {
+    width: min(100% - 24px, 1320px);
+  }
+
+  .shell-main {
+    --page-gap: 14px;
+    --page-pad: 16px;
+  }
+
+  .shell-main :is(.toolbar-card, .panel-head, .card-actions, .head-actions, .filter-row, .app-toolbar, .editor-grid, .toolbar-actions, .action-buttons) {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .shell-main :is(.primary-button, .danger-button, .ghost-button, .action-button, .submit-button, .search-button, .refresh-button, .secondary-button) {
+    width: 100%;
   }
 }
 
@@ -541,6 +589,38 @@ a:focus-visible {
 
   .shell-main :is(.page-header h1, .hero h1) {
     font-size: 24px;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --oat-border: #94a3b8;
+    --oat-border-strong: #64748b;
+    --oat-text-muted: #475569;
+    --oat-focus-ring: 0 0 0 4px rgba(15, 118, 110, .34);
+  }
+
+  .shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card, .editor-card, .detail-card),
+  .shell-main :is(.text-input, .text-area, .select-input, .page-size-input, input:not([type]), input[type='text'], input[type='search'], input[type='password'], input[type='number'], input[type='email'], input[type='url'], select, textarea) {
+    border-color: var(--oat-border-strong);
+  }
+
+  .shell-main :is(.ghost-button, .secondary-link, .link-button, .table-link, .chip-button, .page-button, .filter-chip):not(:disabled),
+  .shell-main :is(.secondary-button, .mini-button, .icon-button, .detail-button, .query-button, .text-button, .tab-button, .control-button, .copy-button, .restore-button, .anchor-link-button, .anchor-filter-button, .action-inline-button, .back-button):not(:disabled) {
+    border: 1px solid currentColor;
+    background: #fff;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --oat-surface-raised: #ffffff;
+  }
+
+  .shell-main :is(.page-header, .hero):not(.plain-header),
+  .shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card, .editor-card, .detail-card) {
+    background: #fff;
+    backdrop-filter: none;
   }
 }
 

@@ -13,6 +13,8 @@
       </div>
     </div>
 
+    <p class="page-guidance">常用操作和筛选保持在首屏内，项目卡片按当前条件分页展示。</p>
+
     <form v-if="creating" class="editor-card" @submit.prevent="submitCreate">
       <h2>创建项目</h2>
       <label class="field">
@@ -38,19 +40,19 @@
         <small>你当前可访问的全部项目</small>
       </div>
       <div class="stat-card">
-        <span>有描述的项目</span>
-        <strong>{{ describedProjectCount }}</strong>
-        <small>项目说明更完整，便于协作</small>
+        <span>已接入应用/服务</span>
+        <strong>{{ projectWithAppsCount }}</strong>
+        <small>至少创建了一个应用或服务</small>
       </div>
       <div class="stat-card">
         <span>待完善项目</span>
-        <strong>{{ projects.length - describedProjectCount }}</strong>
-        <small>建议补充项目描述与用途</small>
+        <strong>{{ projectWithoutAppsCount }}</strong>
+        <small>还没有接入应用或服务</small>
       </div>
       <div class="stat-card">
         <span>最近维护项目</span>
-        <strong>{{ recentlyUpdatedCount }}</strong>
-        <small>有更新时间记录的项目</small>
+        <strong>{{ maintainedProjectCount }}</strong>
+        <small>已接入应用/服务或有更新时间</small>
       </div>
     </div>
 
@@ -60,16 +62,11 @@
         <p>支持按项目名称/描述筛选，并可按最近更新、创建时间或名称排序。</p>
       </div>
       <div class="filter-row">
-        <input v-model.trim="keyword" class="text-input" type="text" placeholder="搜索项目名称或描述..." />
+        <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索项目名称、描述或创建人" aria-label="搜索项目" />
         <select v-model="sortMode" class="text-input select-input">
           <option value="recent">最近更新优先</option>
           <option value="created">最近创建优先</option>
           <option value="name">按名称排序</option>
-        </select>
-        <select v-model.number="pageSize" class="text-input page-size-input">
-          <option :value="6">每页 6 个</option>
-          <option :value="9">每页 9 个</option>
-          <option :value="12">每页 12 个</option>
         </select>
         <div class="view-toggle" role="group" aria-label="项目视图切换">
           <button type="button" :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">卡片</button>
@@ -90,6 +87,7 @@
         </div>
         <div class="project-card-desc">{{ project.describe || '暂无项目描述' }}</div>
         <div class="project-card-meta">
+          <span>{{ projectAppCount(project.id) }} 应用/服务</span>
           <span>{{ project.memberCount }} 成员</span>
           <span>{{ project.createDisplayName || project.create || '-' }}</span>
           <span>{{ recentProjectText(project.id) }}</span>
@@ -134,21 +132,14 @@
       </article>
       </div>
 
-      <div v-if="filteredProjects.length > pageSize" class="pagination-bar">
-        <button class="ghost-button" type="button" :disabled="currentPage === 1" @click="currentPage -= 1">上一页</button>
-        <button
-          v-for="page in pageNumbers"
-          :key="page"
-          class="page-button"
-          :class="{ active: currentPage === page }"
-          type="button"
-          @click="currentPage = page"
-        >
-          {{ page }}
-        </button>
-        <button class="ghost-button" type="button" :disabled="currentPage === totalPages" @click="currentPage += 1">下一页</button>
-        <span>共 {{ filteredProjects.length }} 个项目</span>
-      </div>
+      <AppPagination
+        v-if="filteredProjects.length > 0"
+        v-model:page="currentPage"
+        v-model:page-size="pageSize"
+        :total="filteredProjects.length"
+        item-name="个项目"
+        :page-sizes="[6, 9, 12, 24]"
+      />
     </template>
   </section>
 </template>
@@ -159,6 +150,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import type { ProjectSummary } from '@/api/types'
+import AppPagination from '@/components/AppPagination.vue'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -183,6 +175,7 @@ const viewMode = ref<'card' | 'list'>('card')
 const pageSize = ref(6)
 const currentPage = ref(1)
 const recentProjects = ref<Array<{ id: string; name: string; visitedAt: number }>>([])
+const projectAppCounts = ref<Record<string, number>>({})
 
 const createForm = reactive({
   name: '',
@@ -194,9 +187,11 @@ const editForm = reactive({
   describe: '',
 })
 
-const describedProjectCount = computed(() => projects.value.filter((project) => Boolean(project.describe?.trim())).length)
+const projectWithAppsCount = computed(() => projects.value.filter((project) => projectAppCount(project.id) > 0).length)
 
-const recentlyUpdatedCount = computed(() => projects.value.filter((project) => Boolean(project.updateTime)).length)
+const projectWithoutAppsCount = computed(() => projects.value.filter((project) => projectAppCount(project.id) === 0).length)
+
+const maintainedProjectCount = computed(() => projects.value.filter((project) => projectAppCount(project.id) > 0 || Boolean(project.updateTime)).length)
 
 const filteredProjects = computed(() => {
   const needle = keyword.value.trim().toLowerCase()
@@ -217,33 +212,39 @@ const filteredProjects = computed(() => {
   })
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredProjects.value.length / pageSize.value)))
-
 const paginatedProjects = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return filteredProjects.value.slice(start, start + pageSize.value)
 })
 
-const pageNumbers = computed(() => {
-  const from = Math.max(1, currentPage.value - 2)
-  const to = Math.min(totalPages.value, currentPage.value + 2)
-  const pages: number[] = []
-  for (let page = from; page <= to; page += 1) {
-    pages.push(page)
-  }
-  return pages
-})
+const totalPages = computed(() => Math.max(1, Math.ceil(filteredProjects.value.length / pageSize.value)))
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    await projectStore.loadProjects()
+    const loadedProjects = await projectStore.loadProjects()
+    await loadProjectAppCounts(loadedProjects)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载项目失败'
   } finally {
     loading.value = false
   }
+}
+
+async function loadProjectAppCounts(projectList: ProjectSummary[]) {
+  await Promise.all(projectList.map(async (project) => {
+    try {
+      const apps = await projectStore.loadProjectApps(project.id)
+      projectAppCounts.value = { ...projectAppCounts.value, [project.id]: apps.length }
+    } catch {
+      projectAppCounts.value = { ...projectAppCounts.value, [project.id]: 0 }
+    }
+  }))
+}
+
+function projectAppCount(projectId: string) {
+  return projectAppCounts.value[projectId] ?? 0
 }
 
 function loadRecentProjects() {
@@ -447,6 +448,12 @@ watch(
   flex-wrap: wrap;
 }
 
+.page-guidance {
+  margin: -8px 0 14px;
+  color: #64748b;
+  font-size: 14px;
+}
+
 .eyebrow {
   color: #0f766e;
   font-size: 12px;
@@ -537,6 +544,10 @@ watch(
   gap: 16px;
   align-items: end;
   margin-bottom: 18px;
+  position: sticky;
+  top: 82px;
+  z-index: 8;
+  backdrop-filter: saturate(180%) blur(14px);
 }
 
 .project-toolbar h2,
@@ -550,13 +561,12 @@ watch(
 
 .filter-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 150px 120px auto;
+  grid-template-columns: minmax(220px, 1fr) 168px auto;
   gap: 10px;
   align-items: center;
 }
 
-.select-input,
-.page-size-input {
+.select-input {
   border-radius: 999px;
 }
 
@@ -568,7 +578,7 @@ watch(
 }
 
 .view-toggle button,
-.page-button {
+.view-toggle button {
   border: none;
   border-radius: 999px;
   padding: 8px 12px;
@@ -579,7 +589,7 @@ watch(
 }
 
 .view-toggle button.active,
-.page-button.active {
+.view-toggle button.active {
   background: #0f766e;
   color: #fff;
 }
@@ -588,6 +598,7 @@ watch(
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 16px;
+  min-height: min(520px, calc(100vh - 360px));
 }
 
 .project-grid.list-view {
@@ -705,16 +716,6 @@ watch(
 
 .link-button.danger {
   color: #b91c1c;
-}
-
-.pagination-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 18px;
-  color: #64748b;
 }
 
 @media (max-width: 980px) {

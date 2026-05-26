@@ -28,14 +28,15 @@
       <div v-if="!compact || compactSearchOpen || keyword" :class="['graph-search-block', compact && 'compact-search-block']">
         <label class="search-box">
           <span>图谱搜索</span>
-          <input
-            ref="searchInputRef"
-            v-model.trim="keyword"
-            class="text-input"
-            type="text"
-            placeholder="输入名称、类型或描述，自动定位节点"
-            @keydown.down.prevent="selectSearchMatch(searchMatches[0]?.id)"
-          />
+              <input
+                ref="searchInputRef"
+                v-model.trim="keyword"
+                class="text-input"
+                type="search"
+                placeholder="输入名称、类型或描述，自动定位节点"
+                aria-label="搜索图谱节点"
+                @keydown.down.prevent="selectSearchMatch(searchMatches[0]?.id)"
+              />
         </label>
         <div v-if="keyword" class="graph-search-results">
           <button
@@ -139,7 +140,7 @@
               <div v-if="!filteredNodes.length" class="empty-card">暂无节点数据</div>
               <div v-else class="node-grid">
                 <button
-                  v-for="node in filteredNodes"
+                  v-for="node in paginatedNodes"
                   :key="node.id"
                   type="button"
                   class="node-card"
@@ -155,6 +156,11 @@
                     <li v-for="item in node.meta" :key="item">{{ item }}</li>
                   </ul>
                 </button>
+              </div>
+              <div v-if="nodeTotalPages > 1" class="mini-pagination" aria-label="节点分页">
+                <button type="button" :disabled="nodePage <= 1" @click="nodePage -= 1">上一页</button>
+                <span>{{ nodePage }} / {{ nodeTotalPages }}</span>
+                <button type="button" :disabled="nodePage >= nodeTotalPages" @click="nodePage += 1">下一页</button>
               </div>
             </section>
 
@@ -174,12 +180,15 @@
                   <strong>关联关系</strong>
                   <div v-if="!selectedEdges.length" class="empty-inline">该节点暂无关系</div>
                   <div v-else class="edge-list">
-                    <article v-for="edge in selectedEdges" :key="edge.id" :class="['edge-card', edgeTone(edge)]">
+                    <article v-for="edge in visibleSelectedEdges" :key="edge.id" :class="['edge-card', edgeTone(edge)]">
                       <span>{{ edge.sourceLabel || edge.source }}</span>
                       <strong>{{ edge.label || actionText(edge.action) || '关联' }}</strong>
                       <span>{{ edge.targetLabel || edge.target }}</span>
                     </article>
                   </div>
+                  <button v-if="selectedEdges.length > selectedEdgePreviewLimit" class="inline-more-button" type="button" @click="showAllSelectedEdges = !showAllSelectedEdges">
+                    {{ showAllSelectedEdges ? '收起关系' : `查看全部 ${selectedEdges.length} 条` }}
+                  </button>
                 </div>
               </div>
               <div v-else class="empty-card">选择一个节点后可查看详细关系</div>
@@ -201,13 +210,18 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="edge in filteredEdges" :key="edge.id">
+                    <tr v-for="edge in paginatedEdges" :key="edge.id">
                       <td>{{ edge.sourceLabel || edge.source }}</td>
                       <td><span :class="['action-pill', edgeTone(edge)]">{{ edge.label || actionText(edge.action) || '-' }}</span></td>
                       <td>{{ edge.targetLabel || edge.target }}</td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+              <div v-if="edgeTotalPages > 1" class="mini-pagination edge-pagination" aria-label="关系分页">
+                <button type="button" :disabled="edgePage <= 1" @click="edgePage -= 1">上一页</button>
+                <span>显示 {{ edgeFirstItem }}–{{ edgeLastItem }} / 共 {{ filteredEdges.length }} 条</span>
+                <button type="button" :disabled="edgePage >= edgeTotalPages" @click="edgePage += 1">下一页</button>
               </div>
             </section>
           </div>
@@ -288,6 +302,12 @@ const hideLists = computed(() => Boolean(props.hideLists))
 const keyword = ref('')
 const compactSearchOpen = ref(false)
 const selectedId = ref('')
+const nodePage = ref(1)
+const edgePage = ref(1)
+const nodePageSize = 8
+const edgePageSize = 10
+const selectedEdgePreviewLimit = 8
+const showAllSelectedEdges = ref(false)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const contextMenu = reactive({ open: false, x: 0, y: 0, nodeId: '', target: 'canvas' as 'canvas' | 'node' })
 const tip = reactive({ open: false })
@@ -316,10 +336,25 @@ const filteredEdges = computed(() => {
   return props.edges.filter((edge) => allowed.has(edge.source) || allowed.has(edge.target))
 })
 
+const nodeTotalPages = computed(() => Math.max(1, Math.ceil(filteredNodes.value.length / nodePageSize)))
+const paginatedNodes = computed(() => {
+  const start = (nodePage.value - 1) * nodePageSize
+  return filteredNodes.value.slice(start, start + nodePageSize)
+})
+
+const edgeTotalPages = computed(() => Math.max(1, Math.ceil(filteredEdges.value.length / edgePageSize)))
+const paginatedEdges = computed(() => {
+  const start = (edgePage.value - 1) * edgePageSize
+  return filteredEdges.value.slice(start, start + edgePageSize)
+})
+const edgeFirstItem = computed(() => (filteredEdges.value.length ? (edgePage.value - 1) * edgePageSize + 1 : 0))
+const edgeLastItem = computed(() => Math.min(filteredEdges.value.length, edgePage.value * edgePageSize))
+
 const selectedNode = computed(() => filteredNodes.value.find((node) => node.id === selectedId.value))
 const selectedEdges = computed(() =>
   filteredEdges.value.filter((edge) => edge.source === selectedId.value || edge.target === selectedId.value),
 )
+const visibleSelectedEdges = computed(() => showAllSelectedEdges.value ? selectedEdges.value : selectedEdges.value.slice(0, selectedEdgePreviewLimit))
 const relatedNodeIds = computed(() => {
   const ids = new Set<string>()
   if (!selectedId.value) return ids
@@ -777,6 +812,22 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 watchEffect(() => {
+  if (nodePage.value > nodeTotalPages.value) nodePage.value = nodeTotalPages.value
+  if (edgePage.value > edgeTotalPages.value) edgePage.value = edgeTotalPages.value
+})
+
+watchEffect(() => {
+  keyword.value
+  nodePage.value = 1
+  edgePage.value = 1
+})
+
+watchEffect(() => {
+  selectedId.value
+  showAllSelectedEdges.value = false
+})
+
+watchEffect(() => {
   const firstMatch = searchMatches.value[0]
   if (keyword.value && firstMatch && selectedId.value !== firstMatch.id) {
     selectedId.value = firstMatch.id
@@ -944,6 +995,7 @@ watchEffect(() => {
 .board-workspace {
   display: grid;
   gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -963,7 +1015,8 @@ watchEffect(() => {
 }
 
 .compact-lists {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(260px, .72fr) minmax(320px, 1fr);
+  align-items: start;
 }
 
 .compact-lists .edge-panel {
@@ -985,7 +1038,13 @@ watchEffect(() => {
 .node-detail-panel {
   display: flex;
   flex-direction: column;
-  overflow: visible;
+  overflow: hidden;
+}
+
+.node-grid {
+  overflow: auto;
+  max-height: 470px;
+  padding-right: 2px;
 }
 
 .node-card {
@@ -1048,6 +1107,8 @@ watchEffect(() => {
   display: grid;
   gap: 7px;
   min-height: 0;
+  max-height: 330px;
+  overflow: auto;
 }
 
 .edge-card {
@@ -1088,8 +1149,8 @@ watchEffect(() => {
 }
 
 .edge-panel {
-  max-height: none;
-  overflow: visible;
+  max-height: min(520px, calc(100vh - 390px));
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -1097,6 +1158,41 @@ watchEffect(() => {
 .table-shell {
   overflow: auto;
   min-height: 0;
+  flex: 1;
+}
+
+.mini-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(15, 23, 42, .08);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mini-pagination button,
+.inline-more-button {
+  min-height: 32px;
+  border: 1px solid rgba(15, 118, 110, .16);
+  border-radius: 999px;
+  padding: 5px 11px;
+  background: rgba(15, 118, 110, .07);
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.mini-pagination button:disabled {
+  opacity: .45;
+}
+
+.inline-more-button {
+  justify-self: start;
+  margin-top: 2px;
 }
 
 .edge-table {
@@ -1120,7 +1216,7 @@ watchEffect(() => {
 .graph-panel {
   position: relative;
   display: flex;
-  min-height: min(760px, calc(100vh - 190px));
+  min-height: min(620px, calc(100vh - 250px));
   flex-direction: column;
   padding: 16px;
   border-radius: 24px;
@@ -1355,7 +1451,7 @@ watchEffect(() => {
 .compact-board .graph-panel {
   margin-top: 0;
   padding: 10px;
-  min-height: 0;
+  min-height: min(560px, calc(100vh - 290px));
 }
 
 .compact-board .relation-graph {
@@ -1368,6 +1464,7 @@ watchEffect(() => {
 
 .compact-board .board-workspace {
   height: auto;
+  gap: 14px;
 }
 
 @media (max-width: 760px) {
