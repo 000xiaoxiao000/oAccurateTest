@@ -262,6 +262,9 @@
                 ]"
                 :data-anchor-id="section.anchorId"
               >
+                <button class="message-copy-button" type="button" :title="section.message.role === 'assistant' ? '复制回复内容' : '复制提问内容'" @click.stop="copyMessage(section.message.text, section.id)">
+                  {{ copiedMessageId === section.id ? '已复制' : '复制' }}
+                </button>
                 <div class="message-role">{{ section.message.role === 'user' ? '你' : 'AI' }}</div>
                 <div class="message-text">{{ section.message.text }}</div>
               </article>
@@ -435,10 +438,12 @@ const activeAnchorId = ref('')
 const previewAnchorId = ref('')
 const targetAnchorId = ref('')
 const expandedAnchorIds = ref(new Set<string>())
+const copiedMessageId = ref('')
 const feedbackSubmitting = ref(false)
 const feedbackMessage = ref('')
 let askAbortController: AbortController | null = null
 let targetAnchorTimer: number | undefined
+let copiedMessageTimer: number | undefined
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || null)
 const activeMessages = computed(() => activeSession.value?.messages || [])
@@ -782,6 +787,20 @@ async function copyAnchorLink(anchor: QuestionAnchor) {
     await navigator.clipboard?.writeText(url)
   } catch {
     window.prompt('复制问答锚点链接', url)
+  }
+}
+
+async function copyMessage(text: string, messageId: string) {
+  if (!text) return
+  try {
+    await navigator.clipboard?.writeText(text)
+    copiedMessageId.value = messageId
+    if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer)
+    copiedMessageTimer = window.setTimeout(() => {
+      if (copiedMessageId.value === messageId) copiedMessageId.value = ''
+    }, 1400)
+  } catch {
+    window.prompt('复制消息内容', text)
   }
 }
 
@@ -1146,6 +1165,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', updateActiveAnchorFromScroll)
   window.removeEventListener('resize', updateActiveAnchorFromScroll)
   if (targetAnchorTimer) window.clearTimeout(targetAnchorTimer)
+  if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer)
 })
 </script>
 
@@ -1955,6 +1975,47 @@ onBeforeUnmount(() => {
   position: relative;
   padding-left: 44px;
   transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.message-copy-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: rgba(255, 255, 255, .84);
+  color: #0f766e;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .62;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, .08);
+  transition: opacity .16s ease, transform .16s ease, background .16s ease, color .16s ease, border-color .16s ease;
+}
+
+.message-card:hover .message-copy-button,
+.message-copy-button:focus-visible {
+  opacity: 1;
+}
+
+.message-copy-button:hover,
+.message-copy-button:focus-visible {
+  border-color: rgba(15, 118, 110, .32);
+  background: #0f766e;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.message-card.assistant .message-copy-button {
+  opacity: .78;
+}
+
+.message-card .message-text {
+  padding-right: 58px;
 }
 
 .message-card.anchor-section {
