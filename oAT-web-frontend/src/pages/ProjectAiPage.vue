@@ -115,6 +115,41 @@
 
           <section class="panel">
             <div class="card-title">
+              <h2>快捷入口</h2>
+              <span class="muted">{{ mergedQuickLinks.length }} 个</span>
+            </div>
+            <div class="link-list compact-links">
+              <button v-for="link in mergedQuickLinks" :key="link.title + link.url" class="link-card link-button" type="button" @click="openLink(link)">
+                <strong>{{ link.title }}</strong>
+                <span>{{ link.description }}</span>
+              </button>
+              <div v-if="!mergedQuickLinks.length" class="empty-card compact">暂无快捷入口</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="card-title">
+              <h2>项目上下文</h2>
+              <span class="muted">{{ context.appNames.length }} 个应用</span>
+            </div>
+            <div class="context-list">
+              <div class="context-row">
+                <span>AI 形象</span>
+                <strong>{{ context.mascot?.mascotName || 'AI' }} · {{ context.mascot?.mascotRole || '助手' }}</strong>
+              </div>
+              <div class="context-row">
+                <span>当前状态</span>
+                <strong>{{ context.mascot?.mascotMood || '在线' }}</strong>
+              </div>
+              <div class="app-chip-list">
+                <span v-for="appName in context.appNames" :key="appName" class="app-chip">{{ appName }}</span>
+                <span v-if="!context.appNames.length" class="app-chip muted-chip">暂无应用</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="card-title">
               <h2>会话时间线</h2>
             </div>
             <div class="timeline-list">
@@ -218,6 +253,37 @@
                 </article>
               </div>
             </div>
+
+            <div v-if="reply.visualizationSuggestions?.length" class="subsection">
+              <h3>可视化建议</h3>
+              <div class="visual-list">
+                <article v-for="item in reply.visualizationSuggestions" :key="String(item.title || item.type || JSON.stringify(item))" class="visual-card">
+                  <strong>{{ String(item.title || item.type || '数据图表') }}</strong>
+                  <code>{{ JSON.stringify(item) }}</code>
+                </article>
+              </div>
+            </div>
+
+            <div v-if="replyMetaEntries.length" class="subsection">
+              <h3>生成信息</h3>
+              <div class="meta-grid">
+                <article v-for="item in replyMetaEntries" :key="item.label" class="meta-card">
+                  <span>{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                </article>
+              </div>
+            </div>
+
+            <div class="subsection feedback-box">
+              <h3>回答反馈</h3>
+              <div class="chip-list">
+                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('helpful', 5)">有帮助</button>
+                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('not_helpful', 1)">没帮助</button>
+                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('incorrect', 1, true)">不正确</button>
+                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('incomplete', 2, true)">不完整</button>
+              </div>
+              <p v-if="feedbackMessage" class="feedback-message">{{ feedbackMessage }}</p>
+            </div>
           </section>
         </div>
       </div>
@@ -229,12 +295,13 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { submitAiFeedback } from '@/api/bootstrap'
 import { backendApiUrl } from '@/api/http'
 import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
-import type { AIAction, AIQuickLink } from '@/api/types'
+import type { AIAction, AIFeedbackPayload, AIQuickLink } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -270,10 +337,28 @@ const sessions = ref<ChatSession[]>([])
 const activeSessionId = ref('')
 const sessionSearch = ref('')
 const sessionSort = ref<'recent' | 'oldest' | 'name'>('recent')
+const feedbackSubmitting = ref(false)
+const feedbackMessage = ref('')
 let askAbortController: AbortController | null = null
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || null)
 const activeMessages = computed(() => activeSession.value?.messages || [])
+const mergedQuickLinks = computed(() => mergeQuickLinks([...(context.value?.quickLinks || []), ...(reply.value?.quickLinks || [])]))
+const lastUserQuestion = computed(() => [...activeMessages.value].reverse().find((item) => item.role === 'user')?.text || reply.value?.question || '')
+const lastAssistantAnswer = computed(() => reply.value?.answer || [...activeMessages.value].reverse().find((item) => item.role === 'assistant')?.text || '')
+const replyMetaEntries = computed(() => {
+  const currentReply = reply.value
+  if (!currentReply) return []
+  const entries: Array<{ label: string; value: string }> = []
+  if (typeof currentReply.confidence === 'number') entries.push({ label: '置信度', value: `${Math.round(currentReply.confidence * 100)}%` })
+  if (currentReply.usedTools?.length) entries.push({ label: '使用工具', value: currentReply.usedTools.join('、') })
+  if (currentReply.needMoreData !== undefined) entries.push({ label: '需要更多数据', value: currentReply.needMoreData ? '是' : '否' })
+  const responseTime = currentReply.metadata?.responseTime
+  if (typeof responseTime === 'number') entries.push({ label: '响应耗时', value: `${responseTime}ms` })
+  const routeName = currentReply.metadata?.route || currentReply.metadata?.topic
+  if (routeName) entries.push({ label: '识别场景', value: String(routeName) })
+  return entries
+})
 const visibleSessions = computed(() => {
   const needle = sessionSearch.value.toLowerCase()
   const filtered = sessions.value.filter((session) => {
@@ -331,6 +416,15 @@ function touchSession(session: ChatSession | null) {
 function formatSessionTime(value: number) {
   if (!value) return '-'
   return new Date(value).toLocaleString()
+}
+
+function mergeQuickLinks(links: AIQuickLink[]) {
+  const seen = new Set<string>()
+  return links.filter((link) => {
+    if (!link?.url || seen.has(link.url)) return false
+    seen.add(link.url)
+    return true
+  })
 }
 
 function hydrateSessions(rawState?: string) {
@@ -491,6 +585,39 @@ async function submitAsk() {
 
 function stopAsk() {
   askAbortController?.abort()
+}
+
+async function submitFeedback(feedbackType: AIFeedbackPayload['feedbackType'], rating: number, requireComment = false) {
+  if (!reply.value && !lastAssistantAnswer.value) return
+  let comment = ''
+  if (requireComment) {
+    comment = (await dialog.prompt({
+      title: '补充反馈',
+      message: '请简单说明哪里需要改进，便于 AI 后续学习。',
+      placeholder: '例如：覆盖率入口不对、回答不完整...',
+      confirmText: '提交反馈',
+    }) || '').trim()
+    if (!comment) return
+  }
+  feedbackSubmitting.value = true
+  feedbackMessage.value = ''
+  try {
+    await submitAiFeedback({
+      projectId: projectId.value,
+      question: lastUserQuestion.value,
+      answer: lastAssistantAnswer.value,
+      rating,
+      feedbackType,
+      comment,
+      usedTools: reply.value?.usedTools?.join(','),
+      responseTime: typeof reply.value?.metadata?.responseTime === 'number' ? reply.value.metadata.responseTime : undefined,
+    })
+    feedbackMessage.value = '反馈已提交，感谢帮助 AI 改进。'
+  } catch (err) {
+    feedbackMessage.value = err instanceof Error ? err.message : '反馈提交失败'
+  } finally {
+    feedbackSubmitting.value = false
+  }
 }
 
 function normalizeSpaUrl(url?: string) {
@@ -918,6 +1045,8 @@ onMounted(async () => {
 .ability-list,
 .question-list,
 .link-list,
+.context-list,
+.visual-list,
 .session-list,
 .message-history {
   display: grid;
@@ -932,6 +1061,49 @@ onMounted(async () => {
   border-radius: 16px;
   background: linear-gradient(180deg, #ffffff, #f8fbfb);
   border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.compact-links {
+  gap: 8px;
+}
+
+.context-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, .06);
+  padding-bottom: 8px;
+}
+
+.context-row span {
+  color: #64748b;
+}
+
+.context-row strong {
+  color: #172033;
+  text-align: right;
+}
+
+.app-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-chip {
+  border: 1px solid rgba(15, 118, 110, .18);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(15, 118, 110, .06);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.muted-chip {
+  border-color: rgba(100, 116, 139, .18);
+  background: rgba(148, 163, 184, .08);
+  color: #64748b;
 }
 
 .ability-card,
@@ -1180,6 +1352,52 @@ onMounted(async () => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.meta-card,
+.visual-card {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(248, 250, 252, .92);
+}
+
+.meta-card span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.meta-card strong,
+.visual-card strong {
+  color: #172033;
+}
+
+.visual-card code {
+  max-height: 120px;
+  overflow: auto;
+  color: #475569;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.feedback-box {
+  border-top: 1px solid rgba(15, 23, 42, .08);
+  padding-top: 16px;
+}
+
+.feedback-message {
+  margin: 8px 0 0;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .inline-link {

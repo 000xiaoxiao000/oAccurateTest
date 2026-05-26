@@ -2,6 +2,7 @@ import { apiGet, apiGetRaw, apiPost } from './http'
 import type {
   AIInteractivePagePayload,
   AIInteractiveReply,
+  AIFeedbackPayload,
   AppSummary,
   AppSettingsPayload,
   CompareJobPayload,
@@ -818,6 +819,10 @@ export function saveAiSessionState(projectId: string, sessionState: string) {
 
 export function clearAiSessionState(projectId: string) {
   return apiPost<string>(`/api/projects/${projectId}/ai/session-state/clear`, '', 'application/json')
+}
+
+export function submitAiFeedback(payload: AIFeedbackPayload) {
+  return apiPost<string>('/api/ai/feedback/submit', JSON.stringify(payload), 'application/json')
 }
 
 export function fetchSystemSnapshotList(

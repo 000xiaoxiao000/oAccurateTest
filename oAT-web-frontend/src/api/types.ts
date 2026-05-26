@@ -440,6 +440,17 @@ export interface AIInteractiveReply {
   sessionState?: string
 }
 
+export interface AIFeedbackPayload {
+  projectId: string
+  question?: string
+  answer?: string
+  rating: number
+  feedbackType: 'helpful' | 'not_helpful' | 'incorrect' | 'incomplete'
+  comment?: string
+  usedTools?: string
+  responseTime?: number
+}
+
 export interface SnapshotDirectorySummary {
   id: string
   parentId?: string

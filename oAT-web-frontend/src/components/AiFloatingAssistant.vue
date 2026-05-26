@@ -122,6 +122,7 @@
               <small>{{ link.description }}</small>
             </span>
           </button>
+          <div v-if="!normalizedQuickLinks.length" class="quick-links-empty">暂无快捷入口，请先在 AI 工作台或当前页面产生上下文。</div>
         </div>
       </div>
 
@@ -207,7 +208,7 @@ type SpeechRecognitionLike = {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
-const LAYOUT_VERSION = '2026-05-26-internal-layout-no-auto-panel'
+const LAYOUT_VERSION = '2026-05-26-compact-internal-content-ai'
 const DEFAULT_COLLAPSED_SECTIONS: SectionName[] = ['links', 'starters']
 const layoutResizeDirections: LayoutResizeDirection[] = ['n', 'e', 's', 'w', 'ne', 'nw', 'se', 'sw']
 const LAYOUT_ITEM_META: Record<LayoutItemName, { minWidth: number; minHeight: number; preferredHeight: number }> = {
@@ -796,17 +797,20 @@ function applyDefaultPanelLayout() {
   const sideWidth = Math.max(180, Math.round(bounds.width * 0.34))
   const mainWidth = Math.max(200, bounds.width - sideWidth - gap)
   const composeHeight = 142
-  const messageHeight = Math.max(160, Math.round(bounds.height * 0.48))
-  const contextHeight = 68
-  const sideHeight = Math.max(220, bounds.height - composeHeight - gap)
-  const quickHeight = Math.min(136, Math.max(92, sideHeight - 104 - gap))
-  const starterHeight = Math.max(86, sideHeight - quickHeight - gap)
+  const contextHeight = contextChips.value.length ? 68 : 0
+  const rightBottom = bounds.top + bounds.height - composeHeight - gap
+  const quickRows = Math.max(1, Math.min(normalizedQuickLinks.value.length || 2, 3))
+  const starterRows = Math.max(1, Math.min(starterQuestions.value.length || 2, 4))
+  const quickHeight = isSectionCollapsed('links') ? 38 : Math.min(210, 46 + quickRows * 52)
+  const starterHeight = isSectionCollapsed('starters') ? 38 : Math.min(210, 42 + starterRows * 34)
+  const messageHeight = Math.max(180, bounds.height - composeHeight - contextHeight - gap * (contextHeight ? 2 : 1))
+  const contextTop = bounds.top + messageHeight + gap
   panelLayout.value = {
     messages: { left: bounds.left, top: bounds.top, width: mainWidth, height: messageHeight },
-    context: { left: bounds.left, top: bounds.top + messageHeight + gap, width: mainWidth, height: contextHeight },
+    ...(contextHeight ? { context: { left: bounds.left, top: contextTop, width: mainWidth, height: contextHeight } } : {}),
     links: { left: bounds.left + mainWidth + gap, top: bounds.top, width: sideWidth, height: quickHeight },
     starters: { left: bounds.left + mainWidth + gap, top: bounds.top + quickHeight + gap, width: sideWidth, height: starterHeight },
-    compose: { left: bounds.left, top: bounds.top + bounds.height - composeHeight, width: bounds.width, height: composeHeight },
+    compose: { left: bounds.left, top: rightBottom, width: bounds.width, height: composeHeight },
   }
   lastPanelBounds = bounds
   savePanelLayout()
@@ -1823,12 +1827,22 @@ onBeforeUnmount(() => {
 }
 
 .quick-links {
-  max-height: 108px;
+  max-height: none;
 }
 
 .starters {
-  max-height: 104px;
+  max-height: none;
   grid-template-columns: 1fr;
+}
+
+.quick-links-empty {
+  border: 1px dashed rgba(20, 184, 166, .26);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(240, 253, 250, .58);
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .quick-links button,
