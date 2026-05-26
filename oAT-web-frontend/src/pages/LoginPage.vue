@@ -265,7 +265,10 @@ async function submitRegister() {
   place-items: center;
   position: relative;
   overflow: hidden;
-  background: linear-gradient(110deg, rgba(225, 247, 248, .68), rgba(244, 248, 255, .86));
+  background:
+    radial-gradient(circle at 14% 12%, rgba(var(--oat-primary-rgb), .13), transparent 32%),
+    radial-gradient(circle at 82% 8%, rgba(var(--oat-accent-rgb), .10), transparent 30%),
+    linear-gradient(110deg, rgba(225, 247, 248, .68), rgba(244, 248, 255, .88));
 }
 
 .login-mascots {
@@ -289,10 +292,11 @@ async function submitRegister() {
 .login-card {
   width: min(650px, calc(100vw - 32px));
   padding: 42px 44px 30px;
-  border-radius: 22px;
+  border-radius: var(--oat-radius-2xl);
   border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 24px 72px rgba(15, 23, 42, 0.10);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: var(--oat-shadow-lg);
+  backdrop-filter: saturate(180%) blur(18px);
   position: relative;
   z-index: 1;
 }
@@ -312,15 +316,15 @@ async function submitRegister() {
 
 .auth-brand h1 {
   margin: 0;
-  color: #1f2937;
-  font-size: 34px;
+  color: var(--oat-text);
+  font-size: clamp(30px, 4vw, 38px);
   line-height: 1.15;
-  letter-spacing: .02em;
+  letter-spacing: -.03em;
 }
 
 .auth-brand p {
   margin: 8px 0 0;
-  color: #a4a9b2;
+  color: var(--oat-text-muted);
   font-size: 15px;
   font-weight: 700;
 }
@@ -386,12 +390,20 @@ async function submitRegister() {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 62px;
+  min-height: 58px;
   border: 1px solid rgba(15, 23, 42, 0.10);
-  border-radius: 5px;
+  border-radius: var(--oat-radius-lg);
   padding: 0 18px;
   background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.03);
+  box-shadow: var(--oat-shadow-xs);
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.input-with-icon:focus-within,
+.password-row:focus-within {
+  border-color: rgba(var(--oat-primary-rgb), .55);
+  background: #fff;
+  box-shadow: var(--oat-focus-ring);
 }
 
 .input-with-icon > span,
@@ -409,8 +421,9 @@ async function submitRegister() {
   flex: 0 0 auto;
   display: inline-grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
   border: none;
   padding: 0;
   background: transparent;
@@ -459,14 +472,25 @@ async function submitRegister() {
 
 .login-button {
   border: none;
-  border-radius: 7px;
+  border-radius: 999px;
   padding: 18px 22px;
   margin-top: 8px;
-  background: linear-gradient(135deg, #20c3b7, #2185d0);
+  background: linear-gradient(135deg, var(--oat-primary), var(--oat-accent));
   color: #fff;
   font-size: 20px;
   font-weight: 900;
   cursor: pointer;
+  box-shadow: 0 16px 36px rgba(var(--oat-primary-rgb), .24);
+  transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease;
+}
+
+.login-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 44px rgba(var(--oat-primary-rgb), .28);
+}
+
+.login-button:active:not(:disabled) {
+  transform: translateY(0) scale(.99);
 }
 
 .login-button:disabled {

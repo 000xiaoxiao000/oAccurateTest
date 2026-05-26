@@ -383,22 +383,26 @@ watch(totalPages, (pages) => {
 .danger-button {
   border: none;
   border-radius: 999px;
-  padding: 10px 14px;
+  min-height: var(--oat-min-target);
+  padding: 10px 16px;
   cursor: pointer;
+  font-weight: 800;
 }
 
 .action-button,
 .primary-button {
-  background: #0f172a;
+  background: linear-gradient(135deg, var(--oat-primary), var(--oat-primary-hover));
   color: #fff;
 }
 
 .ghost-button {
-  background: rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(var(--oat-primary-rgb), .16);
+  background: rgba(var(--oat-primary-rgb), 0.08);
+  color: var(--oat-primary-dark);
 }
 
 .danger-button {
-  background: #b91c1c;
+  background: linear-gradient(135deg, var(--oat-danger), #ef4444);
   color: #fff;
 }
 
@@ -407,8 +411,8 @@ watch(totalPages, (pages) => {
 .summary-card,
 .toolbar-card {
   padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
+  border-radius: var(--oat-radius-lg);
+  background: var(--oat-surface-raised);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
@@ -483,7 +487,8 @@ watch(totalPages, (pages) => {
 .text-area {
   width: 100%;
   border: 1px solid rgba(15, 23, 42, 0.14);
-  border-radius: 16px;
+  border-radius: var(--oat-radius-md);
+  min-height: var(--oat-min-target);
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.96);
 }
@@ -502,7 +507,7 @@ watch(totalPages, (pages) => {
 
 .card {
   padding: 20px;
-  border-radius: 22px;
+  border-radius: var(--oat-radius-xl);
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }

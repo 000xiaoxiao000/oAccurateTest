@@ -6,10 +6,10 @@
           <img class="brand-emblem" src="/favicon.png" alt="" aria-hidden="true" />
           <img class="brand-logo-image" src="/images/logo.png" alt="oAccurateTest" />
         </RouterLink>
-        <nav class="shell-nav">
+        <nav class="shell-nav" aria-label="主导航">
           <RouterLink v-if="projectId" :to="`/p/${projectId}/search`">搜索</RouterLink>
           <div v-if="projectId" class="nav-dropdown" :class="{ open: openMenu === 'monitor' }" @mouseenter="openNavMenu('monitor')" @mouseleave="closeMenus">
-            <button class="nav-dropdown-trigger" type="button" :aria-expanded="openMenu === 'monitor'" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret">⌄</span></button>
+            <button class="nav-dropdown-trigger" type="button" aria-haspopup="true" :aria-expanded="openMenu === 'monitor'" @click.stop="toggleMenu('monitor')">监控台 <span class="menu-caret" aria-hidden="true">⌄</span></button>
             <div class="nav-menu compact">
               <RouterLink :to="`/p/${projectId}/monitor`" @click="closeMenus">实时监控</RouterLink>
               <RouterLink :to="`/p/${projectId}/my-snapshots`" @click="closeMenus">我的快照</RouterLink>
@@ -18,7 +18,7 @@
             </div>
           </div>
           <div v-if="projectId" class="nav-dropdown app-center" :class="{ open: openMenu === 'app' }" @mouseenter="openNavMenu('app')" @mouseleave="closeMenus">
-            <button class="nav-dropdown-trigger" type="button" :aria-expanded="openMenu === 'app'" @click.stop="toggleMenu('app')">应用中心 <span class="menu-caret">⌄</span></button>
+            <button class="nav-dropdown-trigger" type="button" aria-haspopup="true" :aria-expanded="openMenu === 'app'" @click.stop="toggleMenu('app')">应用中心 <span class="menu-caret" aria-hidden="true">⌄</span></button>
             <div class="nav-menu app-menu">
               <RouterLink class="menu-entry" :to="`/p/${projectId}/apps`" @click="closeMenus">应用总览</RouterLink>
               <input v-model.trim="appKeyword" class="menu-search" type="text" placeholder="搜索应用..." />
@@ -40,7 +40,7 @@
           <RouterLink v-if="projectId && aiEnabled" :to="`/p/${projectId}/ai`">AI Interactive</RouterLink>
           <template v-if="currentUser">
             <div v-if="projectId" class="nav-dropdown create-menu" :class="{ open: openMenu === 'create' }" @mouseenter="openNavMenu('create')" @mouseleave="closeMenus">
-              <button class="icon-trigger" type="button" :aria-expanded="openMenu === 'create'" @click.stop="toggleMenu('create')">＋</button>
+              <button class="icon-trigger" type="button" aria-label="快速创建" aria-haspopup="true" :aria-expanded="openMenu === 'create'" @click.stop="toggleMenu('create')">＋</button>
               <div class="nav-menu compact right-aligned">
                 <RouterLink to="/projects?create=1" @click="closeMenus">创建新项目</RouterLink>
                 <RouterLink :to="`/p/${projectId}/apps?create=1`" @click="closeMenus">添加应用</RouterLink>
@@ -48,9 +48,9 @@
                 <RouterLink :to="`/p/${projectId}/usecases/new`" @click="closeMenus">新建用例</RouterLink>
               </div>
             </div>
-            <RouterLink v-if="projectId" class="icon-trigger" :to="`/projects?edit=${projectId}`" title="设置" @click="closeMenus">⚙</RouterLink>
+            <RouterLink v-if="projectId" class="icon-trigger" :to="`/projects?edit=${projectId}`" aria-label="项目设置" title="设置" @click="closeMenus">⚙</RouterLink>
             <div class="nav-dropdown project-switcher" :class="{ open: openMenu === 'project' }" @mouseenter="openNavMenu('project')" @mouseleave="closeMenus">
-              <button class="project-trigger" type="button" :aria-expanded="openMenu === 'project'" @click.stop="toggleMenu('project')">{{ currentProjectName }} <span>⌄</span></button>
+              <button class="project-trigger" type="button" aria-haspopup="true" :aria-expanded="openMenu === 'project'" @click.stop="toggleMenu('project')">{{ currentProjectName }} <span aria-hidden="true">⌄</span></button>
               <div class="nav-menu project-menu right-aligned">
                 <input v-model.trim="projectKeyword" class="menu-search" type="text" placeholder="搜索项目..." />
                 <RouterLink v-for="project in filteredProjects" :key="project.id" :to="`/p/${project.id}/home`" @click="closeMenus">
@@ -60,7 +60,7 @@
               </div>
             </div>
             <div class="nav-dropdown user-menu" :class="{ open: openMenu === 'user' }" @mouseenter="openNavMenu('user')" @mouseleave="closeMenus">
-              <button class="icon-trigger" type="button" :aria-expanded="openMenu === 'user'" @click.stop="toggleMenu('user')">👤</button>
+              <button class="icon-trigger" type="button" aria-label="用户菜单" aria-haspopup="true" :aria-expanded="openMenu === 'user'" @click.stop="toggleMenu('user')">👤</button>
               <div class="nav-menu compact right-aligned">
                 <RouterLink class="shell-user-link" to="/account" @click="closeMenus">用户设置</RouterLink>
                 <button type="button" @click="handleLogout">注销退出</button>
@@ -216,33 +216,41 @@ async function handleLogout() {
   position: sticky;
   top: 0;
   z-index: 900;
-  background: rgba(255, 255, 255, .94);
-  border-bottom: 1px solid rgba(15, 23, 42, .08);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, .05);
-  backdrop-filter: blur(14px);
+  background: rgba(255, 255, 255, .82);
+  border-bottom: 1px solid rgba(15, 23, 42, .07);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+  backdrop-filter: saturate(180%) blur(18px);
 }
 
 .shell-header-inner {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 18px;
-  min-height: 58px;
-  padding: 8px 0;
+  gap: 20px;
+  min-height: 64px;
+  padding: 10px 0;
 }
 
 .brand-block {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 8px;
+  gap: 10px;
   min-width: 188px;
-  padding: 0 10px 0 0;
+  min-height: var(--oat-min-target);
+  border-radius: 14px;
+  padding: 4px 12px 4px 0;
+  transition: transform .16s ease, background .16s ease;
+}
+
+.brand-block:hover {
+  background: rgba(var(--oat-primary-rgb), .05);
+  transform: translateY(-1px);
 }
 
 .brand-emblem {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
 }
 
@@ -257,7 +265,7 @@ async function handleLogout() {
 .shell-nav {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -266,12 +274,12 @@ async function handleLogout() {
 .nav-dropdown-trigger,
 .project-trigger,
 .icon-trigger {
-  min-height: 38px;
+  min-height: var(--oat-min-target);
   border: none;
-  border-radius: 9px;
-  padding: 10px 12px;
+  border-radius: 999px;
+  padding: 10px 14px;
   background: transparent;
-  color: #172033;
+  color: var(--oat-text);
   font: inherit;
   font-weight: 700;
   line-height: 1;
@@ -285,8 +293,8 @@ async function handleLogout() {
 .shell-nav > a.router-link-active,
 .shell-nav > a.router-link-exact-active,
 .nav-dropdown.open .nav-dropdown-trigger {
-  background: rgba(15, 118, 110, .06);
-  color: #0f766e;
+  background: rgba(var(--oat-primary-rgb), .10);
+  color: var(--oat-primary-dark);
 }
 
 .menu-caret {
@@ -304,16 +312,16 @@ async function handleLogout() {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding-bottom: 8px;
-  margin-bottom: -8px;
+  padding-bottom: 10px;
+  margin-bottom: -10px;
 }
 
 .icon-trigger {
   display: inline-grid;
   place-items: center;
-  min-width: 38px;
+  min-width: var(--oat-min-target);
   padding: 0;
-  color: #172033;
+  color: var(--oat-text);
 }
 
 .project-trigger {
@@ -321,7 +329,7 @@ async function handleLogout() {
   align-items: center;
   gap: 6px;
   max-width: 230px;
-  color: #172033;
+  color: var(--oat-text);
 }
 
 .nav-menu {
@@ -331,12 +339,12 @@ async function handleLogout() {
   z-index: 160;
   min-width: 220px;
   display: none;
-  padding: 8px;
-  border: 1px solid rgba(15, 23, 42, .10);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, .98);
-  box-shadow: 0 18px 42px rgba(15, 23, 42, .15);
-  backdrop-filter: blur(16px);
+  padding: 10px;
+  border: 1px solid rgba(15, 23, 42, .09);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--oat-shadow-lg);
+  backdrop-filter: saturate(180%) blur(20px);
 }
 
 .nav-dropdown:hover .nav-menu,
@@ -358,21 +366,22 @@ async function handleLogout() {
   display: block;
   width: 100%;
   border: none;
-  border-radius: 10px;
-  padding: 10px 14px;
+  border-radius: 12px;
+  padding: 11px 14px;
   background: transparent;
-  color: #172033;
+  color: var(--oat-text);
   text-align: left;
   font: inherit;
   font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
 }
 
 .nav-menu a:hover,
 .nav-menu button:hover,
 .app-menu-item:hover {
-  background: rgba(15, 118, 110, .07);
-  color: #0f766e;
+  background: rgba(var(--oat-primary-rgb), .09);
+  color: var(--oat-primary-dark);
 }
 
 .nav-menu.compact {
@@ -390,7 +399,7 @@ async function handleLogout() {
 .project-menu a {
   display: flex;
   align-items: center;
-  min-height: 38px;
+  min-height: var(--oat-min-target);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -414,11 +423,18 @@ async function handleLogout() {
   width: calc(100% - 22px);
   margin: 7px 11px 5px;
   border: 1px solid rgba(15, 23, 42, .12);
-  border-radius: 12px;
-  padding: 9px 12px;
+  border-radius: 14px;
+  padding: 10px 12px;
   outline: none;
   font: inherit;
-  color: #172033;
+  color: var(--oat-text);
+  background: rgba(248, 250, 252, .9);
+}
+
+.menu-search:focus {
+  border-color: rgba(var(--oat-primary-rgb), .55);
+  background: #fff;
+  box-shadow: var(--oat-focus-ring);
 }
 
 .menu-divider {
@@ -470,11 +486,11 @@ async function handleLogout() {
 
 .sub-menu-actions a {
   width: auto;
-  min-width: 22px;
-  padding: 2px 4px;
-  border-radius: 3px;
+  min-width: 28px;
+  padding: 4px 7px;
+  border-radius: 999px;
   text-align: center;
-  color: #111827;
+  color: var(--oat-text);
   background: transparent;
   font-size: 12px;
   font-weight: 700;
@@ -490,15 +506,15 @@ async function handleLogout() {
 }
 
 .shell-main {
-  padding: 14px 0 72px;
+  padding: clamp(18px, 2vw, 28px) 0 80px;
 }
 
 .shell-main-wide {
-  width: min(1560px, calc(100vw - 24px));
+  width: min(1560px, calc(100vw - clamp(24px, 4vw, 48px)));
 }
 
 .shell-main-focus {
-  width: min(1440px, calc(100vw - 24px));
+  width: min(1440px, calc(100vw - clamp(24px, 4vw, 48px)));
 }
 
 .back-top-button {
@@ -511,12 +527,12 @@ async function handleLogout() {
   gap: 2px;
   width: 50px;
   height: 50px;
-  border: 1px solid rgba(15, 118, 110, .18);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, .94);
-  color: #0f766e;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, .16);
-  backdrop-filter: blur(14px);
+  border: 1px solid rgba(var(--oat-primary-rgb), .20);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  color: var(--oat-primary-dark);
+  box-shadow: var(--oat-shadow-md);
+  backdrop-filter: saturate(180%) blur(16px);
   transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
 }
 
@@ -531,9 +547,9 @@ async function handleLogout() {
 }
 
 .back-top-button:hover {
-  border-color: rgba(15, 118, 110, .42);
+  border-color: rgba(var(--oat-primary-rgb), .42);
   background: #fff;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, .2);
+  box-shadow: var(--oat-shadow-lg);
   transform: translateY(-3px);
 }
 
@@ -555,10 +571,37 @@ async function handleLogout() {
 @media (max-width: 900px) {
   .shell-header-inner {
     align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .shell-nav {
+    width: 100%;
     gap: 4px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .shell-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-dropdown {
+    position: static;
+  }
+
+  .nav-menu {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: calc(100vw - 24px);
+  }
+
+  .nav-menu.right-aligned {
+    left: 12px;
+    right: 12px;
   }
 
   .back-top-button {

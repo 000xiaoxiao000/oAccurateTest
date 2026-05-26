@@ -1,37 +1,58 @@
 :root {
-  --oat-primary: #00b5ad;
-  --oat-primary-rgb: 0, 181, 173;
-  --oat-primary-hover: #009c95;
-  --oat-primary-dark: #0f766e;
-  --oat-accent: #2185d0;
-  --oat-accent-rgb: 33, 133, 208;
-  --oat-accent-hover: #1b6fb8;
-  --oat-bg: #f5f7fb;
-  --oat-bg-soft: #f8fafc;
+  --oat-primary: #0f766e;
+  --oat-primary-rgb: 15, 118, 110;
+  --oat-primary-hover: #0d9488;
+  --oat-primary-dark: #115e59;
+  --oat-primary-container: #ccfbf1;
+  --oat-accent: #2563eb;
+  --oat-accent-rgb: 37, 99, 235;
+  --oat-accent-hover: #1d4ed8;
+  --oat-bg: #f6f8fb;
+  --oat-bg-soft: #f9fbfd;
   --oat-surface: #ffffff;
-  --oat-border: #e5eaf0;
-  --oat-border-strong: #d7dee8;
-  --oat-text: #1f2937;
-  --oat-text-secondary: #4b5563;
-  --oat-text-muted: #8a94a6;
-  --oat-success: #21ba45;
-  --oat-warning: #f2c037;
-  --oat-danger: #db2828;
-  --oat-radius-sm: 8px;
-  --oat-radius-md: 12px;
-  --oat-radius-lg: 16px;
-  --oat-radius-xl: 22px;
-  --oat-shadow-xs: 0 1px 2px rgba(15, 23, 42, .04);
-  --oat-shadow-sm: 0 6px 18px rgba(15, 23, 42, .06);
-  --oat-shadow-md: 0 14px 36px rgba(15, 23, 42, .1);
+  --oat-surface-raised: rgba(255, 255, 255, .92);
+  --oat-surface-soft: #f8fafc;
+  --oat-border: #e2e8f0;
+  --oat-border-strong: #cbd5e1;
+  --oat-text: #172033;
+  --oat-text-secondary: #475569;
+  --oat-text-muted: #64748b;
+  --oat-success: #16a34a;
+  --oat-warning: #d97706;
+  --oat-danger: #dc2626;
+  --oat-info: #2563eb;
+  --oat-radius-sm: 10px;
+  --oat-radius-md: 14px;
+  --oat-radius-lg: 18px;
+  --oat-radius-xl: 24px;
+  --oat-radius-2xl: 32px;
+  --oat-space-1: 4px;
+  --oat-space-2: 8px;
+  --oat-space-3: 12px;
+  --oat-space-4: 16px;
+  --oat-space-5: 20px;
+  --oat-space-6: 24px;
+  --oat-space-8: 32px;
+  --oat-min-target: 44px;
+  --oat-min-touch-target: 48px;
+  --oat-focus-ring: 0 0 0 4px rgba(15, 118, 110, .18);
+  --oat-shadow-xs: 0 1px 2px rgba(15, 23, 42, .05);
+  --oat-shadow-sm: 0 8px 24px rgba(15, 23, 42, .08);
+  --oat-shadow-md: 0 18px 48px rgba(15, 23, 42, .12);
+  --oat-shadow-lg: 0 28px 72px rgba(15, 23, 42, .16);
   color: var(--oat-text);
   background:
-    radial-gradient(circle at 0% 0%, rgba(var(--oat-primary-rgb), 0.13), transparent 30%),
-    radial-gradient(circle at 90% 8%, rgba(var(--oat-accent-rgb), 0.08), transparent 28%),
-    linear-gradient(180deg, #f7fbfc 0%, #edf4f7 100%);
-  font-family: "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    radial-gradient(circle at 0% 0%, rgba(var(--oat-primary-rgb), 0.12), transparent 30%),
+    radial-gradient(circle at 92% 6%, rgba(var(--oat-accent-rgb), 0.10), transparent 28%),
+    linear-gradient(180deg, #fbfdff 0%, var(--oat-bg) 48%, #eef4f8 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   line-height: 1.5;
   font-weight: 400;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
@@ -51,7 +72,8 @@ html {
 }
 
 body {
-  color: #1f2937;
+  color: var(--oat-text);
+  background: var(--oat-bg);
 }
 
 a {
@@ -122,7 +144,7 @@ select:focus-visible,
 textarea:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid rgba(15, 118, 110, .22);
+  outline: 3px solid rgba(var(--oat-primary-rgb), .26);
   outline-offset: 2px;
 }
 
@@ -143,18 +165,18 @@ a:focus-visible {
 }
 
 .page-shell {
-  width: min(1320px, calc(100vw - 24px));
+  width: min(1320px, calc(100vw - clamp(24px, 4vw, 48px)));
   margin: 0 auto;
 }
 
 
 /* Shared new-frontend page system. Mirrors the old Semantic UI hierarchy while keeping the SPA separated. */
 .shell-main {
-  --page-card-bg: rgba(255, 255, 255, .96);
-  --page-card-border: rgba(15, 23, 42, .08);
-  --page-gap: 12px;
-  --page-pad: 14px;
-  --page-pad-sm: 10px;
+  --page-card-bg: var(--oat-surface-raised);
+  --page-card-border: rgba(15, 23, 42, .09);
+  --page-gap: clamp(14px, 1.8vw, 22px);
+  --page-pad: clamp(16px, 1.7vw, 24px);
+  --page-pad-sm: clamp(12px, 1.2vw, 16px);
   --page-data-height: calc(100vh - 146px);
 }
 
@@ -164,12 +186,13 @@ a:focus-visible {
 }
 
 .shell-main :is(.page-header, .hero):not(.plain-header) {
-  padding: 14px 16px;
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: var(--oat-radius-xl);
+  padding: clamp(18px, 2.4vw, 30px);
+  border: 1px solid rgba(15, 23, 42, .07);
+  border-radius: var(--oat-radius-2xl);
   background:
-    radial-gradient(circle at top right, rgba(var(--oat-primary-rgb), .14), transparent 34%),
-    linear-gradient(135deg, rgba(255, 255, 255, .98) 0%, rgba(244, 251, 255, .96) 100%);
+    radial-gradient(circle at top right, rgba(var(--oat-primary-rgb), .16), transparent 34%),
+    radial-gradient(circle at 18% 0%, rgba(var(--oat-accent-rgb), .08), transparent 36%),
+    linear-gradient(135deg, rgba(255, 255, 255, .98) 0%, rgba(248, 252, 255, .94) 100%);
   box-shadow: var(--oat-shadow-sm);
 }
 
@@ -191,11 +214,12 @@ a:focus-visible {
 }
 
 .shell-main :is(.page-header h1, .hero h1) {
-  margin: 1px 0 4px;
-  color: #172033;
-  font-size: clamp(22px, 2vw, 30px);
-  line-height: 1.15;
-  letter-spacing: -.02em;
+  margin: 2px 0 6px;
+  color: var(--oat-text);
+  font-size: clamp(24px, 2.4vw, 36px);
+  line-height: 1.12;
+  letter-spacing: -.03em;
+  font-weight: 800;
 }
 
 .shell-main :is(.eyebrow, .account-settings-eyebrow) {
@@ -203,9 +227,10 @@ a:focus-visible {
   align-items: center;
   gap: 6px;
   width: fit-content;
-  padding: 3px 8px;
+  min-height: 24px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(var(--oat-primary-rgb), .10);
+  background: rgba(var(--oat-primary-rgb), .11);
   color: var(--oat-primary-dark);
   font-size: 11px;
   font-weight: 800;
@@ -215,7 +240,7 @@ a:focus-visible {
 
 .shell-main :is(.subtext, .panel-desc, .helper-text) {
   color: var(--oat-text-muted);
-  line-height: 1.45;
+  line-height: 1.6;
 }
 
 .shell-main :is(.page-header, .hero, .toolbar-card, .summary-grid, .panel-grid, .hero-grid, .layout-grid, .content-grid, .detail-grid, .section-grid) {
@@ -227,7 +252,8 @@ a:focus-visible {
 }
 
 .shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card) {
-  border-color: rgba(15, 23, 42, .08);
+  border-color: var(--page-card-border);
+  border-radius: var(--oat-radius-lg);
   box-shadow: var(--oat-shadow-xs);
 }
 
@@ -241,8 +267,8 @@ a:focus-visible {
 
 .shell-main :is(.card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .session-card, .node-card, .edge-card, .relation-row, .link-card):hover {
   border-color: rgba(var(--oat-primary-rgb), .24);
-  box-shadow: var(--oat-shadow-sm);
-  transform: translateY(-2px);
+  box-shadow: var(--oat-shadow-md);
+  transform: translateY(-3px);
 }
 
 .shell-main :is(.card, .project-card, .snapshot-card, .node-card, .trace-item, .probe-card, .session-card, .message-card, .relation-row, .edge-card, .link-card):active {
@@ -255,9 +281,10 @@ a:focus-visible {
 
 .shell-main :is(.panel-head, .card-title) h2 {
   margin: 0;
-  color: #172033;
-  font-size: 16px;
+  color: var(--oat-text);
+  font-size: clamp(16px, 1.45vw, 18px);
   line-height: 1.25;
+  letter-spacing: -.015em;
 }
 
 .shell-main :is(.panel-head, .card-title) > span,
@@ -274,19 +301,27 @@ a:focus-visible {
 }
 
 .shell-main :is(.table-shell, .source-shell) {
-  border-radius: var(--oat-radius-md);
+  overflow: auto;
+  border-radius: var(--oat-radius-lg);
   border: 1px solid rgba(15, 23, 42, .07);
-  background: #fff;
+  background: var(--oat-surface);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+}
+
+.shell-main :is(table.report-table, table.edge-table, table.method-table) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .shell-main :is(table.report-table, table.edge-table) thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #f8fafc;
-  color: #475569;
+  background: rgba(248, 250, 252, .96);
+  color: var(--oat-text-secondary);
   font-weight: 800;
+  backdrop-filter: blur(10px);
 }
 
 .shell-main :is(table.report-table, table.edge-table) tbody tr:hover {
@@ -295,12 +330,25 @@ a:focus-visible {
 
 .shell-main :is(table.report-table, table.edge-table, table.method-table) th,
 .shell-main :is(table.report-table, table.edge-table, table.method-table) td {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  vertical-align: middle;
 }
 
 .shell-main :is(.primary-button, .danger-button, .ghost-button, .secondary-link, .table-link, .link-button, .chip-button, .action-button, .refresh-button, .submit-button, .search-button, .page-button, .filter-chip, .badge, .mode-trigger, .inline-link, .danger-link, .text-danger, .route) {
+  min-height: 36px;
+  border-radius: 999px;
   transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease, opacity .16s ease;
+}
+
+.shell-main :is(.primary-button, .danger-button, .ghost-button, .action-button, .refresh-button, .submit-button, .search-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--oat-min-target);
+  padding-inline: 18px;
+  font-weight: 800;
 }
 
 .shell-main :is(.primary-button, .danger-button, .ghost-button, .secondary-link, .table-link, .link-button, .chip-button, .action-button, .refresh-button, .submit-button, .search-button, .page-button, .filter-chip, .badge, .mode-trigger, .inline-link, .danger-link, .text-danger, .route):hover:not(:disabled) {
@@ -314,7 +362,14 @@ a:focus-visible {
 }
 
 .shell-main :is(.primary-button, .action-button, .submit-button, .search-button):not(:disabled) {
-  box-shadow: 0 10px 22px rgba(var(--oat-primary-rgb), .18);
+  background: linear-gradient(135deg, var(--oat-primary), var(--oat-primary-hover));
+  box-shadow: 0 12px 26px rgba(var(--oat-primary-rgb), .22);
+}
+
+.shell-main .danger-button:not(:disabled) {
+  background: linear-gradient(135deg, var(--oat-danger), #ef4444);
+  color: #fff;
+  box-shadow: 0 12px 26px rgba(220, 38, 38, .20);
 }
 
 .shell-main :is(.ghost-button, .secondary-link, .link-button, .table-link, .chip-button, .page-button, .filter-chip, .badge):focus-visible {
@@ -323,13 +378,18 @@ a:focus-visible {
 }
 
 .shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], select, textarea) {
+  min-height: var(--oat-min-target);
   border-color: rgba(15, 23, 42, .12);
+  border-radius: var(--oat-radius-md);
+  background: rgba(255, 255, 255, .94);
+  color: var(--oat-text);
   transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
 
 .shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], select, textarea):focus {
   border-color: rgba(var(--oat-primary-rgb), .65);
-  box-shadow: 0 0 0 3px rgba(var(--oat-primary-rgb), .12);
+  background: #fff;
+  box-shadow: var(--oat-focus-ring);
   outline: none;
 }
 
@@ -342,8 +402,41 @@ a:focus-visible {
 }
 
 .shell-main :is(.checkbox-row, .auto-refresh, .snapshot-select) {
+  min-height: 32px;
   cursor: pointer;
   transition: color .16s ease, background .16s ease;
+}
+
+.shell-main :is(.badge, .tag, .pill, .meta-chip, .type-pill, .action-pill, .method-badge) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 24px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.shell-main :is(.success, .ok, .current) {
+  color: #166534;
+}
+
+.shell-main :is(.warn, .warning) {
+  color: #92400e;
+}
+
+.shell-main :is(.error, .danger, .failed) {
+  color: #b91c1c;
+}
+
+.shell-main :is(.field, .form-field, .toolbar-group) label,
+.shell-main :is(label.field-label, .toolbar-label) {
+  color: var(--oat-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .shell-main :is(.checkbox-row, .auto-refresh, .snapshot-select):hover {
@@ -428,9 +521,16 @@ a:focus-visible {
 }
 
 .shell-main .status-card.error {
-  border-color: rgba(219, 40, 40, .20);
+  border-color: rgba(220, 38, 38, .20);
   background: linear-gradient(135deg, rgba(254, 242, 242, .98), rgba(255, 255, 255, .96));
   color: #b91c1c;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .shell-main :is(.primary-button, .danger-button, .ghost-button, .action-button, .refresh-button, .submit-button, .search-button, .page-button, .filter-chip, .chip-button),
+  .shell-main :is(.text-input, .text-area, input[type='text'], input[type='search'], input[type='password'], select, textarea) {
+    min-height: var(--oat-min-touch-target);
+  }
 }
 
 @media (max-width: 760px) {
