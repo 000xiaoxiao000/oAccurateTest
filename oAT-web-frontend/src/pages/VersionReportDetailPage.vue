@@ -82,9 +82,7 @@
         <a href="#report-usecases">影响用例 {{ displayUsecaseCount }}</a>
         <a href="#report-endpoints">影响接口 {{ endpointCount }}</a>
         <a href="#report-logs">比对日志 {{ logGroups.length }}</a>
-        <button v-if="filteredDifferences.length > differencePreviewLimit" type="button" @click="showAllDifferences = !showAllDifferences">
-          {{ showAllDifferences ? '收起变更' : `显示全部 ${filteredDifferences.length} 项` }}
-        </button>
+        <button type="button" @click="differencePage = 1">回到首组变更</button>
       </nav>
 
       <section id="report-differences" class="panel toolbar-panel">
@@ -93,7 +91,7 @@
           <p class="subtext">按老前端的类/方法结构展示，支持搜索和新增、修改、删除筛选；默认收起长列表以便快速查看重点。</p>
         </div>
         <div class="filter-actions">
-          <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索类名、方法名或描述" />
+          <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索类名、方法名或描述" aria-label="搜索变更项" />
           <button v-for="mode in diffModes" :key="mode.value" :class="['filter-chip', diffMode === mode.value && 'active']" type="button" @click="diffMode = mode.value">{{ mode.label }}</button>
         </div>
       </section>
@@ -102,14 +100,11 @@
         <div class="panel-head">
           <h2>差异清单</h2>
           <div class="panel-head-actions">
-            <span>{{ visibleDifferences.length }} / {{ filteredDifferences.length }}</span>
-            <button v-if="filteredDifferences.length > differencePreviewLimit" class="ghost-button small" type="button" @click="showAllDifferences = !showAllDifferences">
-              {{ showAllDifferences ? '只看前 30 项' : '展开全部' }}
-            </button>
+            <span>{{ paginatedDifferences.length }} / {{ filteredDifferences.length }}</span>
           </div>
         </div>
         <div class="diff-list compact-list">
-          <article v-for="item in visibleDifferences" :key="item.className" class="diff-card" :class="[modelClass(item.model), selectedClass === item.className && 'selected']">
+          <article v-for="item in paginatedDifferences" :key="item.className" class="diff-card" :class="[modelClass(item.model), selectedClass === item.className && 'selected']">
             <button class="diff-top" type="button" @click="toggleClass(item.className)">
               <span class="class-name"><i :class="modelIconClass(item.model)"></i>{{ item.className }}</span>
               <span :class="['tag', modelClass(item.model)]">{{ modelText(item.model) }}</span>
@@ -124,6 +119,14 @@
           </article>
           <div v-if="!filteredDifferences.length" class="empty-card">暂无匹配差异</div>
         </div>
+        <AppPagination
+          v-if="filteredDifferences.length > 0"
+          v-model:page="differencePage"
+          v-model:page-size="differencePageSize"
+          :total="filteredDifferences.length"
+          item-name="变更"
+          :page-sizes="[6, 12, 24, 48]"
+        />
       </section>
 
       <section class="impact-grid">
@@ -152,7 +155,7 @@
                 <small>{{ group.items.length }} 条</small>
               </button>
               <div v-show="openUsecaseGroups.has(group.directory)" class="impact-list">
-                <article v-for="item in group.items" :key="item.id" class="impact-card usecase-card">
+                <article v-for="item in paginatedUsecaseGroupItems(group.items)" :key="item.id" class="impact-card usecase-card">
                   <div class="impact-top">
                     <RouterLink v-if="item.available !== false" class="result-link" :to="`/p/${projectId}/usecases/${item.id}`">{{ item.title }}</RouterLink>
                     <span v-else class="result-link unavailable">{{ item.title }}</span>
@@ -168,6 +171,14 @@
                 </article>
               </div>
             </article>
+            <AppPagination
+              v-if="flatUsecases.length > 0"
+              v-model:page="usecasePage"
+              v-model:page-size="usecasePageSize"
+              :total="flatUsecases.length"
+              item-name="用例"
+              :page-sizes="[5, 10, 20, 50]"
+            />
             <div v-if="!usecaseGroups.length" class="empty-card">
               {{ usecaseDetailsMissing ? `报告记录了 ${displayUsecaseCount} 条影响用例，但未能加载用例详情；请展开比对日志查看命中用例 ID，重新生成报告后会保存完整影响用例。` : '未发现影响用例。' }}
             </div>
@@ -176,8 +187,8 @@
 
         <div id="report-endpoints" class="panel">
           <div class="panel-head"><h2>影响接口</h2><span>{{ endpointCount }}</span></div>
-          <div class="impact-list">
-            <article v-for="endpoint in payload.endpoints || []" :key="endpoint.id || `${endpoint.endpointType}-${endpoint.url}-${endpoint.methodName}`" class="impact-card endpoint-card">
+          <div class="impact-list endpoint-list">
+            <article v-for="endpoint in paginatedEndpoints" :key="endpoint.id || `${endpoint.endpointType}-${endpoint.url}-${endpoint.methodName}`" class="impact-card endpoint-card">
               <div class="impact-top endpoint-top">
                 <span class="method-badge">{{ endpoint.httpMethod || endpoint.endpointType || 'API' }}</span>
                 <strong>{{ endpoint.url || endpoint.methodName || '-' }}</strong>
@@ -202,6 +213,14 @@
             </article>
             <div v-if="!payload.endpoints?.length" class="empty-card">未匹配到影响接口。请先在应用中心完成接口扫描，或确认变更类与接口实现类一致。</div>
           </div>
+          <AppPagination
+            v-if="endpointCount > 0"
+            v-model:page="endpointPage"
+            v-model:page-size="endpointPageSize"
+            :total="endpointCount"
+            item-name="接口"
+            :page-sizes="[4, 8, 16, 32]"
+          />
         </div>
       </section>
 
@@ -239,6 +258,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
+import AppPagination from '@/components/AppPagination.vue'
 import { fetchCompareReport } from '@/api/bootstrap'
 import type { DifferenceGroupSummary, UsecaseImpactSummary, VersionReportDetailPayload } from '@/api/types'
 
@@ -261,6 +281,12 @@ const openUsecases = ref(new Set<string>())
 const impactHintOpen = ref(false)
 const logCollapsed = ref(true)
 const showAllDifferences = ref(false)
+const differencePage = ref(1)
+const differencePageSize = ref(6)
+const usecasePage = ref(1)
+const usecasePageSize = ref(5)
+const endpointPage = ref(1)
+const endpointPageSize = ref(4)
 const pendingRetryCount = ref(0)
 const maxPendingRetries = 5
 const differencePreviewLimit = 30
@@ -315,15 +341,25 @@ const filteredDifferences = computed(() => {
       .includes(needle)
   })
 })
-const visibleDifferences = computed(() => {
-  if (showAllDifferences.value || filteredDifferences.value.length <= differencePreviewLimit) {
-    return filteredDifferences.value
-  }
-  return filteredDifferences.value.slice(0, differencePreviewLimit)
+const visibleDifferences = computed(() => filteredDifferences.value)
+const paginatedDifferences = computed(() => {
+  const start = (differencePage.value - 1) * differencePageSize.value
+  return filteredDifferences.value.slice(start, start + differencePageSize.value)
 })
+const flatUsecases = computed(() => payload.value?.usecases || [])
+const paginatedFlatUsecases = computed(() => {
+  const start = (usecasePage.value - 1) * usecasePageSize.value
+  return flatUsecases.value.slice(start, start + usecasePageSize.value)
+})
+const paginatedEndpointList = computed(() => {
+  const endpoints = payload.value?.endpoints || []
+  const start = (endpointPage.value - 1) * endpointPageSize.value
+  return endpoints.slice(start, start + endpointPageSize.value)
+})
+const paginatedEndpoints = computed(() => paginatedEndpointList.value)
 const usecaseGroups = computed(() => {
   const groups = new Map<string, UsecaseImpactSummary[]>()
-  for (const item of payload.value?.usecases || []) {
+  for (const item of paginatedFlatUsecases.value) {
     const directory = item.directoryPath || 'ROOT'
     const list = groups.get(directory) || []
     list.push(item)
@@ -335,12 +371,40 @@ const jobLogLines = computed(() => sanitizeJobLog(payload.value?.report?.jobLog 
 const logGroups = computed(() => groupLogLines(jobLogLines.value))
 
 watch(() => payload.value?.differences, (differences) => {
-  openClasses.value = new Set((differences || []).slice(0, 12).map((item) => item.className).filter(Boolean))
+  openClasses.value = new Set((differences || []).slice(0, 6).map((item) => item.className).filter(Boolean))
   showAllDifferences.value = false
 }, { immediate: true })
 
 watch([keyword, () => diffMode.value], () => {
+  differencePage.value = 1
   showAllDifferences.value = false
+})
+
+watch(differencePageSize, () => {
+  differencePage.value = 1
+})
+
+watch(usecasePageSize, () => {
+  usecasePage.value = 1
+})
+
+watch(endpointPageSize, () => {
+  endpointPage.value = 1
+})
+
+watch(() => filteredDifferences.value.length, (total) => {
+  const totalPages = Math.max(1, Math.ceil(total / differencePageSize.value))
+  if (differencePage.value > totalPages) differencePage.value = totalPages
+})
+
+watch(() => flatUsecases.value.length, (total) => {
+  const totalPages = Math.max(1, Math.ceil(total / usecasePageSize.value))
+  if (usecasePage.value > totalPages) usecasePage.value = totalPages
+})
+
+watch(endpointCount, (total) => {
+  const totalPages = Math.max(1, Math.ceil(total / endpointPageSize.value))
+  if (endpointPage.value > totalPages) endpointPage.value = totalPages
 })
 
 watch(usecaseGroups, (groups) => {
@@ -399,6 +463,11 @@ function toggleClass(className: string) {
   if (next.has(className)) next.delete(className)
   else next.add(className)
   openClasses.value = next
+}
+
+function paginatedUsecaseGroupItems(items: UsecaseImpactSummary[]) {
+  const visibleIds = new Set(paginatedFlatUsecases.value.map((item) => item.id))
+  return items.filter((item) => visibleIds.has(item.id))
 }
 
 function toggleUsecaseGroup(directory: string) {
@@ -762,9 +831,14 @@ onBeforeUnmount(clearPendingTimer)
 }
 
 .toolbar-panel {
+  position: sticky;
+  top: 138px;
+  z-index: 7;
   display: flex;
   justify-content: space-between;
   gap: 16px;
+  background: rgba(255, 255, 255, .94);
+  backdrop-filter: blur(14px);
 }
 
 .text-input {
@@ -816,7 +890,10 @@ onBeforeUnmount(clearPendingTimer)
 }
 
 .compact-list {
+  max-height: min(520px, calc(100vh - 340px));
   gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .diff-card,
@@ -874,6 +951,12 @@ onBeforeUnmount(clearPendingTimer)
   margin-top: 12px;
 }
 
+.compact-methods {
+  max-height: 184px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .method-item {
   display: grid;
   gap: 3px;
@@ -901,7 +984,23 @@ onBeforeUnmount(clearPendingTimer)
 .tag.model-delete { background: rgba(220, 38, 38, .10); color: #b91c1c; }
 
 .impact-grid {
-  grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, .98fr);
+  align-items: start;
+}
+
+.impact-grid > .panel {
+  max-height: min(640px, calc(100vh - 260px));
+  overflow: auto;
+}
+
+.impact-list {
+  max-height: min(460px, calc(100vh - 360px));
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.endpoint-list {
+  max-height: min(520px, calc(100vh - 330px));
 }
 
 .impact-card p {
@@ -1079,6 +1178,11 @@ onBeforeUnmount(clearPendingTimer)
 .empty-card,
 .empty-inline {
   color: #94a3b8;
+}
+
+.log-panel {
+  max-height: min(620px, calc(100vh - 240px));
+  overflow: auto;
 }
 
 .report-log {

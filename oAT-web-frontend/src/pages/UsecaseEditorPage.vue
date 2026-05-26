@@ -15,7 +15,7 @@
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="payload">
       <form class="editor-grid" @submit.prevent="save">
-        <aside class="side-card">
+        <aside class="side-card meta-panel">
           <div class="card-title">
             <h2>元信息</h2>
           </div>
@@ -27,8 +27,13 @@
 
           <label class="field">
             <span>封面图地址</span>
-            <input v-model="form.headImage" class="text-input" type="text" />
+            <input v-model.trim="form.headImage" class="text-input" type="url" placeholder="https://..." aria-label="封面图地址" />
           </label>
+
+          <div class="cover-preview">
+            <img v-if="form.headImage" :src="form.headImage" alt="用例封面预览" />
+            <div v-else class="cover-placeholder">封面预览</div>
+          </div>
 
           <label class="field">
             <span>目录</span>
@@ -83,17 +88,36 @@
           </label>
         </aside>
 
-        <section class="content-card">
-          <div class="card-title">
-            <h2>Markdown 内容</h2>
-            <button class="submit-button" type="submit">保存</button>
+        <section class="content-card markdown-workbench">
+          <div class="card-title markdown-toolbar">
+            <div>
+              <h2>Markdown 内容</h2>
+              <p class="subtext">左侧编辑、右侧实时预览；保存按钮保持在首屏可见。</p>
+            </div>
+            <div class="toolbar-actions">
+              <button class="ghost-button" type="button" @click="previewMode = previewMode === 'split' ? 'preview' : 'split'">
+                {{ previewMode === 'split' ? '仅预览' : '分栏编辑' }}
+              </button>
+              <button class="submit-button" type="submit">保存</button>
+            </div>
           </div>
-          <textarea
-            v-model="form.content"
-            class="markdown-input"
-            rows="24"
-            placeholder="请输入用例正文，支持 Markdown"
-          ></textarea>
+          <div :class="['markdown-grid', previewMode]">
+            <label class="markdown-pane editor-pane">
+              <span>正文编辑</span>
+              <textarea
+                v-model="form.content"
+                class="markdown-input"
+                rows="24"
+                placeholder="请输入用例正文，支持 Markdown"
+                aria-label="Markdown 正文编辑"
+              ></textarea>
+            </label>
+            <section class="markdown-pane preview-pane" aria-label="Markdown 预览">
+              <div class="pane-title">实时预览</div>
+              <div v-if="previewHtml" class="markdown-preview" v-html="previewHtml"></div>
+              <div v-else class="empty-preview">暂无内容，输入 Markdown 后会在这里预览。</div>
+            </section>
+          </div>
         </section>
       </form>
     </template>
@@ -117,6 +141,7 @@ const payload = computed(() => projectStore.usecaseBootstrapByKey[bootstrapKey.v
 const backLink = computed(() => `/p/${projectId.value}/usecases`)
 const loading = ref(false)
 const error = ref('')
+const previewMode = ref<'split' | 'preview'>('split')
 
 const form = reactive({
   title: '',
@@ -129,6 +154,76 @@ const form = reactive({
   defectsText: '',
   prdRequirementsText: '',
 })
+
+const previewHtml = computed(() => renderMarkdown(form.content))
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function inlineMarkdown(value: string) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img src="$2" alt="$1" loading="lazy" />')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
+}
+
+function renderMarkdown(markdown: string) {
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  const html: string[] = []
+  let listOpen = false
+  let codeOpen = false
+  const closeList = () => {
+    if (listOpen) {
+      html.push('</ul>')
+      listOpen = false
+    }
+  }
+  for (const line of lines) {
+    if (line.trim().startsWith('```')) {
+      closeList()
+      html.push(codeOpen ? '</code></pre>' : '<pre><code>')
+      codeOpen = !codeOpen
+      continue
+    }
+    if (codeOpen) {
+      html.push(`${escapeHtml(line)}\n`)
+      continue
+    }
+    if (!line.trim()) {
+      closeList()
+      continue
+    }
+    const heading = line.match(/^(#{1,3})\s+(.+)$/)
+    if (heading) {
+      closeList()
+      const level = heading[1].length
+      html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`)
+      continue
+    }
+    const bullet = line.match(/^[-*]\s+(.+)$/)
+    if (bullet) {
+      if (!listOpen) {
+        html.push('<ul>')
+        listOpen = true
+      }
+      html.push(`<li>${inlineMarkdown(bullet[1])}</li>`)
+      continue
+    }
+    closeList()
+    html.push(`<p>${inlineMarkdown(line)}</p>`)
+  }
+  closeList()
+  if (codeOpen) html.push('</code></pre>')
+  return html.join('')
+}
 
 function syncForm() {
   if (!payload.value) {
@@ -216,7 +311,8 @@ onMounted(load)
 }
 
 .action-button,
-.submit-button {
+.submit-button,
+.ghost-button {
   border: none;
   border-radius: 999px;
   padding: 10px 14px;
@@ -230,6 +326,11 @@ onMounted(load)
 
 .submit-button {
   background: #0f766e;
+}
+
+.ghost-button {
+  background: rgba(15, 23, 42, 0.08);
+  color: #334155;
 }
 
 .secondary-link {
@@ -254,6 +355,114 @@ onMounted(load)
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
   gap: 18px;
+  align-items: start;
+}
+
+.meta-panel {
+  position: sticky;
+  top: 88px;
+  max-height: calc(100vh - 116px);
+  overflow: auto;
+}
+
+.markdown-workbench {
+  min-width: 0;
+}
+
+.markdown-toolbar {
+  position: sticky;
+  top: 88px;
+  z-index: 5;
+  margin: -18px -18px 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 20px 20px 0 0;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+}
+
+.subtext {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cover-preview {
+  display: grid;
+  place-items: center;
+  min-height: 142px;
+  margin-top: 12px;
+  border: 1px dashed rgba(15, 118, 110, 0.24);
+  border-radius: 16px;
+  background: #f8fbfb;
+  overflow: hidden;
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 156px;
+  object-fit: cover;
+}
+
+.cover-placeholder {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.markdown-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.markdown-grid.preview {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.markdown-grid.preview .editor-pane {
+  display: none;
+}
+
+.markdown-pane {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.markdown-pane > span,
+.pane-title {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.preview-pane {
+  align-self: stretch;
+}
+
+.markdown-preview,
+.empty-preview {
+  min-height: 640px;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  padding: 18px;
+  background: #fbfdfd;
+}
+
+.empty-preview {
+  display: grid;
+  place-items: center;
+  color: #94a3b8;
+  text-align: center;
 }
 
 .field {
@@ -287,13 +496,68 @@ onMounted(load)
 .markdown-input {
   width: 100%;
   min-height: 640px;
+  max-height: calc(100vh - 220px);
   resize: vertical;
   line-height: 1.8;
 }
 
+.markdown-preview :deep(h1),
+.markdown-preview :deep(h2),
+.markdown-preview :deep(h3) {
+  margin: 0 0 12px;
+  color: #111827;
+}
+
+.markdown-preview :deep(p),
+.markdown-preview :deep(li) {
+  color: #334155;
+  line-height: 1.8;
+}
+
+.markdown-preview :deep(ul) {
+  margin: 0 0 14px 20px;
+  padding: 0;
+}
+
+.markdown-preview :deep(code) {
+  border-radius: 8px;
+  padding: 2px 6px;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.markdown-preview :deep(pre) {
+  overflow: auto;
+  border-radius: 14px;
+  padding: 14px;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+
+.markdown-preview :deep(pre code) {
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-preview :deep(a) {
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.markdown-preview :deep(img) {
+  max-width: 100%;
+  border-radius: 14px;
+}
+
 @media (max-width: 960px) {
-  .editor-grid {
+  .editor-grid,
+  .markdown-grid {
     grid-template-columns: 1fr;
+  }
+
+  .meta-panel,
+  .markdown-toolbar {
+    position: static;
+    max-height: none;
   }
 
   .page-header,

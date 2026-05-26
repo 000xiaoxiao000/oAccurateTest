@@ -26,7 +26,7 @@
     </div>
     <template v-else-if="payload">
       <div v-if="autoSelectionNotice" class="inline-notice">{{ autoSelectionNotice }}</div>
-      <div class="action-bar">
+      <div class="action-bar coverage-toolbar">
         <button class="primary-button" type="button" :disabled="generating" @click="generateFull">
           {{ generating ? '处理中...' : '生成全量报告' }}
         </button>
@@ -42,7 +42,7 @@
         </RouterLink>
       </div>
 
-      <div class="hero-grid">
+      <div class="hero-grid coverage-metrics">
         <article class="hero-card">
           <span>全量报告</span>
           <strong>{{ coverageRate(payload.report?.coveredLines, payload.report?.totalLines) }}</strong>
@@ -68,8 +68,8 @@
         <p class="subtext">{{ jobStatus.progressName || '处理中' }}</p>
       </div>
 
-      <div class="panel-grid">
-        <section class="panel">
+      <div class="panel-grid report-workbench">
+        <section class="panel report-summary-panel">
           <div class="panel-head">
             <h2>全量报告</h2>
             <span>{{ payload.report?.createTimeText || '-' }}</span>
@@ -90,7 +90,7 @@
           <div v-else class="empty-card">暂无全量报告</div>
         </section>
 
-        <section class="panel">
+        <section class="panel report-summary-panel">
           <div class="panel-head">
             <h2>增量报告</h2>
             <span>{{ payload.incrementalReport?.createTimeText || '-' }}</span>
@@ -112,9 +112,10 @@
         </section>
       </div>
 
-      <section v-if="payload.comparison" class="panel">
+      <section v-if="payload.comparison" class="panel comparison-panel">
         <div class="panel-head">
           <h2>与上一版对比</h2>
+          <span>按覆盖变化快速定位方法</span>
         </div>
         <div class="hero-grid comparison-grid">
           <button class="hero-card clickable" type="button" @click="showComparisonMethods('added')">
@@ -135,9 +136,10 @@
         </div>
       </section>
 
-      <section v-if="trend.length" class="panel">
+      <section v-if="trend.length" class="panel trend-panel">
         <div class="panel-head">
           <h2>趋势数据</h2>
+          <span>{{ trend.length }} 条</span>
         </div>
         <div class="trend-list">
           <article v-for="(item, index) in trend" :key="index" class="trend-item">
@@ -516,6 +518,21 @@ onMounted(load)
   margin-top: 18px;
 }
 
+.coverage-toolbar {
+  position: sticky;
+  top: 76px;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .9);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+}
+
 .hero-grid,
 .panel-grid,
 .info-grid {
@@ -528,12 +545,37 @@ onMounted(load)
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.coverage-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.coverage-metrics .hero-card {
+  min-height: 118px;
+}
+
+.coverage-metrics .hero-card strong {
+  font-size: 30px;
+}
+
+.report-workbench {
+  align-items: start;
+}
+
+.report-summary-panel {
+  max-height: min(420px, calc(100vh - 310px));
+  overflow: auto;
+}
+
 .panel-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .info-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.report-summary-panel .info-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
 .hero-card strong,
@@ -616,9 +658,17 @@ onMounted(load)
   margin: 12px 0;
 }
 
+.comparison-panel,
+.trend-panel {
+  max-height: min(360px, calc(100vh - 330px));
+  overflow: auto;
+}
+
 .trend-list {
   display: grid;
   gap: 10px;
+  max-height: 180px;
+  overflow: auto;
 }
 
 .trend-item {
