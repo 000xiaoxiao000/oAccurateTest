@@ -46,6 +46,34 @@
         当前页面：{{ route.fullPath }} · {{ assistantContext.appCount }} 个应用 · {{ assistantContext.onlineAppCount }} 个在线
       </div>
 
+      <div v-if="hasReplyInsights" class="section-box insight-box" :class="{ collapsed: isSectionCollapsed('insights') }">
+        <button class="section-title section-toggle" type="button" @click="toggleSection('insights')">
+          <span>AI 建议</span>
+          <span>{{ isSectionCollapsed('insights') ? '展开' : '收起' }}</span>
+        </button>
+        <div v-show="!isSectionCollapsed('insights')" class="reply-insights">
+          <div v-if="lastReply?.topic" class="topic-pill">主题：{{ lastReply.topic }}</div>
+          <div v-if="lastReply?.suggestions?.length" class="suggestion-list">
+            <button v-for="item in lastReply.suggestions" :key="item" type="button" @click="useSuggestion(item)">{{ item }}</button>
+          </div>
+          <div v-if="lastReplyLinks.length" class="quick-links reply-links">
+            <button v-for="link in lastReplyLinks" :key="link.title + link.url" type="button" @click="openQuickLink(link)">
+              <strong>{{ link.title }}</strong>
+              <span>{{ link.description }}</span>
+            </button>
+          </div>
+          <div v-if="lastReplyActions.length" class="action-list">
+            <article v-for="action in lastReplyActions" :key="action.title + action.type" class="action-card">
+              <div>
+                <strong>{{ action.title }}</strong>
+                <span>{{ action.description }}</span>
+              </div>
+              <button type="button" @click="executeAction(action)">执行</button>
+            </article>
+          </div>
+        </div>
+      </div>
+
       <div class="section-box" :class="{ collapsed: isSectionCollapsed('links') }">
         <button class="section-title section-toggle" type="button" @click="toggleSection('links')">
           <span>快捷入口</span>
@@ -93,13 +121,15 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
+import { useAuthStore } from '@/stores/auth'
+import { useDialog } from '@/composables/useDialog'
 import MascotCanvas from '@/components/MascotCanvas.vue'
-import type { AIInteractivePagePayload, AIQuickLink } from '@/api/types'
+import type { AIAction, AIInteractivePagePayload, AIQuickLink } from '@/api/types'
 
 type Message = { id: string; role: 'user' | 'assistant'; text: string }
 type FloatingPosition = { left: number; top: number }
 type PanelSize = { width: number; height: number }
-type SectionName = 'messages' | 'links' | 'starters'
+type SectionName = 'messages' | 'insights' | 'links' | 'starters'
 type SpeechRecognitionLike = {
   lang: string
   continuous: boolean
@@ -116,6 +146,8 @@ type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const authStore = useAuthStore()
+const dialog = useDialog()
 const question = ref('')
 const messages = ref<Message[]>([])
 const panelOpen = ref(false)
@@ -170,6 +202,15 @@ const floatingStyle = computed(() => position.value ? { left: `${position.value.
 const panelStyle = computed(() => panelSize.value ? { width: `${panelSize.value.width}px`, height: `${panelSize.value.height}px` } : {})
 
 const normalizedQuickLinks = computed(() => normalizeLinks(assistantContext.value.quickLinks || []))
+const lastReply = computed(() => projectId.value ? projectStore.aiLastReplyByProjectId[projectId.value] : undefined)
+const lastReplyLinks = computed(() => normalizeLinks(lastReply.value?.quickLinks || [], false))
+const lastReplyActions = computed(() => lastReply.value?.actions || [])
+const hasReplyInsights = computed(() => Boolean(
+  lastReply.value?.topic
+  || lastReply.value?.suggestions?.length
+  || lastReplyLinks.value.length
+  || lastReplyActions.value.length,
+))
 const starterQuestions = computed(() => {
   const routeSpecific = routeStarters(route.path)
   return [...routeSpecific, ...(assistantContext.value.starterQuestions || [])].slice(0, 8)
@@ -258,9 +299,23 @@ function showMascot() {
   localStorage.setItem(`${storagePrefix.value}:hidden`, '0')
 }
 
-function clearConversation() {
+async function clearConversation() {
+  const confirmed = await dialog.confirm({
+    title: '清空 AI 对话',
+    message: '确认清空当前项目的悬浮助手对话和后端 AI 记忆？清空后会重新开始上下文。',
+    confirmText: '确认清空',
+    tone: 'danger',
+  })
+  if (!confirmed) return
   messages.value = []
   error.value = ''
+  question.value = ''
+  imageData.value = ''
+  try {
+    await projectStore.resetAiSessionState(projectId.value)
+  } catch (err) {
+    error.value = friendlyAiError(err)
+  }
 }
 
 function isSectionCollapsed(section: SectionName) {
@@ -413,14 +468,30 @@ async function sendQuestion() {
       sessionState: JSON.stringify({ messages: messages.value.slice(-20) }),
     })
     messages.value.push({ id: uid(), role: 'assistant', text: result.answer || '暂无回答' })
+    await executeAutoAction(result.actions)
     question.value = ''
     imageData.value = ''
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'AI 提问失败'
+    error.value = friendlyAiError(err)
     messages.value.push({ id: uid(), role: 'assistant', text: error.value })
   } finally {
     asking.value = false
   }
+}
+
+function useSuggestion(text: string) {
+  question.value = text
+}
+
+function friendlyAiError(err: unknown) {
+  const message = err instanceof Error ? err.message : ''
+  if (message === 'Failed to fetch' || message.includes('无法连接后端')) {
+    return '无法连接后端 AI 服务，请确认后端已启动，并检查前端代理或跨域配置。'
+  }
+  if (message.includes('INTERNAL_SERVER_ERROR') || message.includes('500') || message.includes('NullPointerException')) {
+    return 'AI 助手接口发生服务端异常，请稍后重试；后端日志中会记录具体原因。'
+  }
+  return message || 'AI 提问失败'
 }
 
 function selectImage() {
@@ -482,8 +553,8 @@ function toggleVoiceInput() {
   recognition.start()
 }
 
-function normalizeLinks(links: AIQuickLink[]) {
-  const routeLinks = routeQuickLinks(route.path)
+function normalizeLinks(links: AIQuickLink[], includeRouteLinks = true) {
+  const routeLinks = includeRouteLinks ? routeQuickLinks(route.path) : []
   const merged = [...routeLinks, ...links]
   const seen = new Set<string>()
   return merged.filter((link) => {
@@ -515,6 +586,47 @@ async function openQuickLink(link: AIQuickLink) {
   }
   await router.push(target)
   panelOpen.value = false
+}
+
+async function executeAction(action: AIAction) {
+  if (action.requireConfirm) {
+    const confirmed = await dialog.confirm({
+      title: action.title || '执行 AI 建议动作',
+      message: action.confirmText || `确认执行${action.title}？`,
+      confirmText: '确认执行',
+      tone: action.type === 'logout' ? 'danger' : 'warning',
+    })
+    if (!confirmed) return
+  }
+  if (action.type === 'logout') {
+    await authStore.logout()
+    await router.replace('/login')
+    panelOpen.value = false
+    return
+  }
+  if (action.type === 'monitorPageAction') {
+    const event = new CustomEvent('oat:monitor-action', { detail: action.payload || {} })
+    window.dispatchEvent(event)
+    const target = `/p/${projectId.value}/monitor`
+    if (route.path !== target) await router.push(target)
+    panelOpen.value = false
+    return
+  }
+  const target = normalizeSpaUrl(action.url)
+  if (!target) return
+  if (/^https?:\/\//.test(target)) {
+    window.open(target, '_blank', 'noopener,noreferrer')
+    return
+  }
+  await router.push(target)
+  panelOpen.value = false
+}
+
+async function executeAutoAction(actions?: AIAction[]) {
+  const action = actions?.find((item) => item.payload?.autoExecute === true && !item.requireConfirm && item.type !== 'logout')
+  if (!action) return
+  messages.value.push({ id: uid(), role: 'assistant', text: `已按建议执行：${action.title}` })
+  await executeAction(action)
 }
 
 function routeQuickLinks(path: string): AIQuickLink[] {
@@ -841,6 +953,7 @@ onBeforeUnmount(() => {
 }
 
 .quick-links,
+.reply-insights,
 .starters {
   display: grid;
   flex: 0 0 auto;
@@ -853,6 +966,88 @@ onBeforeUnmount(() => {
   max-height: 126px;
 }
 
+.reply-insights {
+  max-height: 190px;
+  background: linear-gradient(180deg, rgba(240, 253, 250, .72), rgba(255, 255, 255, .96));
+}
+
+.topic-pill {
+  width: max-content;
+  max-width: 100%;
+  border: 1px solid rgba(20, 184, 166, .2);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, .84);
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-list,
+.action-list {
+  display: grid;
+  gap: 6px;
+}
+
+.suggestion-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.suggestion-list button,
+.action-card button {
+  border-radius: 12px;
+  border: 1px solid rgba(20, 184, 166, .24);
+  background: #fff;
+  color: #0f766e;
+  cursor: pointer;
+}
+
+.suggestion-list button {
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.action-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(20, 184, 166, .18);
+  border-radius: 14px;
+  padding: 8px 9px;
+  background: rgba(255, 255, 255, .86);
+}
+
+.action-card div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.action-card strong {
+  color: #0f172a;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.action-card span {
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.action-card button {
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .starters {
   max-height: 116px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -860,6 +1055,8 @@ onBeforeUnmount(() => {
 
 .quick-links button,
 .starters button,
+.suggestion-list button,
+.action-card button,
 .tool-button,
 .send-button {
   border-radius: 12px;
@@ -874,6 +1071,17 @@ onBeforeUnmount(() => {
   gap: 3px;
   padding: 8px 10px;
   text-decoration: none;
+}
+
+.quick-links button:hover,
+.starters button:hover,
+.suggestion-list button:hover,
+.action-card button:hover,
+.tool-button:hover,
+.send-button:hover:not(:disabled) {
+  border-color: rgba(15, 118, 110, .42);
+  background: rgba(20, 184, 166, .14);
+  transform: translateY(-1px);
 }
 
 .quick-links strong {

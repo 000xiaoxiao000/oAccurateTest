@@ -469,6 +469,7 @@ async function submitAsk() {
     const assistantMessage: SessionMessage = { id: uid(), role: 'assistant', text: '正在连接 AI 流式响应...' }
     activeSession.value?.messages.push(assistantMessage)
     await askAiWithFallback(currentQuestion, assistantMessage)
+    await executeAutoAction(reply.value?.actions)
     touchSession(activeSession.value)
     await syncSessionState()
     question.value = ''
@@ -547,6 +548,14 @@ async function executeAction(action: AIAction) {
   await router.push(target)
 }
 
+async function executeAutoAction(actions?: AIAction[]) {
+  const action = actions?.find((item) => item.payload?.autoExecute === true && !item.requireConfirm && item.type !== 'logout')
+  if (!action) return
+  const lastAssistant = [...activeMessages.value].reverse().find((item) => item.role === 'assistant')
+  if (lastAssistant) lastAssistant.text = `${lastAssistant.text}\n\n[已按建议执行：${action.title}]`
+  await executeAction(action)
+}
+
 
 async function askAiWithFallback(currentQuestion: string, assistantMessage: SessionMessage) {
   try {
@@ -572,6 +581,9 @@ function friendlyAiError(err: unknown) {
   }
   if (err instanceof Error && err.message === 'Failed to fetch') {
     return '无法连接 AI 服务，请确认后端服务已启动，并且前端允许访问后端 API。'
+  }
+  if (err instanceof Error && (err.message.includes('INTERNAL_SERVER_ERROR') || err.message.includes('500') || err.message.includes('NullPointerException'))) {
+    return 'AI 助手接口发生服务端异常，请稍后重试；后端日志中会记录具体原因。'
   }
   return err instanceof Error ? err.message : 'AI 提问失败'
 }

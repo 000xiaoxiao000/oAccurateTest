@@ -631,12 +631,13 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         if (apps == null || apps.isEmpty()) {
             return null;
         }
+        String normalizedQuestion = questionText == null ? "" : questionText.toLowerCase();
         for (AppVo app : apps) {
-            if (app != null && StringUtils.hasText(app.getName()) && questionText.contains(app.getName().toLowerCase())) {
+            if (app != null && StringUtils.hasText(app.getName()) && normalizedQuestion.contains(app.getName().toLowerCase())) {
                 return app;
             }
         }
-        if (containsAny(questionText, "应用", "系统快照", "版本比对", "覆盖率")) {
+        if (containsAny(normalizedQuestion, "应用", "系统快照", "版本比对", "覆盖率")) {
             return apps.get(0);
         }
         return null;
