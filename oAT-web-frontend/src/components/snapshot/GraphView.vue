@@ -16,9 +16,13 @@
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="graph">
       <div class="graph-shell">
-        <section class="panel">
-          <div class="card-title">
-            <h2>节点拓扑</h2>
+        <section class="panel graph-panel-card">
+          <div class="card-title graph-title-row">
+            <div>
+              <h2>节点拓扑</h2>
+              <p class="subtext">默认自适应居中；支持滚轮缩放、拖拽平移和拖拽节点。</p>
+            </div>
+            <span class="graph-count-pill">{{ graph.nodes.length }} 节点 / {{ graph.edges.length }} 连线</span>
           </div>
           <div
             class="graph-board"
@@ -29,7 +33,8 @@
             @pointermove="moveGraphPan"
           >
             <div class="graph-tools">
-              <span>滚轮缩放 · 拖拽平移 · 拖拽节点</span>
+              <span>{{ Math.round(graphZoom * 100) }}%</span>
+              <button type="button" @click="fitGraph">适配</button>
               <button type="button" @click="zoomGraph(0.15)">放大</button>
               <button type="button" @click="zoomGraph(-0.15)">缩小</button>
               <button type="button" @click="resetGraphLayout">重排</button>
@@ -66,12 +71,12 @@
                   @pointerdown.stop="startNodeDrag($event, node)"
                   @click.stop="$emit('select-node', node.id)"
                 >
-                  <rect :x="node.x" :y="node.y" rx="6" ry="6" :width="nodeWidth" :height="nodeHeight" />
-                  <circle :cx="node.x + 30" :cy="node.y + 33" r="18" class="node-icon-ring" />
-                  <text :x="node.x + 30" :y="node.y + 40" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
-                  <text :x="node.x + 58" :y="node.y + 30" class="node-title">{{ node.title || node.id }}</text>
-                  <text :x="node.x + 58" :y="node.y + 56" class="node-subtitle">{{ node.subTitle || '-' }}</text>
-                  <text :x="node.x + 14" :y="node.y + 82" class="node-type">{{ node.tips || node.type || 'unknown' }}</text>
+                  <rect :x="node.x" :y="node.y" rx="16" ry="16" :width="nodeWidth" :height="nodeHeight" />
+                  <circle :cx="node.x + 34" :cy="node.y + 34" r="18" class="node-icon-ring" />
+                  <text :x="node.x + 34" :y="node.y + 41" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
+                  <text :x="node.x + 64" :y="node.y + 30" class="node-title">{{ compactText(node.title || node.id, 25) }}</text>
+                  <text :x="node.x + 64" :y="node.y + 54" class="node-subtitle">{{ compactText(node.subTitle || '-', 30) }}</text>
+                  <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactText(node.tips || node.type || 'unknown', 32) }}</text>
                 </g>
               </g>
             </svg>
@@ -132,8 +137,8 @@ type PositionedNode = GraphNodeSummary & {
   rank: number
 }
 
-const nodeWidth = 240
-const nodeHeight = 96
+const nodeWidth = 230
+const nodeHeight = 92
 const graphZoom = ref(1)
 const graphOffset = ref({ x: 0, y: 0 })
 const graphPan = ref<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
@@ -204,8 +209,8 @@ const nodePositions = computed<PositionedNode[]>(() => {
     const row = Math.max(0, bucket.findIndex((item) => item.id === node.id))
     const columnHeight = Math.max(1, bucket.length)
     const autoPosition = {
-      x: 42 + rank * 318,
-      y: 42 + row * 132 + Math.max(0, 4 - columnHeight) * 36,
+      x: 96 + rank * 310,
+      y: 96 + row * 126 + Math.max(0, 3 - columnHeight) * 34,
     }
     const override = nodePositionOverrides.value[node.id]
     return {
@@ -217,10 +222,22 @@ const nodePositions = computed<PositionedNode[]>(() => {
   })
 })
 
+const graphBounds = computed(() => {
+  const nodes = nodePositions.value
+  if (!nodes.length) return { minX: 0, minY: 0, maxX: 960, maxY: 560, width: 960, height: 560 }
+  const minX = Math.min(...nodes.map((node) => node.x))
+  const minY = Math.min(...nodes.map((node) => node.y))
+  const maxX = Math.max(...nodes.map((node) => node.x + nodeWidth))
+  const maxY = Math.max(...nodes.map((node) => node.y + nodeHeight))
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
+})
+
 const graphViewBox = computed(() => {
-  const maxX = Math.max(1200, ...nodePositions.value.map((node) => node.x + nodeWidth + 80))
-  const maxY = Math.max(720, ...nodePositions.value.map((node) => node.y + nodeHeight + 80))
-  return `0 0 ${maxX} ${maxY}`
+  const bounds = graphBounds.value
+  const padding = 140
+  const width = Math.max(920, bounds.width + padding * 2)
+  const height = Math.max(560, bounds.height + padding * 2)
+  return `0 0 ${width} ${height}`
 })
 
 const graphTransform = computed(() => `translate(${graphOffset.value.x} ${graphOffset.value.y}) scale(${graphZoom.value})`)
@@ -262,9 +279,20 @@ function zoomGraph(delta: number) {
   graphZoom.value = clampZoom(graphZoom.value + delta)
 }
 
+function fitGraph() {
+  const bounds = graphBounds.value
+  const viewWidth = Math.max(920, bounds.width + 280)
+  const viewHeight = Math.max(560, bounds.height + 280)
+  const zoom = clampZoom(Math.min((viewWidth - 180) / Math.max(bounds.width, 1), (viewHeight - 180) / Math.max(bounds.height, 1), 1.05))
+  graphZoom.value = zoom
+  graphOffset.value = {
+    x: (viewWidth - bounds.width * zoom) / 2 - bounds.minX * zoom,
+    y: (viewHeight - bounds.height * zoom) / 2 - bounds.minY * zoom,
+  }
+}
+
 function resetGraphView() {
-  graphZoom.value = 0.92
-  graphOffset.value = { x: 0, y: 0 }
+  fitGraph()
 }
 
 function resetGraphLayout() {
@@ -318,6 +346,10 @@ function startNodeDrag(event: PointerEvent, node: PositionedNode) {
     originX: node.x,
     originY: node.y,
   }
+}
+
+function compactText(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value
 }
 
 function iconGlyph(value?: string) {
@@ -389,22 +421,47 @@ function iconGlyph(value?: string) {
 
 .graph-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(520px, 34vw);
+  grid-template-columns: minmax(0, 1fr) minmax(420px, 30vw);
   gap: 20px;
   align-items: start;
 }
 
+.graph-panel-card {
+  overflow: hidden;
+}
+
+.graph-title-row {
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.graph-title-row h2 {
+  margin: 0;
+}
+
+.graph-count-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .graph-board {
   position: relative;
-  overflow: auto;
-  min-height: min(820px, calc(100vh - 240px));
-  border-radius: 18px;
+  overflow: hidden;
+  min-height: min(640px, calc(100vh - 260px));
+  border-radius: 22px;
   background:
-    linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.05) 1px, transparent 1px),
-    #f8fbfb;
-  background-size: 28px 28px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
+    radial-gradient(circle at 24px 24px, rgba(15, 118, 110, .08) 1.5px, transparent 1.5px),
+    linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, #fbfefd, #f5fbfb);
+  background-size: 56px 56px, 28px 28px, 28px 28px, auto;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8);
   cursor: grab;
 }
 
@@ -414,24 +471,29 @@ function iconGlyph(value?: string) {
 
 .graph-tools {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 14px;
+  right: 14px;
   z-index: 3;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px;
+  padding: 7px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(14px);
 }
 
 .graph-tools span {
-  padding: 0 8px;
-  color: #64748b;
+  min-width: 44px;
+  border-radius: 999px;
+  padding: 6px 8px;
+  background: #0f172a;
+  color: #fff;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 900;
+  text-align: center;
   white-space: nowrap;
 }
 
@@ -461,20 +523,25 @@ function iconGlyph(value?: string) {
 
 .graph-svg {
   width: 100%;
-  min-width: 1160px;
-  min-height: 760px;
-  height: max(760px, calc(100vh - 240px));
+  min-height: min(640px, calc(100vh - 260px));
+  height: min(640px, calc(100vh - 260px));
+  display: block;
 }
 
 .graph-edge {
   fill: none;
-  stroke: #94a3b8;
-  stroke-width: 2;
+  stroke: #8aa0b8;
+  stroke-width: 2.2;
+  opacity: .88;
 }
 
 .edge-label {
   fill: #475569;
   font-size: 12px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgba(255,255,255,.92);
+  stroke-width: 5px;
   text-anchor: middle;
 }
 
@@ -487,15 +554,16 @@ function iconGlyph(value?: string) {
 }
 
 .graph-node rect {
-  fill: #ffffff;
-  stroke: rgba(15, 23, 42, 0.16);
-  stroke-width: 1.4;
-  filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.10));
+  fill: rgba(255, 255, 255, .98);
+  stroke: rgba(15, 118, 110, 0.16);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 14px 24px rgba(15, 23, 42, 0.10));
 }
 
 .graph-node.active rect {
-  stroke: dodgerblue;
-  stroke-width: 2.6;
+  stroke: #2563eb;
+  stroke-width: 2.8;
+  filter: drop-shadow(0 18px 30px rgba(37, 99, 235, 0.18));
 }
 
 .graph-node.node-error rect {
@@ -506,6 +574,7 @@ function iconGlyph(value?: string) {
 .node-icon-ring {
   fill: #ecfeff;
   stroke: rgba(15, 118, 110, 0.22);
+  stroke-width: 1.4;
 }
 
 .graph-node.node-error .node-icon-ring {
@@ -522,14 +591,14 @@ function iconGlyph(value?: string) {
 
 .node-title {
   fill: #0f172a;
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .node-subtitle,
 .node-type {
   fill: #64748b;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .node-type {
@@ -599,8 +668,9 @@ function iconGlyph(value?: string) {
   border-radius: 16px;
 }
 
+.compact-graph-view .graph-board,
 .compact-graph-view .graph-svg {
-  min-width: 780px;
+  min-height: 420px;
   height: 420px;
 }
 
@@ -620,6 +690,13 @@ function iconGlyph(value?: string) {
   .card-title {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .graph-tools {
+    left: 12px;
+    right: 12px;
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 }
 </style>

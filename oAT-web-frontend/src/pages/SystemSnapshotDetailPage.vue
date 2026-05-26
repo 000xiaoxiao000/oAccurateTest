@@ -1,6 +1,6 @@
 <template>
-  <section>
-      <div class="page-header">
+  <section class="snapshot-detail-page">
+    <div class="page-header">
       <div>
         <div class="eyebrow">Snapshot Detail</div>
         <h1>{{ payload?.snapshot.title || '系统快照详情' }}</h1>
@@ -24,12 +24,18 @@
     <div v-if="loading" class="status-card">正在加载系统快照详情...</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="payload">
-      <div class="hero-card">
+      <div class="hero-card" :class="{ 'has-topic-image': payload.snapshot.topicImage }">
         <img v-if="payload.snapshot.topicImage" class="topic-image" :src="payload.snapshot.topicImage" alt="topic" />
         <div class="hero-main">
-          <div class="tag-row">
-            <span v-for="label in payload.labels" :key="label.name" class="tag" :style="{ '--tag-color': label.color || '#0f766e' }">
-              {{ label.name }}
+          <div class="hero-topline">
+            <div class="tag-row">
+              <span v-for="label in payload.labels" :key="label.name" class="tag" :style="{ '--tag-color': label.color || '#0f766e' }">
+                {{ label.name }}
+              </span>
+              <span v-if="!payload.labels.length" class="tag muted">暂无标签</span>
+            </div>
+            <span class="status-pill" :class="statusTone(payload.snapshot.reportStatus)">
+              {{ reportStatusText(payload.snapshot.reportStatus) }}
             </span>
           </div>
           <div class="meta-grid">
@@ -55,10 +61,13 @@
 
       <div class="detail-grid">
         <section class="panel">
-          <div class="card-title">
-            <h2>基本信息</h2>
-            <div class="header-actions">
-              <button class="ghost-button" type="button" @click="saveBasic">保存基本信息</button>
+          <div class="card-title panel-heading">
+            <div>
+              <h2>基本信息</h2>
+              <p>聚焦标题、版本、负责人和标签，其他信息收敛在下方卡片中。</p>
+            </div>
+            <div class="header-actions compact-actions">
+              <button class="ghost-button primary-action" type="button" @click="saveBasic">保存基本信息</button>
               <button class="ghost-button" type="button" @click="openUsecasePicker">更新关联用例</button>
             </div>
           </div>
@@ -67,7 +76,7 @@
               <span>标题</span>
               <input v-model="form.title" class="text-input" type="text" />
             </label>
-            <label class="field">
+            <label class="field field-wide">
               <span>描述</span>
               <textarea v-model="form.describe" class="text-area" rows="4"></textarea>
             </label>
@@ -111,8 +120,14 @@
             <span>{{ reportStatusHint(payload.snapshot.reportStatus) }}</span>
           </div>
 
-          <div class="subsection">
-            <h3>关联用例</h3>
+          <div class="subsection usecase-section">
+            <div class="subsection-title">
+              <div>
+                <h3>关联用例</h3>
+                <p>长列表在卡片内滚动，保持编辑区和链路入口在同一屏可见。</p>
+              </div>
+              <button class="ghost-button small-button" type="button" @click="openUsecasePicker">调整用例</button>
+            </div>
             <UsecasePicker
               v-model:open="usecasePickerOpen"
               title="更新关联用例"
@@ -152,10 +167,13 @@
           </div>
         </section>
 
-        <aside class="side-stack">
-          <section class="panel">
-            <div class="card-title">
-              <h2>动态记录</h2>
+        <aside class="side-stack" aria-label="系统快照侧栏信息">
+          <section class="panel side-panel dynamic-panel">
+            <div class="card-title panel-heading">
+              <div>
+                <h2>动态记录</h2>
+                <p>评论和变更记录固定在侧栏内浏览。</p>
+              </div>
             </div>
             <form class="comment-form" @submit.prevent="addComment">
               <textarea
@@ -187,9 +205,12 @@
             </div>
           </section>
 
-          <section class="panel">
-            <div class="card-title">
-              <h2>负责人</h2>
+          <section class="panel side-panel">
+            <div class="card-title panel-heading">
+              <div>
+                <h2>负责人</h2>
+                <p>当前快照维护人。</p>
+              </div>
             </div>
             <div class="member-list">
               <article
@@ -412,10 +433,17 @@ onMounted(load)
 </script>
 
 <style scoped>
+.snapshot-detail-page {
+  display: grid;
+  gap: 18px;
+}
+
 .page-header,
 .header-actions,
 .card-title,
-.dynamic-top {
+.dynamic-top,
+.hero-topline,
+.subsection-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -423,21 +451,53 @@ onMounted(load)
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 2px;
+  align-items: flex-start;
+}
+
+.page-header h1,
+.card-title h2,
+.subsection-title h3 {
+  margin: 0;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+}
+
+.page-header h1 {
+  font-size: clamp(28px, 4vw, 42px);
+  line-height: 1.08;
 }
 
 .eyebrow {
   color: #0f766e;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
 }
 
 .subtext,
 .dynamic-card p,
-.member-card span {
+.member-card span,
+.panel-heading p,
+.subsection-title p {
   color: #64748b;
+}
+
+.subtext,
+.panel-heading p,
+.subsection-title p {
+  margin: 6px 0 0;
+  line-height: 1.6;
+}
+
+.header-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.compact-actions {
+  flex-shrink: 0;
 }
 
 .secondary-link,
@@ -445,15 +505,38 @@ onMounted(load)
 .ghost-button,
 .danger-button {
   color: #0f766e;
-  font-weight: 700;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.ghost-button,
+.danger-button {
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .ghost-button {
   border: 1px solid rgba(15, 118, 110, 0.18);
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: rgba(15, 118, 110, 0.06);
-  cursor: pointer;
+  background: rgba(15, 118, 110, 0.07);
+}
+
+.ghost-button:hover,
+.danger-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.primary-action {
+  color: #fff;
+  border-color: #0f766e;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+}
+
+.small-button {
+  padding: 8px 12px;
+  font-size: 13px;
 }
 
 .danger-button,
@@ -463,9 +546,15 @@ onMounted(load)
 
 .danger-button {
   border: 1px solid rgba(185, 28, 28, 0.18);
-  border-radius: 999px;
-  padding: 10px 14px;
   background: rgba(185, 28, 28, 0.06);
+}
+
+.danger-link {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-weight: 700;
   cursor: pointer;
 }
 
@@ -473,9 +562,10 @@ onMounted(load)
 .hero-card,
 .panel {
   padding: 18px;
-  border-radius: 20px;
+  border-radius: 24px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
 .status-card.error {
@@ -484,39 +574,90 @@ onMounted(load)
 
 .hero-card {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
   gap: 18px;
-  margin-bottom: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.14), transparent 32%),
+    rgba(255, 255, 255, 0.95);
+}
+
+.hero-card.has-topic-image {
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+}
+
+.hero-main {
+  min-width: 0;
 }
 
 .topic-image {
   width: 100%;
   height: 180px;
   object-fit: cover;
-  border-radius: 18px;
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.hero-topline {
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
 .tag-row {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.tag,
+.status-pill {
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .tag {
   --tag-color: #0f766e;
   padding: 6px 10px;
-  border-radius: 999px;
   background: color-mix(in srgb, var(--tag-color) 14%, white);
   color: var(--tag-color);
-  font-size: 12px;
-  font-weight: 700;
+}
+
+.tag.muted {
+  --tag-color: #64748b;
+}
+
+.status-pill {
+  padding: 7px 11px;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid rgba(100, 116, 139, 0.18);
+}
+
+.status-pill.success {
+  color: #15803d;
+  background: #f0fdf4;
+  border-color: rgba(22, 163, 74, 0.18);
+}
+
+.status-pill.warning {
+  color: #c2410c;
+  background: #fff7ed;
+  border-color: rgba(234, 88, 12, 0.18);
+}
+
+.status-pill.danger {
+  color: #b91c1c;
+  background: #fef2f2;
+  border-color: rgba(185, 28, 28, 0.18);
 }
 
 .meta-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 16px;
 }
 
 .meta-item,
@@ -524,8 +665,9 @@ onMounted(load)
 .dynamic-card,
 .member-card,
 .usecase-card {
+  min-width: 0;
   padding: 14px;
-  border-radius: 16px;
+  border-radius: 18px;
   background: #f8fbfb;
   border: 1px solid rgba(15, 23, 42, 0.06);
 }
@@ -540,12 +682,21 @@ onMounted(load)
 .info-item strong {
   display: block;
   margin-top: 6px;
+  color: #0f172a;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.meta-item strong {
+  font-size: 20px;
+  letter-spacing: -0.02em;
 }
 
 .detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) 360px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
   gap: 18px;
+  align-items: start;
 }
 
 .side-stack,
@@ -557,11 +708,41 @@ onMounted(load)
   gap: 12px;
 }
 
+.side-stack {
+  position: sticky;
+  top: 18px;
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.side-panel {
+  padding: 16px;
+}
+
+.panel-heading {
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
 .info-list,
 .action-row,
 .comment-form {
   display: grid;
   gap: 12px;
+}
+
+.info-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
 }
 
 .action-row {
@@ -578,7 +759,7 @@ onMounted(load)
   gap: 6px;
   margin-top: 14px;
   padding: 14px;
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   background: #f8fbfb;
 }
@@ -605,40 +786,129 @@ onMounted(load)
 .field {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .text-input,
 .text-area,
 .select {
+  width: 100%;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 12px;
-  padding: 10px 12px;
+  border-radius: 14px;
+  padding: 11px 12px;
   background: #fff;
+  color: #0f172a;
+  font: inherit;
+  outline: none;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.text-input:focus,
+.text-area:focus,
+.select:focus {
+  border-color: rgba(15, 118, 110, 0.45);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.12);
+}
+
+.text-area {
+  resize: vertical;
+  min-height: 92px;
 }
 
 .select[multiple] {
-  min-height: 120px;
+  min-height: 112px;
 }
 
 .subsection {
   margin-top: 18px;
 }
 
+.subsection-title {
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.usecase-list {
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .usecase-card {
   display: grid;
   gap: 4px;
   color: #0f172a;
+  text-decoration: none;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.usecase-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(15, 118, 110, 0.22);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+}
+
+.usecase-card span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.comment-form {
+  margin-bottom: 12px;
+}
+
+.comment-form .ghost-button {
+  justify-self: end;
+}
+
+.dynamic-list {
+  max-height: min(430px, 48vh);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.dynamic-card {
+  display: grid;
+  gap: 8px;
+}
+
+.dynamic-top {
+  align-items: flex-start;
+}
+
+.dynamic-top span {
+  color: #94a3b8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dynamic-card p {
+  margin: 0;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .dynamic-type {
+  justify-self: start;
   color: #0f766e;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.member-card {
+  display: grid;
+  gap: 4px;
 }
 
 .empty-card {
   padding: 22px;
-  border-radius: 16px;
+  border-radius: 18px;
   background: #f8fafc;
   color: #64748b;
   text-align: center;
@@ -648,18 +918,37 @@ onMounted(load)
   padding: 14px;
 }
 
+@media (max-width: 1180px) {
+  .page-header,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .side-stack {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 @media (max-width: 960px) {
-  .hero-card,
-  .detail-grid,
-  .meta-grid {
+  .hero-card.has-topic-image,
+  .form-grid,
+  .info-list {
     grid-template-columns: 1fr;
   }
 
   .page-header,
   .header-actions,
-  .card-title {
+  .card-title,
+  .subsection-title {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .compact-actions,
+  .comment-form .ghost-button {
+    justify-self: stretch;
   }
 }
 </style>

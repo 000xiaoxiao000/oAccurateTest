@@ -26,21 +26,29 @@
     </div>
     <template v-else-if="payload">
       <div v-if="autoSelectionNotice" class="inline-notice">{{ autoSelectionNotice }}</div>
-      <div class="action-bar coverage-toolbar">
-        <button class="primary-button" type="button" :disabled="generating" @click="generateFull">
-          {{ generating ? '处理中...' : '生成全量报告' }}
-        </button>
-        <button class="ghost-button" type="button" :disabled="generating || !payload.report" @click="openIncrementalDialog">
-          生成增量报告
-        </button>
-        <RouterLink
-          v-if="payload.report"
-          class="ghost-link"
-          :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }"
-        >
-          查看明细
-        </RouterLink>
-      </div>
+
+      <section class="overview-command-card">
+        <div>
+          <div class="eyebrow">Coverage Actions</div>
+          <h2>覆盖率报告工作台</h2>
+          <p class="subtext">核心指标、生成操作和明细入口集中展示，避免浮层遮挡正文。</p>
+        </div>
+        <div class="coverage-toolbar">
+          <button class="primary-button" type="button" :disabled="generating" @click="generateFull">
+            {{ generating ? '处理中...' : '生成全量报告' }}
+          </button>
+          <button class="ghost-button" type="button" :disabled="generating || !payload.report" @click="openIncrementalDialog">
+            生成增量报告
+          </button>
+          <RouterLink
+            v-if="payload.report"
+            class="ghost-link button-link"
+            :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }"
+          >
+            查看明细
+          </RouterLink>
+        </div>
+      </section>
 
       <div class="hero-grid coverage-metrics">
         <article class="hero-card">
@@ -82,7 +90,7 @@
           <div v-if="payload.report" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.report.versionNumber || '-' }}</strong></div>
             <div class="info-item"><span>分支</span><strong>{{ payload.report.repoBranch || '-' }}</strong></div>
-            <div class="info-item"><span>提交</span><strong>{{ payload.report.repoCommitId || '-' }}</strong></div>
+            <div class="info-item wide"><span>提交</span><strong>{{ shortHash(payload.report.repoCommitId) }}</strong></div>
             <div class="info-item"><span>类</span><strong>{{ payload.report.coveredClasses }} / {{ payload.report.totalClasses }}</strong></div>
             <div class="info-item"><span>方法</span><strong>{{ payload.report.coveredMethods }} / {{ payload.report.totalMethods }}</strong></div>
             <div class="info-item"><span>复杂度</span><strong>{{ payload.report.totalComplexity }}</strong></div>
@@ -103,7 +111,7 @@
           <div v-if="payload.incrementalReport" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.incrementalReport.versionNumber || '-' }}</strong></div>
             <div class="info-item"><span>基准版本</span><strong>{{ payload.incrementalReport.baseVersionNumber || '-' }}</strong></div>
-            <div class="info-item"><span>基准提交</span><strong>{{ payload.incrementalReport.baseRepoCommitId || '-' }}</strong></div>
+            <div class="info-item wide"><span>基准提交</span><strong>{{ shortHash(payload.incrementalReport.baseRepoCommitId) }}</strong></div>
             <div class="info-item"><span>类</span><strong>{{ payload.incrementalReport.coveredClasses }} / {{ payload.incrementalReport.totalClasses }}</strong></div>
             <div class="info-item"><span>方法</span><strong>{{ payload.incrementalReport.coveredMethods }} / {{ payload.incrementalReport.totalMethods }}</strong></div>
             <div class="info-item"><span>复杂度</span><strong>{{ payload.incrementalReport.totalComplexity }}</strong></div>
@@ -143,7 +151,15 @@
         </div>
         <div class="trend-list">
           <article v-for="(item, index) in trend" :key="index" class="trend-item">
-            <strong>{{ formatTrend(item) }}</strong>
+            <div class="trend-main">
+              <strong>{{ trendMetric(item, 'lineCoverage') }}</strong>
+              <span>行覆盖率</span>
+            </div>
+            <div class="trend-meta">
+              <span>分支 {{ trendMetric(item, 'branchCoverage') }}</span>
+              <span>方法 {{ trendMetric(item, 'methodCoverage') }}</span>
+              <span>{{ trendTime(item) }}</span>
+            </div>
           </article>
         </div>
       </section>
@@ -225,6 +241,11 @@ const incrementalDialogOpen = ref(false)
 const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '' })
 const comparisonDialog = ref<{ open: boolean; title: string; methods: CoverageComparisonMethod[] }>({ open: false, title: '', methods: [] })
 
+function shortHash(value?: string) {
+  if (!value) return '-'
+  return value.length > 18 ? `${value.slice(0, 12)}...${value.slice(-6)}` : value
+}
+
 function coverageRate(covered?: number, total?: number) {
   if (!total) {
     return '0%'
@@ -232,10 +253,31 @@ function coverageRate(covered?: number, total?: number) {
   return `${(((covered || 0) / total) * 100).toFixed(1)}%`
 }
 
-function formatTrend(item: Record<string, unknown>) {
-  return Object.entries(item)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join(' · ')
+const trendKeyMap: Record<string, string[]> = {
+  lineCoverage: ['lineCoverage', 'lineCoverageRate', 'lineRate'],
+  branchCoverage: ['branchCoverage', 'branchCoverageRate', 'branchRate'],
+  methodCoverage: ['methodCoverage', 'methodCoverageRate', 'methodRate'],
+}
+
+function trendValue(item: Record<string, unknown>, key: string) {
+  for (const candidate of trendKeyMap[key] || [key]) {
+    if (item[candidate] !== undefined && item[candidate] !== null) return item[candidate]
+  }
+  return undefined
+}
+
+function trendMetric(item: Record<string, unknown>, key: string) {
+  const value = Number(trendValue(item, key))
+  if (!Number.isFinite(value)) return '-'
+  return `${value.toFixed(1)}%`
+}
+
+function trendTime(item: Record<string, unknown>) {
+  const timestamp = Number(item.timestamp)
+  if (Number.isFinite(timestamp) && timestamp > 0) {
+    return new Date(timestamp).toLocaleString()
+  }
+  return String(item.time || item.createTimeText || '-')
 }
 
 type CoverageSelection = {
@@ -500,7 +542,8 @@ onMounted(load)
 .hero-card,
 .panel,
 .empty-card,
-.empty-state-card {
+.empty-state-card,
+.overview-command-card {
   padding: 18px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
@@ -518,19 +561,32 @@ onMounted(load)
   margin-top: 18px;
 }
 
+.overview-command-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 18px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(240, 253, 250, .82));
+}
+
+.overview-command-card h2 {
+  margin: 4px 0 0;
+}
+
 .coverage-toolbar {
-  position: sticky;
-  top: 76px;
-  z-index: 6;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 10px;
-  padding: 12px;
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, .9);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, .06);
+}
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(15, 118, 110, .08);
 }
 
 .hero-grid,
@@ -562,8 +618,7 @@ onMounted(load)
 }
 
 .report-summary-panel {
-  max-height: min(420px, calc(100vh - 310px));
-  overflow: auto;
+  overflow: hidden;
 }
 
 .panel-grid {
@@ -575,7 +630,21 @@ onMounted(load)
 }
 
 .report-summary-panel .info-grid {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.info-item {
+  min-width: 0;
+}
+
+.info-item.wide {
+  grid-column: span 2;
+}
+
+.info-item strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hero-card strong,
@@ -666,15 +735,42 @@ onMounted(load)
 
 .trend-list {
   display: grid;
-  gap: 10px;
-  max-height: 180px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  max-height: 220px;
   overflow: auto;
 }
 
 .trend-item {
-  padding: 12px;
-  border-radius: 14px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
   background: #f8fbfb;
+}
+
+.trend-main strong {
+  display: block;
+  color: #0f172a;
+  font-size: 24px;
+}
+
+.trend-main span,
+.trend-meta {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.trend-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trend-meta span {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: rgba(15, 23, 42, .05);
 }
 
 @media (max-width: 960px) {
@@ -684,9 +780,18 @@ onMounted(load)
     grid-template-columns: 1fr;
   }
 
-  .empty-state-card {
+  .empty-state-card,
+  .overview-command-card {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .coverage-toolbar {
+    justify-content: flex-start;
+  }
+
+  .info-item.wide {
+    grid-column: auto;
   }
 }
 </style>
