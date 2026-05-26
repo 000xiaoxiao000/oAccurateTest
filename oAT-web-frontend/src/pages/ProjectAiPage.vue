@@ -215,32 +215,31 @@
         </aside>
 
         <div class="content-stack">
-          <div v-if="questionAnchors.length" class="floating-anchors" aria-label="右侧问答锚点导航">
-            <div class="floating-anchor-head">问答</div>
-            <div class="floating-anchor-track" :style="{ height: `${floatingTrackHeight}px` }">
-              <button
-                v-for="dot in floatingAnchorDots"
-                :key="dot.id"
-                class="floating-anchor-dot"
-                :class="{ active: activeAnchorId === dot.id, preview: previewAnchorId === dot.id, pending: !dot.answered, answered: dot.answered }"
-                type="button"
-                :style="{ top: `${dot.top}px` }"
-                :aria-label="`${dot.label} ${dot.question}`"
-                @mouseenter="previewAnchorId = dot.id"
-                @mouseleave="previewAnchorId = ''"
-                @click="scrollToAnchor(dot.id)"
-              >
-                <span class="floating-anchor-label">{{ dot.label }}</span>
-                <span class="floating-anchor-tooltip">
-                  <strong>{{ dot.label }} · {{ dot.answered ? '已回复' : '待回复' }}</strong>
-                  <em>{{ dot.question }}</em>
-                  <small>{{ dot.responseTimeText || (dot.answered ? '已生成回答' : '等待回复中') }}</small>
-                </span>
-              </button>
+          <section class="panel ask-workspace-panel">
+            <div v-if="questionAnchors.length" class="floating-anchors" aria-label="右侧问答锚点导航">
+              <div class="floating-anchor-head">问答</div>
+              <div class="floating-anchor-track" :style="{ height: `${floatingTrackHeight}px` }">
+                <button
+                  v-for="dot in floatingAnchorDots"
+                  :key="dot.id"
+                  class="floating-anchor-dot"
+                  :class="{ active: activeAnchorId === dot.id, pending: !dot.answered, answered: dot.answered }"
+                  type="button"
+                  :style="{ top: `${dot.top}px` }"
+                  :aria-label="`${dot.label} ${dot.question}`"
+                  @mouseenter="previewAnchorId = dot.id"
+                  @mouseleave="previewAnchorId = ''"
+                  @click="scrollToAnchor(dot.id)"
+                >
+                  <span class="floating-anchor-label">{{ dot.label }}</span>
+                  <span class="floating-anchor-tooltip">
+                    <strong>{{ dot.label }} · {{ dot.answered ? '已回复' : '待回复' }}</strong>
+                    <em>{{ dot.question }}</em>
+                    <small>{{ dot.responseTimeText || (dot.answered ? '已生成回答' : '等待回复中') }}</small>
+                  </span>
+                </button>
+              </div>
             </div>
-          </div>
-
-          <section class="panel">
             <div class="card-title">
               <h2>提问</h2>
             </div>
@@ -284,9 +283,19 @@
                   <button class="ghost-button" :class="{ active: recording }" type="button" @click="toggleVoiceInput">语音输入</button>
                 </div>
                 <div class="ask-submit-actions">
-                  <button v-if="asking" class="danger-button" type="button" @click="stopAsk">停止生成</button>
-                  <button class="primary-button" type="submit" :disabled="asking">{{ asking ? '生成中...' : '发送问题' }}</button>
-                  <button class="ghost-button" type="button" @click="saveSession">保存会话状态</button>
+                  <button v-if="asking" class="danger-button control-button" type="button" @click="stopAsk">
+                    <span class="button-icon stop-icon"></span>
+                    停止生成
+                  </button>
+                  <button class="primary-button control-button send-button" type="submit" :class="{ loading: asking }" :disabled="asking">
+                    <span v-if="asking" class="button-spinner" aria-hidden="true"></span>
+                    <span v-else class="button-icon send-icon" aria-hidden="true"></span>
+                    {{ asking ? '生成中...' : '发送问题' }}
+                  </button>
+                  <button class="ghost-button control-button save-button" type="button" :disabled="asking" @click="saveSession">
+                    <span class="button-icon save-icon" aria-hidden="true"></span>
+                    保存会话状态
+                  </button>
                 </div>
               </div>
             </form>
@@ -517,7 +526,7 @@ const timelineItems = computed(() => questionAnchors.value.map((anchor) => ({
 })))
 const floatingTrackHeight = computed(() => {
   if (typeof window === 'undefined') return 260
-  return Math.max(180, Math.min(window.innerHeight - 220, 420))
+  return Math.max(180, Math.min(window.innerHeight - 360, 360))
 })
 const floatingAnchorDots = computed(() => {
   const anchors = questionAnchors.value
@@ -1208,15 +1217,25 @@ onBeforeUnmount(() => {
 .action-button,
 .secondary-button,
 .primary-button,
+.danger-button,
 .ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
   border-radius: 999px;
   padding: 10px 14px;
+  font: inherit;
+  font-weight: 800;
   cursor: pointer;
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease, opacity .16s ease;
 }
 
 .action-button,
 .secondary-button,
-.primary-button {
+.primary-button,
+.danger-button {
   border: none;
   color: #fff;
 }
@@ -1231,6 +1250,37 @@ onBeforeUnmount(() => {
 
 .primary-button {
   background: #0f766e;
+}
+
+.danger-button {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 12px 24px rgba(220, 38, 38, .18);
+}
+
+.primary-button:not(:disabled):hover,
+.action-button:not(:disabled):hover,
+.secondary-button:not(:disabled):hover,
+.danger-button:not(:disabled):hover,
+.ghost-button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:not(:disabled):active,
+.action-button:not(:disabled):active,
+.secondary-button:not(:disabled):active,
+.danger-button:not(:disabled):active,
+.ghost-button:not(:disabled):active {
+  transform: translateY(0) scale(.98);
+}
+
+.primary-button:disabled,
+.danger-button:disabled,
+.ghost-button:disabled,
+.action-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: .62;
+  transform: none;
 }
 
 .ghost-button {
@@ -1735,14 +1785,17 @@ onBeforeUnmount(() => {
   padding-right: 4px;
 }
 
+.ask-workspace-panel {
+  position: relative;
+  padding-right: 54px;
+}
+
 .floating-anchors {
-  position: sticky;
-  z-index: 2;
-  top: 96px;
-  float: right;
-  width: 54px;
-  margin-right: -64px;
-  margin-left: 10px;
+  position: absolute;
+  z-index: 4;
+  top: 34px;
+  right: 12px;
+  width: 42px;
   padding: 10px 8px;
   border: 1px solid rgba(15, 118, 110, .12);
   border-radius: 999px;
@@ -1762,14 +1815,14 @@ onBeforeUnmount(() => {
 
 .floating-anchor-track {
   position: relative;
-  width: 38px;
+  width: 26px;
 }
 
 .floating-anchor-track::before {
   position: absolute;
   top: 7px;
   bottom: 7px;
-  left: 18px;
+  left: 12px;
   width: 2px;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(15, 118, 110, .14), rgba(20, 184, 166, .28));
@@ -1781,7 +1834,7 @@ onBeforeUnmount(() => {
   left: 2px;
   display: grid;
   place-items: center;
-  width: 34px;
+  width: 24px;
   height: 22px;
   border: 0;
   border-radius: 999px;
@@ -1823,37 +1876,38 @@ onBeforeUnmount(() => {
 }
 
 .floating-anchor-dot:hover::before,
-.floating-anchor-dot.active::before,
-.floating-anchor-dot.preview::before {
+.floating-anchor-dot:focus-visible::before {
   box-shadow: 0 0 0 7px rgba(15, 118, 110, .16);
 }
 
+.floating-anchor-dot.active {
+  outline: 2px solid rgba(15, 118, 110, .18);
+  outline-offset: 2px;
+}
+
 .floating-anchor-dot:hover,
-.floating-anchor-dot.active,
-.floating-anchor-dot.preview {
+.floating-anchor-dot:focus-visible {
   background: #0f766e;
   box-shadow: 0 10px 20px rgba(15, 118, 110, .22);
   color: #fff;
-  transform: translateX(-4px);
+  transform: translateX(-3px);
 }
 
 .floating-anchor-dot.pending:hover,
-.floating-anchor-dot.pending.active,
-.floating-anchor-dot.pending.preview {
+.floating-anchor-dot.pending:focus-visible {
   background: #f59e0b;
   box-shadow: 0 10px 20px rgba(245, 158, 11, .22);
   color: #fff;
 }
 
 .floating-anchor-dot.pending:hover::before,
-.floating-anchor-dot.pending.active::before,
-.floating-anchor-dot.pending.preview::before {
+.floating-anchor-dot.pending:focus-visible::before {
   box-shadow: 0 0 0 7px rgba(245, 158, 11, .18);
 }
 
 .floating-anchor-tooltip {
   position: absolute;
-  right: 44px;
+  right: 34px;
   top: 50%;
   display: grid;
   gap: 4px;
@@ -1871,8 +1925,7 @@ onBeforeUnmount(() => {
 }
 
 .floating-anchor-dot:hover .floating-anchor-tooltip,
-.floating-anchor-dot.active .floating-anchor-tooltip,
-.floating-anchor-dot.preview .floating-anchor-tooltip {
+.floating-anchor-dot:focus-visible .floating-anchor-tooltip {
   opacity: 1;
   transform: translate(0, -50%) scale(1);
 }
@@ -2159,9 +2212,89 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
 }
 
+.ask-submit-actions {
+  justify-content: flex-end;
+}
+
 .ask-tools,
 .ask-submit-actions {
   flex-wrap: wrap;
+}
+
+.control-button {
+  min-height: 44px;
+  padding: 11px 16px;
+  white-space: nowrap;
+}
+
+.send-button {
+  min-width: 118px;
+  box-shadow: 0 16px 30px rgba(15, 118, 110, .18);
+}
+
+.send-button.loading {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+}
+
+.save-button:disabled {
+  background: rgba(15, 118, 110, .04);
+  color: #7f9f9a;
+}
+
+.button-icon,
+.button-spinner {
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+}
+
+.send-icon::before {
+  position: absolute;
+  inset: 2px 1px 2px 3px;
+  border-style: solid;
+  border-width: 5px 0 5px 9px;
+  border-color: transparent transparent transparent currentColor;
+  content: '';
+}
+
+.save-icon::before {
+  position: absolute;
+  inset: 1px 2px 2px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  content: '';
+}
+
+.save-icon::after {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  content: '';
+}
+
+.stop-icon::before {
+  position: absolute;
+  inset: 3px;
+  border-radius: 3px;
+  background: currentColor;
+  content: '';
+}
+
+.button-spinner {
+  border: 2px solid rgba(255, 255, 255, .45);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: button-spin .8s linear infinite;
+}
+
+@keyframes button-spin {
+  to { transform: rotate(360deg); }
 }
 
 .ghost-button.active {
