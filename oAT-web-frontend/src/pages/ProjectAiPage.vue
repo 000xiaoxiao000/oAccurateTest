@@ -150,40 +150,121 @@
 
           <section class="panel">
             <div class="card-title">
+              <h2>提问锚点</h2>
+              <span class="muted">{{ visibleQuestionAnchors.length }}/{{ questionAnchors.length }} 个</span>
+            </div>
+            <div class="anchor-tools">
+              <div class="anchor-filter" role="group" aria-label="锚点筛选">
+                <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'all' }" type="button" @click="anchorFilterMode = 'all'">全部</button>
+                <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'pending' }" type="button" @click="anchorFilterMode = 'pending'">仅看未回复</button>
+              </div>
+              <div class="anchor-search-row">
+                <input v-model.trim="anchorSearch" class="text-input small-input" type="text" placeholder="搜索问题关键词" />
+                <button v-if="anchorSearch" class="anchor-clear" type="button" title="清空搜索" @click="anchorSearch = ''">×</button>
+              </div>
+              <p class="anchor-tip">点击可快速定位到对应问答</p>
+            </div>
+            <div class="anchor-list">
+              <button
+                v-for="anchor in visibleQuestionAnchors"
+                :key="anchor.id"
+                class="anchor-item"
+                :class="{ active: activeAnchorId === anchor.id, pending: !anchor.answered, answered: anchor.answered, expanded: expandedAnchorIds.has(anchor.id) }"
+                type="button"
+                @mouseenter="previewAnchorId = anchor.id"
+                @mouseleave="previewAnchorId = ''"
+                @click="scrollToAnchor(anchor.id)"
+              >
+                <span class="anchor-top">
+                  <strong>{{ anchor.label }}</strong>
+                  <span class="anchor-status" :class="anchor.answered ? 'answered' : 'pending'">
+                    <i></i>{{ anchor.answered ? '已回复' : '待回复' }}
+                  </span>
+                </span>
+                <span class="anchor-question">{{ anchor.question }}</span>
+                <span class="anchor-meta">{{ anchor.responseTimeText || (anchor.answered ? '已生成回答' : '等待回复中') }}</span>
+                <span class="anchor-actions" @click.stop>
+                  <button class="anchor-link-button" type="button" @click="toggleAnchorText(anchor.id)">{{ expandedAnchorIds.has(anchor.id) ? '收起' : '展开' }}</button>
+                  <button class="anchor-link-button" type="button" @click="copyAnchorLink(anchor)">复制链接</button>
+                </span>
+              </button>
+              <div v-if="!visibleQuestionAnchors.length" class="empty-card compact">暂无匹配的提问锚点</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="card-title">
               <h2>会话时间线</h2>
             </div>
             <div class="timeline-list">
               <button
-                v-for="(item, index) in activeMessages"
+                v-for="item in timelineItems"
                 :key="item.id"
                 class="timeline-item"
+                :class="{ active: activeAnchorId === item.anchorId }"
                 type="button"
-                @click="scrollToMessage(item.id)"
+                @click="scrollToAnchor(item.anchorId)"
               >
-                <span>{{ index + 1 }}</span>
-                <strong>{{ item.role === 'user' ? '你' : 'AI' }}</strong>
-                <small>{{ item.text.slice(0, 42) || '-' }}</small>
+                <span>{{ item.label }}</span>
+                <strong>问答</strong>
+                <small>{{ item.question }}</small>
               </button>
-              <div v-if="!activeMessages.length" class="empty-card compact">暂无会话节点</div>
+              <div v-if="!timelineItems.length" class="empty-card compact">暂无会话节点</div>
             </div>
           </section>
         </aside>
 
         <div class="content-stack">
+          <div v-if="questionAnchors.length" class="floating-anchors" aria-label="右侧问答锚点导航">
+            <div class="floating-anchor-head">问答</div>
+            <div class="floating-anchor-track" :style="{ height: `${floatingTrackHeight}px` }">
+              <button
+                v-for="dot in floatingAnchorDots"
+                :key="dot.id"
+                class="floating-anchor-dot"
+                :class="{ active: activeAnchorId === dot.id, preview: previewAnchorId === dot.id, pending: !dot.answered, answered: dot.answered }"
+                type="button"
+                :style="{ top: `${dot.top}px` }"
+                :aria-label="`${dot.label} ${dot.question}`"
+                @mouseenter="previewAnchorId = dot.id"
+                @mouseleave="previewAnchorId = ''"
+                @click="scrollToAnchor(dot.id)"
+              >
+                <span class="floating-anchor-label">{{ dot.label }}</span>
+                <span class="floating-anchor-tooltip">
+                  <strong>{{ dot.label }} · {{ dot.answered ? '已回复' : '待回复' }}</strong>
+                  <em>{{ dot.question }}</em>
+                  <small>{{ dot.responseTimeText || (dot.answered ? '已生成回答' : '等待回复中') }}</small>
+                </span>
+              </button>
+            </div>
+          </div>
+
           <section class="panel">
             <div class="card-title">
               <h2>提问</h2>
             </div>
             <div v-if="activeMessages.length" class="message-history">
               <article
-                v-for="item in activeMessages"
-                :id="`ai-message-${item.id}`"
-                :key="item.id"
+                v-for="section in messageSections"
+                :id="section.startsQuestion ? section.anchorId : `ai-message-${section.id}`"
+                :key="section.id"
                 class="message-card"
-                :class="item.role"
+                :class="[
+                  section.message.role,
+                  {
+                    'anchor-section': section.startsQuestion,
+                    'qa-group-start': section.startsQuestion,
+                    'qa-group-end': section.endsAnswer,
+                    'is-active': activeAnchorId === section.anchorId,
+                    'is-preview': previewAnchorId === section.anchorId,
+                    'is-target': targetAnchorId === section.anchorId,
+                  },
+                ]"
+                :data-anchor-id="section.anchorId"
               >
-                <div class="message-role">{{ item.role === 'user' ? '你' : 'AI' }}</div>
-                <div class="message-text">{{ item.text }}</div>
+                <div class="message-role">{{ section.message.role === 'user' ? '你' : 'AI' }}</div>
+                <div class="message-text">{{ section.message.text }}</div>
               </article>
             </div>
             <form class="ask-form" @submit.prevent="submitAsk">
@@ -292,7 +373,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { submitAiFeedback } from '@/api/bootstrap'
@@ -311,8 +392,10 @@ const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const context = computed(() => projectStore.aiContextByProjectId[projectId.value])
 const reply = computed(() => projectStore.aiLastReplyByProjectId[projectId.value])
-type SessionMessage = { id: string; role: 'user' | 'assistant'; text: string }
+type SessionMessage = { id: string; role: 'user' | 'assistant'; text: string; responseTime?: number }
 type ChatSession = { id: string; title: string; messages: SessionMessage[]; updatedAt: number; pinned?: boolean }
+type QuestionAnchor = { id: string; label: string; question: string; answered: boolean; responseTime: number; responseTimeText: string; shareUrl: string; messageId: string }
+type MessageSection = { id: string; anchorId: string; message: SessionMessage; startsQuestion: boolean; endsAnswer: boolean }
 type SpeechRecognitionLike = {
   lang: string
   continuous: boolean
@@ -337,9 +420,16 @@ const sessions = ref<ChatSession[]>([])
 const activeSessionId = ref('')
 const sessionSearch = ref('')
 const sessionSort = ref<'recent' | 'oldest' | 'name'>('recent')
+const anchorFilterMode = ref<'all' | 'pending'>('all')
+const anchorSearch = ref('')
+const activeAnchorId = ref('')
+const previewAnchorId = ref('')
+const targetAnchorId = ref('')
+const expandedAnchorIds = ref(new Set<string>())
 const feedbackSubmitting = ref(false)
 const feedbackMessage = ref('')
 let askAbortController: AbortController | null = null
+let targetAnchorTimer: number | undefined
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || null)
 const activeMessages = computed(() => activeSession.value?.messages || [])
@@ -370,6 +460,81 @@ const visibleSessions = computed(() => {
     if (sessionSort.value === 'name') return a.title.localeCompare(b.title)
     return sessionSort.value === 'oldest' ? a.updatedAt - b.updatedAt : b.updatedAt - a.updatedAt
   })
+})
+const messageSections = computed<MessageSection[]>(() => {
+  const sections: MessageSection[] = []
+  let questionIndex = 0
+  let currentAnchorId = ''
+  activeMessages.value.forEach((message, index) => {
+    const startsQuestion = message.role === 'user'
+    if (startsQuestion) {
+      questionIndex += 1
+      currentAnchorId = questionAnchorId(questionIndex)
+    }
+    const anchorId = currentAnchorId || `ai-message-${message.id}`
+    const nextMessage = activeMessages.value[index + 1]
+    sections.push({
+      id: message.id,
+      anchorId,
+      message,
+      startsQuestion,
+      endsAnswer: message.role === 'assistant' && (!nextMessage || nextMessage.role === 'user'),
+    })
+  })
+  return sections
+})
+const questionAnchors = computed<QuestionAnchor[]>(() => {
+  const anchors: QuestionAnchor[] = []
+  let pendingAnchor: QuestionAnchor | null = null
+  activeMessages.value.forEach((message) => {
+    if (message.role === 'user') {
+      pendingAnchor = createQuestionAnchor(message, anchors.length)
+      anchors.push(pendingAnchor)
+      return
+    }
+    if (message.role === 'assistant' && pendingAnchor) {
+      pendingAnchor.answered = true
+      pendingAnchor.responseTime = message.responseTime || pendingAnchor.responseTime
+      pendingAnchor.responseTimeText = formatResponseTime(pendingAnchor.responseTime)
+      pendingAnchor = null
+    }
+  })
+  return anchors
+})
+const visibleQuestionAnchors = computed(() => {
+  const keyword = anchorSearch.value.toLowerCase()
+  return questionAnchors.value.filter((anchor) => {
+    if (anchorFilterMode.value === 'pending' && anchor.answered) return false
+    if (!keyword) return true
+    return `${anchor.label} ${anchor.question}`.toLowerCase().includes(keyword)
+  })
+})
+const timelineItems = computed(() => questionAnchors.value.map((anchor) => ({
+  id: `timeline-${anchor.id}`,
+  anchorId: anchor.id,
+  label: anchor.label,
+  question: anchor.question,
+})))
+const floatingTrackHeight = computed(() => {
+  if (typeof window === 'undefined') return 260
+  return Math.max(180, Math.min(window.innerHeight - 220, 420))
+})
+const floatingAnchorDots = computed(() => {
+  const anchors = questionAnchors.value
+  const maxTop = Math.max(0, floatingTrackHeight.value - 16)
+  let lastTop = -18
+  const dots = anchors.map((anchor, index) => {
+    let top = Math.round(maxTop * (anchors.length <= 1 ? 0 : index / (anchors.length - 1)))
+    if (top - lastTop < 18) top = Math.min(maxTop, lastTop + 18)
+    lastTop = top
+    return { ...anchor, top }
+  })
+  for (let index = dots.length - 2; index >= 0; index -= 1) {
+    if (dots[index + 1].top - dots[index].top < 18) {
+      dots[index].top = Math.max(0, dots[index + 1].top - 18)
+    }
+  }
+  return dots
 })
 
 async function load() {
@@ -418,6 +583,30 @@ function formatSessionTime(value: number) {
   return new Date(value).toLocaleString()
 }
 
+function questionAnchorId(index: number) {
+  return `ai-question-anchor-${index}`
+}
+
+function formatResponseTime(ms: number) {
+  if (!ms || ms <= 0) return ''
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s`
+}
+
+function createQuestionAnchor(message: SessionMessage, index: number): QuestionAnchor {
+  const anchorIndex = index + 1
+  return {
+    id: questionAnchorId(anchorIndex),
+    label: `Q${anchorIndex}`,
+    question: message.text || '未命名提问',
+    answered: false,
+    responseTime: message.responseTime || 0,
+    responseTimeText: formatResponseTime(message.responseTime || 0),
+    shareUrl: `${window.location.pathname}#${questionAnchorId(anchorIndex)}`,
+    messageId: message.id,
+  }
+}
+
 function mergeQuickLinks(links: AIQuickLink[]) {
   const seen = new Set<string>()
   return links.filter((link) => {
@@ -437,6 +626,8 @@ function hydrateSessions(rawState?: string) {
   try {
     const parsed = JSON.parse(rawState) as {
       sessions?: ChatSession[]
+      history?: Array<{ id?: string; role?: 'user' | 'assistant'; message?: string; text?: string; responseTime?: number }>
+      title?: string
       activeSessionId?: string
       sessionSort?: 'recent' | 'oldest' | 'name'
     }
@@ -446,6 +637,21 @@ function hydrateSessions(rawState?: string) {
         ? parsed.activeSessionId
         : parsed.sessions[0].id
       sessionSort.value = parsed.sessionSort || 'recent'
+      return
+    }
+    if (parsed.history?.length) {
+      const legacyMessages = parsed.history
+        .filter((item) => item.role === 'user' || item.role === 'assistant')
+        .map((item) => ({
+          id: item.id || uid(),
+          role: item.role as 'user' | 'assistant',
+          text: item.text || item.message || '',
+          responseTime: item.responseTime,
+        }))
+      const fresh = createSession(parsed.title || '历史会话')
+      fresh.messages = legacyMessages
+      sessions.value = [fresh]
+      activeSessionId.value = fresh.id
       return
     }
   } catch {
@@ -482,7 +688,11 @@ function ensureActiveSession() {
 
 function switchSession(sessionId: string) {
   activeSessionId.value = sessionId
+  activeAnchorId.value = ''
+  previewAnchorId.value = ''
+  targetAnchorId.value = ''
   syncSessionState()
+  nextTick(updateActiveAnchorFromScroll)
 }
 
 function newSession() {
@@ -537,8 +747,51 @@ function togglePinSession(sessionId: string) {
   syncSessionState()
 }
 
-function scrollToMessage(messageId: string) {
-  document.getElementById(`ai-message-${messageId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+function scrollToAnchor(anchorId: string) {
+  const target = document.getElementById(anchorId)
+  if (!target) return
+  activeAnchorId.value = anchorId
+  targetAnchorId.value = anchorId
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${anchorId}`)
+  if (targetAnchorTimer) window.clearTimeout(targetAnchorTimer)
+  targetAnchorTimer = window.setTimeout(() => {
+    if (targetAnchorId.value === anchorId) targetAnchorId.value = ''
+  }, 1600)
+}
+
+function toggleAnchorText(anchorId: string) {
+  const next = new Set(expandedAnchorIds.value)
+  if (next.has(anchorId)) next.delete(anchorId)
+  else next.add(anchorId)
+  expandedAnchorIds.value = next
+}
+
+async function copyAnchorLink(anchor: QuestionAnchor) {
+  const url = `${window.location.origin}${anchor.shareUrl}`
+  try {
+    await navigator.clipboard?.writeText(url)
+  } catch {
+    window.prompt('复制问答锚点链接', url)
+  }
+}
+
+function updateActiveAnchorFromScroll() {
+  const anchors = questionAnchors.value
+  if (!anchors.length) {
+    activeAnchorId.value = ''
+    return
+  }
+  const activationLine = Math.max(120, Math.round(window.innerHeight * 0.24))
+  let nextActive = anchors[0].id
+  for (const anchor of anchors) {
+    const element = document.getElementById(anchor.id)
+    if (!element) continue
+    const rect = element.getBoundingClientRect()
+    if (rect.top <= activationLine) nextActive = anchor.id
+    else break
+  }
+  activeAnchorId.value = nextActive
 }
 
 async function submitAsk() {
@@ -562,10 +815,15 @@ async function submitAsk() {
     }
     const assistantMessage: SessionMessage = { id: uid(), role: 'assistant', text: '正在连接 AI 流式响应...' }
     activeSession.value?.messages.push(assistantMessage)
+    const startedAt = performance.now()
     await askAiWithFallback(currentQuestion, assistantMessage)
+    assistantMessage.responseTime = Math.max(1, Math.round(performance.now() - startedAt))
     await executeAutoAction(reply.value?.actions)
     touchSession(activeSession.value)
     await syncSessionState()
+    await nextTick()
+    const latestAnchor = questionAnchors.value[questionAnchors.value.length - 1]
+    if (latestAnchor) scrollToAnchor(latestAnchor.id)
     question.value = ''
     imageData.value = ''
   } catch (err) {
@@ -865,6 +1123,20 @@ function toggleVoiceInput() {
 onMounted(async () => {
   await load()
   hydrateSessions(context.value?.sessionState)
+  await nextTick()
+  window.addEventListener('scroll', updateActiveAnchorFromScroll, { passive: true })
+  window.addEventListener('resize', updateActiveAnchorFromScroll, { passive: true })
+  if (window.location.hash.startsWith('#ai-question-anchor-')) {
+    scrollToAnchor(window.location.hash.slice(1))
+  } else {
+    updateActiveAnchorFromScroll()
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', updateActiveAnchorFromScroll)
+  window.removeEventListener('resize', updateActiveAnchorFromScroll)
+  if (targetAnchorTimer) window.clearTimeout(targetAnchorTimer)
 })
 </script>
 
@@ -1035,7 +1307,7 @@ onMounted(async () => {
 
 .page-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -1138,6 +1410,20 @@ onMounted(async () => {
   box-shadow: inset 3px 0 0 #0f766e;
 }
 
+.side-stack {
+  position: sticky;
+  top: 92px;
+  max-height: calc(100vh - 116px);
+  overflow: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.side-stack > .panel,
+.side-stack > .ask-panel {
+  position: static;
+}
+
 .session-tools {
   display: grid;
   grid-template-columns: 1fr;
@@ -1200,7 +1486,9 @@ onMounted(async () => {
 }
 
 .session-actions button,
-.timeline-item {
+.timeline-item,
+.anchor-filter-button,
+.anchor-link-button {
   border: 1px solid rgba(15, 118, 110, .16);
   border-radius: 999px;
   background: rgba(255, 255, 255, .72);
@@ -1216,9 +1504,183 @@ onMounted(async () => {
 }
 
 .session-actions button:hover,
-.timeline-item:hover {
+.timeline-item:hover,
+.anchor-filter-button:hover,
+.anchor-link-button:hover {
   border-color: rgba(15, 118, 110, .34);
   background: rgba(15, 118, 110, .08);
+}
+
+.anchor-tools {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.anchor-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.anchor-filter-button {
+  padding: 7px 10px;
+}
+
+.anchor-filter-button.active,
+.anchor-item.active,
+.timeline-item.active {
+  border-color: rgba(15, 118, 110, .34);
+  background: linear-gradient(180deg, #f0fdfa, #ecfeff);
+  box-shadow: inset 3px 0 0 #0f766e, 0 10px 24px rgba(15, 118, 110, .08);
+}
+
+.anchor-search-row {
+  position: relative;
+}
+
+.anchor-search-row .text-input {
+  padding-right: 36px;
+}
+
+.anchor-clear {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .08);
+  color: #64748b;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.anchor-tip {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.anchor-list {
+  display: grid;
+  gap: 10px;
+  max-height: 300px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.anchor-item {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 18px;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, .82);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.anchor-item:hover {
+  transform: translateY(-1px);
+}
+
+.anchor-item.pending {
+  border-color: rgba(245, 158, 11, .26);
+  background: rgba(245, 158, 11, .06);
+}
+
+.anchor-item.answered {
+  border-color: rgba(15, 118, 110, .16);
+}
+
+.anchor-top,
+.anchor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.anchor-top strong {
+  color: #0f766e;
+  font-size: 12px;
+}
+
+.anchor-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.anchor-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.anchor-status.answered {
+  background: rgba(15, 118, 110, .12);
+  color: #0f766e;
+}
+
+.anchor-status.answered i {
+  background: #0f766e;
+}
+
+.anchor-status.pending {
+  background: rgba(245, 158, 11, .16);
+  color: #92400e;
+}
+
+.anchor-status.pending i {
+  background: #f59e0b;
+}
+
+.anchor-question {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.anchor-item.expanded .anchor-question {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: initial;
+}
+
+.anchor-meta {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.anchor-actions {
+  justify-content: flex-start;
+  opacity: .76;
+}
+
+.anchor-item:hover .anchor-actions,
+.anchor-item.active .anchor-actions {
+  opacity: 1;
+}
+
+.anchor-link-button {
+  padding: 7px 9px;
+  border-style: dashed;
+  font-size: 11px;
 }
 
 .timeline-list {
@@ -1228,7 +1690,7 @@ onMounted(async () => {
 
 .timeline-item {
   display: grid;
-  grid-template-columns: 24px 38px minmax(0, 1fr);
+  grid-template-columns: 36px 38px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -1239,7 +1701,7 @@ onMounted(async () => {
 .timeline-item span {
   display: inline-grid;
   place-items: center;
-  width: 22px;
+  min-width: 30px;
   height: 22px;
   border-radius: 999px;
   background: rgba(15, 118, 110, .10);
@@ -1267,20 +1729,224 @@ onMounted(async () => {
   border-color: rgba(20, 184, 166, .16);
 }
 
-.ask-panel {
-  position: sticky;
-  top: 92px;
-}
-
 .message-history {
   max-height: min(44vh, 460px);
   overflow: auto;
   padding-right: 4px;
 }
 
+.floating-anchors {
+  position: sticky;
+  z-index: 2;
+  top: 96px;
+  float: right;
+  width: 54px;
+  margin-right: -64px;
+  margin-left: 10px;
+  padding: 10px 8px;
+  border: 1px solid rgba(15, 118, 110, .12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 16px 38px rgba(15, 23, 42, .10);
+  backdrop-filter: blur(14px);
+  overflow: visible;
+}
+
+.floating-anchor-head {
+  margin-bottom: 8px;
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.floating-anchor-track {
+  position: relative;
+  width: 38px;
+}
+
+.floating-anchor-track::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 18px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(15, 118, 110, .14), rgba(20, 184, 166, .28));
+  content: '';
+}
+
+.floating-anchor-dot {
+  position: absolute;
+  left: 2px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, .10);
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease, color .18s ease;
+}
+
+.floating-anchor-dot::before {
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #0f766e;
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, .12);
+  content: '';
+  transform: translateY(-50%);
+  transition: box-shadow .18s ease, background .18s ease;
+}
+
+.floating-anchor-label {
+  position: relative;
+  z-index: 1;
+}
+
+.floating-anchor-dot.pending::before {
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, .14);
+}
+
+.floating-anchor-dot.pending {
+  color: #92400e;
+}
+
+.floating-anchor-dot:hover::before,
+.floating-anchor-dot.active::before,
+.floating-anchor-dot.preview::before {
+  box-shadow: 0 0 0 7px rgba(15, 118, 110, .16);
+}
+
+.floating-anchor-dot:hover,
+.floating-anchor-dot.active,
+.floating-anchor-dot.preview {
+  background: #0f766e;
+  box-shadow: 0 10px 20px rgba(15, 118, 110, .22);
+  color: #fff;
+  transform: translateX(-4px);
+}
+
+.floating-anchor-dot.pending:hover,
+.floating-anchor-dot.pending.active,
+.floating-anchor-dot.pending.preview {
+  background: #f59e0b;
+  box-shadow: 0 10px 20px rgba(245, 158, 11, .22);
+  color: #fff;
+}
+
+.floating-anchor-dot.pending:hover::before,
+.floating-anchor-dot.pending.active::before,
+.floating-anchor-dot.pending.preview::before {
+  box-shadow: 0 0 0 7px rgba(245, 158, 11, .18);
+}
+
+.floating-anchor-tooltip {
+  position: absolute;
+  right: 44px;
+  top: 50%;
+  display: grid;
+  gap: 4px;
+  width: 210px;
+  border: 1px solid rgba(15, 118, 110, .16);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, .14);
+  opacity: 0;
+  pointer-events: none;
+  text-align: left;
+  transform: translate(8px, -50%) scale(.98);
+  transition: opacity .18s ease, transform .18s ease;
+}
+
+.floating-anchor-dot:hover .floating-anchor-tooltip,
+.floating-anchor-dot.active .floating-anchor-tooltip,
+.floating-anchor-dot.preview .floating-anchor-tooltip {
+  opacity: 1;
+  transform: translate(0, -50%) scale(1);
+}
+
+.floating-anchor-tooltip strong {
+  color: #0f766e;
+  font-size: 11px;
+}
+
+.floating-anchor-tooltip em {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #334155;
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.floating-anchor-tooltip small {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
 .message-card {
   position: relative;
   padding-left: 44px;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.message-card.anchor-section {
+  scroll-margin-top: 96px;
+}
+
+.message-card.anchor-section::after {
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: -8px;
+  width: 3px;
+  border-radius: 999px;
+  background: transparent;
+  content: '';
+  opacity: 0;
+  transition: opacity .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.message-card.is-active::after,
+.message-card.is-target::after {
+  opacity: 1;
+  background: linear-gradient(180deg, rgba(15, 118, 110, .95), rgba(20, 184, 166, .75));
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, .12);
+}
+
+.message-card.is-preview::after {
+  opacity: 1;
+  background: linear-gradient(180deg, rgba(245, 158, 11, .95), rgba(245, 158, 11, .55));
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, .12);
+}
+
+.message-card.is-target,
+.message-card.is-preview,
+.message-card.is-active {
+  border-color: rgba(15, 118, 110, .26);
+  box-shadow: 0 16px 30px rgba(15, 118, 110, .10);
+}
+
+.message-card.qa-group-start {
+  margin-top: 4px;
+}
+
+.message-card.qa-group-end {
+  margin-bottom: 10px;
 }
 
 .message-card::before {
@@ -1511,12 +2177,8 @@ onMounted(async () => {
   filter: drop-shadow(0 22px 36px rgba(0, 0, 0, .22));
 }
 
-.side-stack {
-  position: sticky;
-  top: 92px;
-}
-
 .content-stack {
+  position: relative;
   min-width: 0;
 }
 
@@ -1556,6 +2218,10 @@ onMounted(async () => {
   .side-stack,
   .ask-panel {
     position: static;
+  }
+
+  .floating-anchors {
+    display: none;
   }
 }
 
