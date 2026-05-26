@@ -52,28 +52,29 @@
         </div>
       </div>
 
-      <section
-        class="graph-panel"
-        @click="closeContextMenu"
-        @wheel.prevent="handleGraphWheel"
-        @pointerdown="startBoardPan"
-        @pointermove="moveBoardPan"
-        @pointerup="endBoardPan"
-        @pointerleave="endBoardPan"
-        @contextmenu.prevent="openCanvasContextMenu"
-      >
-        <div class="graph-toolbar">
-          <div>图形画布</div>
-          <div class="graph-tools">
-            <button type="button" @click.stop="openSearchPanel">查找</button>
-            <button type="button" @click.stop="fitGraph">适配视图</button>
-            <button type="button" @click.stop="zoomGraph(0.15)">放大</button>
-            <button type="button" @click.stop="zoomGraph(-0.15)">缩小</button>
-            <button type="button" @click.stop="resetGraphLayout">重排</button>
-            <button type="button" @click.stop="showSelectedTip" :disabled="!selectedNode">节点提示</button>
+      <div :class="['board-workspace', hideLists && 'graph-only']">
+        <section
+          class="graph-panel"
+          @click="closeContextMenu"
+          @wheel.prevent="handleGraphWheel"
+          @pointerdown="startBoardPan"
+          @pointermove="moveBoardPan"
+          @pointerup="endBoardPan"
+          @pointerleave="endBoardPan"
+          @contextmenu.prevent="openCanvasContextMenu"
+        >
+          <div class="graph-toolbar">
+            <div>图形画布</div>
+            <div class="graph-tools">
+              <button type="button" @click.stop="openSearchPanel">查找</button>
+              <button type="button" @click.stop="fitGraph">适配视图</button>
+              <button type="button" @click.stop="zoomGraph(0.15)">放大</button>
+              <button type="button" @click.stop="zoomGraph(-0.15)">缩小</button>
+              <button type="button" @click.stop="resetGraphLayout">重排</button>
+              <button type="button" @click.stop="showSelectedTip" :disabled="!selectedNode">节点提示</button>
+            </div>
           </div>
-        </div>
-        <svg ref="relationGraphRef" class="relation-graph" :viewBox="graphViewBox" role="img" aria-label="关系图画布">
+          <svg ref="relationGraphRef" class="relation-graph" :viewBox="graphViewBox" role="img" aria-label="关系图画布">
           <defs>
             <marker id="graph-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
               <path d="M0,0 L0,6 L9,3 z" fill="#64748b" />
@@ -102,8 +103,8 @@
               </g>
             </g>
           </g>
-        </svg>
-        <div v-if="contextMenu.open && visibleContextActions.length" class="graph-context-menu" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
+          </svg>
+          <div v-if="contextMenu.open && visibleContextActions.length" class="graph-context-menu" :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }" @click.stop>
           <button
             v-for="action in visibleContextActions"
             :key="`${action.id}-${action.target || 'node'}`"
@@ -115,8 +116,8 @@
             <span>{{ action.label }}</span>
             <small v-if="action.shortcut">{{ action.shortcut }}</small>
           </button>
-        </div>
-        <div v-if="tip.open && selectedNode" class="graph-tip" @click.stop="tip.open = false">
+          </div>
+          <div v-if="tip.open && selectedNode" class="graph-tip" @click.stop="tip.open = false">
           <strong>{{ selectedNode.label || selectedNode.id }}</strong>
           <span class="tip-line">ID：{{ selectedNode.id }}</span>
           <span class="tip-line">类型：{{ selectedNode.type || 'node' }}</span>
@@ -125,90 +126,93 @@
             <li v-for="item in selectedNode.meta" :key="item">{{ item }}</li>
           </ul>
           <span class="tip-line">关联关系：{{ selectedEdges.length }} 条</span>
-        </div>
-      </section>
-
-      <div v-if="!hideLists" id="relation-board-lists" class="layout-grid">
-        <section class="panel">
-          <div class="panel-head">
-            <h2>节点列表</h2>
-            <span>{{ filteredNodes.length }}</span>
-          </div>
-          <div v-if="!filteredNodes.length" class="empty-card">暂无节点数据</div>
-          <div v-else class="node-grid">
-            <button
-              v-for="node in filteredNodes"
-              :key="node.id"
-              type="button"
-              class="node-card"
-              :class="{ active: selectedNode?.id === node.id }"
-              @click="selectGraphNode(node.id)"
-            >
-              <div class="node-top">
-                <strong>{{ node.label || node.id }}</strong>
-                <span class="type-pill">{{ node.type || 'node' }}</span>
-              </div>
-              <p v-if="node.description" class="node-desc">{{ node.description }}</p>
-              <ul v-if="node.meta?.length" class="meta-list">
-                <li v-for="item in node.meta" :key="item">{{ item }}</li>
-              </ul>
-            </button>
           </div>
         </section>
 
-        <section class="panel">
-          <div class="panel-head">
-            <h2>节点详情</h2>
-            <span>{{ selectedNode?.type || '-' }}</span>
-          </div>
-          <div v-if="selectedNode" class="detail-card">
-            <h3>{{ selectedNode.label || selectedNode.id }}</h3>
-            <p class="detail-id">{{ selectedNode.id }}</p>
-            <p v-if="selectedNode.description" class="node-desc">{{ selectedNode.description }}</p>
-            <ul v-if="selectedNode.meta?.length" class="meta-list">
-              <li v-for="item in selectedNode.meta" :key="item">{{ item }}</li>
-            </ul>
-            <div class="connection-group">
-              <strong>关联关系</strong>
-              <div v-if="!selectedEdges.length" class="empty-inline">该节点暂无关系</div>
-              <div v-else class="edge-list">
-                <article v-for="edge in selectedEdges" :key="edge.id" :class="['edge-card', edgeTone(edge)]">
-                  <span>{{ edge.sourceLabel || edge.source }}</span>
-                  <strong>{{ edge.label || actionText(edge.action) || '关联' }}</strong>
-                  <span>{{ edge.targetLabel || edge.target }}</span>
-                </article>
+        <aside v-if="!hideLists" class="board-side">
+          <div class="layout-grid compact-lists">
+            <section class="panel node-list-panel">
+              <div class="panel-head">
+                <h2>节点列表</h2>
+                <span>{{ filteredNodes.length }}</span>
               </div>
-            </div>
+              <div v-if="!filteredNodes.length" class="empty-card">暂无节点数据</div>
+              <div v-else class="node-grid">
+                <button
+                  v-for="node in filteredNodes"
+                  :key="node.id"
+                  type="button"
+                  class="node-card"
+                  :class="{ active: selectedNode?.id === node.id }"
+                  @click="selectGraphNode(node.id)"
+                >
+                  <div class="node-top">
+                    <strong>{{ node.label || node.id }}</strong>
+                    <span class="type-pill">{{ node.type || 'node' }}</span>
+                  </div>
+                  <p v-if="node.description" class="node-desc">{{ node.description }}</p>
+                  <ul v-if="node.meta?.length" class="meta-list">
+                    <li v-for="item in node.meta" :key="item">{{ item }}</li>
+                  </ul>
+                </button>
+              </div>
+            </section>
+
+            <section class="panel node-detail-panel">
+              <div class="panel-head">
+                <h2>节点详情</h2>
+                <span>{{ selectedNode?.type || '-' }}</span>
+              </div>
+              <div v-if="selectedNode" class="detail-card">
+                <h3>{{ selectedNode.label || selectedNode.id }}</h3>
+                <p class="detail-id">{{ selectedNode.id }}</p>
+                <p v-if="selectedNode.description" class="node-desc">{{ selectedNode.description }}</p>
+                <ul v-if="selectedNode.meta?.length" class="meta-list">
+                  <li v-for="item in selectedNode.meta" :key="item">{{ item }}</li>
+                </ul>
+                <div class="connection-group">
+                  <strong>关联关系</strong>
+                  <div v-if="!selectedEdges.length" class="empty-inline">该节点暂无关系</div>
+                  <div v-else class="edge-list">
+                    <article v-for="edge in selectedEdges" :key="edge.id" :class="['edge-card', edgeTone(edge)]">
+                      <span>{{ edge.sourceLabel || edge.source }}</span>
+                      <strong>{{ edge.label || actionText(edge.action) || '关联' }}</strong>
+                      <span>{{ edge.targetLabel || edge.target }}</span>
+                    </article>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="empty-card">选择一个节点后可查看详细关系</div>
+            </section>
+
+            <section class="panel edge-panel">
+              <div class="panel-head">
+                <h2>关系清单</h2>
+                <span>{{ filteredEdges.length }}</span>
+              </div>
+              <div v-if="!filteredEdges.length" class="empty-card">暂无关系数据</div>
+              <div v-else class="table-shell">
+                <table class="edge-table">
+                  <thead>
+                    <tr>
+                      <th>来源</th>
+                      <th>关系</th>
+                      <th>目标</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="edge in filteredEdges" :key="edge.id">
+                      <td>{{ edge.sourceLabel || edge.source }}</td>
+                      <td><span :class="['action-pill', edgeTone(edge)]">{{ edge.label || actionText(edge.action) || '-' }}</span></td>
+                      <td>{{ edge.targetLabel || edge.target }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
-          <div v-else class="empty-card">选择一个节点后可查看详细关系</div>
-        </section>
+        </aside>
       </div>
-
-      <section v-if="!hideLists" class="panel edge-panel">
-        <div class="panel-head">
-          <h2>关系清单</h2>
-          <span>{{ filteredEdges.length }}</span>
-        </div>
-        <div v-if="!filteredEdges.length" class="empty-card">暂无关系数据</div>
-        <div v-else class="table-shell">
-          <table class="edge-table">
-            <thead>
-              <tr>
-                <th>来源</th>
-                <th>关系</th>
-                <th>目标</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="edge in filteredEdges" :key="edge.id">
-                <td>{{ edge.sourceLabel || edge.source }}</td>
-                <td><span :class="['action-pill', edgeTone(edge)]">{{ edge.label || actionText(edge.action) || '-' }}</span></td>
-                <td>{{ edge.targetLabel || edge.target }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
     </template>
   </section>
 </template>
@@ -808,7 +812,7 @@ watchEffect(() => {
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .eyebrow {
@@ -838,8 +842,8 @@ watchEffect(() => {
 .panel,
 .empty-card,
 .node-card {
-  padding: 18px;
-  border-radius: 20px;
+  padding: 12px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
@@ -851,18 +855,18 @@ watchEffect(() => {
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 
 .summary-card strong {
   display: block;
-  font-size: 24px;
-  margin-top: 6px;
+  font-size: 20px;
+  margin-top: 3px;
 }
 
 .graph-search-block {
   position: relative;
-  margin: 18px 0;
+  margin: 10px 0;
 }
 
 .compact-search-block {
@@ -875,7 +879,7 @@ watchEffect(() => {
 
 .search-box {
   display: grid;
-  gap: 8px;
+  gap: 5px;
   margin: 0;
 }
 
@@ -932,20 +936,56 @@ watchEffect(() => {
 
 .text-input {
   width: 100%;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  padding: 10px 12px;
+  padding: 8px 10px;
+}
+
+.board-workspace {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+}
+
+.board-workspace.graph-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.board-side,
+.compact-lists,
+.node-list-panel,
+.node-detail-panel {
+  min-height: 0;
+}
+
+.board-side {
+  overflow: visible;
+}
+
+.compact-lists {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-lists .edge-panel {
+  grid-column: 1 / -1;
 }
 
 .layout-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 12px;
 }
 
 .node-grid {
   display: grid;
-  gap: 12px;
+  gap: 8px;
+}
+
+.node-list-panel,
+.node-detail-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
 }
 
 .node-card {
@@ -953,13 +993,28 @@ watchEffect(() => {
   cursor: pointer;
 }
 
+.node-card .node-top {
+  align-items: flex-start;
+}
+
+.node-card strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .node-card.active {
   border-color: rgba(15, 118, 110, 0.45);
-  box-shadow: 0 16px 32px rgba(15, 118, 110, 0.1);
+  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.10);
 }
 
 .type-pill {
-  padding: 4px 10px;
+  max-width: 170px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 8px;
   border-radius: 999px;
   background: rgba(15, 118, 110, 0.08);
   color: #0f766e;
@@ -968,33 +1023,49 @@ watchEffect(() => {
 }
 
 .meta-list {
-  margin: 10px 0 0;
-  padding-left: 18px;
+  margin: 6px 0 0;
+  padding-left: 16px;
+  line-height: 1.35;
 }
 
 .detail-card {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+}
+
+.detail-card h3,
+.detail-card p {
+  margin: 0;
 }
 
 .connection-group {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  min-height: 0;
 }
 
 .edge-list {
   display: grid;
-  gap: 10px;
+  gap: 7px;
+  min-height: 0;
 }
 
 .edge-card {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
-  padding: 12px;
-  border-radius: 14px;
+  padding: 8px 10px;
+  border-radius: 12px;
   background: #f8fbfb;
+  font-size: 13px;
+}
+
+.edge-card span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .edge-card.insert,
@@ -1017,11 +1088,15 @@ watchEffect(() => {
 }
 
 .edge-panel {
-  margin-top: 18px;
+  max-height: none;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
 }
 
 .table-shell {
   overflow: auto;
+  min-height: 0;
 }
 
 .edge-table {
@@ -1031,7 +1106,7 @@ watchEffect(() => {
 
 .edge-table th,
 .edge-table td {
-  padding: 12px 10px;
+  padding: 8px 10px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
 }
@@ -1044,6 +1119,9 @@ watchEffect(() => {
 
 .graph-panel {
   position: relative;
+  display: flex;
+  min-height: min(760px, calc(100vh - 190px));
+  flex-direction: column;
   padding: 16px;
   border-radius: 24px;
   background:
@@ -1052,7 +1130,7 @@ watchEffect(() => {
     rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
-  margin: 16px 0;
+  margin: 0;
   overflow: hidden;
   cursor: grab;
   touch-action: none;
@@ -1106,7 +1184,8 @@ watchEffect(() => {
 
 .relation-graph {
   width: 100%;
-  min-height: 660px;
+  min-height: 0;
+  flex: 1 1 auto;
   border-radius: 20px;
   background:
     linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
@@ -1275,18 +1354,34 @@ watchEffect(() => {
 
 .compact-board .graph-panel {
   margin-top: 0;
-  padding: 14px;
+  padding: 10px;
+  min-height: 0;
 }
 
 .compact-board .relation-graph {
-  min-height: 560px;
+  min-height: 420px;
 }
 
 .compact-board .layout-grid {
   grid-template-columns: minmax(260px, .72fr) minmax(320px, 1fr);
 }
 
+.compact-board .board-workspace {
+  height: auto;
+}
+
 @media (max-width: 760px) {
+  .board-workspace {
+    height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .board-side,
+  .node-grid,
+  .detail-card {
+    max-height: none;
+  }
+
   .relation-graph {
     min-height: 420px;
   }

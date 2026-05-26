@@ -14,8 +14,8 @@
     <div v-if="loading" class="status-card">{{ loadingText }}</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="methods">
-      <div class="detail-grid">
-        <section class="panel">
+      <div class="detail-grid code-workspace">
+        <section class="panel method-panel">
           <div class="card-title">
             <h2>方法覆盖列表</h2>
             <span class="helper-text">{{ filteredMethods.length }} / {{ methods.length }} 个方法</span>
@@ -72,7 +72,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel source-panel">
           <div class="card-title">
             <h2>源码视图</h2>
           </div>
@@ -218,13 +218,13 @@ function coverageText(method: MethodCoverageSummary) {
 .coverage-code-view {
   min-width: 0;
   overflow: hidden;
-  padding-bottom: 28px;
+  padding-bottom: 8px;
 }
 
 .page-header {
   min-width: 0;
-  margin-bottom: 18px;
-  padding: 6px 0 10px;
+  margin-bottom: 10px;
+  padding: 2px 0 8px;
   border-bottom: 1px solid rgba(15, 23, 42, .06);
 }
 
@@ -233,9 +233,9 @@ function coverageText(method: MethodCoverageSummary) {
 }
 
 .page-header h1 {
-  margin: 3px 0 4px;
+  margin: 1px 0 3px;
   max-width: 100%;
-  font-size: 28px;
+  font-size: 22px;
   line-height: 1.25;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -277,30 +277,30 @@ function coverageText(method: MethodCoverageSummary) {
 .status-card,
 .panel,
 .empty-card {
-  padding: 18px;
-  border-radius: 20px;
+  padding: 12px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
   box-shadow: 0 18px 45px rgba(15, 23, 42, .05);
 }
 
 .method-filters {
-  margin: 12px 0;
+  margin: 8px 0;
   justify-content: flex-start;
   flex-wrap: wrap;
 }
 
 .text-input {
-  min-width: 180px;
+  min-width: 160px;
   border: 1px solid rgba(15, 23, 42, .12);
   border-radius: 12px;
-  padding: 9px 11px;
+  padding: 8px 10px;
 }
 
 .ghost-button {
   border: 1px solid rgba(15, 118, 110, .18);
   border-radius: 999px;
-  padding: 9px 12px;
+  padding: 8px 11px;
   background: rgba(15, 118, 110, .06);
   color: #0f766e;
   cursor: pointer;
@@ -313,38 +313,54 @@ function coverageText(method: MethodCoverageSummary) {
 .detail-grid {
   display: grid;
   min-width: 0;
-  gap: 18px;
+  gap: 12px;
+}
+
+.code-workspace {
+  grid-template-columns: minmax(360px, .72fr) minmax(620px, 1.28fr);
+  height: var(--page-data-height, calc(100vh - 146px));
+  min-height: 0;
 }
 
 .panel {
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
+}
+
+.method-panel,
+.source-panel {
+  display: flex;
+  flex-direction: column;
 }
 
 .table-shell,
 .source-container {
   max-width: 100%;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
 }
 
 .table-shell {
-  padding: 0 58px 8px 0;
+  flex: 1 1 auto;
+  padding: 0;
 }
 
 .source-container {
   --line-number-width: 3em;
-  min-height: 360px;
-  max-height: min(72vh, 760px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   scrollbar-gutter: stable both-edges;
   border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fff;
 }
 
 .method-table {
   width: 100%;
-  min-width: 920px;
+  min-width: 780px;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -367,7 +383,7 @@ function coverageText(method: MethodCoverageSummary) {
 
 .method-table th,
 .method-table td {
-  padding: 12px 10px;
+  padding: 8px 9px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
   vertical-align: middle;
@@ -379,12 +395,12 @@ function coverageText(method: MethodCoverageSummary) {
   z-index: 1;
   background: rgba(255, 255, 255, .96);
   color: #0f172a;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .method-name {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -393,7 +409,7 @@ function coverageText(method: MethodCoverageSummary) {
   display: block;
   max-width: 100%;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.3;
 }
 
 .metric-cell {
@@ -435,9 +451,9 @@ function coverageText(method: MethodCoverageSummary) {
 :deep(.source-container pre) {
   margin: 0;
   min-width: 100%;
-  padding: 10px 0;
-  font-size: 13px;
-  line-height: 18px;
+  padding: 8px 0;
+  font-size: 12px;
+  line-height: 17px;
 }
 
 :deep(.source-container pre > div) {
@@ -544,12 +560,12 @@ function coverageText(method: MethodCoverageSummary) {
 
 .back-to-top {
   position: fixed;
-  right: 24px;
-  bottom: 116px;
+  right: 22px;
+  bottom: 92px;
   z-index: 70;
   border: 1px solid rgba(15, 118, 110, .18);
   border-radius: 999px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   background: rgba(255, 255, 255, .92);
   color: #0f766e;
   font-weight: 800;
@@ -558,6 +574,16 @@ function coverageText(method: MethodCoverageSummary) {
 }
 
 @media (max-width: 720px) {
+  .code-workspace {
+    height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .source-container,
+  .table-shell {
+    max-height: min(72vh, 640px);
+  }
+
   .page-header {
     align-items: flex-start;
     flex-direction: column;

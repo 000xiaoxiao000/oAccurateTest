@@ -490,15 +490,15 @@ async function handleLogout() {
 }
 
 .shell-main {
-  padding: 24px 0 112px;
+  padding: 14px 0 72px;
 }
 
 .shell-main-wide {
-  width: min(1500px, calc(100vw - 32px));
+  width: min(1560px, calc(100vw - 24px));
 }
 
 .shell-main-focus {
-  width: min(1380px, calc(100vw - 32px));
+  width: min(1440px, calc(100vw - 24px));
 }
 
 .back-top-button {
