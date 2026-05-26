@@ -6,7 +6,8 @@
         <input
           ref="searchInputRef"
           v-model.trim="searchText"
-          type="text"
+          type="search"
+          aria-label="搜索中心关键词"
           :maxlength="mode === 'table' ? 30 : 120"
           :placeholder="mode === 'table' ? '格式：数据库名 表名' : '搜索...'
           "

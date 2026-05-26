@@ -12,6 +12,7 @@
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="payload">
       <div class="toolbar">
+        <input v-model.trim="keyword" class="select search-input" type="search" placeholder="搜索成员名称、邮箱或角色" aria-label="搜索项目成员" />
         <select v-model="selectedUserId" class="select">
           <option value="">选择要添加的用户</option>
           <option v-for="user in payload.availableUsers" :key="user.id" :value="user.id">
@@ -24,6 +25,7 @@
       </div>
 
       <div class="table-card">
+        <div class="table-summary">显示 {{ filteredMembers.length }} / {{ payload.members.length }} 个成员</div>
         <table class="table">
           <thead>
             <tr>
@@ -34,7 +36,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="member in payload.members" :key="member.id">
+            <tr v-for="member in paginatedMembers" :key="member.id">
               <td>{{ member.memberName || member.memberId }}</td>
               <td>{{ member.memberEmail || '-' }}</td>
               <td>
@@ -66,15 +68,24 @@
             </tr>
           </tbody>
         </table>
+        <div v-if="!filteredMembers.length" class="empty-card">暂无成员或没有匹配结果</div>
       </div>
+      <AppPagination
+        v-if="filteredMembers.length > 0"
+        v-model:page="currentPage"
+        v-model:page-size="pageSize"
+        :total="filteredMembers.length"
+        item-name="成员"
+      />
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
+import AppPagination from '@/components/AppPagination.vue'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -84,6 +95,26 @@ const payload = computed(() => projectStore.membersByProjectId[projectId.value])
 const loading = ref(false)
 const error = ref('')
 const selectedUserId = ref('')
+const keyword = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const filteredMembers = computed(() => {
+  const members = payload.value?.members || []
+  const term = keyword.value.toLowerCase()
+  if (!term) return members
+  return members.filter((member) => [
+    member.memberName,
+    member.memberId,
+    member.memberEmail,
+    member.role,
+  ].some((value) => String(value || '').toLowerCase().includes(term)))
+})
+
+const paginatedMembers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredMembers.value.slice(start, start + pageSize.value)
+})
 
 async function load() {
   if (!projectId.value) {
@@ -141,6 +172,21 @@ async function changeRole(memberId: string, role: string) {
   }
 }
 
+watch(keyword, () => {
+  currentPage.value = 1
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
+
+watch(() => filteredMembers.value.length, (total) => {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize.value))
+  if (currentPage.value > totalPages) {
+    currentPage.value = totalPages
+  }
+})
+
 onMounted(load)
 </script>
 
@@ -158,7 +204,14 @@ onMounted(load)
 }
 
 .toolbar {
+  position: sticky;
+  top: 12px;
+  z-index: 4;
   margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .eyebrow {
@@ -170,7 +223,8 @@ onMounted(load)
 }
 
 .status-card,
-.table-card {
+.table-card,
+.empty-card {
   padding: 18px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.92);
@@ -190,7 +244,30 @@ onMounted(load)
 }
 
 .select {
-  min-width: 320px;
+  min-width: 280px;
+}
+
+.search-input {
+  flex: 1;
+  min-width: 260px;
+}
+
+.table-card {
+  max-height: min(620px, calc(100vh - 280px));
+  overflow: auto;
+}
+
+.table-summary {
+  margin-bottom: 10px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.empty-card {
+  margin-top: 12px;
+  text-align: center;
+  color: #64748b;
 }
 
 .action-button,
@@ -243,7 +320,8 @@ onMounted(load)
     align-items: stretch;
   }
 
-  .select {
+  .select,
+  .search-input {
     min-width: 0;
     width: 100%;
   }

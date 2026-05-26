@@ -31,7 +31,7 @@
           </div>
         </details>
         <label class="search-field">
-          <input v-model="keywordDraft" type="text" placeholder="搜索快照名称..." @keyup.enter="applyFilters" />
+          <input v-model="keywordDraft" type="search" placeholder="搜索快照名称..." aria-label="搜索我的快照" @keyup.enter="applyFilters" />
           <span>⌕</span>
         </label>
         <select v-model="sortDraft" class="sort-select" aria-label="排序">

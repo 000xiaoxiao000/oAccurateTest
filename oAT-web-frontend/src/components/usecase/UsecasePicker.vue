@@ -9,7 +9,7 @@
     </div>
 
     <div class="picker-tools">
-      <input v-model="keyword" class="text-input" type="text" placeholder="搜索用例标题、ID 或内容..." />
+      <input v-model="keyword" class="text-input" type="search" placeholder="搜索用例标题、ID 或内容..." aria-label="搜索用例" />
       <button class="ghost-button small" type="button" @click="selectAll">全选当前结果</button>
       <button class="ghost-button small" type="button" @click="clearSelection">清空</button>
       <span class="selected-badge">已选 {{ draftIds.length }} 个</span>

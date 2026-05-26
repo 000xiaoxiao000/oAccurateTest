@@ -15,8 +15,8 @@
 
     <form class="filter-card" @submit.prevent="applyFilters">
       <div class="filter-grid">
-        <label><span>类名搜索</span><input v-model.trim="filters.className" class="text-input" type="text" placeholder="支持模糊匹配" /></label>
-        <label><span>方法名搜索</span><input v-model.trim="filters.methodName" class="text-input" type="text" placeholder="类中包含该方法" /></label>
+        <label><span>类名搜索</span><input v-model.trim="filters.className" class="text-input" type="search" placeholder="支持模糊匹配" aria-label="搜索类名" /></label>
+        <label><span>方法名搜索</span><input v-model.trim="filters.methodName" class="text-input" type="search" placeholder="类中包含该方法" aria-label="搜索方法名" /></label>
         <label><span>最小行覆盖率</span><input v-model.number="filters.minRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
         <label><span>最大行覆盖率</span><input v-model.number="filters.maxRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
         <label><span>最小分支覆盖</span><input v-model.number="filters.minBranchRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
@@ -68,11 +68,15 @@
             </tbody>
           </table>
         </div>
-        <div v-if="payload.classPage && payload.classPage.totalPages > 1" class="pagination-bar">
-          <button class="ghost-button" type="button" :disabled="currentPage <= 0" @click="goPage(currentPage - 1)">上一页</button>
-          <span>第 {{ currentPage + 1 }} / {{ payload.classPage.totalPages }} 页，共 {{ payload.classPage.totalElements }} 条</span>
-          <button class="ghost-button" type="button" :disabled="currentPage + 1 >= payload.classPage.totalPages" @click="goPage(currentPage + 1)">下一页</button>
-        </div>
+        <AppPagination
+          v-if="payload.classPage && payload.classPage.totalElements > 0"
+          :page="currentPage + 1"
+          :page-size="pageSize"
+          :total="payload.classPage.totalElements"
+          item-name="类"
+          @update:page="goPage($event - 1)"
+          @update:page-size="changePageSize"
+        />
       </section>
 
       <section v-else class="panel">
@@ -124,6 +128,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import AppPagination from '@/components/AppPagination.vue'
 import { backendApiUrl } from '@/api/http'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
@@ -298,7 +303,17 @@ async function clearFilters() {
 }
 
 async function goPage(page: number) {
-  await router.replace({ query: buildFilterQuery(page) })
+  await router.replace({ query: buildFilterQuery(Math.max(0, page)) })
+}
+
+async function changePageSize(size: number) {
+  await router.replace({
+    query: {
+      ...buildFilterQuery(0),
+      page: undefined,
+      size: size !== 20 ? String(size) : undefined,
+    },
+  })
 }
 
 async function switchView(target: string) {
@@ -413,6 +428,9 @@ onMounted(() => {
 }
 
 .filter-card {
+  position: sticky;
+  top: 12px;
+  z-index: 4;
   padding: 18px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
@@ -437,14 +455,6 @@ onMounted(() => {
   padding: 9px 10px;
 }
 
-.pagination-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 14px;
-}
-
 .status-card,
 .panel,
 .tree-card {
@@ -464,6 +474,7 @@ onMounted(() => {
 }
 
 .table-shell {
+  max-height: min(620px, calc(100vh - 280px));
   overflow: auto;
 }
 
@@ -474,7 +485,7 @@ onMounted(() => {
 
 .report-table th,
 .report-table td {
-  padding: 12px 10px;
+  padding: 11px 10px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
 }

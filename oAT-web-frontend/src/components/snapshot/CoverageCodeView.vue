@@ -21,7 +21,7 @@
             <span class="helper-text">{{ filteredMethods.length }} / {{ methods.length }} 个方法</span>
           </div>
           <div class="method-filters">
-            <input v-model.trim="methodKeyword" class="text-input" type="text" placeholder="按方法名或签名筛选..." />
+            <input v-model.trim="methodKeyword" class="text-input" type="search" placeholder="按方法名或签名筛选..." aria-label="筛选方法覆盖列表" />
             <select v-model="statusFilter" class="text-input">
               <option value="">全部状态</option>
               <option value="full">全覆盖</option>
@@ -50,7 +50,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in filteredMethods" :key="`${item.method.methodName}-${item.index}`">
+                <tr v-for="item in paginatedMethods" :key="`${item.method.methodName}-${item.index}`">
                   <td class="method-name">
                     <button class="method-jump" type="button" @click="jumpToMethod(item.method.methodName)">{{ item.method.methodName }}</button>
                     <small>{{ item.method.methodDesc || '-' }}</small>
@@ -70,6 +70,14 @@
               </tbody>
             </table>
           </div>
+          <AppPagination
+            v-if="filteredMethods.length > 0"
+            v-model:page="methodPage"
+            v-model:page-size="methodPageSize"
+            :total="filteredMethods.length"
+            item-name="个方法"
+            :page-sizes="[10, 20, 50, 100]"
+          />
         </section>
 
         <section class="panel source-panel">
@@ -86,10 +94,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 
+import AppPagination from '@/components/AppPagination.vue'
 import type { MethodCoverageSummary } from '@/api/types'
 
 const props = defineProps<{
@@ -106,6 +115,8 @@ const props = defineProps<{
 
 const methodKeyword = ref('')
 const statusFilter = ref('')
+const methodPage = ref(1)
+const methodPageSize = ref(20)
 const sourceRef = ref<HTMLElement | null>(null)
 
 const filteredMethods = computed(() => {
@@ -117,6 +128,20 @@ const filteredMethods = computed(() => {
       return [method.methodName, method.methodDesc].join(' ').toLowerCase().includes(needle)
     })
     .filter(({ method }) => !statusFilter.value || coverageStatus(method) === statusFilter.value)
+})
+
+const paginatedMethods = computed(() => {
+  const start = (methodPage.value - 1) * methodPageSize.value
+  return filteredMethods.value.slice(start, start + methodPageSize.value)
+})
+
+watch([methodKeyword, statusFilter, methodPageSize], () => {
+  methodPage.value = 1
+})
+
+watch(filteredMethods, () => {
+  const totalPages = Math.max(1, Math.ceil(filteredMethods.value.length / methodPageSize.value))
+  if (methodPage.value > totalPages) methodPage.value = totalPages
 })
 
 function clearFilters() {

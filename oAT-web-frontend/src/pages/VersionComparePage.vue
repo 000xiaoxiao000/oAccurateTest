@@ -300,7 +300,7 @@
           <button class="text-danger" type="button" @click="closeCommitPicker">关闭</button>
         </div>
         <div class="input-action modal-tools">
-          <input v-model.trim="commitPicker.keyword" class="text-input" type="text" placeholder="搜索 Commit、作者、说明" />
+          <input v-model.trim="commitPicker.keyword" class="text-input" type="search" placeholder="搜索 Commit、作者、说明" aria-label="搜索 Commit" />
           <label class="check-inline"><input v-model="commitPicker.onlySelectable" type="checkbox" /> 只看可选</label>
         </div>
         <div class="commit-list">

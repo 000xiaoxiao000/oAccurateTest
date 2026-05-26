@@ -42,7 +42,7 @@
           </div>
           <div class="app-nav">
             <RouterLink
-              v-for="item in payload.apps"
+              v-for="item in paginatedApps"
               :key="item.id"
               class="app-link"
               :class="{ active: item.id === appId }"
@@ -51,6 +51,11 @@
               <strong>{{ item.name }}</strong>
               <span>{{ item.onlineCount > 0 ? `${item.onlineCount} 在线` : '无在线探针' }}</span>
             </RouterLink>
+          </div>
+          <div v-if="appTotalPages > 1" class="mini-pagination" aria-label="应用导航分页">
+            <button type="button" :disabled="appPage <= 1" @click="appPage -= 1">上一页</button>
+            <span>{{ appPage }} / {{ appTotalPages }}</span>
+            <button type="button" :disabled="appPage >= appTotalPages" @click="appPage += 1">下一页</button>
           </div>
         </aside>
 
@@ -74,7 +79,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="item in statuses" :key="item.probeKey || item.sessionId || item.addressIp">
+                  <tr v-for="item in paginatedStatuses" :key="item.probeKey || item.sessionId || item.addressIp">
                     <td><span class="status-pill" :class="colorClass(item.statusColor)">{{ item.statusLabel || '-' }}</span></td>
                     <td>
                       <div>{{ item.addressIp || '-' }}</div>
@@ -91,6 +96,14 @@
                 </tbody>
               </table>
             </div>
+            <AppPagination
+              v-if="statuses.length > 0"
+              v-model:page="statusPage"
+              v-model:page-size="statusPageSize"
+              :total="statuses.length"
+              item-name="实例"
+              :page-sizes="[5, 10, 20, 50]"
+            />
           </section>
 
           <section class="panel">
@@ -100,7 +113,7 @@
             </div>
             <div v-if="!events.length" class="empty-card">暂无告警记录</div>
             <div v-else class="event-list">
-              <article v-for="event in events" :key="event.id" class="event-card">
+              <article v-for="event in paginatedEvents" :key="event.id" class="event-card">
                 <div class="event-top">
                   <span class="status-pill" :class="colorClass(event.eventTypeColor)">
                     {{ event.eventTypeLabel || event.eventType || '-' }}
@@ -118,6 +131,14 @@
                 </div>
               </article>
             </div>
+            <AppPagination
+              v-if="events.length > 0"
+              v-model:page="eventPage"
+              v-model:page-size="eventPageSize"
+              :total="events.length"
+              item-name="告警"
+              :page-sizes="[5, 10, 20, 50]"
+            />
           </section>
         </div>
       </div>
@@ -126,9 +147,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
+import AppPagination from '@/components/AppPagination.vue'
 import { useProjectStore } from '@/stores/project'
 
 const route = useRoute()
@@ -141,6 +163,27 @@ const statuses = computed(() => payload.value?.probeAlertDashboard.statuses || [
 const events = computed(() => payload.value?.probeAlertDashboard.recentEvents || [])
 const loading = ref(false)
 const error = ref('')
+const appPage = ref(1)
+const appPageSize = 8
+const statusPage = ref(1)
+const statusPageSize = ref(5)
+const eventPage = ref(1)
+const eventPageSize = ref(5)
+
+const appTotalPages = computed(() => Math.max(1, Math.ceil((payload.value?.apps.length || 0) / appPageSize)))
+const paginatedApps = computed(() => {
+  const apps = payload.value?.apps || []
+  const start = (appPage.value - 1) * appPageSize
+  return apps.slice(start, start + appPageSize)
+})
+const paginatedStatuses = computed(() => {
+  const start = (statusPage.value - 1) * statusPageSize.value
+  return statuses.value.slice(start, start + statusPageSize.value)
+})
+const paginatedEvents = computed(() => {
+  const start = (eventPage.value - 1) * eventPageSize.value
+  return events.value.slice(start, start + eventPageSize.value)
+})
 
 function colorClass(color?: string) {
   switch (color) {
@@ -172,6 +215,26 @@ async function load() {
     loading.value = false
   }
 }
+
+watch(appTotalPages, (totalPages) => {
+  if (appPage.value > totalPages) {
+    appPage.value = totalPages
+  }
+})
+
+watch([() => statuses.value.length, statusPageSize], ([total]) => {
+  const totalPages = Math.max(1, Math.ceil(total / statusPageSize.value))
+  if (statusPage.value > totalPages) {
+    statusPage.value = totalPages
+  }
+})
+
+watch([() => events.value.length, eventPageSize], ([total]) => {
+  const totalPages = Math.max(1, Math.ceil(total / eventPageSize.value))
+  if (eventPage.value > totalPages) {
+    eventPage.value = totalPages
+  }
+})
 
 onMounted(load)
 </script>
@@ -274,7 +337,35 @@ onMounted(load)
 .app-nav {
   display: grid;
   gap: 10px;
+  max-height: min(440px, calc(100vh - 300px));
   margin-top: 14px;
+  overflow: auto;
+}
+
+.mini-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mini-pagination button {
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.mini-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .app-link {
@@ -300,7 +391,8 @@ onMounted(load)
 }
 
 .table-shell {
-  overflow-x: auto;
+  max-height: min(360px, calc(100vh - 360px));
+  overflow: auto;
   margin-top: 14px;
 }
 
@@ -343,7 +435,10 @@ onMounted(load)
 .event-list {
   display: grid;
   gap: 12px;
+  max-height: min(460px, calc(100vh - 320px));
   margin-top: 14px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .event-card {

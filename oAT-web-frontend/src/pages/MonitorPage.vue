@@ -42,7 +42,7 @@
           <p>点击探针可快速过滤 IP。</p>
         </div>
         <div class="header-actions">
-          <input v-model.trim="probeKeyword" class="text-input compact" type="text" placeholder="搜索应用、IP、PID、Agent" />
+          <input v-model.trim="probeKeyword" class="text-input compact" type="search" placeholder="搜索应用、IP、PID、Agent" aria-label="搜索探针" />
           <button v-if="filteredProbes.length > probePreviewLimit" class="ghost-button" type="button" @click="probesExpanded = !probesExpanded">
             {{ probesExpanded ? '收起探针' : '展开探针' }}
           </button>
@@ -127,7 +127,7 @@
         </div>
 
         <div class="toolbar">
-          <input v-model.trim="traceKeyword" class="text-input" type="text" placeholder="搜索 URL / traceId / IP" />
+          <input v-model.trim="traceKeyword" class="text-input" type="search" placeholder="搜索 URL / traceId / IP" aria-label="搜索调用链" />
           <select v-model.number="tracePageSize" class="text-input compact" aria-label="Trace 每页条数">
             <option :value="20">每页 20 条</option>
             <option :value="50">每页 50 条</option>

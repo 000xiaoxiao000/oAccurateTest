@@ -63,7 +63,7 @@
 
     <section class="panel list-panel">
       <div class="toolbar">
-        <input v-model.trim="keyword" class="text-input" type="text" placeholder="搜索 URL / 类名 / 方法 / 来源" />
+        <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索 URL / 类名 / 方法 / 来源" aria-label="搜索接口" />
         <select v-model="endpointType" class="text-input compact">
           <option value="">全部类型</option>
           <option v-for="type in endpointTypes" :key="type" :value="type">{{ type }}</option>

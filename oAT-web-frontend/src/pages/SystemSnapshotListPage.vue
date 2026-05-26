@@ -24,7 +24,7 @@
           </template>
         </div>
         <form class="toolbar-actions" @submit.prevent="applyFilters">
-          <input v-model="keywordDraft" class="text-input" type="text" placeholder="搜索快照名称..." />
+          <input v-model="keywordDraft" class="text-input" type="search" placeholder="搜索快照名称..." aria-label="搜索系统快照" />
           <select v-model="sortDraft" class="select">
             <option value="updateTime">按更新时间</option>
             <option value="name">按名称</option>

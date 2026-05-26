@@ -56,7 +56,7 @@
               <button class="ghost-button small" type="button" @click="newSession">新会话</button>
             </div>
             <div class="session-tools">
-              <input v-model.trim="sessionSearch" class="text-input small-input" type="text" placeholder="搜索会话标题或内容" />
+              <input v-model.trim="sessionSearch" class="text-input small-input" type="search" placeholder="搜索会话标题或内容" aria-label="搜索 AI 会话" />
               <select v-model="sessionSort" class="text-input small-input" @change="syncSessionState">
                 <option value="recent">最近更新</option>
                 <option value="oldest">最早更新</option>
@@ -159,7 +159,7 @@
                 <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'pending' }" type="button" @click="anchorFilterMode = 'pending'">仅看未回复</button>
               </div>
               <div class="anchor-search-row">
-                <input v-model.trim="anchorSearch" class="text-input small-input" type="text" placeholder="搜索问题关键词" />
+                <input v-model.trim="anchorSearch" class="text-input small-input" type="search" placeholder="搜索问题关键词" aria-label="搜索提问锚点" />
                 <button v-if="anchorSearch" class="anchor-clear" type="button" title="清空搜索" @click="anchorSearch = ''">×</button>
               </div>
               <p class="anchor-tip">点击可快速定位到对应问答</p>

@@ -17,9 +17,18 @@
     <section v-else-if="payload" class="panel">
       <div class="panel-head">
         <h2>版本条目</h2>
-        <span>{{ payload.versions.length }}</span>
+        <span>{{ filteredVersions.length }} / {{ payload.versions.length }}</span>
       </div>
-      <div v-if="!payload.versions.length" class="empty-card">暂无版本数据</div>
+      <div class="list-toolbar" aria-label="版本筛选">
+        <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索版本号、分支、Commit、描述" aria-label="搜索版本" />
+        <select v-model="statusFilter" class="text-input compact" aria-label="筛选版本状态">
+          <option value="">全部状态</option>
+          <option value="current">当前版本</option>
+          <option value="exists">文件存在</option>
+          <option value="missing">文件缺失</option>
+        </select>
+      </div>
+      <div v-if="!filteredVersions.length" class="empty-card">暂无版本数据或没有匹配结果</div>
       <div v-else class="table-shell">
         <table class="report-table">
           <thead>
@@ -34,7 +43,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in payload.versions" :key="item.id">
+            <tr v-for="item in paginatedVersions" :key="item.id">
               <td>
                 <strong>{{ item.versionNumber }}</strong>
                 <div class="subtext">{{ item.describe || '-' }}</div>
@@ -65,14 +74,22 @@
           </tbody>
         </table>
       </div>
+      <AppPagination
+        v-if="filteredVersions.length > 0"
+        v-model:page="currentPage"
+        v-model:page-size="pageSize"
+        :total="filteredVersions.length"
+        item-name="版本"
+      />
     </section>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
+import AppPagination from '@/components/AppPagination.vue'
 import { deleteVersion, deleteVersionFile, fetchVersionCenter, setCurrentVersion } from '@/api/bootstrap'
 import type { VersionCenterPayload, VersionItemSummary } from '@/api/types'
 
@@ -83,6 +100,37 @@ const payload = ref<VersionCenterPayload | null>(null)
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
+const keyword = ref('')
+const statusFilter = ref('')
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const filteredVersions = computed(() => {
+  const versions = payload.value?.versions || []
+  const term = keyword.value.toLowerCase()
+  return versions.filter((item) => {
+    const matchesKeyword = !term || [
+      item.versionNumber,
+      item.describe,
+      item.sourceType,
+      item.repoBranch,
+      item.repoCommitId,
+      item.programName,
+      item.programFile,
+    ].some((value) => String(value || '').toLowerCase().includes(term))
+    const matchesStatus =
+      !statusFilter.value ||
+      (statusFilter.value === 'current' && item.current) ||
+      (statusFilter.value === 'exists' && !item.current && item.fileExist) ||
+      (statusFilter.value === 'missing' && !item.current && !item.fileExist)
+    return matchesKeyword && matchesStatus
+  })
+})
+
+const paginatedVersions = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return filteredVersions.value.slice(start, start + pageSize.value)
+})
 
 async function load() {
   loading.value = true
@@ -139,13 +187,29 @@ async function removeFile(filePath: string) {
   }
 }
 
+watch([keyword, statusFilter], () => {
+  currentPage.value = 1
+})
+
+watch(pageSize, () => {
+  currentPage.value = 1
+})
+
+watch(() => filteredVersions.value.length, (total) => {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize.value))
+  if (currentPage.value > totalPages) {
+    currentPage.value = totalPages
+  }
+})
+
 onMounted(load)
 </script>
 
 <style scoped>
 .page-header,
 .header-actions,
-.panel-head {
+.panel-head,
+.list-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -154,6 +218,29 @@ onMounted(load)
 
 .page-header {
   margin-bottom: 20px;
+}
+
+.list-toolbar {
+  position: sticky;
+  top: 12px;
+  z-index: 4;
+  margin: 14px 0;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.text-input {
+  width: min(420px, 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.text-input.compact {
+  width: 180px;
 }
 
 .eyebrow {
@@ -201,6 +288,7 @@ onMounted(load)
 }
 
 .table-shell {
+  max-height: min(620px, calc(100vh - 280px));
   overflow: auto;
 }
 
@@ -211,7 +299,7 @@ onMounted(load)
 
 .report-table th,
 .report-table td {
-  padding: 12px 10px;
+  padding: 11px 10px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
   vertical-align: top;

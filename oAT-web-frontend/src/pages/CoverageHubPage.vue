@@ -16,6 +16,10 @@
           <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.name }}</option>
         </select>
       </label>
+      <label class="field search-field">
+        <span>搜索版本/报告</span>
+        <input v-model.trim="keyword" class="text-input" type="search" placeholder="版本号、分支、Commit" aria-label="搜索覆盖率版本或报告" />
+      </label>
       <button class="ghost-button" type="button" @click="loadApps">刷新应用</button>
     </div>
 
@@ -25,10 +29,10 @@
       <section class="panel">
         <div class="panel-head">
           <h2>版本入口</h2>
-          <span>{{ selectedCenter.versions.length }}</span>
+          <span>{{ filteredVersions.length }} / {{ selectedCenter.versions.length }}</span>
         </div>
         <div class="card-grid">
-          <article v-for="version in selectedCenter.versions" :key="version.id" class="card">
+          <article v-for="version in paginatedVersions" :key="version.id" class="card">
             <div class="card-top">
               <strong>{{ version.versionNumber }}</strong>
               <span v-if="version.current" class="tag">当前版本</span>
@@ -51,15 +55,24 @@
             </RouterLink>
           </article>
         </div>
+        <div v-if="!filteredVersions.length" class="empty-card compact">暂无匹配版本</div>
+        <AppPagination
+          v-if="filteredVersions.length > 0"
+          v-model:page="versionPage"
+          v-model:page-size="versionPageSize"
+          :total="filteredVersions.length"
+          item-name="版本"
+          :page-sizes="[6, 12, 24, 48]"
+        />
       </section>
 
       <section class="panel">
         <div class="panel-head">
           <h2>已生成报告</h2>
-          <span>{{ selectedCenter.coverageReports.length }}</span>
+          <span>{{ filteredReports.length }} / {{ selectedCenter.coverageReports.length }}</span>
         </div>
         <div class="card-grid">
-          <article v-for="report in selectedCenter.coverageReports" :key="report.id" class="card">
+          <article v-for="report in paginatedReports" :key="report.id" class="card">
             <div class="card-top">
               <strong>{{ report.versionNumber || '未命名版本' }}</strong>
               <span :class="['tag', report.reportType === 1 ? 'increment' : 'full']">
@@ -95,6 +108,15 @@
             </div>
           </article>
         </div>
+        <div v-if="!filteredReports.length" class="empty-card compact">暂无匹配报告</div>
+        <AppPagination
+          v-if="filteredReports.length > 0"
+          v-model:page="reportPage"
+          v-model:page-size="reportPageSize"
+          :total="filteredReports.length"
+          item-name="报告"
+          :page-sizes="[6, 12, 24, 48]"
+        />
       </section>
     </template>
   </section>
@@ -105,6 +127,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import { fetchProjectApps, fetchVersionCenter } from '@/api/bootstrap'
+import AppPagination from '@/components/AppPagination.vue'
 import type { AppSummary, VersionCenterPayload } from '@/api/types'
 
 const route = useRoute()
@@ -113,8 +136,45 @@ const apps = ref<AppSummary[]>([])
 const centers = ref<Record<string, VersionCenterPayload>>({})
 const selectedAppId = ref('')
 const error = ref('')
+const keyword = ref('')
+const versionPage = ref(1)
+const versionPageSize = ref(6)
+const reportPage = ref(1)
+const reportPageSize = ref(6)
 
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
+const keywordTerm = computed(() => keyword.value.toLowerCase())
+const filteredVersions = computed(() => {
+  const versions = selectedCenter.value?.versions || []
+  const term = keywordTerm.value
+  if (!term) return versions
+  return versions.filter((version) => [
+    version.versionNumber,
+    version.describe,
+    version.repoBranch,
+    version.repoCommitId,
+    version.sourceType,
+  ].some((value) => String(value || '').toLowerCase().includes(term)))
+})
+const filteredReports = computed(() => {
+  const reports = selectedCenter.value?.coverageReports || []
+  const term = keywordTerm.value
+  if (!term) return reports
+  return reports.filter((report) => [
+    report.versionNumber,
+    report.repoBranch,
+    report.repoCommitId,
+    report.reportType === 1 ? '增量' : '全量',
+  ].some((value) => String(value || '').toLowerCase().includes(term)))
+})
+const paginatedVersions = computed(() => {
+  const start = (versionPage.value - 1) * versionPageSize.value
+  return filteredVersions.value.slice(start, start + versionPageSize.value)
+})
+const paginatedReports = computed(() => {
+  const start = (reportPage.value - 1) * reportPageSize.value
+  return filteredReports.value.slice(start, start + reportPageSize.value)
+})
 
 async function loadApps() {
   error.value = ''
@@ -144,7 +204,28 @@ async function loadCenter(appId: string) {
 }
 
 watch(selectedAppId, (appId) => {
+  versionPage.value = 1
+  reportPage.value = 1
   void loadCenter(appId)
+})
+
+watch(keyword, () => {
+  versionPage.value = 1
+  reportPage.value = 1
+})
+
+watch([versionPageSize, () => filteredVersions.value.length], ([, total]) => {
+  const totalPages = Math.max(1, Math.ceil(total / versionPageSize.value))
+  if (versionPage.value > totalPages) {
+    versionPage.value = totalPages
+  }
+})
+
+watch([reportPageSize, () => filteredReports.value.length], ([, total]) => {
+  const totalPages = Math.max(1, Math.ceil(total / reportPageSize.value))
+  if (reportPage.value > totalPages) {
+    reportPage.value = totalPages
+  }
 })
 
 onMounted(loadApps)
@@ -159,6 +240,21 @@ onMounted(loadApps)
 .action-row {
   display: flex;
   gap: 12px;
+}
+
+.selector-row {
+  position: sticky;
+  top: 12px;
+  z-index: 4;
+  align-items: end;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.search-field {
+  min-width: min(360px, 100%);
 }
 
 .page-header,
@@ -211,7 +307,8 @@ onMounted(loadApps)
 
 .panel,
 .card,
-.status-card {
+.status-card,
+.empty-card {
   padding: 18px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
@@ -229,7 +326,18 @@ onMounted(loadApps)
 
 .card-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
+  max-height: min(520px, calc(100vh - 300px));
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.empty-card.compact {
+  margin-top: 12px;
+  padding: 14px;
+  text-align: center;
+  color: #64748b;
 }
 
 .tag {

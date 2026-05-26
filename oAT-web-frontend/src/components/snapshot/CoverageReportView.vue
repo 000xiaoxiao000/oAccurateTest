@@ -136,7 +136,7 @@
         <div v-show="relationshipsOpen" class="list-toolbar">
           <label class="search-box compact-search">
             <span>接口/类/方法筛选</span>
-            <input v-model.trim="relationshipKeyword" class="text-input" type="text" placeholder="输入 URL、类名或方法名" />
+            <input v-model.trim="relationshipKeyword" class="text-input" type="search" placeholder="输入 URL、类名或方法名" aria-label="筛选接口类方法关系" />
           </label>
           <label class="select-box">
             <span>每页</span>
@@ -225,7 +225,7 @@
         <div v-show="classStatsOpen" class="list-toolbar">
           <label class="search-box compact-search">
             <span>类名筛选</span>
-            <input v-model.trim="classKeyword" class="text-input" type="text" placeholder="输入类名关键字" />
+            <input v-model.trim="classKeyword" class="text-input" type="search" placeholder="输入类名关键字" aria-label="筛选类级统计" />
           </label>
           <label class="select-box">
             <span>每页</span>
@@ -889,10 +889,15 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
 
 .relationship-shell {
   background: transparent;
+  max-height: 430px;
 }
 
 .relationship-table {
   min-width: 880px;
+}
+
+.class-panel .table-shell {
+  max-height: min(620px, calc(100vh - 280px));
 }
 
 .status-pill.success {
