@@ -70,9 +70,9 @@
           <strong>{{ coverageRate(payload.incrementalReport?.coveredLines, payload.incrementalReport?.totalLines) }}</strong>
           <small>{{ payload.incrementalReport?.coveredLines || 0 }} / {{ payload.incrementalReport?.totalLines || 0 }}</small>
         </article>
-        <article class="hero-card">
+        <article :class="['hero-card', 'status-metric-card', payload.hasNewerData ? 'warning' : 'success']">
           <span>报告状态</span>
-          <strong>{{ payload.hasNewerData ? '需重算' : '最新' }}</strong>
+          <strong><i aria-hidden="true"></i>{{ payload.hasNewerData ? '需重算' : '最新' }}</strong>
           <small>{{ payload.hasNewerData ? '检测到有更新快照数据' : '当前报告已对齐最新数据' }}</small>
         </article>
       </div>
@@ -833,6 +833,53 @@ onMounted(load)
 
 .coverage-metrics .hero-card strong {
   font-size: 30px;
+}
+
+.status-metric-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.status-metric-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--status-bg), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.status-metric-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.status-metric-card strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--status-text);
+}
+
+.status-metric-card strong i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 6px var(--status-dot-bg);
+}
+
+.status-metric-card.success {
+  --status-bg: rgba(22, 163, 74, .12);
+  --status-text: #15803d;
+  --status-dot-bg: rgba(22, 163, 74, .12);
+  border-color: rgba(22, 163, 74, .18);
+}
+
+.status-metric-card.warning {
+  --status-bg: rgba(245, 158, 11, .16);
+  --status-text: #b45309;
+  --status-dot-bg: rgba(245, 158, 11, .16);
+  border-color: rgba(245, 158, 11, .22);
 }
 
 .report-workbench {
