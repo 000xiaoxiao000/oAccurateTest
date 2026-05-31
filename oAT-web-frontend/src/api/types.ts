@@ -267,6 +267,7 @@ export interface ProbeAlertEventItem {
   eventType?: string
   eventTypeLabel?: string
   eventTypeColor?: string
+  appId?: string
   appName?: string
   probeText?: string
   eventTimeText?: string

@@ -7,8 +7,9 @@
         <p class="subtext">查看当前应用探针实例在线状态、最近上下线事件和通知结果。</p>
       </div>
       <div class="header-actions">
+        <span class="stream-state" :class="{ active: alertStreamConnected }">{{ alertStreamConnected ? '实时提示已连接' : '实时提示未连接' }}</span>
         <RouterLink class="secondary-link" :to="`/p/${projectId}/apps/${appId}/settings`">应用设置</RouterLink>
-        <button class="action-button" type="button" @click="load">刷新</button>
+        <button class="action-button" type="button" @click="load()">刷新</button>
       </div>
     </div>
 
@@ -33,6 +34,20 @@
           <span>通知失败</span>
         </article>
       </div>
+
+      <section v-if="liveNotice" class="live-alert" :class="colorClass(liveNotice.eventTypeColor)" role="status" aria-live="polite">
+        <div class="live-alert-main">
+          <span class="status-pill" :class="colorClass(liveNotice.eventTypeColor)">
+            {{ liveNotice.eventTypeLabel || eventTypeText(liveNotice.eventType) }}
+          </span>
+          <div>
+            <strong>{{ liveNotice.appName || payload.app.name || '当前应用' }} 探针{{ liveNotice.eventTypeLabel || eventTypeText(liveNotice.eventType) }}</strong>
+            <p>{{ liveNotice.message || liveNotice.probeText || '收到新的探针上下线事件' }}</p>
+            <small>{{ liveNotice.eventTimeText || '刚刚' }}</small>
+          </div>
+        </div>
+        <button type="button" @click="liveNotice = null">知道了</button>
+      </section>
 
       <div class="page-grid">
         <aside class="side-card">
@@ -147,11 +162,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import AppPagination from '@/components/AppPagination.vue'
 import { useProjectStore } from '@/stores/project'
+import type { ProbeAlertEventItem } from '@/api/types'
 
 const route = useRoute()
 const projectStore = useProjectStore()
@@ -169,6 +185,9 @@ const statusPage = ref(1)
 const statusPageSize = ref(5)
 const eventPage = ref(1)
 const eventPageSize = ref(5)
+const liveNotice = ref<ProbeAlertEventItem | null>(null)
+const alertStreamConnected = ref(false)
+let alertEventSource: EventSource | undefined
 
 const appTotalPages = computed(() => Math.max(1, Math.ceil((payload.value?.apps.length || 0) / appPageSize)))
 const paginatedApps = computed(() => {
@@ -217,19 +236,68 @@ function eventTypeText(type?: string) {
   }
 }
 
-async function load() {
+async function load(options: { silent?: boolean } = {}) {
   if (!projectId.value || !appId.value) {
     error.value = '缺少 projectId 或 appId'
     return
   }
-  loading.value = true
-  error.value = ''
+  if (!options.silent) {
+    loading.value = true
+    error.value = ''
+  }
   try {
     await projectStore.loadProbeAlerts(projectId.value, appId.value)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载探针告警失败'
+    if (!options.silent) {
+      error.value = err instanceof Error ? err.message : '加载探针告警失败'
+    }
   } finally {
-    loading.value = false
+    if (!options.silent) {
+      loading.value = false
+    }
+  }
+}
+
+function isCurrentAppEvent(event: ProbeAlertEventItem) {
+  return !event.appId || event.appId === appId.value || event.appName === payload.value?.app.name
+}
+
+function closeAlertStream() {
+  alertStreamConnected.value = false
+  if (alertEventSource) {
+    alertEventSource.close()
+    alertEventSource = undefined
+  }
+}
+
+function startAlertStream() {
+  closeAlertStream()
+  if (!projectId.value || typeof EventSource === 'undefined') {
+    return
+  }
+  const source = new EventSource(`/p/${encodeURIComponent(projectId.value)}/app/probe-alerts/stream`)
+  alertEventSource = source
+  source.addEventListener('connected', () => {
+    alertStreamConnected.value = true
+  })
+  source.addEventListener('heartbeat', () => {
+    alertStreamConnected.value = true
+  })
+  source.addEventListener('probe-alert', (message) => {
+    alertStreamConnected.value = true
+    try {
+      const event = JSON.parse(message.data) as ProbeAlertEventItem
+      if (!isCurrentAppEvent(event)) {
+        return
+      }
+      liveNotice.value = event
+      void load({ silent: true })
+    } catch {
+      return
+    }
+  })
+  source.onerror = () => {
+    alertStreamConnected.value = false
   }
 }
 
@@ -253,7 +321,21 @@ watch([() => events.value.length, eventPageSize], ([total]) => {
   }
 })
 
-onMounted(load)
+watch([projectId, appId], () => {
+  appPage.value = 1
+  statusPage.value = 1
+  eventPage.value = 1
+  liveNotice.value = null
+  void load()
+  startAlertStream()
+})
+
+onMounted(() => {
+  void load()
+  startAlertStream()
+})
+
+onBeforeUnmount(closeAlertStream)
 </script>
 
 <style scoped>
@@ -303,6 +385,31 @@ onMounted(load)
   font-weight: 700;
 }
 
+.stream-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stream-state::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.stream-state.active {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
 .status-card,
 .side-card,
 .panel {
@@ -339,6 +446,55 @@ onMounted(load)
 .metric-card.red { background: linear-gradient(135deg, #b91c1c, #ef4444); }
 .metric-card.blue { background: linear-gradient(135deg, #1d4ed8, #38bdf8); }
 .metric-card.amber { background: linear-gradient(135deg, #b45309, #f59e0b); }
+
+.live-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: -4px 0 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(100, 116, 139, 0.16);
+  background: #f8fafc;
+}
+
+.live-alert-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.live-alert strong {
+  color: #0f172a;
+}
+
+.live-alert p {
+  margin: 4px 0;
+  color: #475569;
+  overflow-wrap: anywhere;
+}
+
+.live-alert small {
+  color: #64748b;
+}
+
+.live-alert button {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.live-alert.green { background: #f0fdf4; border-color: rgba(22, 163, 74, 0.18); }
+.live-alert.red { background: #fef2f2; border-color: rgba(185, 28, 28, 0.18); }
+.live-alert.blue { background: #eff6ff; border-color: rgba(37, 99, 235, 0.18); }
+.live-alert.amber { background: #fff7ed; border-color: rgba(234, 88, 12, 0.18); }
 
 .page-grid {
   display: grid;
@@ -482,7 +638,9 @@ onMounted(load)
   }
 
   .page-header,
-  .header-actions {
+  .header-actions,
+  .live-alert,
+  .live-alert-main {
     flex-direction: column;
     align-items: stretch;
   }

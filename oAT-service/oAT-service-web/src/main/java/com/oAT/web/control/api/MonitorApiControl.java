@@ -8,7 +8,6 @@ import com.oAT.web.control.api.SnapshotApiControl.GraphNodeDetailPayload;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.entity.TraceItemVo;
 import com.oAT.web.service.entity.UserVo;
-import com.oAT.server.model.ClientSessionVo;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.SessionAttribute;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/projects/{projectId}/monitor")
@@ -30,7 +30,7 @@ public class MonitorApiControl {
     }
 
     @GetMapping("/probeStatus")
-    public List<ClientSessionVo> probeStatus(@PathVariable String projectId) {
+    public List<Map<String, Object>> probeStatus(@PathVariable String projectId) {
         return monitorControl.getProbeStatus(projectId);
     }
 

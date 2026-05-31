@@ -1,5 +1,6 @@
 <template>
   <RouterView />
+  <GlobalProbeAlertToasts />
   <AppDialogHost />
 </template>
 
@@ -7,4 +8,5 @@
 import { RouterView } from 'vue-router'
 
 import AppDialogHost from '@/components/AppDialogHost.vue'
+import GlobalProbeAlertToasts from '@/components/GlobalProbeAlertToasts.vue'
 </script>

@@ -211,6 +211,7 @@ public class ProbeAlertDashboardVo {
         private String eventType;
         private String eventTypeLabel;
         private String eventTypeColor;
+        private String appId;
         private String appName;
         private String probeText;
         private String eventTimeText;
@@ -251,6 +252,14 @@ public class ProbeAlertDashboardVo {
 
         public void setEventTypeColor(String eventTypeColor) {
             this.eventTypeColor = eventTypeColor;
+        }
+
+        public String getAppId() {
+            return appId;
+        }
+
+        public void setAppId(String appId) {
+            this.appId = appId;
         }
 
         public String getAppName() {

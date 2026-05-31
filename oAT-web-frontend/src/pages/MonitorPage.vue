@@ -378,6 +378,23 @@ type PositionedNode = GraphNodeSummary & { x: number; y: number; rank: number }
 type PositionedEdge = GraphEdgeSummary & { path: string; mx: number; my: number }
 type SnapshotDialogMode = 'my' | 'system'
 
+type RawMonitorProbeSession = OnlineSessionSummary & {
+  clientInfo?: {
+    appKey?: string
+    addressIp?: string
+    agentVersion?: string
+    systemDir?: string
+    pid?: string
+    jvmVersion?: string
+    jvmOption?: string
+  }
+  application?: {
+    appId?: string
+    appName?: string
+    projectSrcName?: string
+  }
+}
+
 const graphNodeWidth = 240
 const graphNodeHeight = 96
 
@@ -634,11 +651,30 @@ async function loadProbes() {
   probeLoading.value = true
   probeError.value = ''
   try {
-    probes.value = await apiGetRaw<OnlineSessionSummary[]>(`/api/projects/${projectId.value}/monitor/probeStatus`)
+    const items = await apiGetRaw<RawMonitorProbeSession[]>(`/api/projects/${projectId.value}/monitor/probeStatus`)
+    probes.value = items.map(normalizeProbeSession)
   } catch (err) {
     probeError.value = err instanceof Error ? err.message : '加载探针失败'
   } finally {
     probeLoading.value = false
+  }
+}
+
+function normalizeProbeSession(item: RawMonitorProbeSession): OnlineSessionSummary {
+  const clientInfo = item.clientInfo
+  const application = item.application
+  const appId = item.appId || clientInfo?.appKey || application?.appId
+  return {
+    appId,
+    addressIp: item.addressIp || clientInfo?.addressIp,
+    agentVersion: item.agentVersion || clientInfo?.agentVersion,
+    systemDir: item.systemDir || clientInfo?.systemDir,
+    pid: item.pid || clientInfo?.pid,
+    jvmVersion: item.jvmVersion || clientInfo?.jvmVersion,
+    jvmOption: item.jvmOption || clientInfo?.jvmOption,
+    onlineTime: item.onlineTime,
+    appName: item.appName || application?.appName || (appId ? '未识别应用' : '未绑定应用'),
+    projectSrcName: item.projectSrcName || application?.projectSrcName || '-',
   }
 }
 

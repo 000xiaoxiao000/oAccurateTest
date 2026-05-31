@@ -54,17 +54,47 @@ public class MonitorControl {
 
     @RequestMapping("/probeStatus")
     @ResponseBody
-    public List<ClientSessionVo> getProbeStatus(@PathVariable String projectId) {
-        List<String> appIds = getAppIds(projectId);
-        List<ClientSessionVo> onlineSessions = new ArrayList<>();
+    public List<Map<String, Object>> getProbeStatus(@PathVariable String projectId) {
+        List<AppVo> apps = appService.getAppList(projectId);
+        Map<String, AppVo> appById = new HashMap<>();
+        for (AppVo app : apps) {
+            appById.put(app.getId(), app);
+        }
+        List<String> appIds = new ArrayList<>(appById.keySet());
+        List<Map<String, Object>> onlineSessions = new ArrayList<>();
         for (ClientSessionVo session : clientSessionService.getOnlineSessions()) {
             String sessionAppId = session.getClientInfo() == null ? null : session.getClientInfo().getAppKey();
             if (!StringUtils.hasText(sessionAppId) || appIds.contains(sessionAppId)) {
                 session.setOnlineTime(DateUtil.timeDifference(session.getLoginTime(), new Date()));
-                onlineSessions.add(session);
+                onlineSessions.add(toProbeStatusItem(session, appById.get(sessionAppId)));
             }
         }
         return onlineSessions;
+    }
+
+    private Map<String, Object> toProbeStatusItem(ClientSessionVo session, AppVo app) {
+        Map<String, Object> item = new HashMap<>();
+        com.oAT.server.model.ClientInfoVo clientInfo = session.getClientInfo();
+        String appId = clientInfo == null ? null : clientInfo.getAppKey();
+        item.put("appId", appId);
+        item.put("addressIp", clientInfo == null ? null : clientInfo.getAddressIp());
+        item.put("agentVersion", clientInfo == null ? null : clientInfo.getAgentVersion());
+        item.put("systemDir", clientInfo == null ? null : clientInfo.getSystemDir());
+        item.put("pid", clientInfo == null ? null : clientInfo.getPid());
+        item.put("jvmVersion", clientInfo == null ? null : clientInfo.getJvmVersion());
+        item.put("jvmOption", clientInfo == null ? null : clientInfo.getJvmOption());
+        item.put("onlineTime", session.getOnlineTime());
+        if (app != null) {
+            item.put("appName", app.getName());
+            item.put("projectSrcName", app.getSrcName());
+        } else if (session.getApplication() != null) {
+            item.put("appName", session.getApplication().getAppName());
+            item.put("projectSrcName", session.getApplication().getProjectSrcName());
+        } else {
+            item.put("appName", StringUtils.hasText(appId) ? "未识别应用" : "未绑定应用");
+            item.put("projectSrcName", "-");
+        }
+        return item;
     }
 
     /**

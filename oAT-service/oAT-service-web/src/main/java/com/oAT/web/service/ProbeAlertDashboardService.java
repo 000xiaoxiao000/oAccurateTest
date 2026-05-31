@@ -93,6 +93,7 @@ public class ProbeAlertDashboardService {
         item.setEventType(event.getEventType());
         item.setEventTypeLabel(eventTypeLabel(event.getEventType()));
         item.setEventTypeColor(eventTypeColor(event.getEventType()));
+        item.setAppId(event.getAppId());
         item.setAppName(event.getAppName());
         item.setProbeText(buildProbeText(event));
         item.setEventTimeText(formatDate(event.getEventTime()));
