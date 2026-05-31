@@ -121,14 +121,18 @@
         <div class="panel-head trace-head">
           <div>
             <h2>Trace 列表</h2>
-            <p>点击 trace 加载拓扑图。</p>
+            <p>手动刷新或开启自动刷新，同步更新 Trace 列表与示波器。</p>
           </div>
           <div class="auto-refresh-controls">
             <label class="auto-refresh"><input v-model="autoRefresh" type="checkbox" /> 自动刷新</label>
-            <input v-model.number="refreshSeconds" class="text-input refresh-input" type="number" min="3" max="120" />
-            <span>{{ autoRefresh ? '运行中' : '已暂停' }}</span>
+            <label class="refresh-interval">
+              <span>每</span>
+              <input v-model.number="refreshSeconds" class="text-input refresh-input" type="number" min="3" max="120" aria-label="自动刷新间隔（秒）" />
+              <span>秒</span>
+            </label>
+            <span class="refresh-state">{{ autoRefresh ? '运行中' : '已暂停' }}</span>
             <button class="ghost-button small-button" type="button" :disabled="traceLoading" @click="loadTraces()">
-              {{ traceLoading ? '刷新中...' : '刷新列表' }}
+              {{ traceLoading ? '刷新中...' : '手动刷新' }}
             </button>
           </div>
         </div>
@@ -143,8 +147,8 @@
           <button class="ghost-button" type="button" @click="clearMonitorFilters">清空过滤</button>
         </div>
 
-        <div v-if="traceLoading" class="status-card">正在加载 trace...</div>
-        <div v-else-if="traceError" class="status-card error">{{ traceError }}</div>
+        <div v-if="traceError" class="status-card error">{{ traceError }}</div>
+        <div v-if="traceLoading && traces.length === 0" class="status-card">正在加载 trace...</div>
         <div v-else-if="filteredTraces.length === 0" class="status-card">暂无 trace 数据</div>
         <div v-else class="trace-list">
           <button
@@ -460,7 +464,8 @@ const snapshotForm = ref({
   principals: [] as string[],
 })
 let refreshTimer: number | undefined
-let waveRefreshTimer: number | undefined
+let graphRequestSeq = 0
+let nodeDetailRequestSeq = 0
 const autoSavedTraceIds = {
   my: new Set<string>(),
   system: new Set<string>(),
@@ -615,11 +620,6 @@ watch(refreshSeconds, () => {
   if (autoRefresh.value) startRefreshTimer()
 })
 
-watch(graph, (value) => {
-  if (value) stopWaveRefreshTimer()
-  else startWaveRefreshTimer()
-})
-
 watch([traceKeyword, tracePageSize, selectedAppIds, selectedClientIps], () => {
   tracePage.value = 1
 })
@@ -681,6 +681,7 @@ function normalizeProbeSession(item: RawMonitorProbeSession): OnlineSessionSumma
 async function loadTraces(options: { silent?: boolean; keepCurrentView?: boolean } = {}) {
   if (!options.silent) traceLoading.value = true
   traceError.value = ''
+  let nextTrace: TraceItemSummary | undefined
   try {
     const query = new URLSearchParams()
     query.set('upToTime', String(upToTime.value || 180))
@@ -690,13 +691,16 @@ async function loadTraces(options: { silent?: boolean; keepCurrentView?: boolean
     traces.value = await apiGetRaw<TraceItemSummary[]>(`/api/projects/${projectId.value}/monitor/getNodeByTime?${query.toString()}`)
     const visibleTraceIds = new Set(traces.value.map((trace) => trace.traceId))
     if (!options.keepCurrentView && traces.value[0] && (!selectedTraceId.value || !visibleTraceIds.has(selectedTraceId.value))) {
-      await selectTrace(traces.value[0])
+      nextTrace = traces.value[0]
     }
     await runAutoSaveForNewTraces(traces.value)
   } catch (err) {
     traceError.value = err instanceof Error ? err.message : '加载 trace 失败'
   } finally {
     if (!options.silent) traceLoading.value = false
+  }
+  if (nextTrace) {
+    void selectTrace(nextTrace)
   }
 }
 
@@ -837,21 +841,30 @@ async function handleMonitorAction(event: Event) {
 
 async function loadGraph() {
   if (!selectedTraceId.value) return
+  const requestSeq = ++graphRequestSeq
+  const traceId = selectedTraceId.value
   graphLoading.value = true
   graphError.value = ''
+  nodeDetailError.value = ''
+  selectedNodeDetail.value = null
   try {
     const query = new URLSearchParams()
-    query.set('traceId', selectedTraceId.value)
-    graph.value = await apiGetRaw<GraphViewPayload>(`/api/projects/${projectId.value}/monitor/getTraceGraph?${query.toString()}`)
+    query.set('traceId', traceId)
+    const graphPayload = await apiGetRaw<GraphViewPayload>(`/api/projects/${projectId.value}/monitor/getTraceGraph?${query.toString()}`)
+    if (requestSeq !== graphRequestSeq || traceId !== selectedTraceId.value) return
+    graph.value = graphPayload
     resetGraphView()
-    selectedNodeId.value = graph.value?.showDefaultNode?.id || graph.value?.nodes[0]?.id || ''
-    if (selectedNodeId.value) {
-      await loadNodeDetail(selectedNodeId.value)
-    }
+    selectedNodeId.value = graph.value?.showDefaultNode?.id || graph.value?.nodes?.[0]?.id || ''
   } catch (err) {
+    if (requestSeq !== graphRequestSeq) return
     graphError.value = err instanceof Error ? err.message : '加载拓扑失败'
   } finally {
-    graphLoading.value = false
+    if (requestSeq === graphRequestSeq) {
+      graphLoading.value = false
+    }
+  }
+  if (requestSeq === graphRequestSeq && selectedNodeId.value) {
+    void loadNodeDetail(selectedNodeId.value)
   }
 }
 
@@ -910,18 +923,25 @@ function iconGlyph(value?: string) {
 
 async function loadNodeDetail(nodeId: string) {
   if (!selectedTraceId.value || !nodeId) return
+  const requestSeq = ++nodeDetailRequestSeq
+  const traceId = selectedTraceId.value
   nodeDetailLoading.value = true
   nodeDetailError.value = ''
   try {
     const query = new URLSearchParams()
-    query.set('traceId', selectedTraceId.value)
+    query.set('traceId', traceId)
     query.set('nodeId', nodeId)
-    selectedNodeDetail.value = await apiGet<GraphNodeDetailPayload>(`/api/projects/${projectId.value}/monitor/getTraceGraphNode?${query.toString()}`)
+    const detail = await apiGet<GraphNodeDetailPayload>(`/api/projects/${projectId.value}/monitor/getTraceGraphNode?${query.toString()}`)
+    if (requestSeq !== nodeDetailRequestSeq || traceId !== selectedTraceId.value || nodeId !== selectedNodeId.value) return
+    selectedNodeDetail.value = detail
   } catch (err) {
+    if (requestSeq !== nodeDetailRequestSeq) return
     selectedNodeDetail.value = null
     nodeDetailError.value = err instanceof Error ? err.message : '加载节点详情失败'
   } finally {
-    nodeDetailLoading.value = false
+    if (requestSeq === nodeDetailRequestSeq) {
+      nodeDetailLoading.value = false
+    }
   }
 }
 
@@ -1120,21 +1140,6 @@ function stopRefreshTimer() {
   }
 }
 
-function startWaveRefreshTimer() {
-  stopWaveRefreshTimer()
-  waveRefreshTimer = window.setInterval(() => {
-    if (document.hidden || graph.value) return
-    loadTraces({ silent: true, keepCurrentView: true })
-  }, 1800)
-}
-
-function stopWaveRefreshTimer() {
-  if (waveRefreshTimer !== undefined) {
-    window.clearInterval(waveRefreshTimer)
-    waveRefreshTimer = undefined
-  }
-}
-
 function probeKey(probe: OnlineSessionSummary) {
   return `${probe.addressIp || ''}-${probe.pid || ''}-${probe.systemDir || ''}-${probe.appName || ''}`
 }
@@ -1183,11 +1188,9 @@ onMounted(async () => {
   window.addEventListener('oat:monitor-action', handleMonitorAction)
   await refreshAll()
   await applyInitialRouteState()
-  if (!graph.value) startWaveRefreshTimer()
 })
 onBeforeUnmount(() => {
   stopRefreshTimer()
-  stopWaveRefreshTimer()
   window.removeEventListener('oat:monitor-action', handleMonitorAction)
 })
 </script>
@@ -1658,6 +1661,16 @@ onBeforeUnmount(() => {
 
 .trace-head .auto-refresh-controls {
   justify-content: flex-end;
+}
+
+.refresh-interval,
+.refresh-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #64748b;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .auto-refresh {
