@@ -60,6 +60,7 @@ const backendProxyMap = {
   '^/p/[^/]+/monitor/(systemSnapshotContext|doSaveSystemSnapshot)(/|\\?|$)': backendProxy,
   '^/p/[^/]+/map/(home|app|code)/data(/|\\?|$)': backendProxy,
   '^/p/[^/]+/app/[^/]+/oAT\\.key$': backendProxy,
+  '^/p/[^/]+/app/probe-alerts/(recent|stream)(/|\\?|$)': backendProxy,
   '^/p/[^/]+/[^/]+/version/(doAdd|setCurrent|delete|report/delete|coverageReport/delete|file/delete|checkGitPull|git/commits|git/commit|git/pull|git/status|git/deleteCode|package/verifyCommit)(/|\\?|$)': backendProxy,
   '/css': backendProxy,
   '/js': backendProxy,
