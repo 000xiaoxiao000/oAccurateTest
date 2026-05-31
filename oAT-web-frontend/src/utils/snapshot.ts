@@ -10,3 +10,17 @@ export function reportStatusText(status?: number) {
       return '未生成'
   }
 }
+
+
+export function reportStatusTone(status?: number) {
+  switch (status) {
+    case 1:
+      return 'warning'
+    case 2:
+      return 'success'
+    case 3:
+      return 'danger'
+    default:
+      return 'default'
+  }
+}

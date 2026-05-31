@@ -34,7 +34,7 @@
               </span>
               <span v-if="!payload.labels.length" class="tag muted">暂无标签</span>
             </div>
-            <span class="status-pill" :class="statusTone(payload.snapshot.reportStatus)">
+            <span class="status-pill" :class="reportStatusTone(payload.snapshot.reportStatus)">
               {{ reportStatusText(payload.snapshot.reportStatus) }}
             </span>
           </div>
@@ -115,7 +115,7 @@
               打开完整链路图
             </RouterLink>
           </div>
-          <div class="status-callout" :class="statusTone(payload.snapshot.reportStatus)">
+          <div class="status-callout" :class="reportStatusTone(payload.snapshot.reportStatus)">
             <strong>覆盖率状态：{{ reportStatusText(payload.snapshot.reportStatus) }}</strong>
             <span>{{ reportStatusHint(payload.snapshot.reportStatus) }}</span>
           </div>
@@ -238,7 +238,7 @@ import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
 import GraphView from '@/components/snapshot/GraphView.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
-import { reportStatusText } from '@/utils/snapshot'
+import { reportStatusText, reportStatusTone } from '@/utils/snapshot'
 
 const route = useRoute()
 const router = useRouter()
@@ -278,19 +278,6 @@ function reportStatusHint(status?: number) {
       return '最近一次报告生成失败，可在报告页重新触发计算。'
     default:
       return '当前还没有生成覆盖率报告，可进入报告页发起首次计算。'
-  }
-}
-
-function statusTone(status?: number) {
-  switch (status) {
-    case 1:
-      return 'warning'
-    case 2:
-      return 'success'
-    case 3:
-      return 'danger'
-    default:
-      return 'default'
   }
 }
 

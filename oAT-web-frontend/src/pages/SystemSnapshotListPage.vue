@@ -105,7 +105,7 @@
                   <span class="tag">版本 {{ snapshot.version || '-' }}</span>
                   <span class="tag">标签 {{ snapshot.labels?.length || 0 }}</span>
                   <span class="tag">负责人 {{ snapshot.principals?.length || 0 }}</span>
-                  <span class="tag">报告状态 {{ reportStatusText(snapshot.reportStatus) }}</span>
+                  <span :class="['status-tag', reportStatusTone(snapshot.reportStatus)]">报告状态 {{ reportStatusText(snapshot.reportStatus) }}</span>
                 </div>
                 <div class="snapshot-actions">
                   <button class="ghost-button small" type="button" @click="openSingleUsecasePicker(snapshot.id)">关联用例</button>
@@ -138,7 +138,7 @@ import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
 import AppPagination from '@/components/AppPagination.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
-import { reportStatusText } from '@/utils/snapshot'
+import { reportStatusText, reportStatusTone } from '@/utils/snapshot'
 
 const route = useRoute()
 const router = useRouter()
@@ -582,12 +582,42 @@ onMounted(load)
   padding-top: 6px;
 }
 
-.tag {
+.tag,
+.status-tag {
   padding: 6px 10px;
   border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tag {
   background: rgba(15, 118, 110, 0.09);
   color: #0f766e;
-  font-size: 12px;
+}
+
+.status-tag {
+  border: 1px solid rgba(100, 116, 139, 0.16);
+  background: #f8fafc;
+  color: #475569;
+}
+
+.status-tag.success {
+  border-color: rgba(22, 163, 74, 0.18);
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.status-tag.warning {
+  border-color: rgba(234, 88, 12, 0.18);
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.status-tag.danger {
+  border-color: rgba(185, 28, 28, 0.18);
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .empty-card {
