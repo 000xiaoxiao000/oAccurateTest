@@ -37,6 +37,15 @@
           <button class="primary-button" type="button" :disabled="generating" @click="generateFull">
             {{ generating ? '处理中...' : '生成全量报告' }}
           </button>
+          <button
+            class="primary-button current-commit-button"
+            type="button"
+            :disabled="generating || !payload.app.currentCommitId"
+            :title="payload.app.currentCommitId ? `当前 Commit：${payload.app.currentCommitId}` : '当前应用未配置 CommitId'"
+            @click="generateCurrentCommit"
+          >
+            生成本次 Commit 报告
+          </button>
           <button class="ghost-button" type="button" :disabled="generating || !payload.report" @click="openIncrementalDialog">
             生成增量报告
           </button>
@@ -68,13 +77,40 @@
         </article>
       </div>
 
-      <div v-if="jobStatus" class="panel">
-        <div class="panel-head">
-          <h2>生成任务</h2>
-          <span>{{ jobStatus.progress || 0 }}%</span>
+      <section v-if="jobStatus" class="panel job-panel" aria-live="polite">
+        <div class="panel-head job-head">
+          <div>
+            <h2>生成任务</h2>
+            <p class="subtext">覆盖率报告生成</p>
+          </div>
+          <div class="job-state-stack">
+            <span :class="['job-state', jobFailed ? 'error' : jobStatus.finish ? 'done' : 'running']">{{ jobStateText }}</span>
+            <strong>{{ jobProgress }}%</strong>
+          </div>
         </div>
-        <p class="subtext">{{ jobStatus.progressName || '处理中' }}</p>
-      </div>
+
+        <div class="progress-track" role="progressbar" :aria-valuenow="jobProgress" aria-valuemin="0" aria-valuemax="100">
+          <span :style="{ width: `${jobProgress}%` }"></span>
+        </div>
+
+        <div class="job-summary-grid">
+          <div class="job-summary-item">
+            <span>当前阶段</span>
+            <strong>{{ jobStageText }}</strong>
+          </div>
+          <div class="job-summary-item">
+            <span>任务状态</span>
+            <strong>{{ jobFailed ? '生成失败，请检查任务信息' : jobStatus.finish ? '已完成' : '请稍候，正在生成' }}</strong>
+          </div>
+        </div>
+
+        <div v-if="jobLogs.length" class="job-log-list">
+          <div v-for="(log, index) in jobLogs" :key="`${log.time}-${index}`" class="job-log-item" :data-tone="log.tone">
+            <span>{{ log.time }}</span>
+            <strong>{{ log.text }}</strong>
+          </div>
+        </div>
+      </section>
 
       <div class="panel-grid report-workbench">
         <section class="panel report-summary-panel">
@@ -83,9 +119,12 @@
             <span>{{ payload.report?.createTimeText || '-' }}</span>
           </div>
           <div v-if="payload.report" class="report-actions">
-            <RouterLink class="ghost-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }">明细</RouterLink>
-            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export?reportId=${payload.report.id}`)">导出报告</a>
-            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export-methods?reportId=${payload.report.id}`)">导出方法</a>
+            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }">明细</RouterLink>
+            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${payload.report.id}`)">导出报告</a>
+            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${payload.report.id}`)">导出方法</a>
+            <button class="report-action-link danger" type="button" :disabled="!payload.report.id || deletingReportId === payload.report.id" @click="removeCoverageReport(payload.report.id || '')">
+              {{ deletingReportId === payload.report.id ? '删除中...' : '删除报告' }}
+            </button>
           </div>
           <div v-if="payload.report" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.report.versionNumber || '-' }}</strong></div>
@@ -104,9 +143,12 @@
             <span>{{ payload.incrementalReport?.createTimeText || '-' }}</span>
           </div>
           <div v-if="payload.incrementalReport" class="report-actions">
-            <RouterLink class="ghost-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }">明细</RouterLink>
-            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export?reportId=${payload.incrementalReport.id}`)">导出报告</a>
-            <a class="ghost-link" :href="backendApiUrl(`/api/projects/${projectId}/coverage/export-methods?reportId=${payload.incrementalReport.id}`)">导出方法</a>
+            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }">明细</RouterLink>
+            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${payload.incrementalReport.id}`)">导出报告</a>
+            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${payload.incrementalReport.id}`)">导出方法</a>
+            <button class="report-action-link danger" type="button" :disabled="!payload.incrementalReport.id || deletingReportId === payload.incrementalReport.id" @click="removeCoverageReport(payload.incrementalReport.id || '')">
+              {{ deletingReportId === payload.incrementalReport.id ? '删除中...' : '删除报告' }}
+            </button>
           </div>
           <div v-if="payload.incrementalReport" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.incrementalReport.versionNumber || '-' }}</strong></div>
@@ -151,6 +193,7 @@
         </div>
         <div class="trend-list">
           <article v-for="(item, index) in trend" :key="index" class="trend-item">
+            <div class="trend-time">{{ trendTime(item) }}</div>
             <div class="trend-main">
               <strong>{{ trendMetric(item, 'lineCoverage') }}</strong>
               <span>行覆盖率</span>
@@ -158,7 +201,6 @@
             <div class="trend-meta">
               <span>分支 {{ trendMetric(item, 'branchCoverage') }}</span>
               <span>方法 {{ trendMetric(item, 'methodCoverage') }}</span>
-              <span>{{ trendTime(item) }}</span>
             </div>
           </article>
         </div>
@@ -209,20 +251,24 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { backendApiUrl } from '@/api/http'
+import { useDialog } from '@/composables/useDialog'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import {
+  deleteCoverageReport,
   fetchCoverageJob,
   fetchCoverageOverview,
   fetchCoverageTrend,
   fetchVersionCenter,
   triggerCoverageGenerate,
+  triggerCoverageGenerateCurrent,
   triggerCoverageGenerateIncremental,
 } from '@/api/bootstrap'
 import type { CoverageComparisonMethod, CoverageOverviewPayload, VersionItemSummary } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const versionNumber = computed(() => String(route.query.versionNumber || ''))
@@ -236,7 +282,9 @@ const autoSelectionNotice = ref('')
 const emptyState = ref<{ title: string; description: string } | null>(null)
 const selectedAppName = ref('')
 const trend = ref<Array<Record<string, unknown>>>([])
-const jobStatus = ref<{ progress?: number; progressName?: string; finish?: boolean } | null>(null)
+const jobStatus = ref<{ progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string } | null>(null)
+const jobLogs = ref<Array<{ time: string; text: string; tone: 'running' | 'done' | 'error' }>>([])
+const deletingReportId = ref('')
 const incrementalDialogOpen = ref(false)
 const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '' })
 const comparisonDialog = ref<{ open: boolean; title: string; methods: CoverageComparisonMethod[] }>({ open: false, title: '', methods: [] })
@@ -251,6 +299,57 @@ function coverageRate(covered?: number, total?: number) {
     return '0%'
   }
   return `${(((covered || 0) / total) * 100).toFixed(1)}%`
+}
+
+const jobProgress = computed(() => {
+  const directProgress = Number(jobStatus.value?.progress)
+  const parsedProgress = Number(parsedJobProgress.value?.percent)
+  const progress = Number.isFinite(directProgress) ? directProgress : Number.isFinite(parsedProgress) ? parsedProgress : 0
+  return Math.max(0, Math.min(100, Math.round(progress)))
+})
+
+const parsedJobProgress = computed(() => {
+  const raw = jobStatus.value?.progressName || ''
+  try {
+    return JSON.parse(raw) as { name?: string; percent?: number; loaded?: number; total?: number }
+  } catch {
+    return null
+  }
+})
+
+const jobFailed = computed(() => jobStatus.value?.success === false || /失败|错误|异常/.test(parsedJobProgress.value?.name || jobStatus.value?.message || ''))
+
+const jobStateText = computed(() => {
+  if (jobFailed.value) return '失败'
+  return jobStatus.value?.finish ? '已完成' : '处理中'
+})
+
+const jobStageText = computed(() => {
+  return formatJobStage(jobStatus.value)
+})
+
+function formatJobStage(status: typeof jobStatus.value) {
+  const raw = status?.message || status?.progressName || '处理中'
+  try {
+    const parsed = JSON.parse(status?.progressName || '') as { name?: string; loaded?: number; total?: number }
+    const name = parsed.name || raw
+    if (typeof parsed.loaded === 'number' && typeof parsed.total === 'number' && parsed.total > 0) return `${name}（${parsed.loaded} / ${parsed.total}）`
+    return name
+  } catch {
+    return raw
+  }
+}
+
+function appendJobLog(text: string, tone: 'running' | 'done' | 'error' = 'running') {
+  const last = jobLogs.value[jobLogs.value.length - 1]
+  if (last?.text === text && last.tone === tone) return
+  jobLogs.value = [...jobLogs.value, { time: new Date().toLocaleTimeString(), text, tone }].slice(-8)
+}
+
+function readableJobError(err: unknown) {
+  const message = err instanceof Error ? err.message : '任务状态查询失败'
+  if (message.includes('非 JSON')) return '任务状态接口返回异常响应，请稍后刷新或检查后端任务日志'
+  return message
 }
 
 const trendKeyMap: Record<string, string[]> = {
@@ -377,14 +476,33 @@ async function load() {
   }
 }
 
-async function pollJob(jobId: string) {
+async function pollJob(jobId: string, title: string) {
+  jobLogs.value = []
+  appendJobLog(`已提交${title}任务`)
   while (true) {
-    jobStatus.value = await fetchCoverageJob(projectId.value, jobId)
-    if (jobStatus.value?.finish) {
-      break
+    try {
+      jobStatus.value = await fetchCoverageJob(projectId.value, jobId)
+      appendJobLog(formatJobStage(jobStatus.value), jobStatus.value?.finish ? jobStatus.value.success === false ? 'error' : 'done' : 'running')
+      if (jobStatus.value?.finish) return jobStatus.value.success !== false
+    } catch (err) {
+      const message = readableJobError(err)
+      jobStatus.value = { progress: jobProgress.value, finish: true, success: false, message }
+      appendJobLog(message, 'error')
+      return false
     }
     await new Promise((resolve) => setTimeout(resolve, 1500))
   }
+}
+
+async function switchToCoverageSelection(version: string, commit?: string) {
+  await router.replace({
+    name: 'coverage-overview',
+    params: { projectId: projectId.value, appId: appId.value },
+    query: {
+      versionNumber: version,
+      commitId: commit || undefined,
+    },
+  })
 }
 
 async function generateFull() {
@@ -401,12 +519,56 @@ async function generateFull() {
       branch: payload.value.version.repoBranch,
       commitId: payload.value.version.repoCommitId,
     })
-    await pollJob(jobId)
+    if (!(await pollJob(jobId, '全量报告生成'))) return
+    await switchToCoverageSelection(payload.value.version.versionNumber, payload.value.version.repoCommitId)
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '生成全量报告失败'
   } finally {
     generating.value = false
+  }
+}
+
+async function generateCurrentCommit() {
+  if (!payload.value?.app.currentVersion || !payload.value?.app.currentCommitId) {
+    error.value = '当前应用未配置当前版本或当前 CommitId，无法生成本次 Commit 报告'
+    return
+  }
+  generating.value = true
+  error.value = ''
+  try {
+    const jobId = await triggerCoverageGenerateCurrent(projectId.value, appId.value)
+    if (!(await pollJob(jobId, '本次 Commit 报告生成'))) return
+    await switchToCoverageSelection(payload.value.app.currentVersion, payload.value.app.currentCommitId)
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '生成本次 Commit 报告失败'
+  } finally {
+    generating.value = false
+  }
+}
+
+async function removeCoverageReport(targetReportId: string) {
+  if (!targetReportId) return
+  const confirmed = await dialog.confirm({
+    title: '删除覆盖率报告',
+    message: '确认删除该覆盖率报告？删除后需要重新生成才能查看。',
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
+  if (!confirmed) return
+  deletingReportId.value = targetReportId
+  error.value = ''
+  try {
+    await deleteCoverageReport(projectId.value, appId.value, targetReportId)
+    const nextVersion = payload.value?.version?.versionNumber || payload.value?.report?.versionNumber || versionNumber.value
+    const nextCommit = payload.value?.version?.repoCommitId || payload.value?.report?.repoCommitId || commitId.value
+    if (nextVersion) await switchToCoverageSelection(nextVersion, nextCommit)
+    await load()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '删除覆盖率报告失败'
+  } finally {
+    deletingReportId.value = ''
   }
 }
 
@@ -443,7 +605,7 @@ async function generateIncremental() {
       baseCommitId: incrementalForm.value.baseCommitId || undefined,
     })
     incrementalDialogOpen.value = false
-    await pollJob(jobId)
+    if (!(await pollJob(jobId, '增量报告生成'))) return
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '生成增量报告失败'
@@ -581,6 +743,10 @@ onMounted(load)
   gap: 10px;
 }
 
+.current-commit-button {
+  background: linear-gradient(135deg, #2563eb, #14b8a6);
+}
+
 .button-link {
   display: inline-flex;
   align-items: center;
@@ -619,6 +785,159 @@ onMounted(load)
 
 .report-summary-panel {
   overflow: hidden;
+}
+
+.job-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.job-head {
+  align-items: flex-start;
+}
+
+.job-head h2 {
+  margin: 0;
+}
+
+.job-head .subtext {
+  margin: 4px 0 0;
+}
+
+.job-state-stack {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.job-state-stack strong {
+  min-width: 54px;
+  color: #0f172a;
+  font-size: 24px;
+  text-align: right;
+}
+
+.job-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.job-state::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.job-state.running {
+  background: rgba(37, 99, 235, .10);
+  color: #1d4ed8;
+}
+
+.job-state.running::before {
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.job-state.done {
+  background: rgba(22, 163, 74, .12);
+  color: #15803d;
+}
+
+.job-state.error {
+  background: rgba(185, 28, 28, .12);
+  color: #b91c1c;
+}
+
+.progress-track {
+  overflow: hidden;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .08);
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #14b8a6, #38bdf8);
+  box-shadow: 0 8px 18px rgba(20, 184, 166, .24);
+  transition: width .35s ease;
+}
+
+.job-summary-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(160px, 1fr);
+  gap: 10px;
+}
+
+.job-summary-item {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, .86);
+}
+
+.job-summary-item span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.job-summary-item strong {
+  overflow: hidden;
+  color: #172033;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-log-list {
+  display: grid;
+  gap: 8px;
+  max-height: 190px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, .72);
+}
+
+.job-log-item {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(15, 23, 42, .06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .84);
+}
+
+.job-log-item span {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.job-log-item strong {
+  color: #172033;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.job-log-item[data-tone='done'] strong {
+  color: #15803d;
+}
+
+.job-log-item[data-tone='error'] strong {
+  color: #b91c1c;
 }
 
 .panel-grid {
@@ -723,36 +1042,82 @@ onMounted(load)
 .report-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin: 12px 0;
+  gap: 8px;
+  margin: 12px 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, .06);
+}
+
+.report-action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  border: 1px solid rgba(15, 118, 110, .16);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(15, 118, 110, .06);
+  color: #0f766e;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.report-action-link:hover:not(:disabled) {
+  border-color: rgba(15, 118, 110, .28);
+  background: rgba(15, 118, 110, .1);
+}
+
+.report-action-link.danger {
+  border-color: rgba(220, 38, 38, .18);
+  background: rgba(220, 38, 38, .06);
+  color: #dc2626;
+}
+
+.report-action-link.danger:hover:not(:disabled) {
+  border-color: rgba(185, 28, 28, .26);
+  background: rgba(220, 38, 38, .1);
+  color: #b91c1c;
+}
+
+.report-action-link:disabled {
+  cursor: not-allowed;
+  opacity: .58;
 }
 
 .comparison-panel,
 .trend-panel {
-  max-height: min(360px, calc(100vh - 330px));
-  overflow: auto;
+  overflow: hidden;
 }
 
 .trend-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
-  max-height: 220px;
+  gap: 10px;
+  max-height: 280px;
   overflow: auto;
 }
 
 .trend-item {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(180px, .9fr) minmax(140px, .7fr) minmax(220px, 1.2fr);
+  align-items: center;
+  gap: 14px;
   padding: 14px;
   border-radius: 16px;
   background: #f8fbfb;
+  border: 1px solid rgba(15, 23, 42, .06);
+}
+
+.trend-time {
+  color: #64748b;
+  font-weight: 700;
 }
 
 .trend-main strong {
-  display: block;
+  display: inline;
   color: #0f172a;
-  font-size: 24px;
+  font-size: 22px;
 }
 
 .trend-main span,
@@ -765,6 +1130,7 @@ onMounted(load)
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
 }
 
 .trend-meta span {
@@ -776,7 +1142,8 @@ onMounted(load)
 @media (max-width: 960px) {
   .hero-grid,
   .panel-grid,
-  .info-grid {
+  .info-grid,
+  .job-summary-grid {
     grid-template-columns: 1fr;
   }
 
@@ -792,6 +1159,38 @@ onMounted(load)
 
   .info-item.wide {
     grid-column: auto;
+  }
+
+  .job-head,
+  .job-state-stack {
+    align-items: flex-start;
+  }
+
+  .job-state-stack {
+    flex-direction: column;
+  }
+
+  .job-log-item {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-item {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-meta {
+    justify-content: flex-start;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: .45;
+    transform: scale(.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
   }
 }
 </style>

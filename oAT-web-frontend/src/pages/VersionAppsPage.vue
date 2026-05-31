@@ -17,13 +17,15 @@
           <span class="tag">{{ app.currentVersion || '未设当前版本' }}</span>
         </div>
         <p class="subtext">{{ app.describe || '暂无应用描述' }}</p>
-        <div class="meta-list">
-          <span>在线 {{ app.onlineCount }}</span>
-          <span>{{ app.repoConfigured ? '已配置仓库' : '未配置仓库' }}</span>
-        </div>
-        <div class="action-row">
-          <RouterLink class="table-link" :to="`/p/${projectId}/apps/${app.id}/versions`">版本列表</RouterLink>
-          <RouterLink class="table-link" :to="`/p/${projectId}/apps/${app.id}/compare`">比对与报告</RouterLink>
+        <div class="card-body-row">
+          <div class="meta-list">
+            <span>在线 {{ app.onlineCount }}</span>
+            <span>{{ app.repoConfigured ? '已配置仓库' : '未配置仓库' }}</span>
+          </div>
+          <div class="action-row">
+            <RouterLink class="table-link" :to="`/p/${projectId}/apps/${app.id}/versions`">版本列表</RouterLink>
+            <RouterLink class="table-link" :to="`/p/${projectId}/apps/${app.id}/compare`">比对与报告</RouterLink>
+          </div>
         </div>
       </article>
     </div>
@@ -62,6 +64,7 @@ onMounted(load)
 .page-header,
 .card-top,
 .meta-list,
+.card-body-row,
 .action-row {
   display: flex;
   gap: 12px;
@@ -69,10 +72,15 @@ onMounted(load)
 
 .page-header,
 .card-top,
-.meta-list,
-.action-row {
+.card-body-row {
   justify-content: space-between;
   align-items: center;
+}
+
+.meta-list,
+.action-row {
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .page-header {
@@ -106,7 +114,18 @@ onMounted(load)
 
 .card-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 520px));
+  justify-content: start;
+  align-items: stretch;
   gap: 12px;
+}
+
+.card-body-row {
+  margin-top: 14px;
+}
+
+.action-row {
+  justify-content: flex-end;
 }
 
 .tag {

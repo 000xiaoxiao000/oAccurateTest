@@ -348,6 +348,16 @@ export function triggerCoverageGenerate(
   return apiPost<string>(`/api/projects/${projectId}/coverage/generate`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
 }
 
+export function triggerCoverageGenerateCurrent(projectId: string, appId: string) {
+  const body = new URLSearchParams()
+  body.set('appId', appId)
+  return apiPost<string>(
+    `/api/projects/${projectId}/coverage/generate-current`,
+    body.toString(),
+    'application/x-www-form-urlencoded;charset=UTF-8',
+  )
+}
+
 export function triggerCoverageGenerateIncremental(
   projectId: string,
   payload: {
@@ -381,7 +391,7 @@ export function triggerCoverageGenerateIncremental(
 
 export function fetchCoverageJob(projectId: string, jobId: string) {
   return apiGetRaw<{ id?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string }>(
-    `/api/projects/${projectId}/coverage/jobs/${jobId}`,
+    `/p/${projectId}/coverage/job/${jobId}`,
   )
 }
 

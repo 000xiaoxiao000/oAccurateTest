@@ -31,6 +31,15 @@
       <div v-if="!filteredVersions.length" class="empty-card">暂无版本数据或没有匹配结果</div>
       <div v-else class="table-shell">
         <table class="report-table">
+          <colgroup>
+            <col class="version-col" />
+            <col class="source-col" />
+            <col class="commit-col" />
+            <col class="file-col" />
+            <col class="time-col" />
+            <col class="status-col" />
+            <col class="actions-col" />
+          </colgroup>
           <thead>
             <tr>
               <th>版本号</th>
@@ -48,27 +57,38 @@
                 <strong>{{ item.versionNumber }}</strong>
                 <div class="subtext">{{ item.describe || '-' }}</div>
               </td>
-              <td>{{ item.sourceType || '-' }}</td>
-              <td>{{ item.repoBranch || '-' }} / {{ item.repoCommitId || '-' }}</td>
-              <td>{{ item.programName || item.programFile || '-' }}</td>
+              <td>
+                <span class="source-pill">{{ item.sourceType || '-' }}</span>
+              </td>
+              <td>
+                <div class="commit-block">
+                  <span class="branch-name">{{ item.repoBranch || '-' }}</span>
+                  <span class="commit-id">{{ item.repoCommitId || '-' }}</span>
+                </div>
+              </td>
+              <td>
+                <span class="file-name">{{ item.programName || item.programFile || '-' }}</span>
+              </td>
               <td>{{ item.createTimeRelativeText || item.createTimeText || '-' }}</td>
               <td>
                 <span :class="['tag', item.current ? 'current' : item.fileExist ? 'ok' : 'warn']">
                   {{ item.current ? '当前版本' : item.fileExist ? '文件存在' : '文件缺失' }}
                 </span>
               </td>
-              <td class="action-cell">
-                <button class="text-link" type="button" :disabled="saving" @click="useCurrent(item)">设为当前</button>
-                <button
-                  v-if="item.programFile"
-                  class="text-link"
-                  type="button"
-                  :disabled="saving"
-                  @click="removeFile(item.programFile)"
-                >
-                  删除文件
-                </button>
-                <button class="text-danger" type="button" :disabled="saving" @click="removeVersion(item.id)">删除版本</button>
+              <td>
+                <div class="action-cell">
+                  <button class="text-link" type="button" :disabled="saving" @click="useCurrent(item)">设为当前</button>
+                  <button
+                    v-if="item.programFile"
+                    class="text-link"
+                    type="button"
+                    :disabled="saving"
+                    @click="removeFile(item.programFile)"
+                  >
+                    删除文件
+                  </button>
+                  <button class="text-danger" type="button" :disabled="saving" @click="removeVersion(item.id)">删除版本</button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -263,15 +283,24 @@ onMounted(load)
 
 .text-link,
 .text-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
   background: transparent;
   cursor: pointer;
-  padding: 0;
+  padding: 4px 10px;
+  white-space: nowrap;
 }
 
 .text-danger {
-  color: #b91c1c;
+  color: #dc2626;
   font-weight: 700;
+}
+
+.text-danger:hover:not(:disabled) {
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.08);
 }
 
 .status-card,
@@ -290,24 +319,113 @@ onMounted(load)
 .table-shell {
   max-height: min(620px, calc(100vh - 280px));
   overflow: auto;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: #fff;
 }
 
 .report-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.version-col {
+  width: 9%;
+}
+
+.source-col {
+  width: 7%;
+}
+
+.commit-col {
+  width: 34%;
+}
+
+.file-col {
+  width: 30%;
+}
+
+.time-col {
+  width: 7%;
+}
+
+.status-col {
+  width: 8%;
+}
+
+.actions-col {
+  width: 104px;
+}
+
+.report-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(248, 250, 252, 0.98);
 }
 
 .report-table th,
 .report-table td {
-  padding: 11px 10px;
+  padding: 18px 14px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
-  vertical-align: top;
+  vertical-align: middle;
+}
+
+.report-table tbody tr {
+  transition: background .16s ease;
+}
+
+.report-table tbody tr:hover {
+  background: rgba(248, 250, 252, 0.76);
+}
+
+.report-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.commit-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.branch-name {
+  font-weight: 700;
+  color: #334155;
+}
+
+.commit-id,
+.file-name {
+  display: block;
+  color: #1e293b;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.commit-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+}
+
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .action-cell {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .tag {

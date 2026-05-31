@@ -23,6 +23,12 @@ function hasLocalPublicAsset(url?: string) {
   return publicPath.startsWith(publicRoot) && fs.existsSync(publicPath) && fs.statSync(publicPath).isFile()
 }
 
+function isBackendDownloadRequest(url?: string) {
+  if (!url) return false
+  const requestPath = url.split('?')[0]
+  return /^\/p\/[^/]+\/coverage\/(export|export-methods)$/.test(requestPath)
+}
+
 const backendProxy: ProxyOptions = {
   target: backendTarget,
   changeOrigin: true,
@@ -32,6 +38,10 @@ const backendProxy: ProxyOptions = {
 
     if (method === 'GET' && hasLocalPublicAsset(req.url)) {
       return req.url
+    }
+
+    if (method === 'GET' && isBackendDownloadRequest(req.url)) {
+      return undefined
     }
 
     // Vue owns browser page navigations. Only API/form/download calls should be

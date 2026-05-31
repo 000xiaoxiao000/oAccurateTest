@@ -184,7 +184,7 @@
       <div class="panel-head">
         <h2>比对报告</h2>
         <div class="panel-head-actions">
-          <span>{{ center?.compareReports.length || 0 }}</span>
+          <span class="report-count">{{ center?.compareReports.length || 0 }} 份</span>
           <button v-if="(center?.compareReports.length || 0) > reportPageSize" class="ghost-button small" type="button" @click="compareReportsCollapsed = !compareReportsCollapsed">
             {{ compareReportsCollapsed ? '展开' : '收起' }}
           </button>
@@ -230,7 +230,7 @@
       <div class="panel-head">
         <h2>覆盖率报告</h2>
         <div class="panel-head-actions">
-          <span>{{ center?.coverageReports.length || 0 }}</span>
+          <span class="report-count">{{ center?.coverageReports.length || 0 }} 份</span>
           <button v-if="(center?.coverageReports.length || 0) > coveragePageSize" class="ghost-button small" type="button" @click="coverageReportsCollapsed = !coverageReportsCollapsed">
             {{ coverageReportsCollapsed ? '展开' : '收起' }}
           </button>
@@ -905,6 +905,19 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.report-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(var(--oat-accent-rgb), .1);
+  color: var(--oat-accent-hover);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .meta-list,

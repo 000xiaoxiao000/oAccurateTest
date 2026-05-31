@@ -100,6 +100,23 @@ public class CoverageApiControl {
         return new ResultNotified<>(true, "Task started", jobId);
     }
 
+    @PostMapping("/generate-current")
+    public ResultNotified<String> generateCurrent(@PathVariable String projectId,
+                                                  @SessionAttribute UserVo user,
+                                                  @RequestParam String appId) {
+        ensureProjectAccess(projectId, user);
+        AppVo app = appService.getApp(appId);
+        Assert.notNull(app, "应用不存在");
+        Assert.hasText(app.getCurrentVersion(), "当前应用未配置当前版本，无法生成本次 Commit 覆盖率报告");
+        Assert.hasText(app.getCurrentCommitId(), "当前应用未配置当前 CommitId，无法生成本次 Commit 覆盖率报告");
+
+        String jobId = coverageService.startGenerateJob(appId, app.getCurrentVersion(), app.getCurrentBranch(), app.getCurrentCommitId());
+        String appName = StringUtils.hasText(app.getName()) ? app.getName() : appId;
+        addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 本次 Commit 全量 覆盖率报告 [版本:%s, 分支:%s, Commit:%s]",
+                user.getName(), appName, app.getCurrentVersion(), app.getCurrentBranch(), app.getCurrentCommitId()));
+        return new ResultNotified<>(true, "Current commit task started", jobId);
+    }
+
     @PostMapping("/generate-incremental")
     public ResultNotified<String> generateIncremental(@PathVariable String projectId,
                                                       @SessionAttribute UserVo user,

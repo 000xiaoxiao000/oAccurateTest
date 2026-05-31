@@ -504,7 +504,9 @@ watch(totalPages, (pages) => {
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 520px));
+  justify-content: start;
+  align-items: stretch;
   gap: 16px;
   min-height: min(520px, calc(100vh - 360px));
 }
@@ -566,6 +568,14 @@ watch(totalPages, (pages) => {
   border: none;
   padding: 0;
   cursor: pointer;
+}
+
+.card-actions .text-danger {
+  color: #dc2626;
+}
+
+.card-actions .text-danger:hover:not(:disabled) {
+  color: #b91c1c;
 }
 
 .delete-form {

@@ -288,6 +288,7 @@ a:focus-visible {
 }
 
 .shell-main :is(.panel-head, .card-title) > span,
+.shell-main .panel-head-actions > span,
 .shell-main .table-count {
   display: inline-flex;
   align-items: center;

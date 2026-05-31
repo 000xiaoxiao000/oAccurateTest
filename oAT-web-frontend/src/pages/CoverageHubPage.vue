@@ -31,28 +31,34 @@
           <h2>版本入口</h2>
           <span>{{ filteredVersions.length }} / {{ selectedCenter.versions.length }}</span>
         </div>
-        <div class="card-grid">
+        <div class="card-grid version-card-grid">
           <article v-for="version in paginatedVersions" :key="version.id" class="card">
-            <div class="card-top">
-              <strong>{{ version.versionNumber }}</strong>
-              <span v-if="version.current" class="tag">当前版本</span>
+            <div class="card-main">
+              <div class="card-title-block">
+                <div class="card-top">
+                  <strong>{{ version.versionNumber }}</strong>
+                  <span v-if="version.current" class="tag">当前版本</span>
+                </div>
+                <p class="subtext">{{ version.describe || '暂无描述' }}</p>
+              </div>
+              <div class="meta-stack">
+                <span class="branch-name">{{ version.repoBranch || '-' }}</span>
+                <span class="commit-id">{{ version.repoCommitId || '-' }}</span>
+              </div>
+              <span class="time-text">{{ version.createTimeRelativeText || version.createTimeText || '-' }}</span>
             </div>
-            <p class="subtext">{{ version.describe || '暂无描述' }}</p>
-            <div class="meta-list">
-              <span>{{ version.repoBranch || '-' }}</span>
-              <span>{{ version.repoCommitId || '-' }}</span>
-              <span>{{ version.createTimeRelativeText || version.createTimeText || '-' }}</span>
+            <div class="action-row">
+              <RouterLink
+                class="table-link"
+                :to="{
+                  name: 'coverage-overview',
+                  params: { projectId, appId: selectedAppId },
+                  query: { versionNumber: version.versionNumber, commitId: version.repoCommitId || undefined },
+                }"
+              >
+                查看覆盖率概览
+              </RouterLink>
             </div>
-            <RouterLink
-              class="table-link"
-              :to="{
-                name: 'coverage-overview',
-                params: { projectId, appId: selectedAppId },
-                query: { versionNumber: version.versionNumber, commitId: version.repoCommitId || undefined },
-              }"
-            >
-              查看覆盖率概览
-            </RouterLink>
           </article>
         </div>
         <div v-if="!filteredVersions.length" class="empty-card compact">暂无匹配版本</div>
@@ -71,23 +77,27 @@
           <h2>已生成报告</h2>
           <span>{{ filteredReports.length }} / {{ selectedCenter.coverageReports.length }}</span>
         </div>
-        <div class="card-grid">
+        <div class="card-grid report-card-grid">
           <article v-for="report in paginatedReports" :key="report.id" class="card">
-            <div class="card-top">
-              <strong>{{ report.versionNumber || '未命名版本' }}</strong>
-              <span :class="['tag', report.reportType === 1 ? 'increment' : 'full']">
-                {{ report.reportType === 1 ? '增量' : '全量' }}
-              </span>
-            </div>
-            <div class="meta-list">
-              <span>类 {{ report.coveredClasses }} / {{ report.totalClasses }}</span>
-              <span>方法 {{ report.coveredMethods }} / {{ report.totalMethods }}</span>
-              <span>代码行 {{ report.coveredLines }} / {{ report.totalLines }}</span>
-            </div>
-            <div class="meta-list">
-              <span>{{ report.repoBranch || '-' }}</span>
-              <span>{{ report.repoCommitId || '-' }}</span>
-              <span>{{ report.createTimeRelativeText || report.createTimeText || '-' }}</span>
+            <div class="card-main report-main">
+              <div class="card-title-block">
+                <div class="card-top">
+                  <strong>{{ report.versionNumber || '未命名版本' }}</strong>
+                  <span :class="['tag', report.reportType === 1 ? 'increment' : 'full']">
+                    {{ report.reportType === 1 ? '增量' : '全量' }}
+                  </span>
+                </div>
+                <div class="meta-stack">
+                  <span class="branch-name">{{ report.repoBranch || '-' }}</span>
+                  <span class="commit-id">{{ report.repoCommitId || '-' }}</span>
+                </div>
+              </div>
+              <div class="metric-grid">
+                <span><b>{{ report.coveredClasses }}</b> / {{ report.totalClasses }} 类</span>
+                <span><b>{{ report.coveredMethods }}</b> / {{ report.totalMethods }} 方法</span>
+                <span><b>{{ report.coveredLines }}</b> / {{ report.totalLines }} 行</span>
+              </div>
+              <span class="time-text">{{ report.createTimeRelativeText || report.createTimeText || '-' }}</span>
             </div>
             <div class="action-row">
               <RouterLink
@@ -104,6 +114,11 @@
               >
                 打开报告
               </RouterLink>
+              <a class="table-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${report.id}`)">导出报告</a>
+              <a class="table-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${report.id}`)">导出方法</a>
+              <button class="danger-link" type="button" :disabled="deletingReportId === report.id" @click="removeCoverageReport(report.id)">
+                {{ deletingReportId === report.id ? '删除中...' : '删除' }}
+              </button>
               <span v-if="report.hasNewerData" class="warn-text">有新数据待重新生成</span>
             </div>
           </article>
@@ -126,11 +141,14 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { fetchProjectApps, fetchVersionCenter } from '@/api/bootstrap'
+import { deleteCoverageReport, fetchProjectApps, fetchVersionCenter } from '@/api/bootstrap'
+import { backendApiUrl } from '@/api/http'
 import AppPagination from '@/components/AppPagination.vue'
+import { useDialog } from '@/composables/useDialog'
 import type { AppSummary, VersionCenterPayload } from '@/api/types'
 
 const route = useRoute()
+const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const apps = ref<AppSummary[]>([])
 const centers = ref<Record<string, VersionCenterPayload>>({})
@@ -141,6 +159,7 @@ const versionPage = ref(1)
 const versionPageSize = ref(6)
 const reportPage = ref(1)
 const reportPageSize = ref(6)
+const deletingReportId = ref('')
 
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
 const keywordTerm = computed(() => keyword.value.toLowerCase())
@@ -203,6 +222,35 @@ async function loadCenter(appId: string) {
   }
 }
 
+async function refreshCenter(appId: string) {
+  if (!appId) return
+  centers.value = {
+    ...centers.value,
+    [appId]: await fetchVersionCenter(projectId.value, appId),
+  }
+}
+
+async function removeCoverageReport(reportId: string) {
+  if (!selectedAppId.value || !reportId) return
+  const confirmed = await dialog.confirm({
+    title: '删除覆盖率报告',
+    message: '确认删除该覆盖率报告？删除后需要重新生成才能查看。',
+    confirmText: '确认删除',
+    tone: 'danger',
+  })
+  if (!confirmed) return
+  deletingReportId.value = reportId
+  error.value = ''
+  try {
+    await deleteCoverageReport(projectId.value, selectedAppId.value, reportId)
+    await refreshCenter(selectedAppId.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '删除覆盖率报告失败'
+  } finally {
+    deletingReportId.value = ''
+  }
+}
+
 watch(selectedAppId, (appId) => {
   versionPage.value = 1
   reportPage.value = 1
@@ -235,8 +283,6 @@ onMounted(loadApps)
 .page-header,
 .selector-row,
 .panel-head,
-.card-top,
-.meta-list,
 .action-row {
   display: flex;
   gap: 12px;
@@ -258,12 +304,19 @@ onMounted(loadApps)
 }
 
 .page-header,
-.panel-head,
-.card-top,
-.meta-list,
-.action-row {
+.panel-head {
   justify-content: space-between;
   align-items: center;
+}
+
+.action-row {
+  align-items: center;
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .page-header {
@@ -279,8 +332,7 @@ onMounted(loadApps)
 }
 
 .subtext,
-.field span,
-.meta-list {
+.field span {
   color: #64748b;
 }
 
@@ -324,13 +376,111 @@ onMounted(loadApps)
   color: #b91c1c;
 }
 
+.warn-text {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.08);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: 1fr;
+  align-items: stretch;
   gap: 12px;
   max-height: min(520px, calc(100vh - 300px));
   overflow: auto;
   padding-right: 4px;
+}
+
+.card {
+  display: grid;
+  gap: 14px;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.card:hover {
+  border-color: rgba(var(--oat-primary-rgb), 0.2);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.card-main {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(260px, 1.2fr) minmax(72px, auto);
+  align-items: center;
+  gap: 18px;
+}
+
+.report-main {
+  grid-template-columns: minmax(220px, 0.9fr) minmax(420px, 1.45fr) minmax(72px, auto);
+}
+
+.card-title-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.card-title-block .subtext {
+  margin: 0;
+}
+
+.meta-stack {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.branch-name {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.commit-id {
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time-text {
+  justify-self: end;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric-grid span {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.9);
+  color: #64748b;
+  white-space: normal;
+}
+
+.metric-grid b {
+  color: #0f172a;
+}
+
+.action-row {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.report-card-grid .action-row {
+  justify-content: flex-end;
 }
 
 .empty-card.compact {
@@ -360,5 +510,45 @@ onMounted(loadApps)
 .table-link {
   color: #0f766e;
   font-weight: 700;
+}
+
+.danger-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #dc2626;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.danger-link:hover:not(:disabled) {
+  color: #b91c1c;
+}
+
+.danger-link:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
+@media (max-width: 900px) {
+  .selector-row,
+  .card-main,
+  .report-main,
+  .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .selector-row {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .time-text {
+    justify-self: start;
+  }
+
+  .report-card-grid .action-row {
+    justify-content: flex-start;
+  }
 }
 </style>
