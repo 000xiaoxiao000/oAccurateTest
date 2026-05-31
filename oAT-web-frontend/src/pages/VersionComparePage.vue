@@ -197,8 +197,8 @@
             <div class="record-meta">
               <span class="meta-chip">{{ item.gitBranch ? 'Git 比对' : '制品比对' }}</span>
               <span v-if="item.gitBranch" class="meta-chip">分支：{{ item.gitBranch }}</span>
-              <span class="meta-chip old">旧：{{ shortText(item.gitOldCommit || item.sourceVersion) || '-' }}</span>
-              <span class="meta-chip new">新：{{ shortText(item.gitNewCommit || item.targetVersion) || '-' }}</span>
+              <span class="meta-chip old" :title="commitTooltip(item.gitOldCommit || item.sourceVersion)">旧：{{ shortText(item.gitOldCommit || item.sourceVersion) || '-' }}</span>
+              <span class="meta-chip new" :title="commitTooltip(item.gitNewCommit || item.targetVersion)">新：{{ shortText(item.gitNewCommit || item.targetVersion) || '-' }}</span>
             </div>
           </div>
           <div class="report-metrics">
@@ -254,7 +254,7 @@
                 {{ item.reportType === 1 ? '增量覆盖率' : '全量覆盖率' }}{{ item.hasNewerData ? ' · 需重算' : '' }}
               </span>
               <span v-if="item.repoBranch" class="meta-chip">分支：{{ item.repoBranch }}</span>
-              <span v-if="item.repoCommitId" class="meta-chip">Commit：{{ shortText(item.repoCommitId) }}</span>
+              <span v-if="item.repoCommitId" class="meta-chip" :title="commitTooltip(item.repoCommitId)">Commit：{{ shortText(item.repoCommitId) }}</span>
               <span v-if="item.baseVersionNumber" class="meta-chip old">基于：{{ item.baseVersionNumber }}</span>
             </div>
           </div>
@@ -564,6 +564,10 @@ function jobLogTypeText(type: string) {
 function shortText(value?: string) {
   if (!value) return ''
   return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-6)}` : value
+}
+
+function commitTooltip(value?: string) {
+  return value || '暂无 CommitID'
 }
 
 function coveragePercent(covered: number, total: number) {

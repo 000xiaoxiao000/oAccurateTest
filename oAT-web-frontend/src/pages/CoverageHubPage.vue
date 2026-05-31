@@ -43,7 +43,7 @@
               </div>
               <div class="meta-stack">
                 <span class="branch-name">{{ version.repoBranch || '-' }}</span>
-                <span class="commit-id">{{ version.repoCommitId || '-' }}</span>
+                <span class="commit-id" :title="commitTooltip(version.repoCommitId)">{{ version.repoCommitId || '-' }}</span>
               </div>
               <span class="time-text">{{ version.createTimeRelativeText || version.createTimeText || '-' }}</span>
             </div>
@@ -89,13 +89,13 @@
                 </div>
                 <div class="meta-stack">
                   <span class="branch-name">{{ report.repoBranch || '-' }}</span>
-                  <span class="commit-id">{{ report.repoCommitId || '-' }}</span>
+                  <span class="commit-id" :title="commitTooltip(report.repoCommitId)">{{ report.repoCommitId || '-' }}</span>
                 </div>
               </div>
               <div class="metric-grid">
-                <span><b>{{ report.coveredClasses }}</b> / {{ report.totalClasses }} 类</span>
-                <span><b>{{ report.coveredMethods }}</b> / {{ report.totalMethods }} 方法</span>
-                <span><b>{{ report.coveredLines }}</b> / {{ report.totalLines }} 行</span>
+                <span><b>{{ coverageRate(report.coveredClasses, report.totalClasses) }}</b><small>{{ report.coveredClasses }} / {{ report.totalClasses }} 类</small></span>
+                <span><b>{{ coverageRate(report.coveredMethods, report.totalMethods) }}</b><small>{{ report.coveredMethods }} / {{ report.totalMethods }} 方法</small></span>
+                <span><b>{{ coverageRate(report.coveredLines, report.totalLines) }}</b><small>{{ report.coveredLines }} / {{ report.totalLines }} 行</small></span>
               </div>
               <span class="time-text">{{ report.createTimeRelativeText || report.createTimeText || '-' }}</span>
             </div>
@@ -194,6 +194,15 @@ const paginatedReports = computed(() => {
   const start = (reportPage.value - 1) * reportPageSize.value
   return filteredReports.value.slice(start, start + reportPageSize.value)
 })
+
+function commitTooltip(value?: string) {
+  return value || '暂无 CommitID'
+}
+
+function coverageRate(covered?: number, total?: number) {
+  if (!total) return '0%'
+  return `${(((covered || 0) / total) * 100).toFixed(1)}%`
+}
 
 async function loadApps() {
   error.value = ''
@@ -461,6 +470,8 @@ onMounted(loadApps)
 }
 
 .metric-grid span {
+  display: grid;
+  gap: 4px;
   padding: 10px 12px;
   border-radius: 14px;
   background: rgba(248, 250, 252, 0.9);
@@ -470,6 +481,12 @@ onMounted(loadApps)
 
 .metric-grid b {
   color: #0f172a;
+}
+
+.metric-grid small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .action-row {

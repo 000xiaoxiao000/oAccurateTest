@@ -89,7 +89,7 @@
                     <td>{{ item.agentVersion || '-' }}</td>
                     <td>{{ item.lastHeartbeatTimeText || '-' }}</td>
                     <td>
-                      <div>{{ item.lastAlertEventType || '-' }}</div>
+                      <div>{{ eventTypeText(item.lastAlertEventType) }}</div>
                       <div class="muted">{{ item.lastAlertTimeText || '-' }}</div>
                     </td>
                   </tr>
@@ -192,11 +192,28 @@ function colorClass(color?: string) {
     case 'red':
       return 'red'
     case 'orange':
+    case 'yellow':
       return 'amber'
     case 'blue':
       return 'blue'
+    case 'grey':
+    case 'gray':
+      return 'slate'
     default:
       return 'slate'
+  }
+}
+
+function eventTypeText(type?: string) {
+  switch (type) {
+    case 'ONLINE':
+      return '上线'
+    case 'OFFLINE':
+      return '下线'
+    case 'RECOVERED':
+      return '恢复上线'
+    default:
+      return type || '-'
   }
 }
 

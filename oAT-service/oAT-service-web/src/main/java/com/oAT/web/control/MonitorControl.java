@@ -214,7 +214,13 @@ public class MonitorControl {
                                                        String traceId) {
         try {
             Map<String, TraceNode> nodes = getTraceNode(traceId);
-            snapshot.setSubTitle(((HttpTraceNode) nodes.get("0")).getRequestUrl());
+            TraceNode rootNode = nodes.get("0");
+            Assert.notNull(rootNode, "找不到主调用节点");
+            if (rootNode instanceof HttpTraceNode) {
+                snapshot.setSubTitle(((HttpTraceNode) rootNode).getRequestUrl());
+            } else if (!StringUtils.hasText(snapshot.getSubTitle())) {
+                snapshot.setSubTitle(traceId);
+            }
             systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
             return new ResultNotified<>(true, "保存成功");
         } catch (Exception e) {

@@ -622,10 +622,33 @@ export function saveMonitorSystemSnapshot(
   if (payload.topicImage) body.set('topicImage', payload.topicImage)
   if (payload.describe) body.set('describe', payload.describe)
   if (payload.versionCycle !== undefined) body.set('versionCycle', String(payload.versionCycle))
-  if (payload.labels.length) body.set('labels', payload.labels.join(','))
-  if (payload.principals.length) body.set('principals', payload.principals.join(','))
+  payload.labels.forEach((label) => body.append('labels', label))
+  payload.principals.forEach((principal) => body.append('principals', principal))
   return apiPost<string>(
     `/api/projects/${projectId}/monitor/system-snapshots`,
+    body.toString(),
+    'application/x-www-form-urlencoded;charset=UTF-8',
+  )
+}
+
+export function saveMonitorMySnapshot(
+  projectId: string,
+  payload: {
+    traceId: string
+    appId?: string
+    name: string
+    describe?: string
+    labels: string[]
+  },
+) {
+  const body = new URLSearchParams()
+  body.set('traceId', payload.traceId)
+  if (payload.appId) body.set('appId', payload.appId)
+  body.set('name', payload.name)
+  if (payload.describe) body.set('describe', payload.describe)
+  payload.labels.forEach((label) => body.append('labels', label))
+  return apiPost<unknown>(
+    `/api/projects/${projectId}/snapshots/my/save`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )

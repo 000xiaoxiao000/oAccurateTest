@@ -1,6 +1,6 @@
 <template>
   <section>
-    <div class="page-header">
+    <div class="page-header monitor-compact-header plain-header">
       <div>
         <div class="eyebrow">Runtime Monitor</div>
         <h1>实时监控台</h1>
@@ -36,7 +36,7 @@
     </div>
 
     <section class="panel probe-panel probe-dashboard-card">
-      <div class="panel-head">
+      <div class="panel-head probe-head">
         <div>
           <h2>探针状态</h2>
           <p>点击探针可快速过滤 IP。</p>
@@ -49,18 +49,20 @@
           <button class="ghost-button" type="button" @click="loadProbes">刷新探针状态</button>
         </div>
       </div>
-      <div class="probe-summary">在线 {{ filteredProbes.length }} / {{ probes.length }} 个探针，当前展示 {{ visibleProbes.length }} 个</div>
-      <div v-if="probeLoading" class="status-card">正在加载探针...</div>
-      <div v-else-if="probeError" class="status-card error">{{ probeError }}</div>
-      <div v-else-if="filteredProbes.length === 0" class="status-card">暂无在线探针</div>
-      <div v-else class="probe-grid">
-        <button v-for="probe in visibleProbes" :key="probeKey(probe)" class="probe-card" :class="{ active: selectedClientIps.includes(probe.addressIp || '') }" type="button" @click="toggleProbeFilter(probe)">
-          <span class="probe-status-dot"></span>
-          <strong>{{ probe.appName || '未定义应用' }}</strong>
-          <span>{{ probe.addressIp || '-' }} · PID {{ probe.pid || '-' }}</span>
-          <small>{{ probe.projectSrcName || '-' }} · {{ probe.agentVersion || 'unknown agent' }}</small>
-          <small>在线 {{ probe.onlineTime || '-' }}</small>
-        </button>
+      <div class="probe-content">
+        <div class="probe-summary">在线 {{ filteredProbes.length }} / {{ probes.length }} 个探针，展示 {{ visibleProbes.length }} 个</div>
+        <div v-if="probeLoading" class="status-card compact-status">正在加载探针...</div>
+        <div v-else-if="probeError" class="status-card compact-status error">{{ probeError }}</div>
+        <div v-else-if="filteredProbes.length === 0" class="status-card compact-status">暂无在线探针</div>
+        <div v-else class="probe-grid">
+          <button v-for="probe in visibleProbes" :key="probeKey(probe)" class="probe-card" :class="{ active: selectedClientIps.includes(probe.addressIp || '') }" type="button" @click="toggleProbeFilter(probe)">
+            <span class="probe-status-dot"></span>
+            <strong>{{ probe.appName || '未定义应用' }}</strong>
+            <span>{{ probe.addressIp || '-' }} · PID {{ probe.pid || '-' }}</span>
+            <small>{{ probe.projectSrcName || '-' }} · {{ probe.agentVersion || 'unknown agent' }}</small>
+            <small>在线 {{ probe.onlineTime || '-' }}</small>
+          </button>
+        </div>
       </div>
     </section>
 
@@ -97,14 +99,16 @@
           <span class="toolbar-label">数量</span>
           <input v-model.number="maxSize" class="text-input size-input" type="number" min="10" max="500" />
         </div>
-        <button class="ghost-button query-button" type="button" @click="loadTraces">查询</button>
+        <button class="ghost-button query-button" type="button" @click="loadTraces()">查询</button>
       </div>
       <div class="toolbar-actions">
-        <div class="snapshot-actions" :class="{ disabled: !selectedTraceId }">
-          <button class="action-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">保存快照</button>
+        <div class="snapshot-actions" :class="{ disabled: !selectedTraceId, open: snapshotMenuOpen }">
+          <button class="action-button snapshot-trigger" type="button" :disabled="!selectedTraceId || savingSnapshot" aria-haspopup="menu" :aria-expanded="snapshotMenuOpen" @click="toggleSnapshotMenu">
+            保存快照 <span aria-hidden="true">⌄</span>
+          </button>
           <div class="snapshot-menu">
-            <button type="button" :disabled="!selectedTraceId || savingSnapshot" @click="saveMySnapshot">我的快照</button>
-            <button type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">系统快照</button>
+            <button type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog('my')">我的快照</button>
+            <button type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog('system')">系统快照</button>
           </div>
         </div>
         <label class="auto-refresh"><input v-model="autoSaveMySnapshot" type="checkbox" /> 自动保存我的快照</label>
@@ -123,6 +127,9 @@
             <label class="auto-refresh"><input v-model="autoRefresh" type="checkbox" /> 自动刷新</label>
             <input v-model.number="refreshSeconds" class="text-input refresh-input" type="number" min="3" max="120" />
             <span>{{ autoRefresh ? '运行中' : '已暂停' }}</span>
+            <button class="ghost-button small-button" type="button" :disabled="traceLoading" @click="loadTraces()">
+              {{ traceLoading ? '刷新中...' : '刷新列表' }}
+            </button>
           </div>
         </div>
 
@@ -174,10 +181,7 @@
           <div class="header-actions">
             <button v-if="graph" class="ghost-button" type="button" @click="showOscilloscope">返回示波器</button>
             <button class="ghost-button" type="button" :disabled="!selectedTraceId || graphLoading" @click="loadGraph">重载拓扑</button>
-            <button class="ghost-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="autoSaveSnapshot">自动保存系统</button>
-            <button class="action-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog">
-              {{ savingSnapshot ? '保存中...' : '保存系统快照' }}
-            </button>
+            <button class="ghost-button" type="button" :disabled="!selectedTraceId || savingSnapshot" title="自动保存我的快照和系统快照" @click="autoSaveCurrentTraceSnapshots">自动保存快照</button>
           </div>
         </div>
 
@@ -197,7 +201,10 @@
           </div>
           <div class="wave-board">
             <div v-if="!wavePoints.length" class="wave-empty">暂无请求波形<br /><small>当监控列表收到请求后，每个请求会形成一个圆点</small></div>
-            <span v-for="point in wavePoints" :key="point.id" class="wave-point" :style="{ left: `${point.x}%`, top: `${point.y}%` }" :title="point.title"></span>
+            <svg v-if="wavePolyline" class="wave-line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <polyline :points="wavePolyline" />
+            </svg>
+            <span v-for="point in wavePoints" :key="point.id" class="wave-point" :class="{ fresh: point.fresh }" :style="{ left: `${point.x}%`, top: `${point.y}%` }" :title="point.title"></span>
           </div>
           <div class="monitor-request-summary">
             <div><span>最新请求</span><strong>{{ latestTrace?.title || '暂无' }}</strong></div>
@@ -275,8 +282,8 @@
       <form class="snapshot-modal" @submit.prevent="submitSnapshotForm">
         <div class="modal-head">
           <div>
-            <div class="eyebrow">System Snapshot</div>
-            <h2>保存系统快照</h2>
+            <div class="eyebrow">{{ snapshotDialogMode === 'my' ? 'My Snapshot' : 'System Snapshot' }}</div>
+            <h2>{{ snapshotDialogMode === 'my' ? '保存我的快照' : '保存系统快照' }}</h2>
             <p>{{ snapshotContext?.subTitle || selectedTraceId }}</p>
           </div>
           <button class="icon-button" type="button" @click="closeSnapshotDialog">×</button>
@@ -289,13 +296,13 @@
             <div class="form-main">
               <label class="field required">
                 <span>名称</span>
-                <input v-model.trim="snapshotForm.title" class="text-input" type="text" maxlength="50" placeholder="系统快照名称" />
+                <input v-model.trim="snapshotForm.title" class="text-input" type="text" maxlength="50" :placeholder="snapshotDialogMode === 'my' ? '我的快照名称' : '系统快照名称'" />
               </label>
-              <label class="field">
+              <label v-if="snapshotDialogMode === 'system'" class="field">
                 <span>图片</span>
                 <input class="text-input" type="file" accept="image/*" @change="handleTopicImageUpload" />
               </label>
-              <div v-if="snapshotForm.topicImage" class="image-preview-line">
+              <div v-if="snapshotDialogMode === 'system' && snapshotForm.topicImage" class="image-preview-line">
                 <img :src="snapshotForm.topicImage" alt="系统快照图片" />
                 <span>{{ snapshotForm.topicImage }}</span>
               </div>
@@ -310,7 +317,7 @@
                 <span>所属应用</span>
                 <input class="text-input" type="text" :value="snapshotContext?.appName || snapshotForm.appId" readonly />
               </label>
-              <label class="field">
+              <label v-if="snapshotDialogMode === 'system'" class="field">
                 <span>目录</span>
                 <select v-model="snapshotForm.directory" class="text-input">
                   <option value="root">/root</option>
@@ -319,7 +326,7 @@
                   </option>
                 </select>
               </label>
-              <label class="field">
+              <label v-if="snapshotDialogMode === 'system'" class="field">
                 <span>版本有效周期（天）</span>
                 <input v-model.number="snapshotForm.versionCycle" class="text-input" type="number" min="1" max="3650" />
               </label>
@@ -332,7 +339,7 @@
                   </label>
                 </div>
               </div>
-              <div class="field required">
+              <div v-if="snapshotDialogMode === 'system'" class="field required">
                 <span>负责人</span>
                 <div class="choice-grid">
                   <label v-for="member in snapshotContext?.members || []" :key="member.memberId" class="choice-pill">
@@ -347,7 +354,7 @@
           <div class="modal-actions">
             <button class="ghost-button" type="button" @click="closeSnapshotDialog">算啦</button>
             <button class="action-button" type="submit" :disabled="savingSnapshot || topicImageUploading">
-              {{ savingSnapshot ? '保存中...' : topicImageUploading ? '图片上传中...' : '是的，帮我保存' }}
+              {{ savingSnapshot ? '保存中...' : topicImageUploading ? '图片上传中...' : snapshotDialogMode === 'my' ? '保存到我的快照' : '保存到系统快照' }}
             </button>
           </div>
         </template>
@@ -360,7 +367,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
-import { fetchMonitorSnapshotContext, saveMonitorSystemSnapshot, uploadResource } from '@/api/bootstrap'
+import { fetchMonitorSnapshotContext, saveMonitorMySnapshot, saveMonitorSystemSnapshot, uploadResource } from '@/api/bootstrap'
 import { useProjectStore } from '@/stores/project'
 import { apiGet, apiGetRaw, apiPost } from '@/api/http'
 import type { AppSummary, GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload, MonitorSnapshotContextPayload, OnlineSessionSummary, TraceItemSummary } from '@/api/types'
@@ -369,6 +376,7 @@ import AppPagination from '@/components/AppPagination.vue'
 
 type PositionedNode = GraphNodeSummary & { x: number; y: number; rank: number }
 type PositionedEdge = GraphEdgeSummary & { path: string; mx: number; my: number }
+type SnapshotDialogMode = 'my' | 'system'
 
 const graphNodeWidth = 240
 const graphNodeHeight = 96
@@ -401,17 +409,19 @@ const autoSaveMySnapshot = ref(false)
 const autoSaveSystemSnapshot = ref(false)
 const refreshSeconds = ref(5)
 const scopeMode = ref<'aggregate' | 'single' | 'lanes'>('aggregate')
-const monitorListWidth = ref(380)
+const monitorListWidth = ref(340)
 const tracePage = ref(1)
 const tracePageSize = ref(50)
 const probesExpanded = ref(false)
-const probePreviewLimit = 8
+const probePreviewLimit = 4
 const probeLoading = ref(false)
 const traceLoading = ref(false)
 const graphLoading = ref(false)
 const nodeDetailLoading = ref(false)
 const savingSnapshot = ref(false)
 const snapshotDialogOpen = ref(false)
+const snapshotDialogMode = ref<SnapshotDialogMode>('system')
+const snapshotMenuOpen = ref(false)
 const snapshotContextLoading = ref(false)
 const topicImageUploading = ref(false)
 const probeError = ref('')
@@ -433,6 +443,7 @@ const snapshotForm = ref({
   principals: [] as string[],
 })
 let refreshTimer: number | undefined
+let waveRefreshTimer: number | undefined
 const autoSavedTraceIds = {
   my: new Set<string>(),
   system: new Set<string>(),
@@ -485,12 +496,17 @@ const oscilloscopeSubtitle = computed(() => {
   if (scopeMode.value === 'lanes') return '多探针泳道：按 IP 分组展示请求脉冲'
   return '聚合全部探针：圆点 = 一次请求；折线 = 请求脉冲趋势；扫描线 = 实时监听节奏'
 })
-const wavePoints = computed(() => filteredTraces.value.slice(0, 80).map((trace, index, list) => ({
-  id: trace.traceId || `${trace.cacheTime}-${index}`,
-  title: trace.title || trace.traceId,
-  x: list.length <= 1 ? 50 : 4 + (index / (list.length - 1)) * 92,
-  y: 20 + ((trace.title || trace.traceId || '').length * 17 + index * 11) % 58,
-})))
+const wavePoints = computed(() => [...filteredTraces.value].reverse().slice(-80).map((trace, index, list) => {
+  const cacheTime = Number(trace.cacheTime)
+  return {
+    id: trace.traceId || `${trace.cacheTime}-${index}`,
+    title: trace.title || trace.traceId,
+    x: list.length <= 1 ? 50 : 4 + (index / (list.length - 1)) * 92,
+    y: 18 + ((trace.title || trace.traceId || '').length * 17 + index * 13) % 62,
+    fresh: Number.isFinite(cacheTime) && Date.now() - cacheTime < 6000,
+  }
+}))
+const wavePolyline = computed(() => wavePoints.value.map((point) => `${point.x},${point.y}`).join(' '))
 
 const nodePositions = computed<PositionedNode[]>(() => {
   const nodes = graph.value?.nodes || []
@@ -582,6 +598,11 @@ watch(refreshSeconds, () => {
   if (autoRefresh.value) startRefreshTimer()
 })
 
+watch(graph, (value) => {
+  if (value) stopWaveRefreshTimer()
+  else startWaveRefreshTimer()
+})
+
 watch([traceKeyword, tracePageSize, selectedAppIds, selectedClientIps], () => {
   tracePage.value = 1
 })
@@ -621,8 +642,8 @@ async function loadProbes() {
   }
 }
 
-async function loadTraces() {
-  traceLoading.value = true
+async function loadTraces(options: { silent?: boolean; keepCurrentView?: boolean } = {}) {
+  if (!options.silent) traceLoading.value = true
   traceError.value = ''
   try {
     const query = new URLSearchParams()
@@ -632,14 +653,14 @@ async function loadTraces() {
     selectedClientIps.value.forEach((ip) => query.append('clientIps', ip))
     traces.value = await apiGetRaw<TraceItemSummary[]>(`/api/projects/${projectId.value}/monitor/getNodeByTime?${query.toString()}`)
     const visibleTraceIds = new Set(traces.value.map((trace) => trace.traceId))
-    if (traces.value[0] && (!selectedTraceId.value || !visibleTraceIds.has(selectedTraceId.value))) {
+    if (!options.keepCurrentView && traces.value[0] && (!selectedTraceId.value || !visibleTraceIds.has(selectedTraceId.value))) {
       await selectTrace(traces.value[0])
     }
     await runAutoSaveForNewTraces(traces.value)
   } catch (err) {
     traceError.value = err instanceof Error ? err.message : '加载 trace 失败'
   } finally {
-    traceLoading.value = false
+    if (!options.silent) traceLoading.value = false
   }
 }
 
@@ -742,10 +763,10 @@ async function handleMonitorAction(event: Event) {
       await router.push(`/p/${projectId.value}/my-snapshots`)
       break
     case 'openCreateMySnapshot':
-      await saveMySnapshot()
+      await openSnapshotDialog('my')
       break
     case 'openCreateSystemSnapshot':
-      await openSnapshotDialog()
+      await openSnapshotDialog('system')
       break
     case 'batchSaveMySnapshots':
       await batchSaveMySnapshots()
@@ -885,6 +906,12 @@ async function autoSaveSnapshot() {
   }
 }
 
+async function autoSaveCurrentTraceSnapshots() {
+  if (!selectedTraceId.value) return
+  await saveMySnapshot()
+  await autoSaveSnapshot()
+}
+
 async function saveMySnapshot() {
   if (!selectedTraceId.value) return
   savingSnapshot.value = true
@@ -939,8 +966,15 @@ async function batchSaveSystemSnapshots() {
   }
 }
 
-async function openSnapshotDialog() {
+function toggleSnapshotMenu() {
+  if (!selectedTraceId.value || savingSnapshot.value) return
+  snapshotMenuOpen.value = !snapshotMenuOpen.value
+}
+
+async function openSnapshotDialog(mode: SnapshotDialogMode = 'system') {
   if (!selectedTraceId.value) return
+  snapshotMenuOpen.value = false
+  snapshotDialogMode.value = mode
   snapshotDialogOpen.value = true
   snapshotContextLoading.value = true
   snapshotFormError.value = ''
@@ -951,15 +985,15 @@ async function openSnapshotDialog() {
       traceId: context.traceId,
       appId: context.appId,
       directory: 'root',
-      title: (context.defaultTitle || graph.value?.title || '实时监控系统快照').slice(0, 50),
+      title: (context.defaultTitle || graph.value?.title || (mode === 'my' ? '实时监控我的快照' : '实时监控系统快照')).slice(0, 50),
       topicImage: '',
       describe: '',
       versionCycle: 30,
-      labels: [],
+      labels: mode === 'my' ? ['实时监控'] : [],
       principals: context.currentUserId ? [context.currentUserId] : [],
     }
   } catch (err) {
-    snapshotFormError.value = err instanceof Error ? err.message : '加载系统快照保存上下文失败'
+    snapshotFormError.value = err instanceof Error ? err.message : `加载${mode === 'my' ? '我的' : '系统'}快照保存上下文失败`
   } finally {
     snapshotContextLoading.value = false
   }
@@ -994,18 +1028,18 @@ async function handleTopicImageUpload(event: Event) {
 async function submitSnapshotForm() {
   const form = snapshotForm.value
   if (!form.title || form.title.length < 4) {
-    snapshotFormError.value = '标题至少包含4个字符'
+    snapshotFormError.value = '名称至少包含4个字符'
     return
   }
   if (form.title.length > 50) {
-    snapshotFormError.value = '标题不能超过50个字符'
+    snapshotFormError.value = '名称不能超过50个字符'
     return
   }
   if (form.describe.length > 512) {
     snapshotFormError.value = '描述不能超过512个字符'
     return
   }
-  if (!form.principals.length) {
+  if (snapshotDialogMode.value === 'system' && !form.principals.length) {
     snapshotFormError.value = '请至少选择一个负责人'
     return
   }
@@ -1013,11 +1047,22 @@ async function submitSnapshotForm() {
   snapshotFormError.value = ''
   snapshotNotice.value = ''
   try {
-    const result = await saveMonitorSystemSnapshot(projectId.value, form)
-    snapshotNotice.value = result || '系统快照已保存'
+    if (snapshotDialogMode.value === 'my') {
+      await saveMonitorMySnapshot(projectId.value, {
+        traceId: form.traceId,
+        appId: form.appId,
+        name: form.title,
+        describe: form.describe,
+        labels: form.labels,
+      })
+      snapshotNotice.value = '我的快照已保存'
+    } else {
+      const result = await saveMonitorSystemSnapshot(projectId.value, form)
+      snapshotNotice.value = result || '系统快照已保存'
+    }
     snapshotDialogOpen.value = false
   } catch (err) {
-    snapshotFormError.value = err instanceof Error ? err.message : '系统快照保存失败'
+    snapshotFormError.value = err instanceof Error ? err.message : `${snapshotDialogMode.value === 'my' ? '我的' : '系统'}快照保存失败`
   } finally {
     savingSnapshot.value = false
   }
@@ -1036,6 +1081,21 @@ function stopRefreshTimer() {
   if (refreshTimer !== undefined) {
     window.clearInterval(refreshTimer)
     refreshTimer = undefined
+  }
+}
+
+function startWaveRefreshTimer() {
+  stopWaveRefreshTimer()
+  waveRefreshTimer = window.setInterval(() => {
+    if (document.hidden || graph.value) return
+    loadTraces({ silent: true, keepCurrentView: true })
+  }, 1800)
+}
+
+function stopWaveRefreshTimer() {
+  if (waveRefreshTimer !== undefined) {
+    window.clearInterval(waveRefreshTimer)
+    waveRefreshTimer = undefined
   }
 }
 
@@ -1087,9 +1147,11 @@ onMounted(async () => {
   window.addEventListener('oat:monitor-action', handleMonitorAction)
   await refreshAll()
   await applyInitialRouteState()
+  if (!graph.value) startWaveRefreshTimer()
 })
 onBeforeUnmount(() => {
   stopRefreshTimer()
+  stopWaveRefreshTimer()
   window.removeEventListener('oat:monitor-action', handleMonitorAction)
 })
 </script>
@@ -1107,7 +1169,25 @@ onBeforeUnmount(() => {
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+}
+
+.monitor-compact-header {
+  padding: 10px 14px;
+  border: 1px solid rgba(15, 23, 42, .07);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .05);
+}
+
+.monitor-compact-header h1 {
+  margin: 0 0 3px;
+  font-size: 24px;
+  line-height: 1.08;
+}
+
+.monitor-compact-header .subtext {
+  margin: 0;
 }
 
 .eyebrow {
@@ -1145,10 +1225,22 @@ onBeforeUnmount(() => {
   color: #fff;
 }
 
+.snapshot-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .ghost-button {
   background: #eef7f7;
   color: #0f766e;
   font-weight: 800;
+}
+
+.small-button {
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 13px;
 }
 
 .action-button:disabled,
@@ -1160,8 +1252,8 @@ onBeforeUnmount(() => {
 .overview-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .overview-card,
@@ -1177,7 +1269,12 @@ onBeforeUnmount(() => {
 }
 
 .overview-card {
-  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
   background:
     radial-gradient(circle at top right, rgba(20, 184, 166, .16), transparent 42%),
     rgba(255, 255, 255, .94);
@@ -1189,25 +1286,28 @@ onBeforeUnmount(() => {
 }
 
 .overview-card strong {
+  grid-row: 1 / span 2;
+  grid-column: 2;
   display: block;
-  margin-top: 8px;
-  font-size: 30px;
+  margin-top: 0;
+  font-size: 22px;
+  line-height: 1;
 }
 
 .overview-card small {
   display: block;
-  margin-top: 6px;
+  margin-top: 0;
   color: #94a3b8;
   font-weight: 700;
 }
 
 .overview-card .time-value {
-  font-size: 20px;
+  font-size: 17px;
 }
 
 .panel,
 .status-card {
-  padding: 20px;
+  padding: 14px;
 }
 
 .status-card.error {
@@ -1215,18 +1315,48 @@ onBeforeUnmount(() => {
 }
 
 .probe-panel {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .probe-dashboard-card {
+  display: grid;
+  grid-template-columns: minmax(360px, .9fr) minmax(0, 1.4fr);
+  align-items: start;
+  gap: 12px;
   background: linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(245, 251, 255, .96));
 }
 
+.probe-head {
+  align-items: start;
+}
+
+.probe-head h2 {
+  margin: 0 0 4px;
+}
+
+.probe-head p {
+  margin: 0;
+}
+
+.probe-head .header-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.probe-content {
+  min-width: 0;
+}
+
 .probe-summary {
-  margin-top: 8px;
+  margin: 0 0 8px;
   color: #64748b;
   font-size: 13px;
   font-weight: 800;
+}
+
+.compact-status {
+  padding: 12px;
+  border-radius: 16px;
 }
 
 .text-input {
@@ -1261,20 +1391,29 @@ onBeforeUnmount(() => {
 
 .probe-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-  margin-top: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 0;
 }
 
 .probe-card {
   position: relative;
   display: grid;
-  gap: 6px;
-  padding: 14px;
+  gap: 3px;
+  padding: 9px 11px;
+  border-radius: 15px;
   border: 1px solid rgba(15, 23, 42, .08);
   text-align: left;
   cursor: pointer;
   box-shadow: none;
+}
+
+.probe-card strong,
+.probe-card span,
+.probe-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .probe-card.active {
@@ -1284,10 +1423,10 @@ onBeforeUnmount(() => {
 
 .probe-status-dot {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 10px;
-  height: 10px;
+  top: 12px;
+  right: 12px;
+  width: 9px;
+  height: 9px;
   border-radius: 999px;
   background: #22c55e;
   box-shadow: 0 0 0 6px rgba(34, 197, 94, .12);
@@ -1295,14 +1434,14 @@ onBeforeUnmount(() => {
 
 .monitor-toolbar {
   position: sticky;
-  top: 76px;
+  top: 72px;
   z-index: 8;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 14px;
-  margin-bottom: 16px;
-  padding: 12px 14px;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
   backdrop-filter: blur(14px);
 }
 
@@ -1349,8 +1488,8 @@ onBeforeUnmount(() => {
 .filter-chip-row {
   display: flex;
   gap: 6px;
-  min-height: 38px;
-  max-height: 78px;
+  min-height: 36px;
+  max-height: 72px;
   overflow: auto;
   padding: 2px;
   border: 1px solid #d9e5ea;
@@ -1364,7 +1503,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: 999px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   background: #fff;
   color: #475569;
   font-size: 12px;
@@ -1403,7 +1542,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 18px 42px rgba(15, 23, 42, .14);
 }
 
-.snapshot-actions:hover .snapshot-menu,
+.snapshot-actions.open .snapshot-menu,
 .snapshot-actions:focus-within .snapshot-menu {
   display: grid;
   gap: 4px;
@@ -1429,7 +1568,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 0;
   align-items: stretch;
-  min-height: 620px;
+  min-height: max(660px, calc(100vh - 320px));
 }
 
 .monitor-grid > .panel {
@@ -1454,11 +1593,35 @@ onBeforeUnmount(() => {
 
 .trace-panel,
 .graph-panel {
-  min-height: 520px;
+  min-height: max(620px, calc(100vh - 360px));
 }
 
 .toolbar {
   margin: 14px 0;
+}
+
+.trace-panel .toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.trace-panel .toolbar .text-input[type='search'] {
+  grid-column: 1 / -1;
+}
+
+.trace-panel .toolbar .ghost-button {
+  min-width: 96px;
+  white-space: nowrap;
+}
+
+.trace-head {
+  align-items: flex-start;
+}
+
+.trace-head .auto-refresh-controls {
+  justify-content: flex-end;
 }
 
 .auto-refresh {
@@ -1472,19 +1635,33 @@ onBeforeUnmount(() => {
 
 .trace-list {
   display: grid;
-  gap: 10px;
-  max-height: 620px;
+  gap: 12px;
+  max-height: max(420px, calc(100vh - 520px));
   overflow: auto;
+  padding-right: 4px;
 }
 
 .trace-item {
   display: grid;
-  gap: 5px;
+  gap: 8px;
   width: 100%;
-  padding: 14px;
+  padding: 16px;
+  border-radius: 20px;
   text-align: left;
   cursor: pointer;
   box-shadow: none;
+}
+
+.trace-item strong {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.trace-item span,
+.trace-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trace-item.active {
@@ -1519,7 +1696,7 @@ onBeforeUnmount(() => {
 
 .wave-board {
   position: relative;
-  height: 310px;
+  height: clamp(360px, 44vh, 520px);
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, .08);
   border-radius: 22px;
@@ -1540,6 +1717,24 @@ onBeforeUnmount(() => {
   animation: scan-line 3.6s linear infinite;
 }
 
+.wave-line {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.wave-line polyline {
+  fill: none;
+  stroke: rgba(45, 212, 191, .55);
+  stroke-width: .45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 8px rgba(45, 212, 191, .42));
+}
+
 @keyframes scan-line {
   from { transform: translateX(-100%); }
   to { transform: translateX(320%); }
@@ -1547,12 +1742,22 @@ onBeforeUnmount(() => {
 
 .wave-point {
   position: absolute;
-  z-index: 1;
+  z-index: 2;
   width: 10px;
   height: 10px;
   border-radius: 999px;
   background: #2dd4bf;
   box-shadow: 0 0 0 7px rgba(45, 212, 191, .12), 0 0 18px rgba(45, 212, 191, .8);
+  transform: translate(-50%, -50%);
+}
+
+.wave-point.fresh {
+  animation: wave-pulse 1.1s ease-out infinite;
+}
+
+@keyframes wave-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, .42), 0 0 20px rgba(45, 212, 191, .92); }
+  100% { box-shadow: 0 0 0 18px rgba(45, 212, 191, 0), 0 0 20px rgba(45, 212, 191, .72); }
 }
 
 .wave-empty {
@@ -1645,7 +1850,7 @@ onBeforeUnmount(() => {
 .graph-svg {
   min-width: 900px;
   width: 100%;
-  height: 480px;
+  height: clamp(520px, 55vh, 720px);
 }
 
 .graph-edge {
@@ -1838,6 +2043,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 980px) {
   .overview-grid,
+  .probe-dashboard-card,
   .monitor-grid,
   .node-detail-grid,
   .snapshot-form-grid {

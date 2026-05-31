@@ -129,9 +129,9 @@
           <div v-if="payload.report" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.report.versionNumber || '-' }}</strong></div>
             <div class="info-item"><span>分支</span><strong>{{ payload.report.repoBranch || '-' }}</strong></div>
-            <div class="info-item wide"><span>提交</span><strong>{{ shortHash(payload.report.repoCommitId) }}</strong></div>
-            <div class="info-item"><span>类</span><strong>{{ payload.report.coveredClasses }} / {{ payload.report.totalClasses }}</strong></div>
-            <div class="info-item"><span>方法</span><strong>{{ payload.report.coveredMethods }} / {{ payload.report.totalMethods }}</strong></div>
+            <div class="info-item wide"><span>提交</span><strong class="commit-value" :title="commitTooltip(payload.report.repoCommitId)">{{ shortHash(payload.report.repoCommitId) }}</strong></div>
+            <div class="info-item"><span>类覆盖</span><strong>{{ coverageRate(payload.report.coveredClasses, payload.report.totalClasses) }}</strong><small>{{ payload.report.coveredClasses }} / {{ payload.report.totalClasses }}</small></div>
+            <div class="info-item"><span>方法覆盖</span><strong>{{ coverageRate(payload.report.coveredMethods, payload.report.totalMethods) }}</strong><small>{{ payload.report.coveredMethods }} / {{ payload.report.totalMethods }}</small></div>
             <div class="info-item"><span>复杂度</span><strong>{{ payload.report.totalComplexity }}</strong></div>
           </div>
           <div v-else class="empty-card">暂无全量报告</div>
@@ -153,9 +153,9 @@
           <div v-if="payload.incrementalReport" class="info-grid">
             <div class="info-item"><span>版本</span><strong>{{ payload.incrementalReport.versionNumber || '-' }}</strong></div>
             <div class="info-item"><span>基准版本</span><strong>{{ payload.incrementalReport.baseVersionNumber || '-' }}</strong></div>
-            <div class="info-item wide"><span>基准提交</span><strong>{{ shortHash(payload.incrementalReport.baseRepoCommitId) }}</strong></div>
-            <div class="info-item"><span>类</span><strong>{{ payload.incrementalReport.coveredClasses }} / {{ payload.incrementalReport.totalClasses }}</strong></div>
-            <div class="info-item"><span>方法</span><strong>{{ payload.incrementalReport.coveredMethods }} / {{ payload.incrementalReport.totalMethods }}</strong></div>
+            <div class="info-item wide"><span>基准提交</span><strong class="commit-value" :title="commitTooltip(payload.incrementalReport.baseRepoCommitId)">{{ shortHash(payload.incrementalReport.baseRepoCommitId) }}</strong></div>
+            <div class="info-item"><span>类覆盖</span><strong>{{ coverageRate(payload.incrementalReport.coveredClasses, payload.incrementalReport.totalClasses) }}</strong><small>{{ payload.incrementalReport.coveredClasses }} / {{ payload.incrementalReport.totalClasses }}</small></div>
+            <div class="info-item"><span>方法覆盖</span><strong>{{ coverageRate(payload.incrementalReport.coveredMethods, payload.incrementalReport.totalMethods) }}</strong><small>{{ payload.incrementalReport.coveredMethods }} / {{ payload.incrementalReport.totalMethods }}</small></div>
             <div class="info-item"><span>复杂度</span><strong>{{ payload.incrementalReport.totalComplexity }}</strong></div>
           </div>
           <div v-else class="empty-card">暂无增量报告</div>
@@ -170,18 +170,18 @@
         <div class="hero-grid comparison-grid">
           <button class="hero-card clickable" type="button" @click="showComparisonMethods('added')">
             <span>新增覆盖</span>
-            <strong>{{ payload.comparison.addedCount }}</strong>
-            <small>查看新增方法</small>
+            <strong>{{ comparisonRate(payload.comparison.addedCount) }}</strong>
+            <small>{{ payload.comparison.addedCount }} 个方法 · 查看新增方法</small>
           </button>
           <button class="hero-card clickable" type="button" @click="showComparisonMethods('stable')">
             <span>稳定覆盖</span>
-            <strong>{{ payload.comparison.stableCount }}</strong>
-            <small>查看稳定方法</small>
+            <strong>{{ comparisonRate(payload.comparison.stableCount) }}</strong>
+            <small>{{ payload.comparison.stableCount }} 个方法 · 查看稳定方法</small>
           </button>
           <button class="hero-card clickable" type="button" @click="showComparisonMethods('decreased')">
             <span>下降覆盖</span>
-            <strong>{{ payload.comparison.decreasedCount }}</strong>
-            <small>查看下降方法</small>
+            <strong>{{ comparisonRate(payload.comparison.decreasedCount) }}</strong>
+            <small>{{ payload.comparison.decreasedCount }} 个方法 · 查看下降方法</small>
           </button>
         </div>
       </section>
@@ -195,12 +195,17 @@
           <article v-for="(item, index) in trend" :key="index" class="trend-item">
             <div class="trend-time">{{ trendTime(item) }}</div>
             <div class="trend-main">
-              <strong>{{ trendMetric(item, 'lineCoverage') }}</strong>
+              <div class="trend-value-row">
+                <strong>{{ trendMetric(item, 'lineCoverage') }}</strong>
+                <span :class="['trend-direction', trendDirectionTone(index, 'lineCoverage')]" :title="trendDirectionTitle(index, 'lineCoverage')">
+                  {{ trendDirectionSymbol(index, 'lineCoverage') }} {{ trendDirectionText(index, 'lineCoverage') }}
+                </span>
+              </div>
               <span>行覆盖率</span>
             </div>
             <div class="trend-meta">
-              <span>分支 {{ trendMetric(item, 'branchCoverage') }}</span>
-              <span>方法 {{ trendMetric(item, 'methodCoverage') }}</span>
+              <span>分支 {{ trendMetric(item, 'branchCoverage') }} <b :class="trendDirectionTone(index, 'branchCoverage')">{{ trendDirectionSymbol(index, 'branchCoverage') }}</b></span>
+              <span>方法 {{ trendMetric(item, 'methodCoverage') }} <b :class="trendDirectionTone(index, 'methodCoverage')">{{ trendDirectionSymbol(index, 'methodCoverage') }}</b></span>
             </div>
           </article>
         </div>
@@ -221,7 +226,7 @@
           <span>基准 Commit</span>
           <input v-model.trim="incrementalForm.baseCommitId" class="text-input" type="text" placeholder="可为空，默认使用基准报告提交" />
         </label>
-        <p class="subtext">当前版本：{{ payload?.version?.versionNumber || versionNumber }} · {{ payload?.version?.repoCommitId || '-' }}</p>
+        <p class="subtext">当前版本：{{ payload?.version?.versionNumber || versionNumber }} · <span class="commit-inline" :title="commitTooltip(payload?.version?.repoCommitId)">{{ payload?.version?.repoCommitId || '-' }}</span></p>
         <p v-if="error" class="error-text">{{ error }}</p>
         <div class="action-bar">
           <button class="primary-button" type="submit" :disabled="generating">{{ generating ? '处理中...' : '确认生成' }}</button>
@@ -294,11 +299,21 @@ function shortHash(value?: string) {
   return value.length > 18 ? `${value.slice(0, 12)}...${value.slice(-6)}` : value
 }
 
+function commitTooltip(value?: string) {
+  return value || '暂无 CommitID'
+}
+
 function coverageRate(covered?: number, total?: number) {
   if (!total) {
     return '0%'
   }
   return `${(((covered || 0) / total) * 100).toFixed(1)}%`
+}
+
+function comparisonRate(count?: number) {
+  const comparison = payload.value?.comparison
+  const total = (comparison?.addedCount || 0) + (comparison?.stableCount || 0) + (comparison?.decreasedCount || 0)
+  return coverageRate(count, total)
 }
 
 const jobProgress = computed(() => {
@@ -358,6 +373,8 @@ const trendKeyMap: Record<string, string[]> = {
   methodCoverage: ['methodCoverage', 'methodCoverageRate', 'methodRate'],
 }
 
+type TrendTone = 'up' | 'flat' | 'down'
+
 function trendValue(item: Record<string, unknown>, key: string) {
   for (const candidate of trendKeyMap[key] || [key]) {
     if (item[candidate] !== undefined && item[candidate] !== null) return item[candidate]
@@ -369,6 +386,45 @@ function trendMetric(item: Record<string, unknown>, key: string) {
   const value = Number(trendValue(item, key))
   if (!Number.isFinite(value)) return '-'
   return `${value.toFixed(1)}%`
+}
+
+function trendNumber(item: Record<string, unknown> | undefined, key: string) {
+  const value = Number(item ? trendValue(item, key) : undefined)
+  return Number.isFinite(value) ? value : null
+}
+
+function trendDelta(index: number, key: string) {
+  const current = trendNumber(trend.value[index], key)
+  const previous = trendNumber(trend.value[index - 1], key)
+  if (current === null || previous === null) return null
+  return current - previous
+}
+
+function trendDirectionTone(index: number, key: string): TrendTone {
+  const delta = trendDelta(index, key)
+  if (delta === null || Math.abs(delta) < 0.05) return 'flat'
+  return delta > 0 ? 'up' : 'down'
+}
+
+function trendDirectionSymbol(index: number, key: string) {
+  const tone = trendDirectionTone(index, key)
+  if (tone === 'up') return '↗'
+  if (tone === 'down') return '↘'
+  return '→'
+}
+
+function trendDirectionText(index: number, key: string) {
+  const delta = trendDelta(index, key)
+  if (delta === null) return '水平'
+  const absDelta = Math.abs(delta).toFixed(1)
+  if (Math.abs(delta) < 0.05) return '水平'
+  return delta > 0 ? `上升 ${absDelta}%` : `下降 ${absDelta}%`
+}
+
+function trendDirectionTitle(index: number, key: string) {
+  const delta = trendDelta(index, key)
+  if (delta === null) return '暂无上一条趋势数据可比对'
+  return `较上一条${trendDirectionText(index, key)}`
 }
 
 function trendTime(item: Record<string, unknown>) {
@@ -966,6 +1022,19 @@ onMounted(load)
   white-space: nowrap;
 }
 
+.info-item small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.commit-value,
+.commit-inline {
+  cursor: default;
+}
+
 .hero-card strong,
 .info-item strong {
   display: block;
@@ -1120,6 +1189,39 @@ onMounted(load)
   font-size: 22px;
 }
 
+.trend-value-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.trend-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.trend-direction.up {
+  background: rgba(22, 163, 74, .12);
+  color: #15803d;
+}
+
+.trend-direction.flat {
+  background: rgba(100, 116, 139, .12);
+  color: #64748b;
+}
+
+.trend-direction.down {
+  background: rgba(220, 38, 38, .12);
+  color: #dc2626;
+}
+
 .trend-main span,
 .trend-meta {
   color: #64748b;
@@ -1137,6 +1239,23 @@ onMounted(load)
   border-radius: 999px;
   padding: 5px 8px;
   background: rgba(15, 23, 42, .05);
+}
+
+.trend-meta b {
+  margin-left: 4px;
+  font-size: 13px;
+}
+
+.trend-meta b.up {
+  color: #15803d;
+}
+
+.trend-meta b.flat {
+  color: #64748b;
+}
+
+.trend-meta b.down {
+  color: #dc2626;
 }
 
 @media (max-width: 960px) {
