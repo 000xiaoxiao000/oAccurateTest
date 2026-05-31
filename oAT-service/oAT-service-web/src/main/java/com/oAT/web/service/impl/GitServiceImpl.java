@@ -856,9 +856,14 @@ public class GitServiceImpl implements GitService {
                         }
                     }
 
+                    Set<String> normalizedCandidates = new LinkedHashSet<>();
                     for (String candidate : candidates) {
                         // normalize candidate to unix style
                         String normalized = candidate.replace('\\', '/').replaceAll("^/+", "");
+                        if (!StringUtils.hasText(normalized)) {
+                            continue;
+                        }
+                        normalizedCandidates.add(normalized);
                         try (TreeWalk treeWalk = new TreeWalk(repository)) {
                             treeWalk.addTree(revCommit.getTree());
                             treeWalk.setRecursive(true);
@@ -869,6 +874,24 @@ public class GitServiceImpl implements GitService {
                                     org.eclipse.jgit.lib.ObjectLoader loader = reader.open(objectId);
                                     byte[] bytes = loader.getBytes();
                                     return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                                }
+                            }
+                        }
+                    }
+
+                    try (TreeWalk treeWalk = new TreeWalk(repository)) {
+                        treeWalk.addTree(revCommit.getTree());
+                        treeWalk.setRecursive(true);
+                        while (treeWalk.next()) {
+                            String path = treeWalk.getPathString();
+                            for (String candidate : normalizedCandidates) {
+                                if (path.equals(candidate) || path.endsWith("/" + candidate)) {
+                                    ObjectId objectId = treeWalk.getObjectId(0);
+                                    try (org.eclipse.jgit.lib.ObjectReader reader = repository.newObjectReader()) {
+                                        org.eclipse.jgit.lib.ObjectLoader loader = reader.open(objectId);
+                                        byte[] bytes = loader.getBytes();
+                                        return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                                    }
                                 }
                             }
                         }

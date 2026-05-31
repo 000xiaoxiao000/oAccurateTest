@@ -204,8 +204,10 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             throw new RuntimeException("找不到静态源码数据，请确保已进行静态扫描或源码上传。");
         }
 
-        // Filter out classes that don't exist in the current commit
-        if (StringUtils.hasText(commitId)) {
+        // Filter out classes that don't exist in the current commit for incremental report.
+        // Full report must keep existing static source data; otherwise current Commit reports can be emptied
+        // when source packages are absent, multi-module paths differ, or static data comes from runtime upload.
+        if (StringUtils.hasText(commitId) && reportType != 0) {
             if (job != null) job.getLogger().info("正在校验当前 Commit [" + commitId.substring(0, Math.min(7, commitId.length())) + "] 中存在的类...");
             List<StaticSourceInfo> filteredStaticInfos = new ArrayList<>();
 
@@ -233,7 +235,15 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                     }
                 }
             }
-            appStaticInfos = filteredStaticInfos;
+            if (filteredStaticInfos.isEmpty()) {
+                String sourceHint = entrySet != null ? "本地源码包" : "Git 仓库";
+                logger.warn("No static source matched appId={}, commitId={} by {}, fallback to existing static source info.", appId, commitId, sourceHint);
+                if (job != null) {
+                    job.getLogger().info("当前 Commit 未匹配到静态源码文件，已降级使用应用现有静态源码数据继续生成报告。请确认版本源码包或 Git 仓库路径是否完整。");
+                }
+            } else {
+                appStaticInfos = filteredStaticInfos;
+            }
         }
 
         if (appStaticInfos.isEmpty()) {
@@ -407,6 +417,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                     return report;
                 }
             }
+            return null;
         }
 
         if (StringUtils.hasText(branch)) {

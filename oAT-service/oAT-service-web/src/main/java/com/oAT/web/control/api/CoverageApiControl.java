@@ -35,6 +35,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
@@ -136,8 +137,30 @@ public class CoverageApiControl {
     }
 
     @GetMapping("/jobs/{jobId}")
-    public Job<String> job(@PathVariable String jobId) {
-        return coverageService.getJob(jobId);
+    public Map<String, Object> job(@PathVariable String jobId) {
+        Job<String> job = coverageService.getJob(jobId);
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (job == null) {
+            result.put("id", jobId);
+            result.put("finish", true);
+            result.put("success", false);
+            result.put("message", "任务不存在或已过期");
+            result.put("progress", 100);
+            result.put("progressName", "任务不存在或已过期");
+            return result;
+        }
+        Job.JobProgress progress = job.getProgress();
+        boolean success = Job.JobState.finish.equals(job.getState());
+        boolean failed = Job.JobState.error.equals(job.getState()) || Job.JobState.terminate.equals(job.getState());
+        result.put("id", job.getId());
+        result.put("state", job.getState().name());
+        result.put("data", job.getData());
+        result.put("finish", success || failed);
+        result.put("success", !failed);
+        result.put("message", progress == null ? job.getState().name() : progress.getName());
+        result.put("progress", progress == null ? 0 : progress.getPercent());
+        result.put("progressName", progress == null ? job.getState().name() : progress.getName());
+        return result;
     }
 
     @GetMapping("/trend-data")

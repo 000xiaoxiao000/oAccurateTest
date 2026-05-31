@@ -287,7 +287,7 @@ const autoSelectionNotice = ref('')
 const emptyState = ref<{ title: string; description: string } | null>(null)
 const selectedAppName = ref('')
 const trend = ref<Array<Record<string, unknown>>>([])
-const jobStatus = ref<{ progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string } | null>(null)
+const jobStatus = ref<{ data?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string } | null>(null)
 const jobLogs = ref<Array<{ time: string; text: string; tone: 'running' | 'done' | 'error' }>>([])
 const deletingReportId = ref('')
 const incrementalDialogOpen = ref(false)
@@ -550,12 +550,13 @@ async function pollJob(jobId: string, title: string) {
   }
 }
 
-async function switchToCoverageSelection(version: string, commit?: string) {
+async function switchToCoverageSelection(version: string, commit?: string, selectedReportId?: string) {
   await router.replace({
     name: 'coverage-overview',
     params: { projectId: projectId.value, appId: appId.value },
     query: {
       versionNumber: version,
+      reportId: selectedReportId || undefined,
       commitId: commit || undefined,
     },
   })
@@ -576,7 +577,7 @@ async function generateFull() {
       commitId: payload.value.version.repoCommitId,
     })
     if (!(await pollJob(jobId, '全量报告生成'))) return
-    await switchToCoverageSelection(payload.value.version.versionNumber, payload.value.version.repoCommitId)
+    await switchToCoverageSelection(payload.value.version.versionNumber, payload.value.version.repoCommitId, jobStatus.value?.data)
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '生成全量报告失败'
@@ -595,7 +596,7 @@ async function generateCurrentCommit() {
   try {
     const jobId = await triggerCoverageGenerateCurrent(projectId.value, appId.value)
     if (!(await pollJob(jobId, '本次 Commit 报告生成'))) return
-    await switchToCoverageSelection(payload.value.app.currentVersion, payload.value.app.currentCommitId)
+    await switchToCoverageSelection(payload.value.app.currentVersion, payload.value.app.currentCommitId, jobStatus.value?.data)
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '生成本次 Commit 报告失败'

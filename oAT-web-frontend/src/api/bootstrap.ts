@@ -390,8 +390,8 @@ export function triggerCoverageGenerateIncremental(
 }
 
 export function fetchCoverageJob(projectId: string, jobId: string) {
-  return apiGetRaw<{ id?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string }>(
-    `/p/${projectId}/coverage/job/${jobId}`,
+  return apiGetRaw<{ id?: string; data?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string }>(
+    `/api/projects/${projectId}/coverage/jobs/${jobId}`,
   )
 }
 
