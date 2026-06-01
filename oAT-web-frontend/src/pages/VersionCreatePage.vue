@@ -41,13 +41,32 @@
 
       <template v-if="sourceType === 'git'">
         <div class="grid-two">
-          <label class="field">
+          <div ref="branchFieldRef" class="field branch-field">
             <span>分支</span>
-            <input v-model.trim="form.repoBranch" class="text-input" list="branch-options" type="text" @change="fetchLatestCommitForBranch" />
-            <datalist id="branch-options">
-              <option v-for="branch in branches" :key="branch" :value="branch" />
-            </datalist>
-          </label>
+            <button class="branch-select-trigger text-input" type="button" :disabled="busy || branchesLoading || !center?.app.repoConfigured" :aria-expanded="branchMenuOpen" @click="toggleBranchMenu">
+              <span :class="{ placeholder: !form.repoBranch }">{{ form.repoBranch || '请选择分支' }}</span>
+              <span class="select-caret" aria-hidden="true">⌄</span>
+            </button>
+            <div v-if="branchMenuOpen" class="branch-menu">
+              <input v-model.trim="branchSearch" class="branch-search" type="search" placeholder="搜索分支" aria-label="搜索分支" @keydown.stop />
+              <div v-if="branchesLoading" class="branch-menu-empty">正在加载分支...</div>
+              <template v-else-if="filteredBranchOptions.length">
+                <button
+                  v-for="branch in filteredBranchOptions"
+                  :key="branch"
+                  class="branch-option"
+                  :class="{ active: branch === form.repoBranch }"
+                  type="button"
+                  @click="selectBranch(branch)"
+                >
+                  <span>{{ branch }}</span>
+                  <small v-if="branch === currentAppBranch">当前分支</small>
+                </button>
+              </template>
+              <div v-else class="branch-menu-empty">暂无匹配分支</div>
+            </div>
+            <small class="field-hint">共 {{ branchOptions.length }} 个分支，包含远程分支与历史版本分支。</small>
+          </div>
           <label class="field">
             <span>Commit ID</span>
             <input v-model.trim="form.repoCommitId" class="text-input" type="text" />
@@ -58,7 +77,7 @@
           </label>
         </div>
         <div class="action-row">
-          <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured" @click="loadBranches">刷新分支</button>
+          <button class="ghost-button" type="button" :disabled="busy || branchesLoading || !center?.app.repoConfigured" @click="loadBranches()">{{ branchesLoading ? '刷新中...' : '刷新分支' }}</button>
           <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="fetchLatestCommitForBranch">获取最新 Commit</button>
           <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="checkGit">检测可拉取性</button>
           <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="pullGit">执行拉取</button>
@@ -137,6 +156,9 @@ const appId = computed(() => String(route.params.appId || ''))
 const center = ref<VersionCenterPayload | null>(null)
 const sourceType = ref<'git' | 'upload'>('git')
 const branches = ref<string[]>([])
+const branchSearch = ref('')
+const branchMenuOpen = ref(false)
+const branchFieldRef = ref<HTMLElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const uploadedPath = ref('')
 const gitPulledPath = ref('')
@@ -144,6 +166,7 @@ const excludePaths = ref('')
 const gitEstimate = ref<GitPullEstimate | null>(null)
 const gitJob = ref<GitJobSummary | null>(null)
 const busy = ref(false)
+const branchesLoading = ref(false)
 const error = ref('')
 const notice = ref('')
 const form = ref({
@@ -153,6 +176,58 @@ const form = ref({
   repoBranch: '',
   repoCommitId: '',
 })
+
+const currentAppBranch = computed(() => center.value?.app.currentBranch || '')
+const branchOptions = computed(() => {
+  const historyBranches = [
+    ...(center.value?.versions || []).map((version) => version.repoBranch || ''),
+    ...(center.value?.coverageReports || []).map((report) => report.repoBranch || ''),
+  ]
+  const orderedBranches = [currentAppBranch.value, form.value.repoBranch, ...branches.value, ...historyBranches]
+  const seenBranches = new Set<string>()
+  return orderedBranches
+    .map(normalizeBranchName)
+    .filter((branch) => {
+      if (!branch || seenBranches.has(branch)) return false
+      seenBranches.add(branch)
+      return true
+    })
+})
+const filteredBranchOptions = computed(() => {
+  const keyword = branchSearch.value.toLowerCase()
+  if (!keyword) return branchOptions.value
+  return branchOptions.value.filter((branch) => branch.toLowerCase().includes(keyword))
+})
+
+function normalizeBranchName(branch?: string) {
+  return String(branch || '').trim().replace(/^refs\/heads\//, '')
+}
+
+function closeBranchMenu() {
+  branchMenuOpen.value = false
+  branchSearch.value = ''
+}
+
+function toggleBranchMenu() {
+  if (!center.value?.app.repoConfigured) return
+  branchMenuOpen.value = !branchMenuOpen.value
+  if (branchMenuOpen.value && !branches.value.length) {
+    void loadBranches(false)
+  }
+}
+
+async function selectBranch(branch: string) {
+  form.value.repoBranch = branch
+  form.value.repoCommitId = ''
+  closeBranchMenu()
+  await fetchLatestCommitForBranch()
+}
+
+function handleDocumentClick(event: MouseEvent) {
+  const target = event.target as Node | null
+  if (!target || branchFieldRef.value?.contains(target)) return
+  closeBranchMenu()
+}
 
 function formatBytes(value?: number) {
   if (!value) return '-'
@@ -173,6 +248,7 @@ async function load() {
     center.value = await fetchVersionCenter(projectId.value, appId.value)
     form.value.setAsCurrent = center.value.versions.length ? '' : 'on'
     if (!center.value.app.repoConfigured) sourceType.value = 'upload'
+    else await loadBranches(false)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载版本中心失败'
   } finally {
@@ -180,19 +256,20 @@ async function load() {
   }
 }
 
-async function loadBranches() {
-  busy.value = true
-  error.value = ''
+async function loadBranches(showError = true) {
+  if (!center.value?.app.repoConfigured) return
+  branchesLoading.value = true
+  if (showError) error.value = ''
   try {
-    branches.value = await fetchRepositoryBranches(projectId.value, appId.value)
-    if (!form.value.repoBranch && branches.value.length) {
-      form.value.repoBranch = branches.value[0]
+    branches.value = (await fetchRepositoryBranches(projectId.value, appId.value)).map(normalizeBranchName).filter(Boolean)
+    if (!form.value.repoBranch && branchOptions.value.length) {
+      form.value.repoBranch = branchOptions.value[0]
       await fetchLatestCommitForBranch()
     }
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '加载分支失败'
+    if (showError) error.value = err instanceof Error ? err.message : '加载分支失败'
   } finally {
-    busy.value = false
+    branchesLoading.value = false
   }
 }
 
@@ -335,10 +412,12 @@ function beforeUnload(event: BeforeUnloadEvent) {
 onMounted(() => {
   load()
   window.addEventListener('beforeunload', beforeUnload)
+  document.addEventListener('click', handleDocumentClick)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', beforeUnload)
+  document.removeEventListener('click', handleDocumentClick)
 })
 </script>
 
@@ -432,6 +511,105 @@ button:disabled {
 .field {
   display: grid;
   gap: 8px;
+}
+
+.branch-field {
+  position: relative;
+}
+
+.branch-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.branch-select-trigger .placeholder,
+.field-hint {
+  color: #94a3b8;
+}
+
+.select-caret {
+  color: #334155;
+  font-weight: 800;
+}
+
+.branch-menu {
+  position: absolute;
+  top: 72px;
+  left: 0;
+  right: 0;
+  z-index: 18;
+  display: grid;
+  gap: 6px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+}
+
+.branch-search {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  padding: 9px 11px;
+  outline: none;
+}
+
+.branch-search:focus {
+  border-color: rgba(15, 118, 110, 0.45);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+}
+
+.branch-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: transparent;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.branch-option:hover,
+.branch-option.active {
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+}
+
+.branch-option span {
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-option small {
+  flex: 0 0 auto;
+  color: #0f766e;
+  font-weight: 800;
+}
+
+.branch-menu-empty {
+  padding: 12px;
+  color: #64748b;
+  text-align: center;
+}
+
+.field-hint {
+  font-size: 12px;
 }
 
 .wide {

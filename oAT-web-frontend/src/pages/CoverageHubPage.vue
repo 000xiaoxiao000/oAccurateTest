@@ -28,8 +28,11 @@
     <template v-if="selectedCenter">
       <section class="panel">
         <div class="panel-head">
-          <h2>版本入口</h2>
-          <span>{{ filteredVersions.length }} / {{ selectedCenter.versions.length }}</span>
+          <div class="panel-title-block">
+            <h2>版本入口</h2>
+            <p>选择版本进入覆盖率概览。</p>
+          </div>
+          <span class="count-badge">{{ filteredVersions.length }} / {{ selectedCenter.versions.length }}</span>
         </div>
         <div class="card-grid version-card-grid">
           <article v-for="version in paginatedVersions" :key="version.id" class="card">
@@ -74,8 +77,16 @@
 
       <section class="panel">
         <div class="panel-head">
-          <h2>已生成报告</h2>
-          <span>{{ filteredReports.length }} / {{ selectedCenter.coverageReports.length }}</span>
+          <div class="panel-title-block">
+            <h2>已生成报告</h2>
+            <p>查看最新生成结果，可手动刷新同步报告列表。</p>
+          </div>
+          <div class="panel-actions">
+            <span class="count-badge">{{ filteredReports.length }} / {{ selectedCenter.coverageReports.length }}</span>
+            <button class="ghost-button small-button" type="button" :disabled="refreshingReports || !selectedAppId" @click="refreshReports">
+              {{ refreshingReports ? '刷新中...' : '刷新报告' }}
+            </button>
+          </div>
         </div>
         <div class="card-grid report-card-grid">
           <article v-for="report in paginatedReports" :key="report.id" class="card">
@@ -160,6 +171,7 @@ const versionPageSize = ref(6)
 const reportPage = ref(1)
 const reportPageSize = ref(6)
 const deletingReportId = ref('')
+const refreshingReports = ref(false)
 
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
 const keywordTerm = computed(() => keyword.value.toLowerCase())
@@ -239,6 +251,19 @@ async function refreshCenter(appId: string) {
   }
 }
 
+async function refreshReports() {
+  if (!selectedAppId.value) return
+  refreshingReports.value = true
+  error.value = ''
+  try {
+    await refreshCenter(selectedAppId.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '刷新覆盖率报告失败'
+  } finally {
+    refreshingReports.value = false
+  }
+}
+
 async function removeCoverageReport(reportId: string) {
   if (!selectedAppId.value || !reportId) return
   const confirmed = await dialog.confirm({
@@ -292,6 +317,7 @@ onMounted(loadApps)
 .page-header,
 .selector-row,
 .panel-head,
+.panel-actions,
 .action-row {
   display: flex;
   gap: 12px;
@@ -316,6 +342,36 @@ onMounted(loadApps)
 .panel-head {
   justify-content: space-between;
   align-items: center;
+}
+
+.panel-title-block {
+  display: grid;
+  gap: 4px;
+}
+
+.panel-title-block h2,
+.panel-title-block p {
+  margin: 0;
+}
+
+.panel-title-block p {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.panel-actions {
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.count-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #2563eb;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .action-row {
@@ -364,6 +420,18 @@ onMounted(loadApps)
 .ghost-button {
   background: rgba(15, 23, 42, 0.06);
   cursor: pointer;
+}
+
+.ghost-button.small-button {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }
 
 .panel,
