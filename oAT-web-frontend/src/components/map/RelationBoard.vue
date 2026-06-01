@@ -84,7 +84,7 @@
           <g :transform="graphTransform">
             <g class="edge-layer">
               <g v-for="edge in graphEdges" :key="edge.id" :class="['graph-edge', edgeTone(edge), edgeRelated(edge) && 'related', edgeDimmed(edge) && 'dimmed']">
-                <line :x1="edge.source.x" :y1="edge.source.y" :x2="edge.target.x" :y2="edge.target.y" marker-end="url(#graph-arrow)" />
+                <path :d="edge.path" marker-end="url(#graph-arrow)" />
                 <text v-if="showEdgeLabel(edge)" :x="edge.labelX" :y="edge.labelY">{{ edge.label || actionText(edge.action) || '关联' }}</text>
               </g>
             </g>
@@ -232,7 +232,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, watchEffect } from 'vue'
 import { RouterLink } from 'vue-router'
 import type { RouteLocationRaw } from 'vue-router'
 
@@ -426,12 +426,14 @@ const graphEdges = computed(() => filteredEdges.value
     const source = graphNodeMap.value.get(edge.source)
     const target = graphNodeMap.value.get(edge.target)
     if (!source || !target) return null
+    const labelPoint = edgeLabelPoint(source, target)
     return {
       ...edge,
       source,
       target,
-      labelX: (source.x + target.x) / 2,
-      labelY: (source.y + target.y) / 2 - 6,
+      path: edgePath(source, target),
+      labelX: labelPoint.x,
+      labelY: labelPoint.y,
     }
   })
   .filter((edge): edge is NonNullable<typeof edge> => Boolean(edge)))
@@ -444,11 +446,19 @@ function nodeSearchText(node: RelationNode) {
 }
 
 function resolveGraphLayoutKind(nodes: RelationNode[]) {
-  const types = nodes.map((node) => `${node.type || ''} ${(node.classes || []).join(' ')}`.toLowerCase())
-  const codeCount = types.filter((type) => type.includes('code') || type.includes('class') || type.includes('method')).length
+  const codeCount = nodes.filter(isCodeNode).length
   if (nodes.length > 60 || codeCount > Math.max(8, nodes.length * 0.35)) return 'layered'
-  if (types.some((type) => type.includes('snapshot') || type.includes('table') || type.includes('app'))) return 'layered'
+  if (nodes.some((node) => nodeTypeText(node).includes('snapshot') || nodeTypeText(node).includes('table') || nodeTypeText(node).includes('app'))) return 'layered'
   return 'grid'
+}
+
+function nodeTypeText(node: RelationNode) {
+  return `${node.type || ''} ${(node.classes || []).join(' ')}`.toLowerCase()
+}
+
+function isCodeNode(node: RelationNode) {
+  const type = nodeTypeText(node)
+  return type.includes('code') || type.includes('class') || type.includes('method')
 }
 
 function buildGraphLayout(nodes: RelationNode[], edges: RelationEdge[], kind: string) {
@@ -510,7 +520,7 @@ function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
   }
 
   nodes.forEach((node, index) => {
-    if (!ranks.has(node.id)) ranks.set(node.id, Math.floor(index / 12))
+    if (!ranks.has(node.id)) ranks.set(node.id, Math.floor(index / 10))
   })
 
   const buckets = new Map<number, RelationNode[]>()
@@ -521,38 +531,77 @@ function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
     buckets.set(rank, list)
   })
 
-  const maxRowsPerColumn = nodes.length > 80 ? 7 : 6
-  const spacingX = nodes.length > 80 ? 168 : 220
-  const spacingY = nodes.length > 80 ? 86 : 108
+  const mostlyCode = nodes.filter(isCodeNode).length > nodes.length * 0.5
+  const maxRowsPerColumn = mostlyCode ? (nodes.length > 80 ? 5 : 4) : (nodes.length > 80 ? 7 : 6)
+  const maxColumnsPerBand = mostlyCode ? (nodes.length > 80 ? 5 : 6) : (nodes.length > 80 ? 6 : 7)
+  const spacingX = mostlyCode ? 230 : 220
+  const spacingY = mostlyCode ? 118 : 108
+  const bandGap = mostlyCode ? 132 : 118
+  const left = 130
+  const top = 118
   const positions = new Map<string, { x: number; y: number }>()
-  let columnCursor = 0
+  let visualColumn = 0
+
   Array.from(buckets.keys()).sort((a, b) => a - b).forEach((rank) => {
     const bucket = buckets.get(rank) || []
-    const sortedBucket = bucket.slice().sort((left, right) => (left.label || left.id).localeCompare(right.label || right.id))
+    const sortedBucket = bucket.slice().sort((leftNode, rightNode) => nodeSortWeight(leftNode) - nodeSortWeight(rightNode) || (leftNode.label || leftNode.id).localeCompare(rightNode.label || rightNode.id))
     const chunkCount = Math.max(1, Math.ceil(sortedBucket.length / maxRowsPerColumn))
     for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
       const chunk = sortedBucket.slice(chunkIndex * maxRowsPerColumn, (chunkIndex + 1) * maxRowsPerColumn)
-      const x = 110 + columnCursor * spacingX
+      const band = Math.floor(visualColumn / maxColumnsPerBand)
+      const column = visualColumn % maxColumnsPerBand
+      const x = left + column * spacingX
+      const bandTop = top + band * (maxRowsPerColumn * spacingY + bandGap)
       const verticalOffset = Math.max(0, maxRowsPerColumn - chunk.length) * spacingY * 0.5
       chunk.forEach((node, row) => {
         positions.set(node.id, {
           x,
-          y: 108 + verticalOffset + row * spacingY,
+          y: bandTop + verticalOffset + row * spacingY,
         })
       })
-      columnCursor += 1
+      visualColumn += 1
     }
-    columnCursor += bucket.length > maxRowsPerColumn ? 0.45 : 0.75
   })
+
+  const usedColumns = Math.min(maxColumnsPerBand, Math.max(1, visualColumn))
+  const bands = Math.max(1, Math.ceil(visualColumn / maxColumnsPerBand))
   const canvas = {
-    width: Math.max(1200, Math.ceil(columnCursor * spacingX) + 180),
-    height: Math.max(680, maxRowsPerColumn * spacingY + 220),
+    width: Math.max(1120, left * 2 + (usedColumns - 1) * spacingX + 160),
+    height: Math.max(680, top * 2 + bands * maxRowsPerColumn * spacingY + (bands - 1) * bandGap),
   }
   return { canvas, positions }
 }
 
+function nodeSortWeight(node: RelationNode) {
+  const type = nodeTypeText(node)
+  if (type.includes('entry')) return 0
+  if (type.includes('controller')) return 1
+  if (type.includes('service')) return 2
+  if (type.includes('code')) return 3
+  return 4
+}
+
 function shorten(value: string, limit: number) {
   return value.length > limit ? `${value.slice(0, limit - 1)}...` : value
+}
+
+function edgePath(source: GraphNode, target: GraphNode) {
+  const dx = target.x - source.x
+  const dy = target.y - source.y
+  const curve = Math.max(50, Math.min(180, Math.abs(dx) * 0.45 + Math.abs(dy) * 0.12))
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const direction = dx >= 0 ? 1 : -1
+    return `M ${source.x} ${source.y} C ${source.x + curve * direction} ${source.y}, ${target.x - curve * direction} ${target.y}, ${target.x} ${target.y}`
+  }
+  const direction = dy >= 0 ? 1 : -1
+  return `M ${source.x} ${source.y} C ${source.x} ${source.y + curve * direction}, ${target.x} ${target.y - curve * direction}, ${target.x} ${target.y}`
+}
+
+function edgeLabelPoint(source: GraphNode, target: GraphNode) {
+  return {
+    x: (source.x + target.x) / 2,
+    y: (source.y + target.y) / 2 - 10,
+  }
 }
 
 function nodeTone(node: RelationNode) {
@@ -687,8 +736,36 @@ function zoomGraph(delta: number) {
 }
 
 function fitGraph() {
-  graphZoom.value = 1
-  graphOffset.value = { x: 0, y: 0 }
+  const bounds = graphContentBounds()
+  const padding = 100
+  const availableWidth = Math.max(320, graphCanvas.value.width - padding * 2)
+  const availableHeight = Math.max(260, graphCanvas.value.height - padding * 2)
+  const widthRatio = availableWidth / Math.max(bounds.width, 1)
+  const heightRatio = availableHeight / Math.max(bounds.height, 1)
+  const zoom = clampGraphZoom(Math.min(1.35, Math.max(0.55, Math.min(widthRatio, heightRatio))))
+  graphZoom.value = zoom
+  graphOffset.value = {
+    x: graphCanvas.value.width / 2 - (bounds.x + bounds.width / 2) * zoom,
+    y: graphCanvas.value.height / 2 - (bounds.y + bounds.height / 2) * zoom,
+  }
+}
+
+function graphContentBounds() {
+  const nodes = graphNodes.value
+  if (!nodes.length) {
+    return { x: 0, y: 0, width: graphCanvas.value.width, height: graphCanvas.value.height }
+  }
+  const labelPadding = denseGraph.value ? 36 : 72
+  const minX = Math.min(...nodes.map((node) => node.x - node.radius - labelPadding))
+  const maxX = Math.max(...nodes.map((node) => node.x + node.radius + labelPadding))
+  const minY = Math.min(...nodes.map((node) => node.y - node.radius - labelPadding))
+  const maxY = Math.max(...nodes.map((node) => node.y + node.radius + labelPadding))
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  }
 }
 
 function resetGraphLayout() {
@@ -813,6 +890,19 @@ function handleKeydown(event: KeyboardEvent) {
     showSelectedTip()
   }
 }
+
+watch(
+  () => [
+    layoutSourceNodes.value.map((node) => node.id).join('|'),
+    layoutSourceEdges.value.map((edge) => `${edge.source}>${edge.target}`).join('|'),
+  ],
+  async () => {
+    nodePositionOverrides.value = {}
+    await nextTick()
+    fitGraph()
+  },
+  { flush: 'post' },
+)
 
 watchEffect(() => {
   if (nodePage.value > nodeTotalPages.value) nodePage.value = nodeTotalPages.value
@@ -1293,27 +1383,28 @@ watchEffect(() => {
   background-size: 32px 32px;
 }
 
-.graph-edge line {
+.graph-edge path {
+  fill: none;
   stroke: #94a3b8;
   stroke-width: 1.8;
   opacity: .62;
 }
 
-.graph-edge.related line {
+.graph-edge.related path {
   stroke: #0f766e;
   stroke-width: 3;
   opacity: 1;
 }
 
-.graph-edge.dimmed line {
+.graph-edge.dimmed path {
   opacity: .12;
 }
 
-.graph-edge.insert line { stroke: #16a34a; }
-.graph-edge.update line { stroke: #f59e0b; }
-.graph-edge.delete line { stroke: #dc2626; }
-.graph-edge.select line { stroke: #2563eb; }
-.graph-edge.invoke line {
+.graph-edge.insert path { stroke: #16a34a; }
+.graph-edge.update path { stroke: #f59e0b; }
+.graph-edge.delete path { stroke: #dc2626; }
+.graph-edge.select path { stroke: #2563eb; }
+.graph-edge.invoke path {
   stroke: #2563eb;
   stroke-width: 2.1;
   opacity: .72;
