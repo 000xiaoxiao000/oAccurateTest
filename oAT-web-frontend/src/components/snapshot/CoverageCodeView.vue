@@ -1,6 +1,6 @@
 <template>
   <section class="coverage-code-view">
-    <div class="page-header">
+    <div class="page-header plain-header coverage-page-header">
       <div class="header-title">
         <div class="eyebrow">{{ eyebrow }}</div>
         <h1>{{ title }}</h1>

@@ -164,7 +164,7 @@ public class VersionApiControl {
             }
         }
         versionService.addVersionItem(itemVo);
-        if (versionService.getVersionItemList(projectId, appId).size() == 1 && "on".equals(itemVo.getSetAsCurrent())) {
+        if ("on".equals(itemVo.getSetAsCurrent())) {
             AppVo app = appService.getApp(appId);
             app.setCurrentVersion(itemVo.getVersionNumber());
             app.setCurrentBranch(itemVo.getRepoBranch());

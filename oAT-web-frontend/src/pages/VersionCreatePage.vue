@@ -93,9 +93,14 @@
             <span>时长 {{ formatDuration(gitEstimate.estimatedDurationMs) }}</span>
             <span>包大小 {{ formatBytes(gitEstimate.estimatedPackageSizeBytes) }}</span>
           </div>
-          <p v-if="gitEstimate.packageCommitVerify?.unavailableReason" class="subtext">
-            {{ gitEstimate.packageCommitVerify.unavailableReason }}
-          </p>
+          <div v-if="gitEstimate.packageCommitVerify?.unavailableReason" class="status-callout warning">
+            <div class="callout-icon" aria-hidden="true">!</div>
+            <div>
+              <strong>运行时 Commit 校验未完成</strong>
+              <span>{{ gitEstimate.packageCommitVerify.unavailableReason }}</span>
+              <small>这不会阻止 Git 拉取；如需校验运行时目标系统 CommitId，请先确认应用探针在线后重新检测。</small>
+            </div>
+          </div>
         </div>
         <div v-if="gitJob" class="panel">
           <div class="panel-head">
@@ -495,6 +500,47 @@ onBeforeUnmount(() => {
   margin-bottom: 14px;
   background: rgba(245, 158, 11, .12);
   color: #92400e;
+}
+
+.status-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.status-callout.warning {
+  background: rgba(255, 247, 237, 0.92);
+  border-color: rgba(234, 88, 12, 0.18);
+}
+
+.callout-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(234, 88, 12, 0.14);
+  color: #c2410c;
+  font-weight: 900;
+}
+
+.status-callout div:last-child {
+  display: grid;
+  gap: 5px;
+}
+
+.status-callout strong {
+  color: #9a3412;
+}
+
+.status-callout span,
+.status-callout small {
+  color: #64748b;
+  line-height: 1.55;
 }
 
 button:disabled {

@@ -1,6 +1,6 @@
 <template>
   <section>
-    <div class="page-header">
+    <div class="page-header plain-header coverage-page-header">
       <div>
         <div class="eyebrow">Coverage Overview</div>
         <h1>{{ payload?.app.name || selectedAppName || appId }}</h1>
@@ -34,14 +34,20 @@
           <p class="subtext">核心指标、生成操作和明细入口集中展示，避免浮层遮挡正文。</p>
         </div>
         <div class="coverage-toolbar">
-          <button class="primary-button" type="button" :disabled="generating" @click="generateFull">
+          <button
+            class="primary-button tooltip-button"
+            type="button"
+            :disabled="generating"
+            data-tooltip="基于当前选择的版本与 Commit 生成完整覆盖率报告，会覆盖该版本的全量报告视图。"
+            @click="generateFull"
+          >
             {{ generating ? '处理中...' : '生成全量报告' }}
           </button>
           <button
-            class="primary-button current-commit-button"
+            class="primary-button current-commit-button tooltip-button"
             type="button"
             :disabled="generating || !payload.app.currentCommitId"
-            :title="payload.app.currentCommitId ? `当前 Commit：${payload.app.currentCommitId}` : '当前应用未配置 CommitId'"
+            :data-tooltip="payload.app.currentCommitId ? `只针对应用当前 Commit 生成报告：${payload.app.currentCommitId}` : '当前应用未配置 CommitId，无法生成本次 Commit 报告'"
             @click="generateCurrentCommit"
           >
             生成本次 Commit 报告
@@ -212,42 +218,117 @@
       </section>
     </template>
 
-    <div v-if="incrementalDialogOpen" class="modal-mask" @click.self="incrementalDialogOpen = false">
-      <form class="modal-card" @submit.prevent="generateIncremental">
-        <div class="panel-head">
-          <h2>生成增量覆盖率报告</h2>
-          <button class="text-button danger" type="button" @click="incrementalDialogOpen = false">关闭</button>
+    <div v-if="incrementalDialogOpen" class="modal-mask" @click.self="closeIncrementalDialog">
+      <form class="modal-card incremental-modal" @submit.prevent="generateIncremental">
+        <div class="modal-head">
+          <div>
+            <div class="eyebrow">Incremental Coverage</div>
+            <h2>生成增量覆盖率报告</h2>
+            <p class="subtext">选择一个基准报告进行差异计算，也可手动指定基准版本与 Commit。</p>
+          </div>
+          <button class="modal-close" type="button" aria-label="关闭生成增量报告弹窗" @click="closeIncrementalDialog">×</button>
         </div>
-        <label class="field">
-          <span>基准版本号</span>
-          <input v-model.trim="incrementalForm.baseVersionNumber" class="text-input" type="text" placeholder="例如 1.0.0" />
-        </label>
-        <label class="field">
-          <span>基准 Commit</span>
-          <input v-model.trim="incrementalForm.baseCommitId" class="text-input" type="text" placeholder="可为空，默认使用基准报告提交" />
-        </label>
-        <p class="subtext">当前版本：{{ payload?.version?.versionNumber || versionNumber }} · <span class="commit-inline" :title="commitTooltip(payload?.version?.repoCommitId)">{{ payload?.version?.repoCommitId || '-' }}</span></p>
-        <p v-if="error" class="error-text">{{ error }}</p>
-        <div class="action-bar">
-          <button class="primary-button" type="submit" :disabled="generating">{{ generating ? '处理中...' : '确认生成' }}</button>
-          <button class="ghost-button" type="button" @click="incrementalDialogOpen = false">取消</button>
+
+        <div class="incremental-summary-grid">
+          <article class="summary-tile current">
+            <span>当前版本</span>
+            <strong>{{ payload?.version?.versionNumber || versionNumber || '-' }}</strong>
+            <small :title="commitTooltip(payload?.version?.repoCommitId)">Commit {{ shortHash(payload?.version?.repoCommitId) }}</small>
+          </article>
+          <article class="summary-tile base">
+            <span>基准版本</span>
+            <strong>{{ incrementalForm.baseVersionNumber || '未选择' }}</strong>
+            <small :title="commitTooltip(incrementalForm.baseCommitId)">Commit {{ shortHash(incrementalForm.baseCommitId) }}</small>
+          </article>
+        </div>
+
+        <section class="modal-section">
+          <div class="modal-section-head">
+            <div>
+              <h3>选择基准报告</h3>
+              <p class="subtext">优先选择已有全量报告，系统会自动填充基准版本号与 Commit。</p>
+            </div>
+            <span class="count-badge">{{ baseReportOptions.length }} 个可选</span>
+          </div>
+          <div v-if="incrementalBaseLoading" class="base-report-empty">正在加载基准报告...</div>
+          <div v-else-if="baseReportOptions.length" class="base-report-list">
+            <button
+              v-for="report in baseReportOptions"
+              :key="baseReportKey(report)"
+              class="base-report-option"
+              :class="{ active: baseReportKey(report) === incrementalForm.baseReportId }"
+              type="button"
+              @click="selectBaseReport(report)"
+            >
+              <span>
+                <strong>{{ report.versionNumber || '-' }}</strong>
+                <small>{{ report.repoBranch || '-' }} · {{ report.createTimeText || '-' }}</small>
+              </span>
+              <code :title="commitTooltip(report.repoCommitId)">{{ shortHash(report.repoCommitId) }}</code>
+            </button>
+          </div>
+          <div v-else class="base-report-empty">暂无可选基准报告，请手动填写基准版本号。</div>
+        </section>
+
+        <section class="modal-section">
+          <div class="modal-section-head compact">
+            <h3>手动确认基准信息</h3>
+          </div>
+          <div class="incremental-form-grid">
+            <label class="field">
+              <span>基准版本号</span>
+              <input v-model.trim="incrementalForm.baseVersionNumber" class="text-input" type="text" placeholder="例如 v1.0.0" />
+            </label>
+            <label class="field">
+              <span>基准 Commit</span>
+              <input v-model.trim="incrementalForm.baseCommitId" class="text-input" type="text" placeholder="可为空，默认使用基准报告提交" />
+            </label>
+          </div>
+        </section>
+
+        <div v-if="incrementalError" class="modal-error">{{ incrementalError }}</div>
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" :disabled="generating" @click="closeIncrementalDialog">取消</button>
+          <button class="primary-button" type="submit" :disabled="generating || !incrementalForm.baseVersionNumber">
+            {{ generating ? '处理中...' : '确认生成' }}
+          </button>
         </div>
       </form>
     </div>
 
-    <div v-if="comparisonDialog.open" class="modal-mask" @click.self="comparisonDialog.open = false">
-      <section class="modal-card">
-        <div class="panel-head">
-          <h2>{{ comparisonDialog.title }}</h2>
-          <button class="text-button danger" type="button" @click="comparisonDialog.open = false">关闭</button>
+    <div v-if="comparisonDialog.open" class="modal-mask" @click.self="closeComparisonDialog">
+      <section class="modal-card comparison-modal">
+        <div class="modal-head">
+          <div>
+            <div class="eyebrow">Coverage Diff Methods</div>
+            <h2>{{ comparisonDialog.title }}</h2>
+            <p class="subtext">{{ comparisonDialog.description }}</p>
+          </div>
+          <button class="modal-close" type="button" aria-label="关闭覆盖变化方法弹窗" @click="closeComparisonDialog">×</button>
         </div>
-        <div class="method-list">
-          <article v-for="method in comparisonDialog.methods" :key="`${method.className}-${method.methodName}-${method.methodDesc}`" class="method-item">
-            <strong>{{ method.className }}</strong>
-            <span>{{ method.methodName }}{{ method.methodDesc || '' }}</span>
+
+        <div class="comparison-modal-toolbar">
+          <span :class="['comparison-tone-badge', comparisonDialog.type]">{{ comparisonDialog.label }}</span>
+          <span class="count-badge">{{ filteredComparisonMethods.length }} / {{ comparisonDialog.methods.length }} 个方法</span>
+          <input v-model.trim="comparisonDialog.keyword" class="text-input comparison-search" type="search" placeholder="搜索类名、方法名或签名" aria-label="搜索覆盖变化方法" />
+        </div>
+
+        <div v-if="filteredComparisonMethods.length" class="method-list comparison-method-list">
+          <article v-for="method in filteredComparisonMethods" :key="`${method.className}-${method.methodName}-${method.methodDesc}`" class="method-item comparison-method-item">
+            <div class="method-main">
+              <strong>{{ method.className }}</strong>
+              <span>{{ method.methodName }}{{ method.methodDesc || '' }}</span>
+            </div>
+            <RouterLink
+              v-if="comparisonReportId"
+              class="report-action-link"
+              :to="{ name: 'coverage-code', params: { projectId, appId }, query: { reportId: comparisonReportId, className: method.className } }"
+            >
+              定位源码
+            </RouterLink>
           </article>
-          <div v-if="!comparisonDialog.methods.length" class="empty-card">暂无方法明细</div>
         </div>
+        <div v-else class="base-report-empty">暂无匹配方法</div>
       </section>
     </div>
   </section>
@@ -291,8 +372,53 @@ const jobStatus = ref<{ data?: string; progress?: number; progressName?: string;
 const jobLogs = ref<Array<{ time: string; text: string; tone: 'running' | 'done' | 'error' }>>([])
 const deletingReportId = ref('')
 const incrementalDialogOpen = ref(false)
-const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '' })
-const comparisonDialog = ref<{ open: boolean; title: string; methods: CoverageComparisonMethod[] }>({ open: false, title: '', methods: [] })
+const incrementalBaseLoading = ref(false)
+const incrementalError = ref('')
+const incrementalBaseReports = ref<IncrementalBaseReport[]>([])
+const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '', baseReportId: '' })
+const comparisonDialog = ref<{
+  open: boolean
+  type: 'added' | 'stable' | 'decreased'
+  title: string
+  label: string
+  description: string
+  keyword: string
+  methods: CoverageComparisonMethod[]
+}>({ open: false, type: 'added', title: '', label: '', description: '', keyword: '', methods: [] })
+
+type IncrementalBaseReport = {
+  id?: string
+  versionNumber?: string
+  repoBranch?: string
+  repoCommitId?: string
+  createTimeText?: string
+  reportType?: number
+}
+
+const baseReportOptions = computed(() => {
+  const candidates: IncrementalBaseReport[] = [
+    ...(payload.value?.report ? [payload.value.report] : []),
+    ...incrementalBaseReports.value,
+  ]
+  const seen = new Set<string>()
+  return candidates
+    .filter((report) => report.versionNumber && report.reportType !== 1)
+    .filter((report) => {
+      const key = baseReportKey(report)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+})
+const comparisonReportId = computed(() => payload.value?.incrementalReport?.id || payload.value?.report?.id || '')
+const filteredComparisonMethods = computed(() => {
+  const keyword = comparisonDialog.value.keyword.toLowerCase()
+  if (!keyword) return comparisonDialog.value.methods
+  return comparisonDialog.value.methods.filter((method) => [method.className, method.methodName, method.methodDesc]
+    .join(' ')
+    .toLowerCase()
+    .includes(keyword))
+})
 
 function shortHash(value?: string) {
   if (!value) return '-'
@@ -629,7 +755,38 @@ async function removeCoverageReport(targetReportId: string) {
   }
 }
 
-function openIncrementalDialog() {
+function baseReportKey(report: IncrementalBaseReport) {
+  return report.id || `${report.versionNumber || ''}:${report.repoCommitId || ''}`
+}
+
+function selectBaseReport(report: IncrementalBaseReport) {
+  incrementalForm.value = {
+    baseVersionNumber: report.versionNumber || '',
+    baseCommitId: report.repoCommitId || '',
+    baseReportId: baseReportKey(report),
+  }
+  incrementalError.value = ''
+}
+
+function closeIncrementalDialog() {
+  if (generating.value) return
+  incrementalDialogOpen.value = false
+  incrementalError.value = ''
+}
+
+async function loadIncrementalBaseReports() {
+  incrementalBaseLoading.value = true
+  try {
+    const center = await fetchVersionCenter(projectId.value, appId.value)
+    incrementalBaseReports.value = center.coverageReports || []
+  } catch (err) {
+    incrementalError.value = err instanceof Error ? err.message : '加载基准报告失败，可手动填写基准信息'
+  } finally {
+    incrementalBaseLoading.value = false
+  }
+}
+
+async function openIncrementalDialog() {
   if (!payload.value?.version?.versionNumber || !payload.value?.report?.versionNumber) {
     error.value = '缺少版本或基准报告信息'
     return
@@ -637,21 +794,25 @@ function openIncrementalDialog() {
   incrementalForm.value = {
     baseVersionNumber: payload.value.report.versionNumber || payload.value.version.versionNumber || '',
     baseCommitId: payload.value.report.repoCommitId || '',
+    baseReportId: baseReportKey(payload.value.report),
   }
+  incrementalError.value = ''
   incrementalDialogOpen.value = true
+  await loadIncrementalBaseReports()
 }
 
 async function generateIncremental() {
   if (!payload.value?.version?.versionNumber) {
-    error.value = '缺少当前版本信息'
+    incrementalError.value = '缺少当前版本信息'
     return
   }
   if (!incrementalForm.value.baseVersionNumber) {
-    error.value = '请填写基准版本号'
+    incrementalError.value = '请填写基准版本号'
     return
   }
   generating.value = true
   error.value = ''
+  incrementalError.value = ''
   try {
     const jobId = await triggerCoverageGenerateIncremental(projectId.value, {
       appId: appId.value,
@@ -665,18 +826,37 @@ async function generateIncremental() {
     if (!(await pollJob(jobId, '增量报告生成'))) return
     await load()
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '生成增量报告失败'
+    incrementalError.value = err instanceof Error ? err.message : '生成增量报告失败'
   } finally {
     generating.value = false
   }
+}
+
+function closeComparisonDialog() {
+  comparisonDialog.value.open = false
+  comparisonDialog.value.keyword = ''
 }
 
 function showComparisonMethods(type: 'added' | 'stable' | 'decreased') {
   const comparison = payload.value?.comparison
   if (!comparison) return
   const titleMap = { added: '新增覆盖方法', stable: '稳定覆盖方法', decreased: '覆盖下降方法' }
+  const labelMap = { added: '新增覆盖', stable: '稳定覆盖', decreased: '下降覆盖' }
+  const descriptionMap = {
+    added: '这些方法在当前版本新增进入覆盖范围，可用于快速确认新增能力的测试触达情况。',
+    stable: '这些方法与上一版本保持覆盖，可用于确认核心稳定路径是否持续被测试保护。',
+    decreased: '这些方法相比上一版本覆盖下降，建议优先定位源码并补充用例或回放流量。',
+  }
   const methodMap = { added: comparison.addedMethods, stable: comparison.stableMethods, decreased: comparison.decreasedMethods }
-  comparisonDialog.value = { open: true, title: titleMap[type], methods: methodMap[type] || [] }
+  comparisonDialog.value = {
+    open: true,
+    type,
+    title: titleMap[type],
+    label: labelMap[type],
+    description: descriptionMap[type],
+    keyword: '',
+    methods: methodMap[type] || [],
+  }
 }
 
 onMounted(load)
@@ -694,7 +874,7 @@ onMounted(load)
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .eyebrow {
@@ -763,7 +943,7 @@ onMounted(load)
 .empty-card,
 .empty-state-card,
 .overview-command-card {
-  padding: 18px;
+  padding: 16px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -777,31 +957,93 @@ onMounted(load)
 .panel,
 .panel-grid,
 .hero-grid {
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .overview-command-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-top: 18px;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 14px 16px;
   background: linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(240, 253, 250, .82));
 }
 
 .overview-command-card h2 {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
+  font-size: 22px;
+}
+
+.overview-command-card .subtext {
+  margin: 6px 0 0;
 }
 
 .coverage-toolbar {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .current-commit-button {
   background: linear-gradient(135deg, #2563eb, #14b8a6);
+}
+
+.tooltip-button {
+  position: relative;
+}
+
+.tooltip-button::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  width: max-content;
+  max-width: 280px;
+  padding: 9px 11px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, .94);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, .18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.tooltip-button::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  z-index: 21;
+  width: 10px;
+  height: 10px;
+  background: rgba(15, 23, 42, .94);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px) rotate(45deg);
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.tooltip-button:hover::before,
+.tooltip-button:focus-visible::before,
+.tooltip-button:hover::after,
+.tooltip-button:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0) rotate(45deg);
+}
+
+.tooltip-button:hover::after,
+.tooltip-button:focus-visible::after {
+  transform: translate(-50%, 0);
 }
 
 .button-link {
@@ -816,7 +1058,7 @@ onMounted(load)
 .panel-grid,
 .info-grid {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .hero-grid,
@@ -829,11 +1071,12 @@ onMounted(load)
 }
 
 .coverage-metrics .hero-card {
-  min-height: 118px;
+  min-height: 86px;
+  padding: 14px 16px;
 }
 
 .coverage-metrics .hero-card strong {
-  font-size: 30px;
+  font-size: 26px;
 }
 
 .status-metric-card {
@@ -1119,7 +1362,8 @@ onMounted(load)
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgba(15, 23, 42, .44);
+  background: rgba(15, 23, 42, .52);
+  backdrop-filter: blur(8px);
 }
 
 .modal-card {
@@ -1128,6 +1372,200 @@ onMounted(load)
   overflow: auto;
   display: grid;
   gap: 14px;
+  padding: 22px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, .98);
+  border: 1px solid rgba(15, 23, 42, .08);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, .24);
+}
+
+.incremental-modal {
+  width: min(820px, calc(100vw - 32px));
+}
+
+.modal-head,
+.modal-section-head,
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.modal-head {
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, .08);
+}
+
+.modal-head h2,
+.modal-head .subtext,
+.modal-section-head h3,
+.modal-section-head .subtext {
+  margin: 0;
+}
+
+.modal-head h2 {
+  margin-top: 4px;
+}
+
+.modal-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .06);
+  color: #334155;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  background: rgba(220, 38, 38, .10);
+  color: #dc2626;
+}
+
+.incremental-summary-grid,
+.incremental-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-tile {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  background: rgba(248, 250, 252, .86);
+}
+
+.summary-tile.current {
+  border-color: rgba(15, 118, 110, .18);
+  background: rgba(240, 253, 250, .86);
+}
+
+.summary-tile.base {
+  border-color: rgba(37, 99, 235, .14);
+  background: rgba(239, 246, 255, .82);
+}
+
+.summary-tile span,
+.summary-tile small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.summary-tile strong,
+.summary-tile small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  background: rgba(248, 250, 252, .64);
+}
+
+.modal-section-head.compact {
+  justify-content: flex-start;
+}
+
+.count-badge {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, .08);
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.base-report-list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.base-report-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, .88);
+  text-align: left;
+  cursor: pointer;
+}
+
+.base-report-option:hover,
+.base-report-option.active {
+  border-color: rgba(15, 118, 110, .26);
+  background: rgba(240, 253, 250, .92);
+}
+
+.base-report-option span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.base-report-option small,
+.base-report-option code {
+  color: #64748b;
+}
+
+.base-report-option strong,
+.base-report-option small,
+.base-report-option code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.base-report-option code {
+  max-width: 180px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.base-report-empty,
+.modal-error {
+  padding: 12px 14px;
+  border-radius: 16px;
+}
+
+.base-report-empty {
+  background: rgba(241, 245, 249, .9);
+  color: #64748b;
+  text-align: center;
+}
+
+.modal-error {
+  border: 1px solid rgba(185, 28, 28, .14);
+  background: rgba(254, 242, 242, .92);
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+.modal-actions {
+  justify-content: flex-end;
+  padding-top: 4px;
 }
 
 .method-list {
@@ -1142,6 +1580,91 @@ onMounted(load)
   border-radius: 14px;
   background: #f8fbfb;
   border: 1px solid rgba(15, 23, 42, .08);
+}
+
+.comparison-modal {
+  width: min(780px, calc(100vw - 32px));
+}
+
+.comparison-modal-toolbar {
+  display: grid;
+  grid-template-columns: auto auto minmax(220px, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, .78);
+  border: 1px solid rgba(15, 23, 42, .07);
+}
+
+.comparison-search {
+  min-width: 0;
+}
+
+.comparison-tone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.comparison-tone-badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.comparison-tone-badge.added {
+  background: rgba(22, 163, 74, .12);
+  color: #15803d;
+}
+
+.comparison-tone-badge.stable {
+  background: rgba(37, 99, 235, .10);
+  color: #2563eb;
+}
+
+.comparison-tone-badge.decreased {
+  background: rgba(220, 38, 38, .10);
+  color: #dc2626;
+}
+
+.comparison-method-list {
+  max-height: min(520px, calc(100vh - 360px));
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.comparison-method-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, .92);
+}
+
+.method-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.method-main strong,
+.method-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.method-main span {
+  color: #334155;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
 }
 
 .text-button {
@@ -1312,6 +1835,18 @@ onMounted(load)
   .info-grid,
   .job-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .incremental-summary-grid,
+  .incremental-form-grid,
+  .base-report-option,
+  .comparison-modal-toolbar,
+  .comparison-method-item {
+    grid-template-columns: 1fr;
+  }
+
+  .base-report-option code {
+    max-width: 100%;
   }
 
   .empty-state-card,

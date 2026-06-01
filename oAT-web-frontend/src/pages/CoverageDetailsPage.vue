@@ -1,6 +1,6 @@
 <template>
   <section>
-    <div class="page-header">
+    <div class="page-header plain-header coverage-page-header">
       <div>
         <div class="eyebrow">Coverage Details</div>
         <h1>{{ payload?.app.name || appId }}</h1>
@@ -385,7 +385,7 @@ onMounted(() => {
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .eyebrow {
@@ -431,7 +431,7 @@ onMounted(() => {
   position: sticky;
   top: 12px;
   z-index: 4;
-  padding: 18px;
+  padding: 14px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -440,7 +440,7 @@ onMounted(() => {
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(120px, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .filter-grid label {
@@ -458,7 +458,7 @@ onMounted(() => {
 .status-card,
 .panel,
 .tree-card {
-  padding: 18px;
+  padding: 16px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
@@ -470,7 +470,7 @@ onMounted(() => {
 
 .toolbar,
 .panel {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .table-shell {

@@ -1,6 +1,6 @@
 <template>
   <section>
-    <div class="page-header">
+    <div class="page-header plain-header coverage-page-header">
       <div>
         <div class="eyebrow">Coverage Center</div>
         <h1>覆盖率中心</h1>
@@ -385,7 +385,7 @@ onMounted(loadApps)
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .eyebrow {
@@ -438,14 +438,14 @@ onMounted(loadApps)
 .card,
 .status-card,
 .empty-card {
-  padding: 18px;
+  padding: 16px;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
 .panel {
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .status-card.error,
