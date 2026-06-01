@@ -52,14 +52,6 @@
           >
             生成增量报告
           </button>
-          <RouterLink
-            v-for="link in toolbarDetailLinks"
-            :key="link.type"
-            :class="['ghost-link', 'button-link', `${link.type}-detail-link`]"
-            :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: link.report?.id } }"
-          >
-            查看{{ link.detailLabel }}
-          </RouterLink>
         </div>
       </section>
 
@@ -480,7 +472,6 @@ const baseReportOptions = computed(() => {
       return true
     })
 })
-const toolbarDetailLinks = computed(() => reportBuckets.value.filter((bucket) => bucket.report?.id))
 const canGenerateCurrentCommit = computed(() => isCurrentCoverageVersion.value && Boolean(currentCoverageCommit.value))
 const canGenerateIncremental = computed(() => isCurrentCoverageVersion.value && Boolean(currentCoverageVersionNumber.value))
 const currentCommitGenerateTooltip = computed(() => {
@@ -1239,18 +1230,6 @@ onMounted(load)
   transform: translate(-50%, 0);
 }
 
-.button-link {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: rgba(15, 118, 110, .08);
-}
-
-.incremental-detail-link {
-  background: rgba(37, 99, 235, .08);
-  color: #2563eb;
-}
 
 .hero-grid,
 .panel-grid,
