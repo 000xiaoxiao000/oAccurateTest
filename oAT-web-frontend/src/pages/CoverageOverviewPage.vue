@@ -30,24 +30,15 @@
       <section class="overview-command-card">
         <div>
           <div class="eyebrow">Coverage Actions</div>
-          <h2>覆盖率报告工作台</h2>
-          <p class="subtext">核心指标、生成操作和明细入口集中展示，避免浮层遮挡正文。</p>
+          <h2>Commit 覆盖率工作台</h2>
+          <p class="subtext">当前页面只展示本次 Commit 与增量报告；版本全量与版本增量请在覆盖率中心查看。</p>
         </div>
         <div class="coverage-toolbar">
           <button
-            class="primary-button tooltip-button"
-            type="button"
-            :disabled="generating"
-            data-tooltip="基于当前选择的版本与 Commit 生成完整覆盖率报告，会覆盖该版本的全量报告视图。"
-            @click="generateFull"
-          >
-            {{ generating ? '处理中...' : '生成全量报告' }}
-          </button>
-          <button
             class="primary-button current-commit-button tooltip-button"
             type="button"
-            :disabled="generating || !payload.app.currentCommitId"
-            :data-tooltip="payload.app.currentCommitId ? `只针对应用当前 Commit 生成报告：${payload.app.currentCommitId}` : '当前应用未配置 CommitId，无法生成本次 Commit 报告'"
+            :disabled="generating || !canGenerateCurrentCommit"
+            :data-tooltip="currentCommitGenerateTooltip"
             @click="generateCurrentCommit"
           >
             生成本次 Commit 报告
@@ -56,7 +47,7 @@
             class="ghost-button tooltip-button"
             type="button"
             :disabled="generating || !canGenerateIncremental"
-            data-tooltip="选择基准版本或基准 Commit 后生成增量覆盖率报告，仅统计当前版本相对基准的变更范围。"
+            :data-tooltip="incrementalGenerateTooltip"
             @click="openIncrementalDialog"
           >
             生成增量报告
@@ -200,17 +191,9 @@
         <div class="panel-head typed-panel-head">
           <div>
             <h2>趋势数据</h2>
-            <p class="subtext">按版本全量、本次 Commit 与增量报告分别查看覆盖率变化，避免不同口径混算。</p>
+            <p class="subtext">按本次 Commit 与增量报告分别查看覆盖率变化，避免与版本全量口径混算。</p>
           </div>
           <div class="report-type-switch" aria-label="切换趋势报告类型">
-            <button
-              type="button"
-              :class="['type-switch-button', { active: trendReportType === 'full' }]"
-              :disabled="!trendCounts.full"
-              @click="selectTrendReportType('full')"
-            >
-              版本全量 {{ trendCounts.full }} 条
-            </button>
             <button
               type="button"
               :class="['type-switch-button', { active: trendReportType === 'commit' }]"
@@ -383,7 +366,6 @@ import {
   fetchCoverageOverview,
   fetchCoverageTrend,
   fetchVersionCenter,
-  triggerCoverageGenerate,
   triggerCoverageGenerateCurrent,
   triggerCoverageGenerateIncremental,
 } from '@/api/bootstrap'
@@ -449,20 +431,19 @@ const primaryReportKind = computed(() => coverageReportKind(payload.value?.repor
 const currentCoverageVersionNumber = computed(() => payload.value?.version?.versionNumber || versionNumber.value)
 const currentCoverageBranch = computed(() => payload.value?.version?.repoBranch || payload.value?.app.currentBranch || '')
 const currentCoverageCommit = computed(() => payload.value?.version?.repoCommitId || commitId.value || payload.value?.app.currentCommitId || '')
+const isCurrentCoverageVersion = computed(() => {
+  const version = payload.value?.version
+  const app = payload.value?.app
+  if (!version || !app) return true
+  return sameOptional(version.versionNumber, app.currentVersion)
+    && sameOptional(version.repoBranch, app.currentBranch)
+    && sameOptional(version.repoCommitId, app.currentCommitId)
+})
 const displayCoverageVersionNumber = computed(() => currentCoverageVersionNumber.value || payload.value?.report?.versionNumber || '未选择版本')
 const versionFullReport = computed(() => payload.value?.versionFullReport || (primaryReportKind.value === 'full' ? payload.value?.report || null : null))
 const currentCommitReport = computed(() => payload.value?.currentCommitReport || (primaryReportKind.value === 'commit' ? payload.value?.report || null : null))
 const incrementalReport = computed(() => payload.value?.incrementalReport || (primaryReportKind.value === 'incremental' ? payload.value?.report || null : null))
 const reportBuckets = computed<ReportBucket[]>(() => [
-  {
-    type: 'full',
-    title: '版本全量报告',
-    detailLabel: '版本全量明细',
-    comparisonLabel: '版本全量对比',
-    emptyText: '暂无版本全量报告',
-    report: versionFullReport.value,
-    comparison: payload.value?.versionFullComparison || (primaryReportKind.value === 'full' ? payload.value?.comparison || null : null),
-  },
   {
     type: 'commit',
     title: '本次 Commit 报告',
@@ -491,7 +472,7 @@ const baseReportOptions = computed(() => {
   ]
   const seen = new Set<string>()
   return candidates
-    .filter((report) => report.versionNumber && report.reportType !== 1)
+    .filter((report) => report.versionNumber && reportTypeText(coverageReportKind(report)) !== '增量报告')
     .filter((report) => {
       const key = baseReportKey(report)
       if (seen.has(key)) return false
@@ -500,7 +481,15 @@ const baseReportOptions = computed(() => {
     })
 })
 const toolbarDetailLinks = computed(() => reportBuckets.value.filter((bucket) => bucket.report?.id))
-const canGenerateIncremental = computed(() => Boolean(currentCoverageVersionNumber.value))
+const canGenerateCurrentCommit = computed(() => isCurrentCoverageVersion.value && Boolean(currentCoverageCommit.value))
+const canGenerateIncremental = computed(() => isCurrentCoverageVersion.value && Boolean(currentCoverageVersionNumber.value))
+const currentCommitGenerateTooltip = computed(() => {
+  if (!isCurrentCoverageVersion.value) return '非当前版本仅支持查看覆盖率，不能生成报告'
+  return currentCoverageCommit.value ? `只针对当前页面 Commit 生成报告：${currentCoverageCommit.value}` : '当前页面未绑定 CommitId，无法生成本次 Commit 报告'
+})
+const incrementalGenerateTooltip = computed(() => isCurrentCoverageVersion.value
+  ? '选择基准版本或基准 Commit 后生成增量覆盖率报告，仅统计当前版本相对基准的变更范围。'
+  : '非当前版本仅支持查看覆盖率，不能生成报告')
 const comparisonOptions = computed(() => reportBuckets.value.map((bucket) => ({
   type: bucket.type,
   label: bucket.comparisonLabel,
@@ -518,7 +507,7 @@ const activeComparisonLabel = computed(() => activeComparisonOption.value?.badge
 const activeComparisonDescription = computed(() => {
   if (activeComparisonOption.value?.type === 'incremental') return '仅展示增量报告与上一份增量报告的覆盖变化，避免与全量口径混算。'
   if (activeComparisonOption.value?.type === 'commit') return '仅展示本次 Commit 报告与同 Commit 历史报告的覆盖变化，避免混入版本全量。'
-  return '仅展示版本全量报告与同 Commit 历史报告的覆盖变化，适合观察版本整体覆盖变化。'
+  return '仅展示当前 Commit 报告与同 Commit 历史报告的覆盖变化。'
 })
 const activeComparisonMeta = computed(() => {
   const report = activeComparisonOption.value?.report
@@ -552,6 +541,10 @@ function shortHash(value?: string) {
 
 function commitTooltip(value?: string) {
   return value || '暂无 CommitID'
+}
+
+function sameOptional(value?: string, current?: string) {
+  return !current || !value || value === current
 }
 
 function coverageRate(covered?: number, total?: number) {
@@ -744,20 +737,19 @@ function syncReportTypeDefaults(selection: CoverageSelection) {
   const selectedType = selectedReportType(selection)
   comparisonReportType.value = selectedType
   const hasSelectedTrend = trendCounts.value[selectedType] > 0
-  const hasFullTrend = trendCounts.value.full > 0
   const hasCommitTrend = trendCounts.value.commit > 0
   const hasIncrementalTrend = trendCounts.value.incremental > 0
-  trendReportType.value = hasSelectedTrend ? selectedType : hasFullTrend ? 'full' : hasCommitTrend ? 'commit' : hasIncrementalTrend ? 'incremental' : 'full'
+  trendReportType.value = hasSelectedTrend ? selectedType : hasCommitTrend ? 'commit' : hasIncrementalTrend ? 'incremental' : 'commit'
 }
 
 function selectedReportType(selection: CoverageSelection): ReportViewType {
   if (selection.reportId) {
     if (payload.value?.incrementalReport?.id === selection.reportId) return 'incremental'
     if (payload.value?.currentCommitReport?.id === selection.reportId) return 'commit'
-    if (payload.value?.versionFullReport?.id === selection.reportId) return 'full'
+    if (payload.value?.versionFullReport?.id === selection.reportId) return 'commit'
   }
   if (!payload.value?.report && payload.value?.incrementalReport) return 'incremental'
-  return primaryReportKind.value
+  return primaryReportKind.value === 'full' ? 'commit' : primaryReportKind.value
 }
 
 type CoverageSelection = {
@@ -890,41 +882,26 @@ async function switchToCoverageSelection(version: string, commit?: string, selec
   })
 }
 
-async function generateFull() {
-  if (!payload.value?.version?.versionNumber) {
-    error.value = '当前版本信息不完整，无法生成报告'
-    return
-  }
-  generating.value = true
-  error.value = ''
-  try {
-    const jobId = await triggerCoverageGenerate(projectId.value, {
-      appId: appId.value,
-      versionNumber: payload.value.version.versionNumber,
-      branch: payload.value.version.repoBranch,
-      commitId: payload.value.version.repoCommitId,
-    })
-    if (!(await pollJob(jobId, '全量报告生成'))) return
-    await switchToCoverageSelection(payload.value.version.versionNumber, payload.value.version.repoCommitId, jobStatus.value?.data)
-    await load()
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '生成全量报告失败'
-  } finally {
-    generating.value = false
-  }
-}
-
 async function generateCurrentCommit() {
-  if (!payload.value?.app.currentVersion || !payload.value?.app.currentCommitId) {
-    error.value = '当前应用未配置当前版本或当前 CommitId，无法生成本次 Commit 报告'
+  if (!isCurrentCoverageVersion.value) {
+    error.value = '非当前版本仅支持查看覆盖率，不能生成报告'
+    return
+  }
+  if (!currentCoverageVersionNumber.value || !currentCoverageCommit.value) {
+    error.value = '当前页面未绑定版本或 CommitId，无法生成本次 Commit 报告'
     return
   }
   generating.value = true
   error.value = ''
   try {
-    const jobId = await triggerCoverageGenerateCurrent(projectId.value, appId.value)
+    const jobId = await triggerCoverageGenerateCurrent(projectId.value, {
+      appId: appId.value,
+      versionNumber: currentCoverageVersionNumber.value,
+      branch: currentCoverageBranch.value,
+      commitId: currentCoverageCommit.value,
+    })
     if (!(await pollJob(jobId, '本次 Commit 报告生成'))) return
-    await switchToCoverageSelection(payload.value.app.currentVersion, payload.value.app.currentCommitId, jobStatus.value?.data)
+    await switchToCoverageSelection(currentCoverageVersionNumber.value, currentCoverageCommit.value, jobStatus.value?.data)
     await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '生成本次 Commit 报告失败'
@@ -989,6 +966,10 @@ async function loadIncrementalBaseReports() {
 }
 
 async function openIncrementalDialog() {
+  if (!isCurrentCoverageVersion.value) {
+    error.value = '非当前版本仅支持查看覆盖率，不能生成报告'
+    return
+  }
   if (!currentCoverageVersionNumber.value) {
     error.value = '缺少当前版本信息，无法生成增量报告'
     return
@@ -1009,6 +990,10 @@ async function openIncrementalDialog() {
 }
 
 async function generateIncremental() {
+  if (!isCurrentCoverageVersion.value) {
+    incrementalError.value = '非当前版本仅支持查看覆盖率，不能生成报告'
+    return
+  }
   if (!currentCoverageVersionNumber.value) {
     incrementalError.value = '缺少当前版本信息'
     return

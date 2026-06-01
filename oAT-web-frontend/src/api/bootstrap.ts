@@ -348,9 +348,21 @@ export function triggerCoverageGenerate(
   return apiPost<string>(`/api/projects/${projectId}/coverage/generate`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
 }
 
-export function triggerCoverageGenerateCurrent(projectId: string, appId: string) {
+export function triggerCoverageGenerateCurrent(
+  projectId: string,
+  payload: { appId: string; versionNumber?: string; branch?: string; commitId?: string },
+) {
   const body = new URLSearchParams()
-  body.set('appId', appId)
+  body.set('appId', payload.appId)
+  if (payload.versionNumber) {
+    body.set('versionNumber', payload.versionNumber)
+  }
+  if (payload.branch) {
+    body.set('branch', payload.branch)
+  }
+  if (payload.commitId) {
+    body.set('commitId', payload.commitId)
+  }
   return apiPost<string>(
     `/api/projects/${projectId}/coverage/generate-current`,
     body.toString(),

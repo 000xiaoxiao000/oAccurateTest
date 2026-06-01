@@ -24,15 +24,16 @@
     </div>
 
     <div v-if="error" class="status-card error">{{ error }}</div>
+    <div v-if="generationNotice" :class="['status-card', generationFailed ? 'error' : 'info']">{{ generationNotice }}</div>
 
     <template v-if="selectedCenter">
       <section class="panel">
         <div class="panel-head">
           <div class="panel-title-block">
             <h2>版本入口</h2>
-            <p>选择版本进入覆盖率概览。</p>
+            <p>选择版本查看覆盖率；仅当前版本允许生成版本全量或增量报告。</p>
           </div>
-          <span class="count-badge">{{ filteredVersions.length }} / {{ selectedCenter.versions.length }}</span>
+          <span class="count-badge">{{ filteredVersions.length }} / {{ visibleVersions.length }}</span>
         </div>
         <div class="card-grid version-card-grid">
           <article v-for="version in paginatedVersions" :key="version.id" class="card">
@@ -61,6 +62,24 @@
               >
                 查看覆盖率概览
               </RouterLink>
+              <button
+                class="ghost-button small-button generate-button"
+                type="button"
+                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :title="generateDisabledTitle(version, 'full')"
+                @click="generateVersionFull(version)"
+              >
+                {{ isGeneratingVersion(version, 'full') ? '全量生成中...' : '生成版本全量' }}
+              </button>
+              <button
+                class="ghost-button small-button generate-button"
+                type="button"
+                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :title="generateDisabledTitle(version, 'incremental')"
+                @click="openIncrementalDialog(version)"
+              >
+                {{ isGeneratingVersion(version, 'incremental') ? '增量生成中...' : '生成版本增量' }}
+              </button>
             </div>
           </article>
         </div>
@@ -113,17 +132,19 @@
             <div class="action-row">
               <RouterLink
                 class="table-link"
-                :to="{
-                  name: 'coverage-overview',
-                  params: { projectId, appId: selectedAppId },
-                  query: {
-                    versionNumber: report.versionNumber || undefined,
-                    reportId: report.id,
-                    commitId: report.repoCommitId || undefined,
-                  },
-                }"
+                :to="report.reportType !== 1 && report.reportType !== 2 && !report.baseVersionNumber && !report.baseRepoCommitId
+                  ? { name: 'coverage-details', params: { projectId, appId: selectedAppId }, query: { reportId: report.id } }
+                  : {
+                    name: 'coverage-overview',
+                    params: { projectId, appId: selectedAppId },
+                    query: {
+                      versionNumber: report.versionNumber || undefined,
+                      reportId: report.id,
+                      commitId: report.repoCommitId || undefined,
+                    },
+                  }"
               >
-                打开报告
+                {{ report.reportType !== 1 && report.reportType !== 2 && !report.baseVersionNumber && !report.baseRepoCommitId ? '查看版本全量明细' : '打开报告' }}
               </RouterLink>
               <a class="table-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${report.id}`)">导出报告</a>
               <a class="table-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${report.id}`)">导出方法</a>
@@ -145,6 +166,83 @@
         />
       </section>
     </template>
+
+    <div v-if="incrementalDialogOpen && incrementalDialogVersion" class="modal-mask" @click.self="closeIncrementalDialog">
+      <form class="modal-card incremental-modal" @submit.prevent="generateVersionIncremental">
+        <div class="modal-head">
+          <div>
+            <div class="eyebrow">Version Incremental</div>
+            <h2>生成版本增量报告</h2>
+            <p class="subtext">选择基准报告或手动指定基准版本，生成当前版本相对基准的增量覆盖率。</p>
+          </div>
+          <button class="modal-close" type="button" aria-label="关闭生成版本增量弹窗" @click="closeIncrementalDialog">×</button>
+        </div>
+
+        <div class="incremental-summary-grid">
+          <article class="summary-tile current">
+            <span>当前版本</span>
+            <strong>{{ incrementalDialogVersion.versionNumber || '-' }}</strong>
+            <small :title="commitTooltip(incrementalDialogVersion.repoCommitId)">Commit {{ shortHash(incrementalDialogVersion.repoCommitId) }}</small>
+          </article>
+          <article class="summary-tile base">
+            <span>基准版本</span>
+            <strong>{{ incrementalForm.baseVersionNumber || '未选择' }}</strong>
+            <small :title="commitTooltip(incrementalForm.baseCommitId)">Commit {{ shortHash(incrementalForm.baseCommitId) }}</small>
+          </article>
+        </div>
+
+        <section class="modal-section">
+          <div class="modal-section-head">
+            <div>
+              <h3>选择基准报告</h3>
+              <p class="subtext">优先选择已有版本全量报告，系统会自动填充基准版本和 Commit。</p>
+            </div>
+            <span class="count-badge">{{ incrementalBaseOptions.length }} 个可选</span>
+          </div>
+          <div v-if="incrementalBaseOptions.length" class="base-report-list">
+            <button
+              v-for="report in incrementalBaseOptions"
+              :key="baseReportKey(report)"
+              class="base-report-option"
+              :class="{ active: baseReportKey(report) === incrementalForm.baseReportId }"
+              type="button"
+              @click="selectBaseReport(report)"
+            >
+              <span>
+                <strong>{{ report.versionNumber || '-' }}</strong>
+                <small>{{ report.repoBranch || '-' }} · {{ report.createTimeText || '-' }}</small>
+              </span>
+              <code :title="commitTooltip(report.repoCommitId)">{{ shortHash(report.repoCommitId) }}</code>
+            </button>
+          </div>
+          <div v-else class="base-report-empty">暂无可选基准报告，请手动填写基准版本号。</div>
+        </section>
+
+        <section class="modal-section">
+          <div class="modal-section-head compact">
+            <h3>手动确认基准信息</h3>
+          </div>
+          <div class="incremental-form-grid">
+            <label class="field">
+              <span>基准版本号</span>
+              <input v-model.trim="incrementalForm.baseVersionNumber" class="text-input" type="text" placeholder="例如 v1.0.0" />
+            </label>
+            <label class="field">
+              <span>基准 Commit</span>
+              <input v-model.trim="incrementalForm.baseCommitId" class="text-input" type="text" placeholder="可为空，默认使用基准版本" />
+            </label>
+          </div>
+        </section>
+
+        <div v-if="incrementalError" class="modal-error">{{ incrementalError }}</div>
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" :disabled="Boolean(generatingVersionKey)" @click="closeIncrementalDialog">取消</button>
+          <button class="primary-button" type="submit" :disabled="Boolean(generatingVersionKey) || !incrementalForm.baseVersionNumber">
+            {{ generatingVersionKey ? '处理中...' : '确认生成' }}
+          </button>
+        </div>
+      </form>
+    </div>
   </section>
 </template>
 
@@ -152,11 +250,18 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { deleteCoverageReport, fetchProjectApps, fetchVersionCenter } from '@/api/bootstrap'
+import {
+  deleteCoverageReport,
+  fetchCoverageJob,
+  fetchProjectApps,
+  fetchVersionCenter,
+  triggerCoverageGenerate,
+  triggerCoverageGenerateIncremental,
+} from '@/api/bootstrap'
 import { backendApiUrl } from '@/api/http'
 import AppPagination from '@/components/AppPagination.vue'
 import { useDialog } from '@/composables/useDialog'
-import type { AppSummary, VersionCenterPayload } from '@/api/types'
+import type { AppSummary, CoverageReportCard, VersionCenterPayload, VersionItemSummary } from '@/api/types'
 
 const route = useRoute()
 const dialog = useDialog()
@@ -172,11 +277,19 @@ const reportPage = ref(1)
 const reportPageSize = ref(6)
 const deletingReportId = ref('')
 const refreshingReports = ref(false)
+const generatingVersionKey = ref('')
+const generationNotice = ref('')
+const generationFailed = ref(false)
+const incrementalDialogOpen = ref(false)
+const incrementalDialogVersion = ref<VersionItemSummary | null>(null)
+const incrementalError = ref('')
+const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '', baseReportId: '' })
 
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
 const keywordTerm = computed(() => keyword.value.toLowerCase())
+const visibleVersions = computed(() => compactVersionEntries(selectedCenter.value?.versions || []))
 const filteredVersions = computed(() => {
-  const versions = selectedCenter.value?.versions || []
+  const versions = visibleVersions.value
   const term = keywordTerm.value
   if (!term) return versions
   return versions.filter((version) => [
@@ -206,6 +319,29 @@ const paginatedReports = computed(() => {
   const start = (reportPage.value - 1) * reportPageSize.value
   return filteredReports.value.slice(start, start + reportPageSize.value)
 })
+const incrementalBaseOptions = computed(() => {
+  const currentVersion = incrementalDialogVersion.value
+  const reports = selectedCenter.value?.coverageReports || []
+  const seen = new Set<string>()
+  return reports
+    .filter((report) => report.versionNumber && isBaseReport(report))
+    .filter((report) => !currentVersion || report.versionNumber !== currentVersion.versionNumber || report.repoCommitId !== currentVersion.repoCommitId)
+    .filter((report) => {
+      const key = baseReportKey(report)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+})
+
+function versionDisplayKey(version: VersionItemSummary) {
+  return `${version.versionNumber || ''}::${version.repoBranch || ''}`
+}
+
+function compactVersionEntries(versions: VersionItemSummary[]) {
+  const currentKeys = new Set(versions.filter((version) => version.current).map(versionDisplayKey))
+  return versions.filter((version) => version.current || !currentKeys.has(versionDisplayKey(version)))
+}
 
 function commitTooltip(value?: string) {
   return value || '暂无 CommitID'
@@ -214,6 +350,150 @@ function commitTooltip(value?: string) {
 function coverageRate(covered?: number, total?: number) {
   if (!total) return '0%'
   return `${(((covered || 0) / total) * 100).toFixed(1)}%`
+}
+
+function shortHash(value?: string) {
+  if (!value) return '-'
+  return value.length > 10 ? value.slice(0, 10) : value
+}
+
+function isBaseReport(report: CoverageReportCard) {
+  return report.reportType !== 1 && report.reportType !== 2 && !report.baseVersionNumber && !report.baseRepoCommitId
+}
+
+function baseReportKey(report: CoverageReportCard) {
+  return report.id || `${report.versionNumber || ''}:${report.repoCommitId || ''}`
+}
+
+function selectBaseReport(report: CoverageReportCard) {
+  incrementalForm.value = {
+    baseVersionNumber: report.versionNumber || '',
+    baseCommitId: report.repoCommitId || '',
+    baseReportId: baseReportKey(report),
+  }
+  incrementalError.value = ''
+}
+
+function versionActionKey(version: VersionItemSummary, type: 'full' | 'incremental') {
+  return `${type}:${version.id || version.versionNumber}:${version.repoCommitId || ''}`
+}
+
+function canGenerateVersion(version: VersionItemSummary) {
+  return Boolean(version.current)
+}
+
+function isGeneratingVersion(version: VersionItemSummary, type: 'full' | 'incremental') {
+  return generatingVersionKey.value === versionActionKey(version, type)
+}
+
+function generateDisabledTitle(version: VersionItemSummary, type: 'full' | 'incremental') {
+  if (!version.current) return '非当前版本仅支持查看覆盖率，不能生成报告'
+  if (generatingVersionKey.value && !isGeneratingVersion(version, type)) return '已有覆盖率生成任务处理中，请稍后再试'
+  return type === 'full' ? '生成当前版本的版本全量报告' : '选择基准后生成当前版本的版本增量报告'
+}
+
+function generationPayload(version: VersionItemSummary) {
+  return {
+    appId: selectedAppId.value,
+    versionNumber: version.versionNumber,
+    branch: version.repoBranch || undefined,
+    commitId: version.repoCommitId || undefined,
+  }
+}
+
+function closeIncrementalDialog() {
+  if (generatingVersionKey.value) return
+  incrementalDialogOpen.value = false
+  incrementalDialogVersion.value = null
+  incrementalError.value = ''
+}
+
+function openIncrementalDialog(version: VersionItemSummary) {
+  if (!canGenerateVersion(version)) return
+  incrementalDialogVersion.value = version
+  incrementalForm.value = { baseVersionNumber: '', baseCommitId: '', baseReportId: '' }
+  incrementalError.value = ''
+  incrementalDialogOpen.value = true
+  const defaultBaseReport = incrementalBaseOptions.value[0]
+  if (defaultBaseReport) {
+    selectBaseReport(defaultBaseReport)
+  }
+}
+
+async function pollCoverageJob(jobId: string, label: string) {
+  generationNotice.value = `已提交${label}任务`
+  while (true) {
+    try {
+      const status = await fetchCoverageJob(projectId.value, jobId)
+      const progress = Number.isFinite(Number(status.progress)) ? Math.max(0, Math.min(100, Number(status.progress))) : 0
+      const stage = status.progressName || status.message || ''
+      generationNotice.value = status.finish
+        ? `${label}${status.success === false ? '失败' : '完成'}`
+        : `${label}处理中，进度 ${Math.round(progress)}%${stage ? ` · ${stage}` : ''}`
+      if (status.finish) return status.success !== false
+    } catch (err) {
+      generationFailed.value = true
+      generationNotice.value = err instanceof Error ? err.message : `${label}失败`
+      return false
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+  }
+}
+
+async function generateVersionFull(version: VersionItemSummary) {
+  if (!canGenerateVersion(version) || generatingVersionKey.value) return
+  generatingVersionKey.value = versionActionKey(version, 'full')
+  generationFailed.value = false
+  generationNotice.value = ''
+  error.value = ''
+  try {
+    const jobId = await triggerCoverageGenerate(projectId.value, generationPayload(version))
+    const success = await pollCoverageJob(jobId, '版本全量报告生成')
+    generationFailed.value = !success
+    if (success) {
+      generationNotice.value = '版本全量报告生成完成，已刷新报告列表'
+      await refreshCenter(selectedAppId.value)
+    }
+  } catch (err) {
+    generationFailed.value = true
+    generationNotice.value = err instanceof Error ? err.message : '生成版本全量报告失败'
+  } finally {
+    generatingVersionKey.value = ''
+  }
+}
+
+async function generateVersionIncremental() {
+  const version = incrementalDialogVersion.value
+  if (!version || !canGenerateVersion(version) || generatingVersionKey.value) return
+  if (!incrementalForm.value.baseVersionNumber) {
+    incrementalError.value = '请填写基准版本号'
+    return
+  }
+  generatingVersionKey.value = versionActionKey(version, 'incremental')
+  generationFailed.value = false
+  generationNotice.value = ''
+  error.value = ''
+  incrementalError.value = ''
+  try {
+    const jobId = await triggerCoverageGenerateIncremental(projectId.value, {
+      ...generationPayload(version),
+      baseVersionNumber: incrementalForm.value.baseVersionNumber,
+      baseCommitId: incrementalForm.value.baseCommitId || undefined,
+    })
+    incrementalDialogOpen.value = false
+    const success = await pollCoverageJob(jobId, '版本增量报告生成')
+    generationFailed.value = !success
+    if (success) {
+      generationNotice.value = '版本增量报告生成完成，已刷新报告列表'
+      await refreshCenter(selectedAppId.value)
+    }
+  } catch (err) {
+    generationFailed.value = true
+    incrementalError.value = err instanceof Error ? err.message : '生成版本增量报告失败'
+    generationNotice.value = incrementalError.value
+  } finally {
+    generatingVersionKey.value = ''
+  }
 }
 
 async function loadApps() {
@@ -411,7 +691,8 @@ onMounted(loadApps)
 }
 
 .text-input,
-.ghost-button {
+.ghost-button,
+.primary-button {
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   padding: 10px 12px;
@@ -420,6 +701,18 @@ onMounted(loadApps)
 .ghost-button {
   background: rgba(15, 23, 42, 0.06);
   cursor: pointer;
+}
+
+.primary-button {
+  background: #0f766e;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
 }
 
 .ghost-button.small-button {
@@ -451,6 +744,10 @@ onMounted(loadApps)
 .status-card.error,
 .warn-text {
   color: #b91c1c;
+}
+
+.status-card.info {
+  color: #0f766e;
 }
 
 .warn-text {
@@ -620,6 +917,153 @@ onMounted(loadApps)
   opacity: .58;
 }
 
+.generate-button {
+  color: #0f766e;
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 22px;
+  border-radius: 24px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.modal-head,
+.modal-section-head,
+.modal-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.modal-head h2,
+.modal-head p,
+.modal-section-head h3,
+.modal-section-head p {
+  margin: 0;
+}
+
+.modal-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #475569;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.incremental-modal,
+.modal-section {
+  display: grid;
+  gap: 16px;
+}
+
+.incremental-summary-grid,
+.incremental-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-tile {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.summary-tile span,
+.summary-tile small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.summary-tile strong {
+  color: #0f172a;
+}
+
+.base-report-list {
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.base-report-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(248, 250, 252, 0.82);
+  cursor: pointer;
+  text-align: left;
+}
+
+.base-report-option.active {
+  border-color: rgba(15, 118, 110, 0.42);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.base-report-option span {
+  display: grid;
+  gap: 4px;
+}
+
+.base-report-option small,
+.base-report-option code,
+.base-report-empty {
+  color: #64748b;
+}
+
+.base-report-option code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+}
+
+.base-report-empty,
+.modal-error {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.modal-error {
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.08);
+  font-weight: 700;
+}
+
+.modal-actions {
+  justify-content: flex-end;
+  align-items: center;
+}
+
 @media (max-width: 900px) {
   .selector-row,
   .card-main,
@@ -639,6 +1083,11 @@ onMounted(loadApps)
 
   .report-card-grid .action-row {
     justify-content: flex-start;
+  }
+
+  .incremental-summary-grid,
+  .incremental-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

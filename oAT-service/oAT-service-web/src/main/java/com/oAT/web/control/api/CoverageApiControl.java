@@ -104,17 +104,23 @@ public class CoverageApiControl {
     @PostMapping("/generate-current")
     public ResultNotified<String> generateCurrent(@PathVariable String projectId,
                                                   @SessionAttribute UserVo user,
-                                                  @RequestParam String appId) {
+                                                  @RequestParam String appId,
+                                                  @RequestParam(required = false) String versionNumber,
+                                                  @RequestParam(required = false) String branch,
+                                                  @RequestParam(required = false) String commitId) {
         ensureProjectAccess(projectId, user);
         AppVo app = appService.getApp(appId);
         Assert.notNull(app, "应用不存在");
-        Assert.hasText(app.getCurrentVersion(), "当前应用未配置当前版本，无法生成本次 Commit 覆盖率报告");
-        Assert.hasText(app.getCurrentCommitId(), "当前应用未配置当前 CommitId，无法生成本次 Commit 覆盖率报告");
+        String targetVersion = StringUtils.hasText(versionNumber) ? versionNumber : app.getCurrentVersion();
+        String targetBranch = StringUtils.hasText(branch) ? branch : app.getCurrentBranch();
+        String targetCommit = StringUtils.hasText(commitId) ? commitId : app.getCurrentCommitId();
+        Assert.hasText(targetVersion, "当前应用未配置当前版本，无法生成本次 Commit 覆盖率报告");
+        Assert.hasText(targetCommit, "当前应用未配置当前 CommitId，无法生成本次 Commit 覆盖率报告");
 
-        String jobId = coverageService.startGenerateCurrentCommitJob(appId, app.getCurrentVersion(), app.getCurrentBranch(), app.getCurrentCommitId());
+        String jobId = coverageService.startGenerateCurrentCommitJob(appId, targetVersion, targetBranch, targetCommit);
         String appName = StringUtils.hasText(app.getName()) ? app.getName() : appId;
-        addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 本次 Commit 全量 覆盖率报告 [版本:%s, 分支:%s, Commit:%s]",
-                user.getName(), appName, app.getCurrentVersion(), app.getCurrentBranch(), app.getCurrentCommitId()));
+        addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 本次 Commit 覆盖率报告 [版本:%s, 分支:%s, Commit:%s]",
+                user.getName(), appName, targetVersion, targetBranch, targetCommit));
         return new ResultNotified<>(true, "Current commit task started", jobId);
     }
 
@@ -219,49 +225,29 @@ public class CoverageApiControl {
                 : report == null ? (StringUtils.hasText(currentCommitId) ? currentCommitId : versionCommitId) : report.getRepoCommitId();
 
         CoverageReportIndex versionFullReport = coverageService.getLatestReportByType(appId, versionNumber, 0, versionCommitId);
-        CoverageReportIndex currentCommitReport = StringUtils.hasText(currentCommitId)
-                ? coverageService.getLatestReportByType(appId, versionNumber, 2, currentCommitId)
+        CoverageReportIndex currentCommitReport = StringUtils.hasText(targetCommitId)
+                ? coverageService.getLatestReportByType(appId, versionNumber, 2, targetCommitId)
                 : null;
-        if (currentCommitReport == null && StringUtils.hasText(currentCommitId) && !isSameCommit(currentCommitId, versionCommitId)) {
-            currentCommitReport = coverageService.getLatestReportByType(appId, versionNumber, 0, currentCommitId);
+        if (currentCommitReport == null && StringUtils.hasText(targetCommitId) && !isSameCommit(targetCommitId, versionCommitId)) {
+            currentCommitReport = coverageService.getLatestReportByType(appId, versionNumber, 0, targetCommitId);
         }
 
-        CoverageReportIndex fullReport = versionFullReport;
         CoverageReportIndex incrementalReport = coverageService.getLatestReportByType(appId, versionNumber, 1, targetCommitId);
         CoverageReportIndex selectedReport = report;
         if (selectedReport == null) {
-            if (versionFullReport != null && isSameCommit(targetCommitId, versionCommitId)) {
-                selectedReport = versionFullReport;
-            } else if (currentCommitReport != null && isSameCommit(targetCommitId, currentCommitId)) {
-                selectedReport = currentCommitReport;
-            } else if (versionFullReport != null) {
-                selectedReport = versionFullReport;
-            } else {
-                selectedReport = coverageService.getLatestReportByType(appId, versionNumber, 0, targetCommitId);
-            }
+            selectedReport = currentCommitReport != null ? currentCommitReport : incrementalReport;
         }
 
         if (selectedReport != null && Integer.valueOf(1).equals(selectedReport.getReportType())) {
             incrementalReport = selectedReport;
-        } else if (selectedReport != null && Integer.valueOf(2).equals(selectedReport.getReportType())) {
-            currentCommitReport = selectedReport;
         } else if (selectedReport != null) {
-            if (isSameCommit(selectedReport.getRepoCommitId(), versionCommitId)) {
-                versionFullReport = selectedReport;
-                fullReport = selectedReport;
-            } else if (isSameCommit(selectedReport.getRepoCommitId(), currentCommitId)) {
-                currentCommitReport = selectedReport;
-            }
-        }
-
-        if (fullReport == null) {
-            fullReport = versionFullReport != null ? versionFullReport : coverageService.getLatestReportByType(appId, versionNumber, 0, versionCommitId);
+            currentCommitReport = selectedReport;
         }
         if (incrementalReport == null) {
             incrementalReport = coverageService.getLatestReportByType(appId, versionNumber, 1);
         }
 
-        CoverageReportIndex freshnessReport = selectedReport != null ? selectedReport : fullReport;
+        CoverageReportIndex freshnessReport = selectedReport != null ? selectedReport : currentCommitReport;
         boolean hasNewerData = freshnessReport == null
                 ? coverageService.hasNewerData(appId, versionNumber, null)
                 : coverageService.hasNewerData(appId, versionNumber, freshnessReport);
@@ -271,7 +257,7 @@ public class CoverageApiControl {
         payload.setApps(toAppSummaries(appService.getAppList(projectId)));
         payload.setApp(toAppSummary(app));
         payload.setVersion(toVersionSummary(version));
-        payload.setReport(toCoverageReportSummary(selectedReport != null ? selectedReport : fullReport));
+        payload.setReport(toCoverageReportSummary(selectedReport != null ? selectedReport : currentCommitReport));
         payload.setVersionFullReport(toCoverageReportSummary(versionFullReport));
         payload.setCurrentCommitReport(toCoverageReportSummary(currentCommitReport));
         payload.setIncrementalReport(toCoverageReportSummary(incrementalReport));
