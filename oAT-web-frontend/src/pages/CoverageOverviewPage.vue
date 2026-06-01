@@ -60,7 +60,14 @@
             class="ghost-link button-link"
             :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }"
           >
-            查看明细
+            查看全量明细
+          </RouterLink>
+          <RouterLink
+            v-if="payload.incrementalReport"
+            class="ghost-link button-link incremental-detail-link"
+            :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }"
+          >
+            查看增量明细
           </RouterLink>
         </div>
       </section>
@@ -125,7 +132,7 @@
             <span>{{ payload.report?.createTimeText || '-' }}</span>
           </div>
           <div v-if="payload.report" class="report-actions">
-            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }">明细</RouterLink>
+            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }">全量明细</RouterLink>
             <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${payload.report.id}`)">导出报告</a>
             <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${payload.report.id}`)">导出方法</a>
             <button class="report-action-link danger" type="button" :disabled="!payload.report.id || deletingReportId === payload.report.id" @click="removeCoverageReport(payload.report.id || '')">
@@ -149,7 +156,7 @@
             <span>{{ payload.incrementalReport?.createTimeText || '-' }}</span>
           </div>
           <div v-if="payload.incrementalReport" class="report-actions">
-            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }">明细</RouterLink>
+            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }">增量明细</RouterLink>
             <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${payload.incrementalReport.id}`)">导出报告</a>
             <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${payload.incrementalReport.id}`)">导出方法</a>
             <button class="report-action-link danger" type="button" :disabled="!payload.incrementalReport.id || deletingReportId === payload.incrementalReport.id" @click="removeCoverageReport(payload.incrementalReport.id || '')">
@@ -168,38 +175,81 @@
         </section>
       </div>
 
-      <section v-if="payload.comparison" class="panel comparison-panel">
-        <div class="panel-head">
-          <h2>与上一版对比</h2>
-          <span>按覆盖变化快速定位方法</span>
+      <section v-if="hasComparisonPanel" class="panel comparison-panel">
+        <div class="panel-head typed-panel-head">
+          <div>
+            <h2>与上一版本对比</h2>
+            <p class="subtext">{{ activeComparisonDescription }}</p>
+          </div>
+          <div class="report-type-switch" aria-label="切换对比报告类型">
+            <button
+              v-for="option in comparisonOptions"
+              :key="option.type"
+              type="button"
+              :class="['type-switch-button', { active: comparisonReportType === option.type }]"
+              :disabled="!option.report && !option.comparison"
+              @click="selectComparisonReportType(option.type)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
         </div>
-        <div class="hero-grid comparison-grid">
+        <div class="typed-panel-meta">
+          <span :class="['trend-type-badge', activeComparisonOption.type]">{{ activeComparisonLabel }}</span>
+          <span>{{ activeComparisonMeta }}</span>
+        </div>
+        <div v-if="activeComparison" class="hero-grid comparison-grid">
           <button class="hero-card clickable" type="button" @click="showComparisonMethods('added')">
             <span>新增覆盖</span>
-            <strong>{{ comparisonRate(payload.comparison.addedCount) }}</strong>
-            <small>{{ payload.comparison.addedCount }} 个方法 · 查看新增方法</small>
+            <strong>{{ comparisonRate(activeComparison.addedCount) }}</strong>
+            <small>{{ activeComparison.addedCount }} 个方法 · 查看新增方法</small>
           </button>
           <button class="hero-card clickable" type="button" @click="showComparisonMethods('stable')">
             <span>稳定覆盖</span>
-            <strong>{{ comparisonRate(payload.comparison.stableCount) }}</strong>
-            <small>{{ payload.comparison.stableCount }} 个方法 · 查看稳定方法</small>
+            <strong>{{ comparisonRate(activeComparison.stableCount) }}</strong>
+            <small>{{ activeComparison.stableCount }} 个方法 · 查看稳定方法</small>
           </button>
           <button class="hero-card clickable" type="button" @click="showComparisonMethods('decreased')">
             <span>下降覆盖</span>
-            <strong>{{ comparisonRate(payload.comparison.decreasedCount) }}</strong>
-            <small>{{ payload.comparison.decreasedCount }} 个方法 · 查看下降方法</small>
+            <strong>{{ comparisonRate(activeComparison.decreasedCount) }}</strong>
+            <small>{{ activeComparison.decreasedCount }} 个方法 · 查看下降方法</small>
           </button>
         </div>
+        <div v-else class="empty-card">暂无{{ activeComparisonLabel }}的上一版本对比数据</div>
       </section>
 
       <section v-if="trend.length" class="panel trend-panel">
-        <div class="panel-head">
-          <h2>趋势数据</h2>
-          <span>{{ trend.length }} 条</span>
+        <div class="panel-head typed-panel-head">
+          <div>
+            <h2>趋势数据</h2>
+            <p class="subtext">按报告类型查看覆盖率变化，避免全量与增量混算。</p>
+          </div>
+          <div class="report-type-switch" aria-label="切换趋势报告类型">
+            <button
+              type="button"
+              :class="['type-switch-button', { active: trendReportType === 'full' }]"
+              :disabled="!trendCounts.full"
+              @click="selectTrendReportType('full')"
+            >
+              全量 {{ trendCounts.full }} 条
+            </button>
+            <button
+              type="button"
+              :class="['type-switch-button', { active: trendReportType === 'incremental' }]"
+              :disabled="!trendCounts.incremental"
+              @click="selectTrendReportType('incremental')"
+            >
+              增量 {{ trendCounts.incremental }} 条
+            </button>
+          </div>
         </div>
-        <div class="trend-list">
-          <article v-for="(item, index) in trend" :key="index" class="trend-item">
-            <div class="trend-time">{{ trendTime(item) }}</div>
+        <div v-if="filteredTrend.length" class="trend-list">
+          <article v-for="(item, index) in filteredTrend" :key="String(item.reportId || item.timestamp || index)" class="trend-item">
+            <div class="trend-time">
+              <span :class="['trend-type-badge', trendReportKind(item)]">{{ trendReportTypeLabel(item) }}</span>
+              <strong>{{ trendTime(item) }}</strong>
+              <small>{{ trendReportMeta(item) }}</small>
+            </div>
             <div class="trend-main">
               <div class="trend-value-row">
                 <strong>{{ trendMetric(item, 'lineCoverage') }}</strong>
@@ -215,6 +265,7 @@
             </div>
           </article>
         </div>
+        <div v-else class="empty-card">暂无{{ trendReportType === 'incremental' ? '增量' : '全量' }}趋势数据</div>
       </section>
     </template>
 
@@ -368,6 +419,9 @@ const autoSelectionNotice = ref('')
 const emptyState = ref<{ title: string; description: string } | null>(null)
 const selectedAppName = ref('')
 const trend = ref<Array<Record<string, unknown>>>([])
+type ReportViewType = 'full' | 'incremental'
+const comparisonReportType = ref<ReportViewType>('full')
+const trendReportType = ref<ReportViewType>('full')
 const jobStatus = ref<{ data?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string } | null>(null)
 const jobLogs = ref<Array<{ time: string; text: string; tone: 'running' | 'done' | 'error' }>>([])
 const deletingReportId = ref('')
@@ -410,7 +464,48 @@ const baseReportOptions = computed(() => {
       return true
     })
 })
-const comparisonReportId = computed(() => payload.value?.incrementalReport?.id || payload.value?.report?.id || '')
+const comparisonOptions = computed(() => [
+  {
+    type: 'full' as const,
+    label: '全量对比',
+    badge: '全量报告',
+    report: payload.value?.report || null,
+    comparison: payload.value?.comparison || null,
+  },
+  {
+    type: 'incremental' as const,
+    label: '增量对比',
+    badge: '增量报告',
+    report: payload.value?.incrementalReport || null,
+    comparison: payload.value?.incrementalComparison || null,
+  },
+])
+const hasComparisonPanel = computed(() => comparisonOptions.value.some((option) => option.report || option.comparison))
+const activeComparisonOption = computed(() => {
+  const current = comparisonOptions.value.find((option) => option.type === comparisonReportType.value && (option.report || option.comparison))
+  return current || comparisonOptions.value.find((option) => option.report || option.comparison) || comparisonOptions.value[0]
+})
+const activeComparison = computed(() => activeComparisonOption.value?.comparison || null)
+const activeComparisonLabel = computed(() => activeComparisonOption.value?.badge || '报告')
+const activeComparisonDescription = computed(() => {
+  if (activeComparisonOption.value?.type === 'incremental') return '仅展示增量报告与上一份增量报告的覆盖变化，避免与全量口径混算。'
+  return '仅展示全量报告与上一份全量报告的覆盖变化，适合观察版本整体覆盖变化。'
+})
+const activeComparisonMeta = computed(() => {
+  const report = activeComparisonOption.value?.report
+  if (!report) return '暂无对应报告'
+  const commit = shortHash(report.repoCommitId)
+  if (activeComparisonOption.value?.type === 'incremental') {
+    return `基准 ${report.baseVersionNumber || '-'} · Commit ${shortHash(report.baseRepoCommitId)}`
+  }
+  return `版本 ${report.versionNumber || '-'} · Commit ${commit}`
+})
+const comparisonReportId = computed(() => activeComparisonOption.value?.report?.id || '')
+const filteredTrend = computed(() => trend.value.filter((item) => trendReportKind(item) === trendReportType.value))
+const trendCounts = computed(() => ({
+  full: trend.value.filter((item) => trendReportKind(item) === 'full').length,
+  incremental: trend.value.filter((item) => trendReportKind(item) === 'incremental').length,
+}))
 const filteredComparisonMethods = computed(() => {
   const keyword = comparisonDialog.value.keyword.toLowerCase()
   if (!keyword) return comparisonDialog.value.methods
@@ -437,7 +532,7 @@ function coverageRate(covered?: number, total?: number) {
 }
 
 function comparisonRate(count?: number) {
-  const comparison = payload.value?.comparison
+  const comparison = activeComparison.value
   const total = (comparison?.addedCount || 0) + (comparison?.stableCount || 0) + (comparison?.decreasedCount || 0)
   return coverageRate(count, total)
 }
@@ -520,8 +615,8 @@ function trendNumber(item: Record<string, unknown> | undefined, key: string) {
 }
 
 function trendDelta(index: number, key: string) {
-  const current = trendNumber(trend.value[index], key)
-  const previous = trendNumber(trend.value[index - 1], key)
+  const current = trendNumber(filteredTrend.value[index], key)
+  const previous = trendNumber(filteredTrend.value[index - 1], key)
   if (current === null || previous === null) return null
   return current - previous
 }
@@ -559,6 +654,40 @@ function trendTime(item: Record<string, unknown>) {
     return new Date(timestamp).toLocaleString()
   }
   return String(item.time || item.createTimeText || '-')
+}
+
+function trendReportKind(item: Record<string, unknown>): ReportViewType {
+  return Number(item.reportType) === 1 ? 'incremental' : 'full'
+}
+
+function trendReportTypeLabel(item: Record<string, unknown>) {
+  return trendReportKind(item) === 'incremental' ? '增量' : '全量'
+}
+
+function trendReportMeta(item: Record<string, unknown>) {
+  if (trendReportKind(item) === 'incremental') {
+    return `基准 ${String(item.baseVersionNumber || '-')} · Commit ${shortHash(String(item.baseRepoCommitId || ''))}`
+  }
+  return `Commit ${shortHash(String(item.repoCommitId || ''))}`
+}
+
+function selectComparisonReportType(type: ReportViewType) {
+  const option = comparisonOptions.value.find((item) => item.type === type)
+  if (!option?.report && !option?.comparison) return
+  comparisonReportType.value = type
+}
+
+function selectTrendReportType(type: ReportViewType) {
+  if (!trendCounts.value[type]) return
+  trendReportType.value = type
+}
+
+function syncReportTypeDefaults(selection: CoverageSelection) {
+  const selectedIncremental = !!selection.reportId && payload.value?.incrementalReport?.id === selection.reportId
+  comparisonReportType.value = selectedIncremental || (!payload.value?.report && !!payload.value?.incrementalReport) ? 'incremental' : 'full'
+  const hasFullTrend = trendCounts.value.full > 0
+  const hasIncrementalTrend = trendCounts.value.incremental > 0
+  trendReportType.value = selectedIncremental && hasIncrementalTrend ? 'incremental' : hasFullTrend ? 'full' : hasIncrementalTrend ? 'incremental' : 'full'
 }
 
 type CoverageSelection = {
@@ -651,6 +780,7 @@ async function load() {
       commitId: selection.commitId,
     })
     trend.value = await fetchCoverageTrend(projectId.value, appId.value, selection.versionNumber)
+    syncReportTypeDefaults(selection)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载覆盖率概览失败'
   } finally {
@@ -838,14 +968,14 @@ function closeComparisonDialog() {
 }
 
 function showComparisonMethods(type: 'added' | 'stable' | 'decreased') {
-  const comparison = payload.value?.comparison
+  const comparison = activeComparison.value
   if (!comparison) return
   const titleMap = { added: '新增覆盖方法', stable: '稳定覆盖方法', decreased: '覆盖下降方法' }
   const labelMap = { added: '新增覆盖', stable: '稳定覆盖', decreased: '下降覆盖' }
   const descriptionMap = {
-    added: '这些方法在当前版本新增进入覆盖范围，可用于快速确认新增能力的测试触达情况。',
-    stable: '这些方法与上一版本保持覆盖，可用于确认核心稳定路径是否持续被测试保护。',
-    decreased: '这些方法相比上一版本覆盖下降，建议优先定位源码并补充用例或回放流量。',
+    added: `${activeComparisonLabel.value}中新增进入覆盖范围的方法，可用于快速确认新增能力的测试触达情况。`,
+    stable: `${activeComparisonLabel.value}中与上一版本保持覆盖的方法，可用于确认核心稳定路径是否持续被测试保护。`,
+    decreased: `${activeComparisonLabel.value}中相比上一版本覆盖下降的方法，建议优先定位源码并补充用例或回放流量。`,
   }
   const methodMap = { added: comparison.addedMethods, stable: comparison.stableMethods, decreased: comparison.decreasedMethods }
   comparisonDialog.value = {
@@ -1052,6 +1182,11 @@ onMounted(load)
   border-radius: 999px;
   padding: 10px 14px;
   background: rgba(15, 118, 110, .08);
+}
+
+.incremental-detail-link {
+  background: rgba(37, 99, 235, .08);
+  color: #2563eb;
 }
 
 .hero-grid,
@@ -1731,6 +1866,81 @@ onMounted(load)
   overflow: hidden;
 }
 
+.typed-panel-head {
+  align-items: flex-start;
+}
+
+.typed-panel-head h2,
+.typed-panel-head .subtext {
+  margin: 0;
+}
+
+.typed-panel-head .subtext {
+  margin-top: 4px;
+}
+
+.report-type-switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  padding: 4px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, .78);
+}
+
+.type-switch-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.type-switch-button.active {
+  background: #0f766e;
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(15, 118, 110, .18);
+}
+
+.type-switch-button:disabled {
+  cursor: not-allowed;
+  opacity: .42;
+}
+
+.typed-panel-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.trend-type-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: rgba(15, 118, 110, .10);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.trend-type-badge.incremental {
+  background: rgba(37, 99, 235, .10);
+  color: #2563eb;
+}
+
 .trend-list {
   display: grid;
   gap: 10px;
@@ -1750,8 +1960,28 @@ onMounted(load)
 }
 
 .trend-time {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
   color: #64748b;
   font-weight: 700;
+}
+
+.trend-time strong,
+.trend-time small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trend-time strong {
+  color: #334155;
+  font-size: 14px;
+}
+
+.trend-time small {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 .trend-main strong {
@@ -1843,6 +2073,12 @@ onMounted(load)
   .comparison-modal-toolbar,
   .comparison-method-item {
     grid-template-columns: 1fr;
+  }
+
+  .typed-panel-head,
+  .trend-meta,
+  .report-type-switch {
+    justify-content: flex-start;
   }
 
   .base-report-option code {

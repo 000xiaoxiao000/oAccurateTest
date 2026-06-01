@@ -12,20 +12,24 @@ public class StackCodeLayer implements ImageLayer {
 
     StackNodeVo[] codeNodes;
     String snapshotId;
-    Map<String, List<StackNodeVo>> childNodes;
     Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup;
 
     public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId, Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup) {
-        this.codeNodes = codeNodes;
+        this.codeNodes = codeNodes != null ? codeNodes : new StackNodeVo[0];
         this.snapshotId = snapshotId;
         this.staticMethodLookup = staticMethodLookup != null ? staticMethodLookup : Collections.emptyMap();
-        childNodes = Arrays.stream(codeNodes).collect(Collectors.groupingBy(StackNodeVo::parentId));
     }
 
     @Override
     public List<ImageElement> elements() {
+        if (ArrayUtils.isEmpty(codeNodes)) {
+            return Collections.emptyList();
+        }
+
         // 1. 按 packageAndClassName 分组
-        Map<String, List<StackNodeVo>> packageGroup = Arrays.stream(codeNodes).collect(Collectors.groupingBy(StackNodeVo::getClassName));
+        Map<String, List<StackNodeVo>> packageGroup = Arrays.stream(codeNodes)
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(StackNodeVo::getClassName));
 
         // 2. 按包分组整体在圆环上分段均匀分布
         int totalNodeCount = Arrays.stream(codeNodes).toArray().length;
@@ -56,9 +60,7 @@ public class StackCodeLayer implements ImageLayer {
                     nodeElement.data.x = (int) x;
                     nodeElement.data.y = (int) y;
                 }
-                List<ImageElement> elements = buildEdges(a, a.getId());
-                elements.add(nodeElement);
-                collect.addAll(elements);
+                collect.add(nodeElement);
                 nodeGlobalIdx++;
             }
         }
@@ -78,8 +80,8 @@ public class StackCodeLayer implements ImageLayer {
             );
         });
 
-        // 添加入口到顶层代码节点的关系
-        results.addAll(buildRootEdges());
+        // 添加入口与代码节点之间的调用关系；缺失中间父节点时连接到最近存在的祖先，避免全部退化为 root 连线。
+        results.addAll(buildCallEdges());
         return results;
     }
 
@@ -190,66 +192,67 @@ public class StackCodeLayer implements ImageLayer {
         return element;
     }
 
-    private List<ImageElement> buildRootEdges() {
+    private List<ImageElement> buildCallEdges() {
         if (ArrayUtils.isEmpty(codeNodes)) {
             return Collections.emptyList();
         }
 
-        Set<String> nodeIds = Arrays.stream(codeNodes)
-                .map(StackNodeVo::getId)
+        Map<String, StackNodeVo> nodeByStackId = Arrays.stream(codeNodes)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+                .filter(node -> hasText(node.getId()))
+                .collect(Collectors.toMap(StackNodeVo::getId, node -> node, (left, right) -> left, LinkedHashMap::new));
 
-        List<StackNodeVo> rootNodes = Arrays.stream(codeNodes)
-                .filter(Objects::nonNull)
-                .filter(node -> {
-                    String parentId = node.parentId();
-                    return "0".equals(parentId) || "ROOT".equals(parentId) || !nodeIds.contains(parentId);
-                })
-                .sorted(Comparator.comparing(StackNodeVo::getId, Comparator.nullsLast(String::compareTo)))
-                .collect(Collectors.toList());
+        Map<String, ImageElement> edgeMap = new LinkedHashMap<>();
+        for (StackNodeVo node : codeNodes) {
+            if (node == null || !hasText(node.getClassName()) || !hasText(node.getMethodName())) {
+                continue;
+            }
+            StackNodeVo parent = findNearestExistingParent(node, nodeByStackId);
+            String source = parent == null ? snapshotId : graphNodeId(parent);
+            String target = graphNodeId(node);
+            if (!hasText(source) || !hasText(target) || source.equals(target)) {
+                continue;
+            }
 
-        if (rootNodes.isEmpty()) {
-            rootNodes = Arrays.stream(codeNodes)
-                    .filter(Objects::nonNull)
-                    .sorted(Comparator.comparing(StackNodeVo::getId, Comparator.nullsLast(String::compareTo)))
-                    .limit(1)
-                    .collect(Collectors.toList());
-        }
-
-        return rootNodes.stream().map(rootNode -> {
-            ImageData edgeData = new ImageData(generateTempId());
-            edgeData.source = snapshotId;
-            edgeData.target = ClassUtil.toClassName(rootNode.getClassName()) + " " + rootNode.getMethodName();
-            edgeData.name = "invoke";
+            ImageData edgeData = new ImageData(source + " ->invoke-> " + target);
+            edgeData.source = source;
+            edgeData.target = target;
+            edgeData.name = parent == null ? "entry" : "invoke";
             ImageElement element = buildDefaultEdge(edgeData);
-            element.classes = new String[]{"start_invoke", "invoke"};
-            return element;
-        }).collect(Collectors.toList());
+            element.classes = parent == null ? new String[]{"start_invoke", "invoke"} : new String[]{"invoke"};
+            edgeMap.putIfAbsent(edgeData.source + "\u0001" + edgeData.target, element);
+        }
+        return new ArrayList<>(edgeMap.values());
     }
 
-    private List<ImageElement> buildEdges(StackNodeVo node, String nodeId) {
-        List<StackNodeVo> child = childNodes.get(node.getId());
-        if (child == null || child.isEmpty()) {
-            return new ArrayList<>();
+    private StackNodeVo findNearestExistingParent(StackNodeVo node, Map<String, StackNodeVo> nodeByStackId) {
+        if (node == null || !hasText(node.getId())) {
+            return null;
         }
-
-        String className = ClassUtil.toClassName(node.getClassName());
-        String methodName = node.getMethodName();
-        String classSimpleName = ClassUtil.getClassSimpleName(className);
-        return child.stream().map(a -> {
-            String targetClassName = ClassUtil.toClassName(a.getClassName());
-            String targetMethodName = a.getMethodName();
-            ImageData edgeData =
-                    new ImageData(classSimpleName + " " + methodName + " ->invoke-> " + ClassUtil.getClassSimpleName(targetClassName) + " "
-                            + targetMethodName);
-            edgeData.source = className + " " + methodName;
-            edgeData.target = targetClassName + " " + targetMethodName;
-            edgeData.name = "invoke";
-            ImageElement element = buildDefaultEdge(edgeData);
-            element.classes = new String[]{"invoke"};
-            return element;
-        }).collect(Collectors.toList());
+        String parentId = directParentStackId(node.getId());
+        while (hasText(parentId) && !"ROOT".equals(parentId)) {
+            StackNodeVo parent = nodeByStackId.get(parentId);
+            if (parent != null) {
+                return parent;
+            }
+            parentId = directParentStackId(parentId);
+        }
+        return null;
     }
 
+    private String graphNodeId(StackNodeVo node) {
+        return ClassUtil.toClassName(node.getClassName()) + " " + node.getMethodName();
+    }
+
+    private String directParentStackId(String stackId) {
+        if (!hasText(stackId) || "0".equals(stackId)) {
+            return null;
+        }
+        int lastDot = stackId.lastIndexOf('.');
+        return lastDot > 0 ? stackId.substring(0, lastDot) : null;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
 }

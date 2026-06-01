@@ -255,12 +255,13 @@
                   :class="{ selected: selectedNodeId === node.id }"
                   @click.stop="selectNode(node.id)"
                 >
+                  <title>{{ graphNodeTooltip(node) }}</title>
                   <rect :x="node.x" :y="node.y" rx="6" ry="6" :width="graphNodeWidth" :height="graphNodeHeight" />
                   <circle :cx="node.x + 30" :cy="node.y + 33" r="18" class="node-icon-ring" />
                   <text :x="node.x + 30" :y="node.y + 40" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
-                  <text :x="node.x + 58" :y="node.y + 30" class="node-title">{{ node.title || node.id }}</text>
-                  <text :x="node.x + 58" :y="node.y + 56" class="node-subtitle">{{ node.subTitle || '-' }}</text>
-                  <text :x="node.x + 14" :y="node.y + 82" class="node-type">{{ node.tips || node.type || 'node' }}</text>
+                  <text :x="node.x + 58" :y="node.y + 30" class="node-title">{{ compactGraphText(node.title || node.id, 22) }}</text>
+                  <text :x="node.x + 58" :y="node.y + 56" class="node-subtitle">{{ compactGraphText(node.subTitle || '-', 26) }}</text>
+                  <text :x="node.x + 14" :y="node.y + 82" class="node-type">{{ compactGraphText(node.tips || node.type || 'node', 32) }}</text>
                 </g>
               </g>
             </svg>
@@ -910,6 +911,17 @@ function moveGraphPan(event: PointerEvent) {
 
 function endGraphPan() {
   graphPan.value = null
+}
+
+function compactGraphText(value: string, maxLength: number) {
+  if (!value) return ''
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value
+}
+
+function graphNodeTooltip(node: GraphNodeSummary) {
+  return [node.title || node.id, node.subTitle, node.tips || node.type]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function iconGlyph(value?: string) {

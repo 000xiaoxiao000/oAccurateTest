@@ -570,6 +570,7 @@ function edgeTone(edge: Pick<RelationEdge, 'action' | 'label'>) {
   if (value.includes('update') || value.includes('改')) return 'update'
   if (value.includes('insert') || value.includes('增')) return 'insert'
   if (value.includes('select') || value.includes('查')) return 'select'
+  if (value.includes('invoke') || value.includes('调用') || value.includes('entry') || value.includes('入口')) return 'invoke'
   return 'default'
 }
 
@@ -581,6 +582,8 @@ function actionText(action?: string) {
     if (value === 'delete') return '删'
     if (value === 'update') return '改'
     if (value === 'select') return '查'
+    if (value === 'invoke') return '调用'
+    if (value === 'entry' || value === 'start') return '入口'
     return item
   }).filter(Boolean).join(',')
 }
@@ -1297,6 +1300,7 @@ watchEffect(() => {
 }
 
 .graph-edge.related line {
+  stroke: #0f766e;
   stroke-width: 3;
   opacity: 1;
 }
@@ -1309,11 +1313,17 @@ watchEffect(() => {
 .graph-edge.update line { stroke: #f59e0b; }
 .graph-edge.delete line { stroke: #dc2626; }
 .graph-edge.select line { stroke: #2563eb; }
+.graph-edge.invoke line {
+  stroke: #2563eb;
+  stroke-width: 2.1;
+  opacity: .72;
+}
 
 .graph-edge.insert text { fill: #15803d; }
 .graph-edge.update text { fill: #b45309; }
 .graph-edge.delete text { fill: #b91c1c; }
 .graph-edge.select text { fill: #1d4ed8; }
+.graph-edge.invoke text { fill: #1d4ed8; }
 
 .graph-edge text {
   font-size: 11px;

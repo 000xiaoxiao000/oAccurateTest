@@ -238,6 +238,7 @@ public class CoverageApiControl {
         payload.setIncrementalReport(toCoverageReportSummary(incrementalReport));
         payload.setHasNewerData(hasNewerData);
         payload.setComparison(toComparisonSummary(fullReport == null ? null : coverageService.getComparison(fullReport.getId())));
+        payload.setIncrementalComparison(toComparisonSummary(incrementalReport == null ? null : coverageService.getComparison(incrementalReport.getId())));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         payload.setMascotPrimary(computeMascotPrimary(projectId, payload.getProject().getName()));
         return new ResultNotified<>(true, "获取覆盖率概览成功", payload);
@@ -563,6 +564,7 @@ public class CoverageApiControl {
         private CoverageReportSummary incrementalReport;
         private Boolean hasNewerData;
         private CoverageComparisonSummary comparison;
+        private CoverageComparisonSummary incrementalComparison;
         private String currentUserRole;
         private String mascotPrimary;
 
@@ -582,6 +584,8 @@ public class CoverageApiControl {
         public void setHasNewerData(Boolean hasNewerData) { this.hasNewerData = hasNewerData; }
         public CoverageComparisonSummary getComparison() { return comparison; }
         public void setComparison(CoverageComparisonSummary comparison) { this.comparison = comparison; }
+        public CoverageComparisonSummary getIncrementalComparison() { return incrementalComparison; }
+        public void setIncrementalComparison(CoverageComparisonSummary incrementalComparison) { this.incrementalComparison = incrementalComparison; }
         public String getCurrentUserRole() { return currentUserRole; }
         public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
         public String getMascotPrimary() { return mascotPrimary; }

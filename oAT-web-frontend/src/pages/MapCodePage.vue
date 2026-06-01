@@ -2,11 +2,13 @@
   <RelationBoard
     eyebrow="Code Map"
     title="源码链路图"
-    subtext="按 traceId 展示调用链中的代码节点。"
+    subtext="按 traceId 展示调用链中的代码节点，节点之间按真实调用关系连线。点击节点可高亮上下游关系。"
     :loading="loading"
     :error="error"
     :nodes="nodes"
     :edges="edges"
+    :highlight-related="true"
+    :show-edge-labels="false"
     :back-route="`/p/${projectId}/search`"
     back-label="返回搜索中心"
   />
@@ -49,11 +51,19 @@ const edges = computed(() => {
       id: item.data.id,
       source: item.data.source as string,
       target: item.data.target as string,
-      label: item.data.methodName || item.data.name,
+      label: relationLabel(item.data.name || item.data.methodName),
+      action: item.data.name || item.data.methodName,
       sourceLabel: labelMap.get(item.data.source as string),
       targetLabel: labelMap.get(item.data.target as string),
     }))
 })
+
+function relationLabel(value?: string) {
+  const normalized = String(value || '').toLowerCase()
+  if (normalized === 'entry' || normalized === 'start') return '入口'
+  if (normalized === 'invoke') return '调用'
+  return value || '调用'
+}
 
 async function load() {
   if (!traceId.value) {

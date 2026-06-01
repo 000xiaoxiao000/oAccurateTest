@@ -67,16 +67,17 @@
                   v-for="node in nodePositions"
                   :key="node.id"
                   class="graph-node"
-                  :class="[`node-${node.state || 'normal'}`, { active: selectedNodeId === node.id || graph.showDefaultNode?.id === node.id }]"
+                  :class="[`node-${node.state || 'normal'}`, { active: selectedNodeId === node.id }]"
                   @pointerdown.stop="startNodeDrag($event, node)"
                   @click.stop="$emit('select-node', node.id)"
                 >
+                  <title>{{ nodeTooltip(node) }}</title>
                   <rect :x="node.x" :y="node.y" rx="16" ry="16" :width="nodeWidth" :height="nodeHeight" />
                   <circle :cx="node.x + 34" :cy="node.y + 34" r="18" class="node-icon-ring" />
                   <text :x="node.x + 34" :y="node.y + 41" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
-                  <text :x="node.x + 64" :y="node.y + 30" class="node-title">{{ compactText(node.title || node.id, 25) }}</text>
-                  <text :x="node.x + 64" :y="node.y + 54" class="node-subtitle">{{ compactText(node.subTitle || '-', 30) }}</text>
-                  <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactText(node.tips || node.type || 'unknown', 32) }}</text>
+                  <text :x="node.x + 64" :y="node.y + 30" class="node-title">{{ compactText(node.title || node.id, 20) }}</text>
+                  <text :x="node.x + 64" :y="node.y + 54" class="node-subtitle">{{ compactText(node.subTitle || '-', 24) }}</text>
+                  <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactText(node.tips || node.type || 'unknown', 30) }}</text>
                 </g>
               </g>
             </svg>
@@ -349,7 +350,14 @@ function startNodeDrag(event: PointerEvent, node: PositionedNode) {
 }
 
 function compactText(value: string, maxLength: number) {
+  if (!value) return ''
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value
+}
+
+function nodeTooltip(node: GraphNodeSummary) {
+  return [node.title || node.id, node.subTitle, node.tips || node.type]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function iconGlyph(value?: string) {
@@ -623,10 +631,20 @@ function iconGlyph(value?: string) {
 .node-card {
   display: grid;
   gap: 4px;
+  min-width: 0;
   padding: 14px;
   border-radius: 16px;
   background: #f8fbfb;
   border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.node-card strong,
+.node-card span,
+.node-card small,
+.node-card p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .node-card.node-error {

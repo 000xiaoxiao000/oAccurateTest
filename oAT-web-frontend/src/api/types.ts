@@ -706,6 +706,7 @@ export interface CoverageOverviewPayload {
   incrementalReport?: ExtendedCoverageReportSummary
   hasNewerData?: boolean
   comparison?: CoverageComparisonSummary
+  incrementalComparison?: CoverageComparisonSummary
   currentUserRole: string
   mascotPrimary?: string
 }

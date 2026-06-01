@@ -1010,8 +1010,15 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
         for (CoverageReportIndex report : reports) {
             Map<String, Object> point = new HashMap<>();
-            point.put("time", sdfTrend.format(report.getCreateTime()));
-            point.put("timestamp", report.getCreateTime().getTime());
+            point.put("time", report.getCreateTime() == null ? null : sdfTrend.format(report.getCreateTime()));
+            point.put("timestamp", report.getCreateTime() == null ? null : report.getCreateTime().getTime());
+            point.put("reportId", report.getId());
+            point.put("versionNumber", report.getVersionNumber());
+            point.put("repoBranch", report.getRepoBranch());
+            point.put("repoCommitId", report.getRepoCommitId());
+            point.put("reportType", normalizeReportType(report.getReportType()));
+            point.put("baseVersionNumber", report.getBaseVersionNumber());
+            point.put("baseRepoCommitId", report.getBaseRepoCommitId());
             point.put("lineCoverage", report.getTotalLines() > 0 ? (double) report.getCoveredLines() / report.getTotalLines() * 100 : 0);
             point.put("methodCoverage", report.getTotalMethods() > 0 ? (double) report.getCoveredMethods() / report.getTotalMethods() * 100 : 0);
             point.put("branchCoverage", calculateBranchRate(report.getCoveredBranchTargets(), report.getTotalBranchTargets()));
