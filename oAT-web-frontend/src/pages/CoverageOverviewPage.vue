@@ -496,9 +496,9 @@ const activeComparisonOption = computed(() => {
 const activeComparison = computed(() => activeComparisonOption.value?.comparison || null)
 const activeComparisonLabel = computed(() => activeComparisonOption.value?.badge || '报告')
 const activeComparisonDescription = computed(() => {
-  if (activeComparisonOption.value?.type === 'incremental') return '仅展示增量报告与上一份增量报告的覆盖变化，避免与全量口径混算。'
-  if (activeComparisonOption.value?.type === 'commit') return '仅展示本次 Commit 报告与同 Commit 历史报告的覆盖变化，避免混入版本全量。'
-  return '仅展示当前 Commit 报告与同 Commit 历史报告的覆盖变化。'
+  if (activeComparisonOption.value?.type === 'incremental') return '仅展示增量报告相对所选基准报告的覆盖变化，避免与版本全量口径混算。'
+  if (activeComparisonOption.value?.type === 'commit') return '仅展示本次 Commit 报告与上一份同类型报告的覆盖变化，避免混入版本全量。'
+  return '仅展示当前报告与上一份同类型报告的覆盖变化。'
 })
 const activeComparisonMeta = computed(() => {
   const report = activeComparisonOption.value?.report
@@ -510,7 +510,10 @@ const activeComparisonMeta = computed(() => {
   return `版本 ${report.versionNumber || '-'} · Commit ${commit}`
 })
 const comparisonReportId = computed(() => activeComparisonOption.value?.report?.id || '')
-const filteredTrend = computed(() => trend.value.filter((item) => trendReportKind(item) === trendReportType.value))
+const filteredTrend = computed(() => trend.value
+  .filter((item) => trendReportKind(item) === trendReportType.value)
+  .slice()
+  .sort((a, b) => trendTimestamp(b) - trendTimestamp(a)))
 const trendCounts = computed(() => ({
   full: trend.value.filter((item) => trendReportKind(item) === 'full').length,
   commit: trend.value.filter((item) => trendReportKind(item) === 'commit').length,
@@ -623,6 +626,14 @@ function trendMetric(item: Record<string, unknown>, key: string) {
   return `${value.toFixed(1)}%`
 }
 
+function trendTimestamp(item: Record<string, unknown> | undefined) {
+  if (!item) return 0
+  const timestamp = Number(item.timestamp)
+  if (Number.isFinite(timestamp)) return timestamp
+  const parsed = Date.parse(String(item.createTimeText || item.time || ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 function trendNumber(item: Record<string, unknown> | undefined, key: string) {
   const value = Number(item ? trendValue(item, key) : undefined)
   return Number.isFinite(value) ? value : null
@@ -630,7 +641,7 @@ function trendNumber(item: Record<string, unknown> | undefined, key: string) {
 
 function trendDelta(index: number, key: string) {
   const current = trendNumber(filteredTrend.value[index], key)
-  const previous = trendNumber(filteredTrend.value[index - 1], key)
+  const previous = trendNumber(filteredTrend.value[index + 1], key)
   if (current === null || previous === null) return null
   return current - previous
 }
@@ -658,8 +669,8 @@ function trendDirectionText(index: number, key: string) {
 
 function trendDirectionTitle(index: number, key: string) {
   const delta = trendDelta(index, key)
-  if (delta === null) return '暂无上一条趋势数据可比对'
-  return `较上一条${trendDirectionText(index, key)}`
+  if (delta === null) return '暂无更早趋势数据可比对'
+  return `较上一条较早数据${trendDirectionText(index, key)}`
 }
 
 function trendTime(item: Record<string, unknown>) {
@@ -1244,11 +1255,14 @@ onMounted(load)
 }
 
 .coverage-metrics {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
 }
 
 .coverage-metrics .hero-card {
-  min-height: 86px;
+  display: grid;
+  align-content: center;
+  min-height: 96px;
   padding: 14px 16px;
 }
 
@@ -1304,12 +1318,16 @@ onMounted(load)
 }
 
 .report-workbench {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
 }
 
 .report-summary-panel {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+  padding: 14px 16px;
 }
 
 .job-panel {
@@ -1474,15 +1492,24 @@ onMounted(load)
 }
 
 .report-summary-panel .info-grid {
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(180px, 1.55fr);
+  gap: 8px;
 }
 
 .info-item {
   min-width: 0;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, .72);
+  border: 1px solid rgba(15, 23, 42, .045);
 }
 
 .info-item.wide {
   grid-column: span 2;
+}
+
+.report-summary-panel .info-item.wide {
+  grid-column: span 1;
 }
 
 .info-item strong {
@@ -1507,7 +1534,7 @@ onMounted(load)
 .hero-card strong,
 .info-item strong {
   display: block;
-  margin-top: 6px;
+  margin-top: 5px;
 }
 
 .hero-card.clickable {
@@ -1861,8 +1888,8 @@ onMounted(load)
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 12px 0 16px;
-  padding-bottom: 12px;
+  margin: 10px 0 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(15, 23, 42, .06);
 }
 
@@ -2143,7 +2170,8 @@ onMounted(load)
     justify-content: flex-start;
   }
 
-  .info-item.wide {
+  .info-item.wide,
+  .report-summary-panel .info-item.wide {
     grid-column: auto;
   }
 

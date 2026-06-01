@@ -881,10 +881,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         CoverageReportIndex currentReport = coverageReportRepository.findById(reportId).orElse(null);
         if (currentReport == null) return comparison;
 
-        List<CoverageReportIndex> repoReports = coverageReportRepository.findByAppIdAndVersionNumber(currentReport.getAppId(), currentReport.getVersionNumber());
-        if (repoReports == null || repoReports.isEmpty()) return comparison;
-
-        CoverageReportIndex previousReport = selectPreviousReport(currentReport, repoReports);
+        CoverageReportIndex previousReport = selectPreviousReport(currentReport);
         if (previousReport == null) return comparison;
 
         List<ClassCoverageIndex> currentCcList = classCoverageRepository.findByReportId(currentReport.getId());
@@ -934,40 +931,73 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         return comparison;
     }
 
-    private CoverageReportIndex selectPreviousReport(CoverageReportIndex currentReport, List<CoverageReportIndex> repoReports) {
-        List<CoverageReportIndex> sameTypeReports = new ArrayList<>();
-        for (CoverageReportIndex report : repoReports) {
-            if (report == null || !StringUtils.hasText(report.getId())) {
-                continue;
-            }
-            if (normalizeReportType(report.getReportType()) == normalizeReportType(currentReport.getReportType())
-                    && sameReportCommitScope(currentReport, report)) {
-                sameTypeReports.add(report);
+    private CoverageReportIndex selectPreviousReport(CoverageReportIndex currentReport) {
+        if (currentReport == null) {
+            return null;
+        }
+        if (isIncrementalReport(currentReport.getReportType())) {
+            CoverageReportIndex baseReport = selectExplicitBaseReport(currentReport);
+            if (baseReport != null) {
+                return baseReport;
             }
         }
+        List<CoverageReportIndex> repoReports = coverageReportRepository.findByAppIdAndVersionNumber(currentReport.getAppId(), currentReport.getVersionNumber());
+        return selectOlderSameTypeReport(currentReport, repoReports);
+    }
 
-        if (sameTypeReports.isEmpty()) {
+    private CoverageReportIndex selectExplicitBaseReport(CoverageReportIndex currentReport) {
+        if (!StringUtils.hasText(currentReport.getBaseVersionNumber())) {
+            return null;
+        }
+        List<CoverageReportIndex> baseReports = coverageReportRepository.findByAppIdAndVersionNumber(currentReport.getAppId(), currentReport.getBaseVersionNumber());
+        if (baseReports == null || baseReports.isEmpty()) {
+            return null;
+        }
+        List<CoverageReportIndex> candidates = new ArrayList<>();
+        for (CoverageReportIndex report : baseReports) {
+            if (report == null || !StringUtils.hasText(report.getId()) || report.getId().equals(currentReport.getId())) {
+                continue;
+            }
+            if (isIncrementalReport(report.getReportType())) {
+                continue;
+            }
+            if (StringUtils.hasText(currentReport.getBaseRepoCommitId())
+                    && !Objects.equals(normalizeText(currentReport.getBaseRepoCommitId()), normalizeText(report.getRepoCommitId()))) {
+                continue;
+            }
+            candidates.add(report);
+        }
+        return latestReport(candidates);
+    }
+
+    private CoverageReportIndex selectOlderSameTypeReport(CoverageReportIndex currentReport, List<CoverageReportIndex> repoReports) {
+        if (repoReports == null || repoReports.isEmpty()) {
+            return null;
+        }
+        List<CoverageReportIndex> olderReports = new ArrayList<>();
+        for (CoverageReportIndex report : repoReports) {
+            if (report == null || !StringUtils.hasText(report.getId()) || report.getId().equals(currentReport.getId())) {
+                continue;
+            }
+            if (normalizeReportType(report.getReportType()) != normalizeReportType(currentReport.getReportType())) {
+                continue;
+            }
+            if (currentReport.getCreateTime() != null && report.getCreateTime() != null
+                    && !report.getCreateTime().before(currentReport.getCreateTime())) {
+                continue;
+            }
+            olderReports.add(report);
+        }
+
+        if (olderReports.isEmpty()) {
             return null;
         }
 
-        sameTypeReports.sort((a, b) -> {
+        olderReports.sort((a, b) -> {
             if (a.getCreateTime() == null) return 1;
             if (b.getCreateTime() == null) return -1;
             return b.getCreateTime().compareTo(a.getCreateTime());
         });
-
-        int currentIndex = -1;
-        for (int i = 0; i < sameTypeReports.size(); i++) {
-            if (sameTypeReports.get(i).getId().equals(currentReport.getId())) {
-                currentIndex = i;
-                break;
-            }
-        }
-        if (currentIndex < 0 || currentIndex + 1 >= sameTypeReports.size()) {
-            return null;
-        }
-
-        List<CoverageReportIndex> olderReports = sameTypeReports.subList(currentIndex + 1, sameTypeReports.size());
 
         if (StringUtils.hasText(currentReport.getRepoBranch())) {
             for (CoverageReportIndex report : olderReports) {
@@ -980,8 +1010,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         return olderReports.get(0);
     }
 
-    private boolean sameReportCommitScope(CoverageReportIndex left, CoverageReportIndex right) {
-        return Objects.equals(normalizeText(left == null ? null : left.getRepoCommitId()), normalizeText(right == null ? null : right.getRepoCommitId()));
+    private CoverageReportIndex latestReport(List<CoverageReportIndex> reports) {
+        if (reports == null || reports.isEmpty()) {
+            return null;
+        }
+        reports.sort((a, b) -> {
+            if (a.getCreateTime() == null) return 1;
+            if (b.getCreateTime() == null) return -1;
+            return b.getCreateTime().compareTo(a.getCreateTime());
+        });
+        return reports.get(0);
     }
 
     private String normalizeText(String value) {
@@ -1031,11 +1069,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         if (repoReports == null || repoReports.isEmpty()) return Collections.emptyList();
 
         List<CoverageReportIndex> reports = new ArrayList<>(repoReports);
-        reports.sort(Comparator.comparing(CoverageReportIndex::getCreateTime, (a, b) -> {
-            if (a == null) return -1;
-            if (b == null) return 1;
-            return a.compareTo(b);
-        }));
+        reports.sort((a, b) -> {
+            if (a.getCreateTime() == null) return 1;
+            if (b.getCreateTime() == null) return -1;
+            return b.getCreateTime().compareTo(a.getCreateTime());
+        });
 
         List<Map<String, Object>> trend = new ArrayList<>();
         java.text.SimpleDateFormat sdfTrend = new java.text.SimpleDateFormat("MM-dd HH:mm");

@@ -397,8 +397,8 @@ const layoutSourceNodes = computed(() => filteredNodes.value)
 const layoutSourceEdges = computed(() => filteredEdges.value)
 const graphLayoutKind = computed(() => resolveGraphLayoutKind(layoutSourceNodes.value))
 const graphLayoutPlan = computed(() => buildGraphLayout(layoutSourceNodes.value, layoutSourceEdges.value, graphLayoutKind.value))
-const graphCanvas = computed(() => graphLayoutPlan.value.canvas)
-const graphViewBox = computed(() => `0 0 ${graphCanvas.value.width} ${graphCanvas.value.height}`)
+const graphViewport = computed(() => ({ width: compact.value ? 1080 : 1200, height: compact.value ? 620 : 720 }))
+const graphViewBox = computed(() => `0 0 ${graphViewport.value.width} ${graphViewport.value.height}`)
 const graphTransform = computed(() => `translate(${graphOffset.value.x} ${graphOffset.value.y}) scale(${graphZoom.value})`)
 const denseGraph = computed(() => layoutSourceNodes.value.length > 70)
 
@@ -532,6 +532,9 @@ function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
   })
 
   const mostlyCode = nodes.filter(isCodeNode).length > nodes.length * 0.5
+  if (mostlyCode && nodes.length > 10) {
+    return buildWrappedFlowLayout(nodes, edges)
+  }
   const maxRowsPerColumn = mostlyCode ? (nodes.length > 80 ? 5 : 4) : (nodes.length > 80 ? 7 : 6)
   const maxColumnsPerBand = mostlyCode ? (nodes.length > 80 ? 5 : 6) : (nodes.length > 80 ? 6 : 7)
   const spacingX = mostlyCode ? 230 : 220
@@ -570,6 +573,83 @@ function buildLayeredLayout(nodes: RelationNode[], edges: RelationEdge[]) {
     height: Math.max(680, top * 2 + bands * maxRowsPerColumn * spacingY + (bands - 1) * bandGap),
   }
   return { canvas, positions }
+}
+
+function buildWrappedFlowLayout(nodes: RelationNode[], edges: RelationEdge[]) {
+  const order = topologicalNodeOrder(nodes, edges)
+  const perRow = nodes.length > 80 ? 8 : nodes.length > 40 ? 7 : 6
+  const spacingX = nodes.length > 80 ? 144 : 160
+  const spacingY = nodes.length > 80 ? 108 : 118
+  const left = 96
+  const top = 96
+  const rowCount = Math.max(1, Math.ceil(order.length / perRow))
+  const usedColumns = Math.min(perRow, order.length)
+  const positions = new Map<string, { x: number; y: number }>()
+
+  for (let row = 0; row < rowCount; row += 1) {
+    const rowNodes = order.slice(row * perRow, (row + 1) * perRow)
+    const displayNodes = row % 2 === 0 ? rowNodes : rowNodes.slice().reverse()
+    const rowOffset = Math.max(0, perRow - rowNodes.length) * spacingX * 0.5
+    displayNodes.forEach((node, column) => {
+      positions.set(node.id, {
+        x: left + rowOffset + column * spacingX,
+        y: top + row * spacingY,
+      })
+    })
+  }
+
+  const canvas = {
+    width: Math.max(1120, left * 2 + Math.max(0, usedColumns - 1) * spacingX + 96),
+    height: Math.max(680, top * 2 + Math.max(0, rowCount - 1) * spacingY + 96),
+  }
+  return { canvas, positions }
+}
+
+function topologicalNodeOrder(nodes: RelationNode[], edges: RelationEdge[]) {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node]))
+  const indegree = new Map(nodes.map((node) => [node.id, 0]))
+  const children = new Map(nodes.map((node) => [node.id, [] as string[]]))
+  edges.forEach((edge) => {
+    if (!nodeMap.has(edge.source) || !nodeMap.has(edge.target)) return
+    indegree.set(edge.target, (indegree.get(edge.target) || 0) + 1)
+    children.get(edge.source)?.push(edge.target)
+  })
+  children.forEach((items) => items.sort((leftId, rightId) => {
+    const leftNode = nodeMap.get(leftId)!
+    const rightNode = nodeMap.get(rightId)!
+    return nodeSortWeight(leftNode) - nodeSortWeight(rightNode) || nodeLabel(leftNode).localeCompare(nodeLabel(rightNode))
+  }))
+
+  const queue = nodes
+    .filter((node) => (indegree.get(node.id) || 0) === 0)
+    .sort((leftNode, rightNode) => nodeSortWeight(leftNode) - nodeSortWeight(rightNode) || nodeLabel(leftNode).localeCompare(nodeLabel(rightNode)))
+  const ordered: RelationNode[] = []
+  const visited = new Set<string>()
+
+  for (let index = 0; index < queue.length; index += 1) {
+    const node = queue[index]
+    if (!node || visited.has(node.id)) continue
+    visited.add(node.id)
+    ordered.push(node)
+    ;(children.get(node.id) || []).forEach((childId) => {
+      indegree.set(childId, Math.max(0, (indegree.get(childId) || 0) - 1))
+      if ((indegree.get(childId) || 0) === 0) {
+        const child = nodeMap.get(childId)
+        if (child) queue.push(child)
+      }
+    })
+  }
+
+  nodes
+    .filter((node) => !visited.has(node.id))
+    .sort((leftNode, rightNode) => nodeSortWeight(leftNode) - nodeSortWeight(rightNode) || nodeLabel(leftNode).localeCompare(nodeLabel(rightNode)))
+    .forEach((node) => ordered.push(node))
+
+  return ordered
+}
+
+function nodeLabel(node: RelationNode) {
+  return node.label || node.id
 }
 
 function nodeSortWeight(node: RelationNode) {
@@ -737,23 +817,24 @@ function zoomGraph(delta: number) {
 
 function fitGraph() {
   const bounds = graphContentBounds()
-  const padding = 100
-  const availableWidth = Math.max(320, graphCanvas.value.width - padding * 2)
-  const availableHeight = Math.max(260, graphCanvas.value.height - padding * 2)
+  const padding = denseGraph.value ? 64 : 80
+  const viewport = graphViewport.value
+  const availableWidth = Math.max(320, viewport.width - padding * 2)
+  const availableHeight = Math.max(260, viewport.height - padding * 2)
   const widthRatio = availableWidth / Math.max(bounds.width, 1)
   const heightRatio = availableHeight / Math.max(bounds.height, 1)
   const zoom = clampGraphZoom(Math.min(1.35, Math.max(0.55, Math.min(widthRatio, heightRatio))))
   graphZoom.value = zoom
   graphOffset.value = {
-    x: graphCanvas.value.width / 2 - (bounds.x + bounds.width / 2) * zoom,
-    y: graphCanvas.value.height / 2 - (bounds.y + bounds.height / 2) * zoom,
+    x: viewport.width / 2 - (bounds.x + bounds.width / 2) * zoom,
+    y: viewport.height / 2 - (bounds.y + bounds.height / 2) * zoom,
   }
 }
 
 function graphContentBounds() {
   const nodes = graphNodes.value
   if (!nodes.length) {
-    return { x: 0, y: 0, width: graphCanvas.value.width, height: graphCanvas.value.height }
+    return { x: 0, y: 0, width: graphViewport.value.width, height: graphViewport.value.height }
   }
   const labelPadding = denseGraph.value ? 36 : 72
   const minX = Math.min(...nodes.map((node) => node.x - node.radius - labelPadding))
@@ -775,8 +856,8 @@ function resetGraphLayout() {
 
 function graphPointerDelta(event: PointerEvent, startX: number, startY: number) {
   const rect = relationGraphRef.value?.getBoundingClientRect()
-  const scaleX = rect?.width ? graphCanvas.value.width / rect.width : 1
-  const scaleY = rect?.height ? graphCanvas.value.height / rect.height : 1
+  const scaleX = rect?.width ? graphViewport.value.width / rect.width : 1
+  const scaleY = rect?.height ? graphViewport.value.height / rect.height : 1
   return {
     x: (event.clientX - startX) * scaleX / graphZoom.value,
     y: (event.clientY - startY) * scaleY / graphZoom.value,
@@ -844,8 +925,8 @@ function centerGraphOnNode(nodeId: string) {
   if (!node) return
   graphZoom.value = Math.max(graphZoom.value, denseGraph.value ? 1.15 : 1)
   graphOffset.value = {
-    x: graphCanvas.value.width / 2 - node.x * graphZoom.value,
-    y: graphCanvas.value.height / 2 - node.y * graphZoom.value,
+    x: graphViewport.value.width / 2 - node.x * graphZoom.value,
+    y: graphViewport.value.height / 2 - node.y * graphZoom.value,
   }
 }
 
