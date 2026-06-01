@@ -4,7 +4,7 @@
       <div>
         <div class="eyebrow">Coverage Overview</div>
         <h1>{{ payload?.app.name || selectedAppName || appId }}</h1>
-        <p class="subtext">{{ versionNumber || payload?.report?.versionNumber || '未选择版本' }}</p>
+        <p class="subtext">{{ displayCoverageVersionNumber }}</p>
       </div>
       <div class="header-actions">
         <RouterLink class="secondary-link" :to="`/p/${projectId}/coverage`">返回覆盖率中心</RouterLink>
@@ -52,36 +52,32 @@
           >
             生成本次 Commit 报告
           </button>
-          <button class="ghost-button" type="button" :disabled="generating || !payload.report" @click="openIncrementalDialog">
+          <button
+            class="ghost-button tooltip-button"
+            type="button"
+            :disabled="generating || !canGenerateIncremental"
+            data-tooltip="选择基准版本或基准 Commit 后生成增量覆盖率报告，仅统计当前版本相对基准的变更范围。"
+            @click="openIncrementalDialog"
+          >
             生成增量报告
           </button>
           <RouterLink
-            v-if="payload.report"
-            class="ghost-link button-link"
-            :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }"
+            v-for="link in toolbarDetailLinks"
+            :key="link.type"
+            :class="['ghost-link', 'button-link', `${link.type}-detail-link`]"
+            :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: link.report?.id } }"
           >
-            查看全量明细
-          </RouterLink>
-          <RouterLink
-            v-if="payload.incrementalReport"
-            class="ghost-link button-link incremental-detail-link"
-            :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }"
-          >
-            查看增量明细
+            查看{{ link.detailLabel }}
           </RouterLink>
         </div>
       </section>
 
       <div class="hero-grid coverage-metrics">
-        <article class="hero-card">
-          <span>全量报告</span>
-          <strong>{{ coverageRate(payload.report?.coveredLines, payload.report?.totalLines) }}</strong>
-          <small>{{ payload.report?.coveredLines || 0 }} / {{ payload.report?.totalLines || 0 }}</small>
-        </article>
-        <article class="hero-card">
-          <span>增量报告</span>
-          <strong>{{ coverageRate(payload.incrementalReport?.coveredLines, payload.incrementalReport?.totalLines) }}</strong>
-          <small>{{ payload.incrementalReport?.coveredLines || 0 }} / {{ payload.incrementalReport?.totalLines || 0 }}</small>
+        <article v-for="bucket in reportBuckets" :key="bucket.type" class="hero-card">
+          <span>{{ bucket.title }}</span>
+          <strong>{{ coverageRate(bucket.report?.coveredLines, bucket.report?.totalLines) }}</strong>
+          <small v-if="bucket.report">{{ bucket.report.coveredLines || 0 }} / {{ bucket.report.totalLines || 0 }}</small>
+          <small v-else>{{ bucket.emptyText }}</small>
         </article>
         <article :class="['hero-card', 'status-metric-card', payload.hasNewerData ? 'warning' : 'success']">
           <span>报告状态</span>
@@ -126,52 +122,34 @@
       </section>
 
       <div class="panel-grid report-workbench">
-        <section class="panel report-summary-panel">
+        <section v-for="bucket in reportBuckets" :key="bucket.type" class="panel report-summary-panel">
           <div class="panel-head">
-            <h2>全量报告</h2>
-            <span>{{ payload.report?.createTimeText || '-' }}</span>
+            <h2>{{ bucket.title }}</h2>
+            <span>{{ bucket.report?.createTimeText || '-' }}</span>
           </div>
-          <div v-if="payload.report" class="report-actions">
-            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.report.id } }">全量明细</RouterLink>
-            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${payload.report.id}`)">导出报告</a>
-            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${payload.report.id}`)">导出方法</a>
-            <button class="report-action-link danger" type="button" :disabled="!payload.report.id || deletingReportId === payload.report.id" @click="removeCoverageReport(payload.report.id || '')">
-              {{ deletingReportId === payload.report.id ? '删除中...' : '删除报告' }}
+          <div v-if="bucket.report" class="report-actions">
+            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: bucket.report.id } }">{{ bucket.detailLabel }}</RouterLink>
+            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${bucket.report.id}`)">导出报告</a>
+            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${bucket.report.id}`)">导出方法</a>
+            <button class="report-action-link danger" type="button" :disabled="!bucket.report.id || deletingReportId === bucket.report.id" @click="removeCoverageReport(bucket.report.id || '')">
+              {{ deletingReportId === bucket.report.id ? '删除中...' : '删除报告' }}
             </button>
           </div>
-          <div v-if="payload.report" class="info-grid">
-            <div class="info-item"><span>版本</span><strong>{{ payload.report.versionNumber || '-' }}</strong></div>
-            <div class="info-item"><span>分支</span><strong>{{ payload.report.repoBranch || '-' }}</strong></div>
-            <div class="info-item wide"><span>提交</span><strong class="commit-value" :title="commitTooltip(payload.report.repoCommitId)">{{ shortHash(payload.report.repoCommitId) }}</strong></div>
-            <div class="info-item"><span>类覆盖</span><strong>{{ coverageRate(payload.report.coveredClasses, payload.report.totalClasses) }}</strong><small>{{ payload.report.coveredClasses }} / {{ payload.report.totalClasses }}</small></div>
-            <div class="info-item"><span>方法覆盖</span><strong>{{ coverageRate(payload.report.coveredMethods, payload.report.totalMethods) }}</strong><small>{{ payload.report.coveredMethods }} / {{ payload.report.totalMethods }}</small></div>
-            <div class="info-item"><span>复杂度</span><strong>{{ payload.report.totalComplexity }}</strong></div>
+          <div v-if="bucket.report" class="info-grid">
+            <div class="info-item"><span>版本</span><strong>{{ bucket.report.versionNumber || '-' }}</strong></div>
+            <template v-if="bucket.type === 'incremental'">
+              <div class="info-item"><span>基准版本</span><strong>{{ bucket.report.baseVersionNumber || '-' }}</strong></div>
+              <div class="info-item wide"><span>基准提交</span><strong class="commit-value" :title="commitTooltip(bucket.report.baseRepoCommitId)">{{ shortHash(bucket.report.baseRepoCommitId) }}</strong></div>
+            </template>
+            <template v-else>
+              <div class="info-item"><span>分支</span><strong>{{ bucket.report.repoBranch || '-' }}</strong></div>
+              <div class="info-item wide"><span>提交</span><strong class="commit-value" :title="commitTooltip(bucket.report.repoCommitId)">{{ shortHash(bucket.report.repoCommitId) }}</strong></div>
+            </template>
+            <div class="info-item"><span>类覆盖</span><strong>{{ coverageRate(bucket.report.coveredClasses, bucket.report.totalClasses) }}</strong><small>{{ bucket.report.coveredClasses }} / {{ bucket.report.totalClasses }}</small></div>
+            <div class="info-item"><span>方法覆盖</span><strong>{{ coverageRate(bucket.report.coveredMethods, bucket.report.totalMethods) }}</strong><small>{{ bucket.report.coveredMethods }} / {{ bucket.report.totalMethods }}</small></div>
+            <div class="info-item"><span>复杂度</span><strong>{{ bucket.report.totalComplexity }}</strong></div>
           </div>
-          <div v-else class="empty-card">暂无全量报告</div>
-        </section>
-
-        <section class="panel report-summary-panel">
-          <div class="panel-head">
-            <h2>增量报告</h2>
-            <span>{{ payload.incrementalReport?.createTimeText || '-' }}</span>
-          </div>
-          <div v-if="payload.incrementalReport" class="report-actions">
-            <RouterLink class="report-action-link" :to="{ name: 'coverage-details', params: { projectId, appId }, query: { reportId: payload.incrementalReport.id } }">增量明细</RouterLink>
-            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${payload.incrementalReport.id}`)">导出报告</a>
-            <a class="report-action-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${payload.incrementalReport.id}`)">导出方法</a>
-            <button class="report-action-link danger" type="button" :disabled="!payload.incrementalReport.id || deletingReportId === payload.incrementalReport.id" @click="removeCoverageReport(payload.incrementalReport.id || '')">
-              {{ deletingReportId === payload.incrementalReport.id ? '删除中...' : '删除报告' }}
-            </button>
-          </div>
-          <div v-if="payload.incrementalReport" class="info-grid">
-            <div class="info-item"><span>版本</span><strong>{{ payload.incrementalReport.versionNumber || '-' }}</strong></div>
-            <div class="info-item"><span>基准版本</span><strong>{{ payload.incrementalReport.baseVersionNumber || '-' }}</strong></div>
-            <div class="info-item wide"><span>基准提交</span><strong class="commit-value" :title="commitTooltip(payload.incrementalReport.baseRepoCommitId)">{{ shortHash(payload.incrementalReport.baseRepoCommitId) }}</strong></div>
-            <div class="info-item"><span>类覆盖</span><strong>{{ coverageRate(payload.incrementalReport.coveredClasses, payload.incrementalReport.totalClasses) }}</strong><small>{{ payload.incrementalReport.coveredClasses }} / {{ payload.incrementalReport.totalClasses }}</small></div>
-            <div class="info-item"><span>方法覆盖</span><strong>{{ coverageRate(payload.incrementalReport.coveredMethods, payload.incrementalReport.totalMethods) }}</strong><small>{{ payload.incrementalReport.coveredMethods }} / {{ payload.incrementalReport.totalMethods }}</small></div>
-            <div class="info-item"><span>复杂度</span><strong>{{ payload.incrementalReport.totalComplexity }}</strong></div>
-          </div>
-          <div v-else class="empty-card">暂无增量报告</div>
+          <div v-else class="empty-card">{{ bucket.emptyText }}</div>
         </section>
       </div>
 
@@ -222,7 +200,7 @@
         <div class="panel-head typed-panel-head">
           <div>
             <h2>趋势数据</h2>
-            <p class="subtext">按报告类型查看覆盖率变化，避免全量与增量混算。</p>
+            <p class="subtext">按版本全量、本次 Commit 与增量报告分别查看覆盖率变化，避免不同口径混算。</p>
           </div>
           <div class="report-type-switch" aria-label="切换趋势报告类型">
             <button
@@ -231,7 +209,15 @@
               :disabled="!trendCounts.full"
               @click="selectTrendReportType('full')"
             >
-              全量 {{ trendCounts.full }} 条
+              版本全量 {{ trendCounts.full }} 条
+            </button>
+            <button
+              type="button"
+              :class="['type-switch-button', { active: trendReportType === 'commit' }]"
+              :disabled="!trendCounts.commit"
+              @click="selectTrendReportType('commit')"
+            >
+              本次 Commit {{ trendCounts.commit }} 条
             </button>
             <button
               type="button"
@@ -265,7 +251,7 @@
             </div>
           </article>
         </div>
-        <div v-else class="empty-card">暂无{{ trendReportType === 'incremental' ? '增量' : '全量' }}趋势数据</div>
+        <div v-else class="empty-card">暂无{{ reportTypeText(trendReportType) }}趋势数据</div>
       </section>
     </template>
 
@@ -401,7 +387,7 @@ import {
   triggerCoverageGenerateCurrent,
   triggerCoverageGenerateIncremental,
 } from '@/api/bootstrap'
-import type { CoverageComparisonMethod, CoverageOverviewPayload, VersionItemSummary } from '@/api/types'
+import type { CoverageComparisonMethod, CoverageComparisonSummary, CoverageOverviewPayload, ExtendedCoverageReportSummary, VersionItemSummary } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -419,7 +405,7 @@ const autoSelectionNotice = ref('')
 const emptyState = ref<{ title: string; description: string } | null>(null)
 const selectedAppName = ref('')
 const trend = ref<Array<Record<string, unknown>>>([])
-type ReportViewType = 'full' | 'incremental'
+type ReportViewType = 'full' | 'commit' | 'incremental'
 const comparisonReportType = ref<ReportViewType>('full')
 const trendReportType = ref<ReportViewType>('full')
 const jobStatus = ref<{ data?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string } | null>(null)
@@ -449,8 +435,57 @@ type IncrementalBaseReport = {
   reportType?: number
 }
 
+type ReportBucket = {
+  type: ReportViewType
+  title: string
+  detailLabel: string
+  comparisonLabel: string
+  emptyText: string
+  report: ExtendedCoverageReportSummary | null
+  comparison: CoverageComparisonSummary | null
+}
+
+const primaryReportKind = computed(() => coverageReportKind(payload.value?.report))
+const currentCoverageVersionNumber = computed(() => payload.value?.version?.versionNumber || versionNumber.value)
+const currentCoverageBranch = computed(() => payload.value?.version?.repoBranch || payload.value?.app.currentBranch || '')
+const currentCoverageCommit = computed(() => payload.value?.version?.repoCommitId || commitId.value || payload.value?.app.currentCommitId || '')
+const displayCoverageVersionNumber = computed(() => currentCoverageVersionNumber.value || payload.value?.report?.versionNumber || '未选择版本')
+const versionFullReport = computed(() => payload.value?.versionFullReport || (primaryReportKind.value === 'full' ? payload.value?.report || null : null))
+const currentCommitReport = computed(() => payload.value?.currentCommitReport || (primaryReportKind.value === 'commit' ? payload.value?.report || null : null))
+const incrementalReport = computed(() => payload.value?.incrementalReport || (primaryReportKind.value === 'incremental' ? payload.value?.report || null : null))
+const reportBuckets = computed<ReportBucket[]>(() => [
+  {
+    type: 'full',
+    title: '版本全量报告',
+    detailLabel: '版本全量明细',
+    comparisonLabel: '版本全量对比',
+    emptyText: '暂无版本全量报告',
+    report: versionFullReport.value,
+    comparison: payload.value?.versionFullComparison || (primaryReportKind.value === 'full' ? payload.value?.comparison || null : null),
+  },
+  {
+    type: 'commit',
+    title: '本次 Commit 报告',
+    detailLabel: '本次 Commit 明细',
+    comparisonLabel: '本次 Commit 对比',
+    emptyText: '暂无本次 Commit 报告',
+    report: currentCommitReport.value,
+    comparison: payload.value?.currentCommitComparison || (primaryReportKind.value === 'commit' ? payload.value?.comparison || null : null),
+  },
+  {
+    type: 'incremental',
+    title: '增量报告',
+    detailLabel: '增量明细',
+    comparisonLabel: '增量对比',
+    emptyText: '暂无增量报告',
+    report: incrementalReport.value,
+    comparison: payload.value?.incrementalComparison || (primaryReportKind.value === 'incremental' ? payload.value?.comparison || null : null),
+  },
+])
 const baseReportOptions = computed(() => {
   const candidates: IncrementalBaseReport[] = [
+    ...(versionFullReport.value ? [versionFullReport.value] : []),
+    ...(currentCommitReport.value ? [currentCommitReport.value] : []),
     ...(payload.value?.report ? [payload.value.report] : []),
     ...incrementalBaseReports.value,
   ]
@@ -464,22 +499,15 @@ const baseReportOptions = computed(() => {
       return true
     })
 })
-const comparisonOptions = computed(() => [
-  {
-    type: 'full' as const,
-    label: '全量对比',
-    badge: '全量报告',
-    report: payload.value?.report || null,
-    comparison: payload.value?.comparison || null,
-  },
-  {
-    type: 'incremental' as const,
-    label: '增量对比',
-    badge: '增量报告',
-    report: payload.value?.incrementalReport || null,
-    comparison: payload.value?.incrementalComparison || null,
-  },
-])
+const toolbarDetailLinks = computed(() => reportBuckets.value.filter((bucket) => bucket.report?.id))
+const canGenerateIncremental = computed(() => Boolean(currentCoverageVersionNumber.value))
+const comparisonOptions = computed(() => reportBuckets.value.map((bucket) => ({
+  type: bucket.type,
+  label: bucket.comparisonLabel,
+  badge: bucket.title,
+  report: bucket.report,
+  comparison: bucket.comparison,
+})))
 const hasComparisonPanel = computed(() => comparisonOptions.value.some((option) => option.report || option.comparison))
 const activeComparisonOption = computed(() => {
   const current = comparisonOptions.value.find((option) => option.type === comparisonReportType.value && (option.report || option.comparison))
@@ -489,7 +517,8 @@ const activeComparison = computed(() => activeComparisonOption.value?.comparison
 const activeComparisonLabel = computed(() => activeComparisonOption.value?.badge || '报告')
 const activeComparisonDescription = computed(() => {
   if (activeComparisonOption.value?.type === 'incremental') return '仅展示增量报告与上一份增量报告的覆盖变化，避免与全量口径混算。'
-  return '仅展示全量报告与上一份全量报告的覆盖变化，适合观察版本整体覆盖变化。'
+  if (activeComparisonOption.value?.type === 'commit') return '仅展示本次 Commit 报告与同 Commit 历史报告的覆盖变化，避免混入版本全量。'
+  return '仅展示版本全量报告与同 Commit 历史报告的覆盖变化，适合观察版本整体覆盖变化。'
 })
 const activeComparisonMeta = computed(() => {
   const report = activeComparisonOption.value?.report
@@ -504,6 +533,7 @@ const comparisonReportId = computed(() => activeComparisonOption.value?.report?.
 const filteredTrend = computed(() => trend.value.filter((item) => trendReportKind(item) === trendReportType.value))
 const trendCounts = computed(() => ({
   full: trend.value.filter((item) => trendReportKind(item) === 'full').length,
+  commit: trend.value.filter((item) => trendReportKind(item) === 'commit').length,
   incremental: trend.value.filter((item) => trendReportKind(item) === 'incremental').length,
 }))
 const filteredComparisonMethods = computed(() => {
@@ -657,11 +687,39 @@ function trendTime(item: Record<string, unknown>) {
 }
 
 function trendReportKind(item: Record<string, unknown>): ReportViewType {
-  return Number(item.reportType) === 1 ? 'incremental' : 'full'
+  return coverageReportKind({
+    reportType: Number(item.reportType),
+    repoCommitId: String(item.repoCommitId || ''),
+    baseVersionNumber: String(item.baseVersionNumber || ''),
+    baseRepoCommitId: String(item.baseRepoCommitId || ''),
+  })
+}
+
+function coverageReportKind(report?: { reportType?: number; repoCommitId?: string; baseVersionNumber?: string; baseRepoCommitId?: string } | null): ReportViewType {
+  if (!report) return 'full'
+  const reportType = Number(report.reportType)
+  if (reportType === 1 || normalizeCommit(report.baseVersionNumber) || normalizeCommit(report.baseRepoCommitId)) return 'incremental'
+  if (reportType === 2) return 'commit'
+  const reportCommit = normalizeCommit(report.repoCommitId)
+  const versionCommit = normalizeCommit(payload.value?.version?.repoCommitId)
+  const currentCommit = normalizeCommit(payload.value?.app.currentCommitId)
+  if (reportCommit && versionCommit && reportCommit !== versionCommit) return 'commit'
+  if (reportCommit && !versionCommit && currentCommit && reportCommit === currentCommit) return 'commit'
+  return 'full'
+}
+
+function normalizeCommit(value?: string) {
+  return value?.trim() || ''
+}
+
+function reportTypeText(type: ReportViewType) {
+  if (type === 'incremental') return '增量报告'
+  if (type === 'commit') return '本次 Commit 报告'
+  return '版本全量报告'
 }
 
 function trendReportTypeLabel(item: Record<string, unknown>) {
-  return trendReportKind(item) === 'incremental' ? '增量' : '全量'
+  return reportTypeText(trendReportKind(item)).replace('报告', '')
 }
 
 function trendReportMeta(item: Record<string, unknown>) {
@@ -683,11 +741,23 @@ function selectTrendReportType(type: ReportViewType) {
 }
 
 function syncReportTypeDefaults(selection: CoverageSelection) {
-  const selectedIncremental = !!selection.reportId && payload.value?.incrementalReport?.id === selection.reportId
-  comparisonReportType.value = selectedIncremental || (!payload.value?.report && !!payload.value?.incrementalReport) ? 'incremental' : 'full'
+  const selectedType = selectedReportType(selection)
+  comparisonReportType.value = selectedType
+  const hasSelectedTrend = trendCounts.value[selectedType] > 0
   const hasFullTrend = trendCounts.value.full > 0
+  const hasCommitTrend = trendCounts.value.commit > 0
   const hasIncrementalTrend = trendCounts.value.incremental > 0
-  trendReportType.value = selectedIncremental && hasIncrementalTrend ? 'incremental' : hasFullTrend ? 'full' : hasIncrementalTrend ? 'incremental' : 'full'
+  trendReportType.value = hasSelectedTrend ? selectedType : hasFullTrend ? 'full' : hasCommitTrend ? 'commit' : hasIncrementalTrend ? 'incremental' : 'full'
+}
+
+function selectedReportType(selection: CoverageSelection): ReportViewType {
+  if (selection.reportId) {
+    if (payload.value?.incrementalReport?.id === selection.reportId) return 'incremental'
+    if (payload.value?.currentCommitReport?.id === selection.reportId) return 'commit'
+    if (payload.value?.versionFullReport?.id === selection.reportId) return 'full'
+  }
+  if (!payload.value?.report && payload.value?.incrementalReport) return 'incremental'
+  return primaryReportKind.value
 }
 
 type CoverageSelection = {
@@ -717,7 +787,9 @@ async function resolveCoverageSelection(): Promise<CoverageSelection | null> {
   selectedAppName.value = center.app?.name || ''
   const latestReport = (center.coverageReports || []).find((report) => !!report.versionNumber)
   if (latestReport?.versionNumber) {
-    autoSelectionNotice.value = `已自动打开最新${latestReport.reportType === 1 ? '增量' : '全量'}报告：${latestReport.versionNumber}`
+    const latestVersion = (center.versions || []).find((version) => version.versionNumber === latestReport.versionNumber)
+    const latestReportKind = latestReport.reportType === 1 || latestReport.baseVersionNumber || latestReport.baseRepoCommitId ? '增量' : latestReport.reportType === 2 || (latestReport.repoCommitId && latestVersion?.repoCommitId && latestReport.repoCommitId !== latestVersion.repoCommitId) ? '本次 Commit' : '版本全量'
+    autoSelectionNotice.value = `已自动打开最新${latestReportKind}报告：${latestReport.versionNumber}`
     void router.replace({
       name: 'coverage-overview',
       params: { projectId: projectId.value, appId: appId.value },
@@ -917,22 +989,27 @@ async function loadIncrementalBaseReports() {
 }
 
 async function openIncrementalDialog() {
-  if (!payload.value?.version?.versionNumber || !payload.value?.report?.versionNumber) {
-    error.value = '缺少版本或基准报告信息'
+  if (!currentCoverageVersionNumber.value) {
+    error.value = '缺少当前版本信息，无法生成增量报告'
     return
   }
-  incrementalForm.value = {
-    baseVersionNumber: payload.value.report.versionNumber || payload.value.version.versionNumber || '',
-    baseCommitId: payload.value.report.repoCommitId || '',
-    baseReportId: baseReportKey(payload.value.report),
+  const fallbackBaseReport = payload.value?.report?.reportType === 1 ? null : payload.value?.report || null
+  const defaultBaseReport = versionFullReport.value || currentCommitReport.value || fallbackBaseReport
+  if (defaultBaseReport) {
+    selectBaseReport(defaultBaseReport)
+  } else {
+    incrementalForm.value = { baseVersionNumber: '', baseCommitId: '', baseReportId: '' }
   }
   incrementalError.value = ''
   incrementalDialogOpen.value = true
   await loadIncrementalBaseReports()
+  if (!defaultBaseReport && baseReportOptions.value.length) {
+    selectBaseReport(baseReportOptions.value[0])
+  }
 }
 
 async function generateIncremental() {
-  if (!payload.value?.version?.versionNumber) {
+  if (!currentCoverageVersionNumber.value) {
     incrementalError.value = '缺少当前版本信息'
     return
   }
@@ -946,14 +1023,15 @@ async function generateIncremental() {
   try {
     const jobId = await triggerCoverageGenerateIncremental(projectId.value, {
       appId: appId.value,
-      versionNumber: payload.value.version.versionNumber,
-      branch: payload.value.version.repoBranch,
-      commitId: payload.value.version.repoCommitId,
+      versionNumber: currentCoverageVersionNumber.value,
+      branch: currentCoverageBranch.value,
+      commitId: currentCoverageCommit.value,
       baseVersionNumber: incrementalForm.value.baseVersionNumber,
       baseCommitId: incrementalForm.value.baseCommitId || undefined,
     })
     incrementalDialogOpen.value = false
     if (!(await pollJob(jobId, '增量报告生成'))) return
+    await switchToCoverageSelection(currentCoverageVersionNumber.value, currentCoverageCommit.value, jobStatus.value?.data)
     await load()
   } catch (err) {
     incrementalError.value = err instanceof Error ? err.message : '生成增量报告失败'
@@ -1202,7 +1280,7 @@ onMounted(load)
 }
 
 .coverage-metrics {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .coverage-metrics .hero-card {
@@ -1262,6 +1340,7 @@ onMounted(load)
 }
 
 .report-workbench {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
 }
 
@@ -1934,6 +2013,11 @@ onMounted(load)
   font-size: 12px;
   font-weight: 900;
   line-height: 1;
+}
+
+.trend-type-badge.commit {
+  background: rgba(245, 158, 11, .14);
+  color: #b45309;
 }
 
 .trend-type-badge.incremental {

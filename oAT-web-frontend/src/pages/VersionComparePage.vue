@@ -250,8 +250,8 @@
               {{ item.versionNumber || '-' }}
             </RouterLink>
             <div class="record-meta">
-              <span :class="['tag', item.reportType === 1 ? 'increment' : 'full']">
-                {{ item.reportType === 1 ? '增量覆盖率' : '全量覆盖率' }}{{ item.hasNewerData ? ' · 需重算' : '' }}
+              <span :class="['tag', item.reportType === 1 || item.baseVersionNumber || item.baseRepoCommitId ? 'increment' : item.reportType === 2 ? 'commit' : 'full']">
+                {{ item.reportType === 1 || item.baseVersionNumber || item.baseRepoCommitId ? '增量覆盖率' : item.reportType === 2 ? '本次 Commit 覆盖率' : '全量覆盖率' }}{{ item.hasNewerData ? ' · 需重算' : '' }}
               </span>
               <span v-if="item.repoBranch" class="meta-chip">分支：{{ item.repoBranch }}</span>
               <span v-if="item.repoCommitId" class="meta-chip" :title="commitTooltip(item.repoCommitId)">Commit：{{ shortText(item.repoCommitId) }}</span>
@@ -1485,6 +1485,11 @@ button:disabled {
 .tag.increment {
   background: rgba(234, 88, 12, 0.12);
   color: #c2410c;
+}
+
+.tag.commit {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
 }
 
 .text-danger,

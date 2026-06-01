@@ -703,9 +703,13 @@ export interface CoverageOverviewPayload {
   app: AppSummary
   version?: CoverageVersionSummary
   report?: ExtendedCoverageReportSummary
+  versionFullReport?: ExtendedCoverageReportSummary
+  currentCommitReport?: ExtendedCoverageReportSummary
   incrementalReport?: ExtendedCoverageReportSummary
   hasNewerData?: boolean
   comparison?: CoverageComparisonSummary
+  versionFullComparison?: CoverageComparisonSummary
+  currentCommitComparison?: CoverageComparisonSummary
   incrementalComparison?: CoverageComparisonSummary
   currentUserRole: string
   mascotPrimary?: string

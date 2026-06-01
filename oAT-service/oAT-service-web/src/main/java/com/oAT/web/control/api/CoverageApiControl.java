@@ -111,7 +111,7 @@ public class CoverageApiControl {
         Assert.hasText(app.getCurrentVersion(), "当前应用未配置当前版本，无法生成本次 Commit 覆盖率报告");
         Assert.hasText(app.getCurrentCommitId(), "当前应用未配置当前 CommitId，无法生成本次 Commit 覆盖率报告");
 
-        String jobId = coverageService.startGenerateJob(appId, app.getCurrentVersion(), app.getCurrentBranch(), app.getCurrentCommitId());
+        String jobId = coverageService.startGenerateCurrentCommitJob(appId, app.getCurrentVersion(), app.getCurrentBranch(), app.getCurrentCommitId());
         String appName = StringUtils.hasText(app.getName()) ? app.getName() : appId;
         addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 本次 Commit 全量 覆盖率报告 [版本:%s, 分支:%s, Commit:%s]",
                 user.getName(), appName, app.getCurrentVersion(), app.getCurrentBranch(), app.getCurrentCommitId()));
@@ -182,7 +182,7 @@ public class CoverageApiControl {
         coverageService.deleteReport(reportId);
         AppVo app = appService.getApp(report.getAppId());
         String appName = app == null ? report.getAppId() : app.getName();
-        String reportType = Integer.valueOf(1).equals(report.getReportType()) ? "增量" : "全量";
+        String reportType = reportTypeLabel(report.getReportType());
         SystemLog log = new SystemLog();
         log.setTitle(String.format("%s 删除了应用 [%s] 的 %s 覆盖率报告 [版本:%s] - %s",
                 user.getName(), appName, reportType, report.getVersionNumber(), reportId));
@@ -208,36 +208,77 @@ public class CoverageApiControl {
         AppVo app = appService.getApp(appId);
         Assert.notNull(app, "应用不存在");
 
+        VersionItemVo version = findVersion(projectId, appId, versionNumber, commitId);
+        String versionCommitId = version == null ? null : version.getRepoCommitId();
+        String currentCommitId = app.getCurrentCommitId();
         CoverageReportIndex report = StringUtils.hasText(reportId)
                 ? coverageService.getReport(reportId)
                 : coverageService.getLatestReport(appId, versionNumber, commitId);
+        String targetCommitId = StringUtils.hasText(commitId)
+                ? commitId
+                : report == null ? (StringUtils.hasText(currentCommitId) ? currentCommitId : versionCommitId) : report.getRepoCommitId();
 
-        CoverageReportIndex fullReport = null;
-        CoverageReportIndex incrementalReport = null;
-        if (report != null) {
-            String targetCommitId = StringUtils.hasText(commitId) ? commitId : report.getRepoCommitId();
-            if (Integer.valueOf(1).equals(report.getReportType())) {
-                incrementalReport = report;
-                fullReport = coverageService.getLatestReportByType(appId, versionNumber, 0, targetCommitId);
+        CoverageReportIndex versionFullReport = coverageService.getLatestReportByType(appId, versionNumber, 0, versionCommitId);
+        CoverageReportIndex currentCommitReport = StringUtils.hasText(currentCommitId)
+                ? coverageService.getLatestReportByType(appId, versionNumber, 2, currentCommitId)
+                : null;
+        if (currentCommitReport == null && StringUtils.hasText(currentCommitId) && !isSameCommit(currentCommitId, versionCommitId)) {
+            currentCommitReport = coverageService.getLatestReportByType(appId, versionNumber, 0, currentCommitId);
+        }
+
+        CoverageReportIndex fullReport = versionFullReport;
+        CoverageReportIndex incrementalReport = coverageService.getLatestReportByType(appId, versionNumber, 1, targetCommitId);
+        CoverageReportIndex selectedReport = report;
+        if (selectedReport == null) {
+            if (versionFullReport != null && isSameCommit(targetCommitId, versionCommitId)) {
+                selectedReport = versionFullReport;
+            } else if (currentCommitReport != null && isSameCommit(targetCommitId, currentCommitId)) {
+                selectedReport = currentCommitReport;
+            } else if (versionFullReport != null) {
+                selectedReport = versionFullReport;
             } else {
-                fullReport = report;
-                incrementalReport = coverageService.getLatestReportByType(appId, versionNumber, 1, targetCommitId);
+                selectedReport = coverageService.getLatestReportByType(appId, versionNumber, 0, targetCommitId);
             }
         }
 
-        boolean hasNewerData = fullReport == null
+        if (selectedReport != null && Integer.valueOf(1).equals(selectedReport.getReportType())) {
+            incrementalReport = selectedReport;
+        } else if (selectedReport != null && Integer.valueOf(2).equals(selectedReport.getReportType())) {
+            currentCommitReport = selectedReport;
+        } else if (selectedReport != null) {
+            if (isSameCommit(selectedReport.getRepoCommitId(), versionCommitId)) {
+                versionFullReport = selectedReport;
+                fullReport = selectedReport;
+            } else if (isSameCommit(selectedReport.getRepoCommitId(), currentCommitId)) {
+                currentCommitReport = selectedReport;
+            }
+        }
+
+        if (fullReport == null) {
+            fullReport = versionFullReport != null ? versionFullReport : coverageService.getLatestReportByType(appId, versionNumber, 0, versionCommitId);
+        }
+        if (incrementalReport == null) {
+            incrementalReport = coverageService.getLatestReportByType(appId, versionNumber, 1);
+        }
+
+        CoverageReportIndex freshnessReport = selectedReport != null ? selectedReport : fullReport;
+        boolean hasNewerData = freshnessReport == null
                 ? coverageService.hasNewerData(appId, versionNumber, null)
-                : coverageService.hasNewerData(appId, versionNumber, fullReport);
+                : coverageService.hasNewerData(appId, versionNumber, freshnessReport);
 
         CoverageOverviewPayload payload = new CoverageOverviewPayload();
         payload.setProject(toProjectSummary(projectService.getProject(projectId)));
         payload.setApps(toAppSummaries(appService.getAppList(projectId)));
         payload.setApp(toAppSummary(app));
-        payload.setVersion(toVersionSummary(findVersion(projectId, appId, versionNumber, commitId)));
-        payload.setReport(toCoverageReportSummary(fullReport));
+        payload.setVersion(toVersionSummary(version));
+        payload.setReport(toCoverageReportSummary(selectedReport != null ? selectedReport : fullReport));
+        payload.setVersionFullReport(toCoverageReportSummary(versionFullReport));
+        payload.setCurrentCommitReport(toCoverageReportSummary(currentCommitReport));
         payload.setIncrementalReport(toCoverageReportSummary(incrementalReport));
         payload.setHasNewerData(hasNewerData);
-        payload.setComparison(toComparisonSummary(fullReport == null ? null : coverageService.getComparison(fullReport.getId())));
+        payload.setComparison(toComparisonSummary(selectedReport == null ? null : coverageService.getComparison(selectedReport.getId())));
+        payload.setVersionFullComparison(toComparisonSummary(versionFullReport == null ? null : coverageService.getComparison(versionFullReport.getId())));
+        payload.setCurrentCommitComparison(toComparisonSummary(currentCommitReport == null ? null : coverageService.getComparison(currentCommitReport.getId())));
         payload.setIncrementalComparison(toComparisonSummary(incrementalReport == null ? null : coverageService.getComparison(incrementalReport.getId())));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         payload.setMascotPrimary(computeMascotPrimary(projectId, payload.getProject().getName()));
@@ -381,6 +422,23 @@ public class CoverageApiControl {
             }
         }
         return versions.stream().filter(item -> versionNumber.equals(item.getVersionNumber())).findFirst().orElse(null);
+    }
+
+    private boolean isSameCommit(String left, String right) {
+        if (!StringUtils.hasText(left) || !StringUtils.hasText(right)) {
+            return false;
+        }
+        return left.trim().equals(right.trim());
+    }
+
+    private String reportTypeLabel(Integer reportType) {
+        if (Integer.valueOf(1).equals(reportType)) {
+            return "增量";
+        }
+        if (Integer.valueOf(2).equals(reportType)) {
+            return "本次 Commit";
+        }
+        return "版本全量";
     }
 
     private ProjectVo ensureProjectAccess(String projectId, UserVo user) {
@@ -561,9 +619,13 @@ public class CoverageApiControl {
         private AppSummary app;
         private VersionSummary version;
         private CoverageReportSummary report;
+        private CoverageReportSummary versionFullReport;
+        private CoverageReportSummary currentCommitReport;
         private CoverageReportSummary incrementalReport;
         private Boolean hasNewerData;
         private CoverageComparisonSummary comparison;
+        private CoverageComparisonSummary versionFullComparison;
+        private CoverageComparisonSummary currentCommitComparison;
         private CoverageComparisonSummary incrementalComparison;
         private String currentUserRole;
         private String mascotPrimary;
@@ -578,12 +640,20 @@ public class CoverageApiControl {
         public void setVersion(VersionSummary version) { this.version = version; }
         public CoverageReportSummary getReport() { return report; }
         public void setReport(CoverageReportSummary report) { this.report = report; }
+        public CoverageReportSummary getVersionFullReport() { return versionFullReport; }
+        public void setVersionFullReport(CoverageReportSummary versionFullReport) { this.versionFullReport = versionFullReport; }
+        public CoverageReportSummary getCurrentCommitReport() { return currentCommitReport; }
+        public void setCurrentCommitReport(CoverageReportSummary currentCommitReport) { this.currentCommitReport = currentCommitReport; }
         public CoverageReportSummary getIncrementalReport() { return incrementalReport; }
         public void setIncrementalReport(CoverageReportSummary incrementalReport) { this.incrementalReport = incrementalReport; }
         public Boolean getHasNewerData() { return hasNewerData; }
         public void setHasNewerData(Boolean hasNewerData) { this.hasNewerData = hasNewerData; }
         public CoverageComparisonSummary getComparison() { return comparison; }
         public void setComparison(CoverageComparisonSummary comparison) { this.comparison = comparison; }
+        public CoverageComparisonSummary getVersionFullComparison() { return versionFullComparison; }
+        public void setVersionFullComparison(CoverageComparisonSummary versionFullComparison) { this.versionFullComparison = versionFullComparison; }
+        public CoverageComparisonSummary getCurrentCommitComparison() { return currentCommitComparison; }
+        public void setCurrentCommitComparison(CoverageComparisonSummary currentCommitComparison) { this.currentCommitComparison = currentCommitComparison; }
         public CoverageComparisonSummary getIncrementalComparison() { return incrementalComparison; }
         public void setIncrementalComparison(CoverageComparisonSummary incrementalComparison) { this.incrementalComparison = incrementalComparison; }
         public String getCurrentUserRole() { return currentUserRole; }

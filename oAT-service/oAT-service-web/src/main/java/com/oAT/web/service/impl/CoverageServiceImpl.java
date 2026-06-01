@@ -94,6 +94,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     private List<Job<String>> jobs;
 
     private static final int TREE_NODE_SCAN_PAGE_SIZE = 2000;
+    private static final int REPORT_TYPE_VERSION_FULL = 0;
+    private static final int REPORT_TYPE_INCREMENTAL = 1;
+    private static final int REPORT_TYPE_CURRENT_COMMIT = 2;
 
     @Override
     public void afterPropertiesSet() {
@@ -104,13 +107,18 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
     @Override
     public String startGenerateJob(String appId, String versionNumber, String branch, String commitId) {
-        return startJob(appId, versionNumber, branch, commitId, 0, null, null);
+        return startJob(appId, versionNumber, branch, commitId, REPORT_TYPE_VERSION_FULL, null, null);
+    }
+
+    @Override
+    public String startGenerateCurrentCommitJob(String appId, String versionNumber, String branch, String commitId) {
+        return startJob(appId, versionNumber, branch, commitId, REPORT_TYPE_CURRENT_COMMIT, null, null);
     }
 
     @Override
     public String startGenerateIncrementalJob(String appId, String versionNumber, String branch, String commitId,
                                             String baseVersionNumber, String baseCommitId) {
-        return startJob(appId, versionNumber, branch, commitId, 1, baseVersionNumber, baseCommitId);
+        return startJob(appId, versionNumber, branch, commitId, REPORT_TYPE_INCREMENTAL, baseVersionNumber, baseCommitId);
     }
 
     private String startJob(String appId, String versionNumber, String branch, String commitId,
@@ -127,14 +135,14 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         }
 
         final String finalAppDisplayName = appDisplayName;
-        String jobName = finalAppDisplayName + ":" + versionNumber + (reportType == 1 ? " (增量)" : " (全量)");
+        String jobName = finalAppDisplayName + ":" + versionNumber + " (" + reportTypeName(reportType) + ")";
         Job<String> job = new Job<>(jobName);
         jobs.add(job);
         jobExecutors.execute(() -> {
             try {
                 job.state = Job.JobState.active;
                 job.getProgress().next("初始化生成任务", 5);
-                job.getLogger().info("开始为应用 [" + finalAppDisplayName + "] 生成" + (reportType == 1 ? "增量" : "全量") + "覆盖率报告...");
+                job.getLogger().info("开始为应用 [" + finalAppDisplayName + "] 生成" + reportTypeName(reportType) + "覆盖率报告...");
 
                 String reportId = generateReportInternal(appId, versionNumber, branch, commitId, reportType, baseVersionNumber, baseCommitId, job);
 
@@ -207,7 +215,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         // Filter out classes that don't exist in the current commit for incremental report.
         // Full report must keep existing static source data; otherwise current Commit reports can be emptied
         // when source packages are absent, multi-module paths differ, or static data comes from runtime upload.
-        if (StringUtils.hasText(commitId) && reportType != 0) {
+        if (StringUtils.hasText(commitId) && normalizeReportType(reportType) != REPORT_TYPE_VERSION_FULL) {
             if (job != null) job.getLogger().info("正在校验当前 Commit [" + commitId.substring(0, Math.min(7, commitId.length())) + "] 中存在的类...");
             List<StaticSourceInfo> filteredStaticInfos = new ArrayList<>();
 
@@ -252,7 +260,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
         // 1.1 Diff Logic for Incremental Report
         Map<String, List<Integer>> incrementalDiffMap = null;
-        if (reportType == 1 && StringUtils.hasText(baseCommitId)) {
+        if (isIncrementalReport(reportType) && StringUtils.hasText(baseCommitId)) {
             if (job != null) job.getLogger().info("正在获取基准 Commit [" + baseCommitId + "] 的差异对比...");
             incrementalDiffMap = toDiffMap(gitService.getDiffDetail(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(),
                     baseCommitId, commitId));
@@ -268,7 +276,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             String ownerClassName = resolveCoverageOwnerClassName(classInfo.getClassName());
 
             // If incremental report, only include classes that have changes
-            if (reportType == 1) {
+            if (isIncrementalReport(reportType)) {
                 if (incrementalDiffMap == null || getChangedLinesForClass(incrementalDiffMap, ownerClassName) == null) {
                     continue;
                 }
@@ -279,7 +287,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             appendStaticClassCoverage(classCov, classInfo, incrementalDiffMap);
         }
 
-        if (reportType != 0) {
+        if (normalizeReportType(reportType) != REPORT_TYPE_VERSION_FULL) {
             coverageMap.entrySet().removeIf(entry -> entry.getValue().getTotalLines() <= 0);
         }
 
@@ -600,8 +608,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             totalComplexity += classCov.getTotalComplexity();
 
             // Incremental Calculation (Summary for the report)
-            // If it's an incremental report (reportType == 1), coverageMap already contains only incremental data
-            if (report.getReportType() != null && report.getReportType() == 1) {
+            // If it's an incremental report (isIncrementalReport(reportType)), coverageMap already contains only incremental data
+            if (isIncrementalReport(report.getReportType())) {
                 incTotalClasses++;
                 if (classCov.getCoveredLines() > 0) incCoveredClasses++;
 
@@ -932,7 +940,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             if (report == null || !StringUtils.hasText(report.getId())) {
                 continue;
             }
-            if (normalizeReportType(report.getReportType()) == normalizeReportType(currentReport.getReportType())) {
+            if (normalizeReportType(report.getReportType()) == normalizeReportType(currentReport.getReportType())
+                    && sameReportCommitScope(currentReport, report)) {
                 sameTypeReports.add(report);
             }
         }
@@ -971,8 +980,31 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         return olderReports.get(0);
     }
 
+    private boolean sameReportCommitScope(CoverageReportIndex left, CoverageReportIndex right) {
+        return Objects.equals(normalizeText(left == null ? null : left.getRepoCommitId()), normalizeText(right == null ? null : right.getRepoCommitId()));
+    }
+
+    private String normalizeText(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private boolean isIncrementalReport(Integer reportType) {
+        return normalizeReportType(reportType) == REPORT_TYPE_INCREMENTAL;
+    }
+
+    private String reportTypeName(Integer reportType) {
+        int normalizedType = normalizeReportType(reportType);
+        if (normalizedType == REPORT_TYPE_INCREMENTAL) {
+            return "增量";
+        }
+        if (normalizedType == REPORT_TYPE_CURRENT_COMMIT) {
+            return "本次 Commit";
+        }
+        return "版本全量";
+    }
+
     private int normalizeReportType(Integer reportType) {
-        return reportType == null ? 0 : reportType;
+        return reportType == null ? REPORT_TYPE_VERSION_FULL : reportType;
     }
 
     private String buildMethodKey(String className, MethodCoverageDetail method) {

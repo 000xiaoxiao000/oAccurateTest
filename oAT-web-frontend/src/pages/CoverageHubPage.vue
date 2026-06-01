@@ -94,8 +94,8 @@
               <div class="card-title-block">
                 <div class="card-top">
                   <strong>{{ report.versionNumber || '未命名版本' }}</strong>
-                  <span :class="['tag', report.reportType === 1 ? 'increment' : 'full']">
-                    {{ report.reportType === 1 ? '增量' : '全量' }}
+                  <span :class="['tag', report.reportType === 1 || report.baseVersionNumber || report.baseRepoCommitId ? 'increment' : report.reportType === 2 ? 'commit' : 'full']">
+                    {{ report.reportType === 1 || report.baseVersionNumber || report.baseRepoCommitId ? '增量' : report.reportType === 2 ? '本次 Commit' : '全量' }}
                   </span>
                 </div>
                 <div class="meta-stack">
@@ -195,7 +195,7 @@ const filteredReports = computed(() => {
     report.versionNumber,
     report.repoBranch,
     report.repoCommitId,
-    report.reportType === 1 ? '增量' : '全量',
+    report.reportType === 1 || report.baseVersionNumber || report.baseRepoCommitId ? '增量' : report.reportType === 2 ? '本次 Commit' : '全量',
   ].some((value) => String(value || '').toLowerCase().includes(term)))
 })
 const paginatedVersions = computed(() => {
@@ -590,6 +590,11 @@ onMounted(loadApps)
 .tag.increment {
   background: rgba(234, 88, 12, 0.12);
   color: #c2410c;
+}
+
+.tag.commit {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
 }
 
 .table-link {

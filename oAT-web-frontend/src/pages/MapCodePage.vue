@@ -9,8 +9,8 @@
     :edges="edges"
     :highlight-related="true"
     :show-edge-labels="false"
-    :back-route="`/p/${projectId}/search`"
-    back-label="返回搜索中心"
+    :back-route="backRoute"
+    :back-label="backLabel"
   />
 </template>
 
@@ -24,6 +24,8 @@ import { fetchMapCode } from '@/api/bootstrap'
 const route = useRoute()
 const projectId = computed(() => String(route.params.projectId || ''))
 const traceId = computed(() => String(route.query.traceId || ''))
+const backRoute = computed(() => sanitizeBackRoute(String(route.query.backRoute || ''), `/p/${projectId.value}/search`))
+const backLabel = computed(() => String(route.query.backLabel || '返回搜索中心'))
 const loading = ref(false)
 const error = ref('')
 const elements = ref<Awaited<ReturnType<typeof fetchMapCode>>>([])
@@ -61,8 +63,16 @@ const edges = computed(() => {
 function relationLabel(value?: string) {
   const normalized = String(value || '').toLowerCase()
   if (normalized === 'entry' || normalized === 'start') return '入口'
+  if (normalized === 'static invoke') return '静态调用'
+  if (normalized === 'runtime sequence') return '执行关联'
   if (normalized === 'invoke') return '调用'
   return value || '调用'
+}
+
+function sanitizeBackRoute(value: string, fallback: string) {
+  if (!value || !value.startsWith('/p/')) return fallback
+  if (value.includes('://') || value.startsWith('//')) return fallback
+  return value
 }
 
 async function load() {

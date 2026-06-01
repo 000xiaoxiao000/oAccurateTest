@@ -570,7 +570,7 @@ function edgeTone(edge: Pick<RelationEdge, 'action' | 'label'>) {
   if (value.includes('update') || value.includes('改')) return 'update'
   if (value.includes('insert') || value.includes('增')) return 'insert'
   if (value.includes('select') || value.includes('查')) return 'select'
-  if (value.includes('invoke') || value.includes('调用') || value.includes('entry') || value.includes('入口')) return 'invoke'
+  if (value.includes('invoke') || value.includes('调用') || value.includes('执行') || value.includes('entry') || value.includes('入口')) return 'invoke'
   return 'default'
 }
 

@@ -1,6 +1,6 @@
 <template>
   <section class="my-snapshot-page">
-    <div class="page-header">
+    <div class="page-header snapshot-page-header">
       <div>
         <div class="eyebrow">My Snapshots</div>
         <h1>我的快照</h1>
@@ -65,6 +65,25 @@
         @submit="submitUsecaseBinding"
       />
 
+      <Teleport to="body">
+        <div v-if="activeRowMenuSnapshot" class="row-menu-dismiss" @click="closeRowMenu"></div>
+        <div
+          v-if="activeRowMenuSnapshot"
+          class="row-menu-panel floating-row-menu-panel"
+          :style="rowMenuStyle"
+          role="menu"
+          @click.stop
+        >
+          <RouterLink :to="`/p/${projectId}/my-snapshots/${activeRowMenuSnapshot.id}/report`" role="menuitem" @click="closeRowMenu">覆盖率报告</RouterLink>
+          <RouterLink :to="`/p/${projectId}/my-snapshots/${activeRowMenuSnapshot.id}/graph`" role="menuitem" @click="closeRowMenu">链路图</RouterLink>
+          <button type="button" role="menuitem" @click="runRowMenuAction(() => openSingleUsecasePicker(activeRowMenuSnapshot!.id))">关联用例</button>
+          <button type="button" role="menuitem" @click="runRowMenuAction(() => startEdit(activeRowMenuSnapshot!))">编辑</button>
+          <button type="button" role="menuitem" @click="runRowMenuAction(() => toggleShare(activeRowMenuSnapshot!))">{{ activeRowMenuSnapshot.share ? '关闭共享' : '开启共享' }}</button>
+          <a v-if="activeRowMenuSnapshot.share" :href="`/share/snapshot/${activeRowMenuSnapshot.id}`" target="_blank" rel="noreferrer" role="menuitem" @click="closeRowMenu">访问共享页</a>
+          <button class="danger-link" type="button" role="menuitem" @click="runRowMenuAction(() => remove(activeRowMenuSnapshot!.id))">删除</button>
+        </div>
+      </Teleport>
+
       <section class="snapshot-panel">
         <div class="snapshot-panel-header">
           <nav class="snapshot-tabs" aria-label="快照导航">
@@ -75,7 +94,7 @@
         </div>
 
         <div v-if="!payload.snapshots.length" class="empty-card">暂无数据</div>
-        <div v-else class="snapshot-table-shell">
+        <div v-else class="snapshot-table-shell" @scroll.passive="closeRowMenu">
           <table class="snapshot-table">
             <colgroup>
               <col class="select-col" />
@@ -105,18 +124,16 @@
                     <span :title="snapshot.updateTimeText || '-'">{{ snapshot.updateTimeRelativeText || snapshot.updateTimeText || '-' }}</span>
                   </td>
                   <td class="snapshot-action-cell">
-                    <details class="row-menu">
-                      <summary title="设置">⚙</summary>
-                      <div class="row-menu-panel">
-                        <RouterLink :to="`/p/${projectId}/my-snapshots/${snapshot.id}/report`">覆盖率报告</RouterLink>
-                        <RouterLink :to="`/p/${projectId}/my-snapshots/${snapshot.id}/graph`">链路图</RouterLink>
-                        <button type="button" @click="openSingleUsecasePicker(snapshot.id)">关联用例</button>
-                        <button type="button" @click="startEdit(snapshot)">编辑</button>
-                        <button type="button" @click="toggleShare(snapshot)">{{ snapshot.share ? '关闭共享' : '开启共享' }}</button>
-                        <a v-if="snapshot.share" :href="`/share/snapshot/${snapshot.id}`" target="_blank" rel="noreferrer">访问共享页</a>
-                        <button class="danger-link" type="button" @click="remove(snapshot.id)">删除</button>
-                      </div>
-                    </details>
+                    <button
+                      :class="['row-menu-trigger', { active: activeRowMenuId === snapshot.id }]"
+                      type="button"
+                      title="打开快照操作菜单"
+                      aria-haspopup="menu"
+                      :aria-expanded="activeRowMenuId === snapshot.id"
+                      @click.stop="toggleRowMenu(snapshot, $event)"
+                    >
+                      ⚙
+                    </button>
                   </td>
                 </tr>
                 <tr v-if="editingId === snapshot.id" class="edit-row">
@@ -189,6 +206,8 @@ const usecasePickerOpen = ref(false)
 const usecasePickerMode = ref<'single' | 'batch'>('single')
 const usecasePickerSnapshotId = ref('')
 const usecasePickerSelectedIds = ref<string[]>([])
+const activeRowMenuId = ref('')
+const rowMenuStyle = ref<Record<string, string>>({})
 const labelFilterText = computed(() => (labelDrafts.value.length ? `标签过滤 ${labelDrafts.value.length}` : '标签过滤'))
 const hasActiveFilters = computed(
   () => Boolean(keywordDraft.value.trim()) || sortDraft.value !== 'updateTime' || labelDrafts.value.length > 0,
@@ -209,6 +228,11 @@ const paginatedSnapshots = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return snapshots.slice(start, start + pageSize.value)
 })
+const activeRowMenuSnapshot = computed(() => {
+  if (!activeRowMenuId.value) return null
+  return (payload.value?.snapshots || []).find((snapshot) => snapshot.id === activeRowMenuId.value) || null
+})
+
 
 async function load() {
   if (!projectId.value) {
@@ -284,6 +308,40 @@ function selectAll() {
 
 function clearSelection() {
   selectedSnapshotIds.value = []
+}
+
+function toggleRowMenu(snapshot: SnapshotOption, event: MouseEvent) {
+  if (activeRowMenuId.value === snapshot.id) {
+    closeRowMenu()
+    return
+  }
+  const trigger = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  if (!trigger) return
+  const rect = trigger.getBoundingClientRect()
+  const panelWidth = 164
+  const estimatedPanelHeight = snapshot.share ? 292 : 252
+  const viewportPadding = 12
+  const left = Math.min(Math.max(rect.right - panelWidth, viewportPadding), window.innerWidth - panelWidth - viewportPadding)
+  const opensUp = rect.bottom + estimatedPanelHeight + viewportPadding > window.innerHeight
+  const top = opensUp
+    ? Math.max(viewportPadding, rect.top - estimatedPanelHeight - 8)
+    : Math.min(rect.bottom + 8, window.innerHeight - estimatedPanelHeight - viewportPadding)
+  rowMenuStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${panelWidth}px`,
+  }
+  activeRowMenuId.value = snapshot.id
+}
+
+function closeRowMenu() {
+  activeRowMenuId.value = ''
+}
+
+function runRowMenuAction(action: () => void | Promise<void>) {
+  const result = action()
+  closeRowMenu()
+  void result
 }
 
 function startEdit(snapshot: SnapshotOption) {
@@ -401,12 +459,14 @@ watch(
   () => {
     syncFilterDrafts()
     currentPage.value = 1
+    closeRowMenu()
     load()
   },
 )
 
 watch(pageSize, () => {
   currentPage.value = 1
+  closeRowMenu()
 })
 
 onMounted(load)
@@ -431,12 +491,28 @@ onMounted(load)
 
 .page-header {
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
+}
+
+.snapshot-page-header {
+  min-height: auto;
+  padding: 24px 30px 22px;
+}
+
+.snapshot-page-header::after {
+  right: 28px;
+  bottom: -48px;
+  width: 104px;
+  height: 104px;
 }
 
 .page-header h1 {
-  margin: 6px 0 8px;
-  font-size: 30px;
+  margin: 4px 0 6px;
+  font-size: 28px;
+}
+
+.snapshot-page-header .subtext {
+  margin: 0;
 }
 
 .eyebrow {
@@ -723,7 +799,7 @@ onMounted(load)
 .snapshot-table-shell {
   position: relative;
   z-index: 1;
-  max-height: calc(100vh - 278px);
+  max-height: calc(100vh - 318px);
   overflow: auto;
 }
 
@@ -845,37 +921,33 @@ onMounted(load)
   text-align: center;
 }
 
-.row-menu {
-  position: relative;
-  display: inline-block;
-}
-
-.row-menu summary {
+.row-menu-trigger {
   width: 28px;
   height: 28px;
   display: inline-grid;
   place-items: center;
-  border-radius: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
   color: #64748b;
   cursor: pointer;
-  list-style: none;
 }
 
-.row-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.row-menu[open] summary,
-.row-menu summary:hover {
+.row-menu-trigger.active,
+.row-menu-trigger:hover {
   background: rgba(15, 118, 110, .08);
   color: #0f766e;
 }
 
+.row-menu-dismiss {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: transparent;
+}
+
 .row-menu-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 40;
+  z-index: 90;
   min-width: 148px;
   padding: 6px;
   border: 1px solid rgba(15, 23, 42, .12);
@@ -883,6 +955,12 @@ onMounted(load)
   background: #fff;
   box-shadow: 0 18px 42px rgba(15, 23, 42, .16);
   text-align: left;
+}
+
+.floating-row-menu-panel {
+  position: fixed;
+  max-height: min(320px, calc(100vh - 24px));
+  overflow: auto;
 }
 
 .row-menu-panel a,

@@ -13,11 +13,25 @@ public class StackCodeLayer implements ImageLayer {
     StackNodeVo[] codeNodes;
     String snapshotId;
     Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup;
+    Map<String, List<String>> staticInvokeLookup;
+    Set<String> entryMethodKeys;
 
     public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId, Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup) {
+        this(codeNodes, snapshotId, staticMethodLookup, Collections.emptyMap());
+    }
+
+    public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId, Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup,
+                          Map<String, List<String>> staticInvokeLookup) {
+        this(codeNodes, snapshotId, staticMethodLookup, staticInvokeLookup, Collections.emptySet());
+    }
+
+    public StackCodeLayer(StackNodeVo[] codeNodes, String snapshotId, Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup,
+                          Map<String, List<String>> staticInvokeLookup, Set<String> entryMethodKeys) {
         this.codeNodes = codeNodes != null ? codeNodes : new StackNodeVo[0];
         this.snapshotId = snapshotId;
         this.staticMethodLookup = staticMethodLookup != null ? staticMethodLookup : Collections.emptyMap();
+        this.staticInvokeLookup = staticInvokeLookup != null ? staticInvokeLookup : Collections.emptyMap();
+        this.entryMethodKeys = entryMethodKeys != null ? entryMethodKeys : Collections.emptySet();
     }
 
     @Override
@@ -80,7 +94,7 @@ public class StackCodeLayer implements ImageLayer {
             );
         });
 
-        // 添加入口与代码节点之间的调用关系；缺失中间父节点时连接到最近存在的祖先，避免全部退化为 root 连线。
+        // 添加源码方法间调用关系，并仅将 root 连接到入口方法或子图根节点。
         results.addAll(buildCallEdges());
         return results;
     }
@@ -204,25 +218,205 @@ public class StackCodeLayer implements ImageLayer {
 
         Map<String, ImageElement> edgeMap = new LinkedHashMap<>();
         for (StackNodeVo node : codeNodes) {
-            if (node == null || !hasText(node.getClassName()) || !hasText(node.getMethodName())) {
+            if (!isValidNode(node)) {
                 continue;
             }
             StackNodeVo parent = findNearestExistingParent(node, nodeByStackId);
-            String source = parent == null ? snapshotId : graphNodeId(parent);
-            String target = graphNodeId(node);
-            if (!hasText(source) || !hasText(target) || source.equals(target)) {
-                continue;
+            if (parent != null && isValidNode(parent)) {
+                addEdge(edgeMap, graphNodeId(parent), graphNodeId(node), "invoke", new String[]{"invoke"});
             }
+        }
 
-            ImageData edgeData = new ImageData(source + " ->invoke-> " + target);
-            edgeData.source = source;
-            edgeData.target = target;
-            edgeData.name = parent == null ? "entry" : "invoke";
-            ImageElement element = buildDefaultEdge(edgeData);
-            element.classes = parent == null ? new String[]{"start_invoke", "invoke"} : new String[]{"invoke"};
-            edgeMap.putIfAbsent(edgeData.source + "\u0001" + edgeData.target, element);
+        addStaticInvokeEdges(edgeMap);
+        if (edgeMap.isEmpty()) {
+            addRuntimeSequenceEdges(edgeMap);
+        }
+
+        Set<String> rootTargets = collectEntryNodeIds();
+        if (rootTargets.isEmpty()) {
+            rootTargets = collectTopSourceNodeIds(edgeMap);
+        }
+        if (rootTargets.isEmpty()) {
+            String firstNodeId = firstValidNodeId();
+            if (hasText(firstNodeId)) {
+                rootTargets.add(firstNodeId);
+            }
+        }
+        for (String target : rootTargets) {
+            addEdge(edgeMap, snapshotId, target, "entry", new String[]{"start_invoke", "invoke"});
         }
         return new ArrayList<>(edgeMap.values());
+    }
+
+    private void addStaticInvokeEdges(Map<String, ImageElement> edgeMap) {
+        if (staticInvokeLookup.isEmpty()) {
+            return;
+        }
+        List<StackNodeVo> validNodes = Arrays.stream(codeNodes)
+                .filter(this::isValidNode)
+                .collect(Collectors.toList());
+        Map<String, List<StackNodeVo>> nodesByClass = validNodes.stream()
+                .collect(Collectors.groupingBy(node -> ClassUtil.toClassName(node.getClassName()), LinkedHashMap::new, Collectors.toList()));
+
+        for (StackNodeVo sourceNode : validNodes) {
+            List<String> invokedMethods = staticInvokeLookup.getOrDefault(sourceMethodKey(sourceNode), Collections.emptyList());
+            for (String invokedMethod : invokedMethods) {
+                StaticInvokeTarget target = parseStaticInvokeTarget(invokedMethod);
+                if (target == null || !hasText(target.className)) {
+                    continue;
+                }
+                List<StackNodeVo> targetNodes = nodesByClass.getOrDefault(target.className, Collections.emptyList());
+                for (StackNodeVo targetNode : targetNodes) {
+                    if (graphNodeId(sourceNode).equals(graphNodeId(targetNode))) {
+                        continue;
+                    }
+                    if (hasText(target.methodName) && !methodNameMatches(target.methodName, targetNode.getMethodName())) {
+                        continue;
+                    }
+                    addEdge(edgeMap, graphNodeId(sourceNode), graphNodeId(targetNode), "static invoke", new String[]{"invoke", "static_invoke"});
+                }
+            }
+        }
+    }
+
+    private String sourceMethodKey(StackNodeVo node) {
+        return ClassUtil.toClassName(node.getClassName()) + "#" + normalizeMethodName(node.getMethodName());
+    }
+
+    private Set<String> collectEntryNodeIds() {
+        if (entryMethodKeys.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+        Set<String> normalizedEntryKeys = entryMethodKeys.stream()
+                .filter(this::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> nodeIds = new LinkedHashSet<>();
+        for (StackNodeVo node : codeNodes) {
+            if (isValidNode(node) && normalizedEntryKeys.contains(sourceMethodKey(node))) {
+                nodeIds.add(graphNodeId(node));
+            }
+        }
+        return nodeIds;
+    }
+
+    private Set<String> collectTopSourceNodeIds(Map<String, ImageElement> edgeMap) {
+        Set<String> sources = new LinkedHashSet<>();
+        Set<String> targets = new LinkedHashSet<>();
+        for (ImageElement edge : edgeMap.values()) {
+            if (edge.data == null || snapshotId.equals(edge.data.source)) {
+                continue;
+            }
+            if (hasText(edge.data.source)) {
+                sources.add(edge.data.source);
+            }
+            if (hasText(edge.data.target)) {
+                targets.add(edge.data.target);
+            }
+        }
+        sources.removeAll(targets);
+        if (sources.isEmpty()) {
+            sources.addAll(edgeMap.values().stream()
+                    .filter(edge -> edge.data != null && !snapshotId.equals(edge.data.source))
+                    .map(edge -> edge.data.source)
+                    .filter(this::hasText)
+                    .collect(Collectors.toCollection(LinkedHashSet::new)));
+        }
+        return sources;
+    }
+
+    private String firstValidNodeId() {
+        for (StackNodeVo node : codeNodes) {
+            if (isValidNode(node)) {
+                return graphNodeId(node);
+            }
+        }
+        return null;
+    }
+
+    private void addRuntimeSequenceEdges(Map<String, ImageElement> edgeMap) {
+        String previousNodeId = null;
+        Set<String> visitedNodeIds = new LinkedHashSet<>();
+        for (StackNodeVo node : codeNodes) {
+            if (!isValidNode(node)) {
+                continue;
+            }
+            String currentNodeId = graphNodeId(node);
+            if (!visitedNodeIds.add(currentNodeId)) {
+                continue;
+            }
+            if (hasText(previousNodeId)) {
+                addEdge(edgeMap, previousNodeId, currentNodeId, "runtime sequence", new String[]{"invoke", "runtime_sequence"});
+            }
+            previousNodeId = currentNodeId;
+        }
+    }
+
+    private void addEdge(Map<String, ImageElement> edgeMap, String source, String target, String name, String[] classes) {
+        if (!hasText(source) || !hasText(target) || source.equals(target)) {
+            return;
+        }
+        ImageData edgeData = new ImageData(source + " ->" + name + "-> " + target);
+        edgeData.source = source;
+        edgeData.target = target;
+        edgeData.name = name;
+        ImageElement element = buildDefaultEdge(edgeData);
+        element.classes = classes;
+        edgeMap.putIfAbsent(edgeKey(source, target), element);
+    }
+
+    private String edgeKey(String source, String target) {
+        return source + "\u0001" + target;
+    }
+
+    private boolean isValidNode(StackNodeVo node) {
+        return node != null && hasText(node.getClassName()) && hasText(node.getMethodName());
+    }
+
+    private StaticInvokeTarget parseStaticInvokeTarget(String value) {
+        if (!hasText(value)) {
+            return null;
+        }
+        int separatorIndex = value.lastIndexOf('#');
+        if (separatorIndex < 0) {
+            return new StaticInvokeTarget(value.trim(), null);
+        }
+        return new StaticInvokeTarget(value.substring(0, separatorIndex).trim(), value.substring(separatorIndex + 1).trim());
+    }
+
+    private boolean methodNameMatches(String expected, String actual) {
+        String normalizedExpected = normalizeMethodName(expected);
+        String normalizedActual = normalizeMethodName(actual);
+        return hasText(normalizedExpected) && normalizedExpected.equals(normalizedActual);
+    }
+
+    private String normalizeMethodName(String value) {
+        if (!hasText(value)) {
+            return "";
+        }
+        String normalized = value.trim();
+        int spaceIndex = normalized.indexOf(' ');
+        if (spaceIndex > 0) {
+            normalized = normalized.substring(0, spaceIndex);
+        }
+        int parenIndex = normalized.indexOf('(');
+        if (parenIndex > 0) {
+            normalized = normalized.substring(0, parenIndex);
+        }
+        int dotIndex = normalized.lastIndexOf('.');
+        if (dotIndex >= 0) {
+            normalized = normalized.substring(dotIndex + 1);
+        }
+        return normalized;
+    }
+
+    private static class StaticInvokeTarget {
+        private final String className;
+        private final String methodName;
+
+        private StaticInvokeTarget(String className, String methodName) {
+            this.className = className;
+            this.methodName = methodName;
+        }
     }
 
     private StackNodeVo findNearestExistingParent(StackNodeVo node, Map<String, StackNodeVo> nodeByStackId) {
@@ -230,7 +424,7 @@ public class StackCodeLayer implements ImageLayer {
             return null;
         }
         String parentId = directParentStackId(node.getId());
-        while (hasText(parentId) && !"ROOT".equals(parentId)) {
+        while (hasText(parentId)) {
             StackNodeVo parent = nodeByStackId.get(parentId);
             if (parent != null) {
                 return parent;

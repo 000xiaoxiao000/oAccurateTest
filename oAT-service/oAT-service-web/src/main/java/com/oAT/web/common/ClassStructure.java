@@ -58,13 +58,19 @@ public class ClassStructure implements java.io.Serializable{
     }
 
     public void addInvokerMethod(String owner, String name, int invokerCode) {
-        invokers.add(new InvokerMethod(owner, name, invokerCode));
+        invokers.add(new InvokerMethod(owner, name, invokerCode, null, null));
+    }
+
+    public void addInvokerMethod(String owner, String name, int invokerCode, String sourceMethodName, String sourceMethodDesc) {
+        invokers.add(new InvokerMethod(owner, name, invokerCode, sourceMethodName, sourceMethodDesc));
     }
 
     // 方法调用
     public class InvokerMethod implements java.io.Serializable {
         private String owner; // 方法所属类
         private String name;  // 方法名称
+        private String sourceMethodName; // 调用发生的方法名称
+        private String sourceMethodDesc; // 调用发生的方法描述
         /**
          * 调用类型
          * int INVOKEVIRTUAL = 182; // visitMethodInsn
@@ -76,9 +82,15 @@ public class ClassStructure implements java.io.Serializable{
         private int invokerCode;
 
         public InvokerMethod(String owner, String name, int invokerCode) {
+            this(owner, name, invokerCode, null, null);
+        }
+
+        public InvokerMethod(String owner, String name, int invokerCode, String sourceMethodName, String sourceMethodDesc) {
             this.owner = owner.replaceAll("/",".");
             this.name = name;
             this.invokerCode = invokerCode;
+            this.sourceMethodName = sourceMethodName;
+            this.sourceMethodDesc = sourceMethodDesc;
         }
 
 
@@ -94,11 +106,20 @@ public class ClassStructure implements java.io.Serializable{
             return invokerCode;
         }
 
+        public String getSourceMethodName() {
+            return sourceMethodName;
+        }
+
+        public String getSourceMethodDesc() {
+            return sourceMethodDesc;
+        }
+
         @Override
         public String toString() {
             return "InvokerMethod{" +
                    "owner='" + owner + '\'' +
                    ", name='" + name + '\'' +
+                   ", sourceMethodName='" + sourceMethodName + '\'' +
                    ", invokerCode=" + invokerCode +
                    '}';
         }
@@ -112,7 +133,9 @@ public class ClassStructure implements java.io.Serializable{
 
             if (invokerCode != that.invokerCode){ return false;}
             if (!owner.equals(that.owner)){ return false;}
-            return name.equals(that.name);
+            if (!name.equals(that.name)){ return false;}
+            if (sourceMethodName != null ? !sourceMethodName.equals(that.sourceMethodName) : that.sourceMethodName != null) { return false;}
+            return sourceMethodDesc != null ? sourceMethodDesc.equals(that.sourceMethodDesc) : that.sourceMethodDesc == null;
         }
 
         @Override
@@ -120,6 +143,8 @@ public class ClassStructure implements java.io.Serializable{
             int result = owner.hashCode();
             result = 31 * result + name.hashCode();
             result = 31 * result + invokerCode;
+            result = 31 * result + (sourceMethodName != null ? sourceMethodName.hashCode() : 0);
+            result = 31 * result + (sourceMethodDesc != null ? sourceMethodDesc.hashCode() : 0);
             return result;
         }
     }

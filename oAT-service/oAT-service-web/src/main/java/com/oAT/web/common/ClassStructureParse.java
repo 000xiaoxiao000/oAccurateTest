@@ -42,21 +42,25 @@ public class ClassStructureParse {
 
         @Override
         public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
-            return new StructureMethodVisitor(structure);
+            return new StructureMethodVisitor(structure, name, desc);
         }
     }
 
     private class StructureMethodVisitor extends MethodVisitor {
         private final ClassStructure structure;
+        private final String sourceMethodName;
+        private final String sourceMethodDesc;
 
-        public StructureMethodVisitor(ClassStructure structure) {
+        public StructureMethodVisitor(ClassStructure structure, String sourceMethodName, String sourceMethodDesc) {
             super(Opcodes.ASM5);
             this.structure = structure;
+            this.sourceMethodName = sourceMethodName;
+            this.sourceMethodDesc = sourceMethodDesc;
         }
 
         @Override
         public void visitMethodInsn(int opcode, String owner, String name, String desc, boolean itf) {
-            structure.addInvokerMethod(owner, name, opcode);
+            structure.addInvokerMethod(owner, name, opcode, sourceMethodName, sourceMethodDesc);
         }
     }
 }

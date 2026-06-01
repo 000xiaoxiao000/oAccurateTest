@@ -21,6 +21,11 @@ public interface CoverageService {
     String startGenerateJob(String appId, String versionNumber, String branch, String commitId);
 
     /**
+     * 开启异步生成本次 Commit 覆盖率报告任务
+     */
+    String startGenerateCurrentCommitJob(String appId, String versionNumber, String branch, String commitId);
+
+    /**
      * 开启异步生成增量覆盖率报告任务
      */
     String startGenerateIncrementalJob(String appId, String versionNumber, String branch, String commitId,
@@ -42,7 +47,7 @@ public interface CoverageService {
     CoverageReportIndex getLatestReport(String appId, String versionNumber);
 
     /**
-     * 获取指定类型的最新报告 (0: 全量, 1: 增量)
+     * 获取指定类型的最新报告 (0: 版本全量, 1: 增量, 2: 本次 Commit)
      */
     CoverageReportIndex getLatestReportByType(String appId, String versionNumber, Integer reportType);
 
