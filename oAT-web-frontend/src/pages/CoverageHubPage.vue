@@ -266,7 +266,8 @@
       <div
         v-if="floatingTimeTooltip.visible"
         class="floating-time-tooltip"
-        :style="{ left: `${floatingTimeTooltip.x}px`, top: `${floatingTimeTooltip.y}px` }"
+        ref="floatingTimeTooltipEl"
+        :style="floatingTimeTooltipStyle"
       >
         <span class="floating-time-tooltip-icon" aria-hidden="true">⏱</span>
         <span class="floating-time-tooltip-content">
@@ -279,7 +280,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import {
@@ -316,7 +317,8 @@ const incrementalDialogOpen = ref(false)
 const incrementalDialogVersion = ref<VersionItemSummary | null>(null)
 const incrementalError = ref('')
 const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '', baseReportId: '' })
-const floatingTimeTooltip = ref({ visible: false, text: '', x: 0, y: 0 })
+const floatingTimeTooltip = ref({ visible: false, text: '', x: 0, y: 0, arrowOffset: 0 })
+const floatingTimeTooltipEl = ref<HTMLElement | null>(null)
 
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
 const keywordTerm = computed(() => keyword.value.toLowerCase())
@@ -352,6 +354,11 @@ const paginatedReports = computed(() => {
   const start = (reportPage.value - 1) * reportPageSize.value
   return filteredReports.value.slice(start, start + reportPageSize.value)
 })
+const floatingTimeTooltipStyle = computed(() => ({
+  left: `${floatingTimeTooltip.value.x}px`,
+  top: `${floatingTimeTooltip.value.y}px`,
+  '--arrow-offset': `${floatingTimeTooltip.value.arrowOffset}px`,
+}))
 const incrementalBaseOptions = computed(() => {
   const currentVersion = incrementalDialogVersion.value
   const reports = selectedCenter.value?.coverageReports || []
@@ -419,27 +426,39 @@ function formatAbsoluteTime(value?: string) {
   }).format(new Date(timestamp)).replace(/\//g, '-')
 }
 
-function showTimeTooltip(event: MouseEvent | FocusEvent, text: string) {
+async function showTimeTooltip(event: MouseEvent | FocusEvent, text: string) {
   if (!text) return
   const target = event.currentTarget as HTMLElement | null
   if (!target) return
   const rect = target.getBoundingClientRect()
   const viewportPadding = 12
-  const tooltipMaxWidth = Math.min(320, window.innerWidth - viewportPadding * 2)
-  const minX = tooltipMaxWidth / 2 + viewportPadding
-  const maxX = window.innerWidth - tooltipMaxWidth / 2 - viewportPadding
   const centerX = rect.left + rect.width / 2
-  const clampedX = maxX < minX ? window.innerWidth / 2 : Math.min(Math.max(centerX, minX), maxX)
   floatingTimeTooltip.value = {
     visible: true,
     text,
-    x: Math.round(clampedX),
+    x: Math.round(centerX),
     y: Math.round(rect.top - 12),
+    arrowOffset: 0,
+  }
+  await nextTick()
+  const tooltipWidth = floatingTimeTooltipEl.value?.offsetWidth || 0
+  const halfTooltipWidth = tooltipWidth / 2
+  const minX = halfTooltipWidth + viewportPadding
+  const maxX = window.innerWidth - halfTooltipWidth - viewportPadding
+  const adjustedX = maxX < minX ? window.innerWidth / 2 : Math.min(Math.max(centerX, minX), maxX)
+  const maxArrowOffset = Math.max(0, halfTooltipWidth - 16)
+  const arrowOffset = Math.min(Math.max(centerX - adjustedX, -maxArrowOffset), maxArrowOffset)
+  floatingTimeTooltip.value = {
+    visible: true,
+    text,
+    x: Math.round(adjustedX),
+    y: Math.round(rect.top - 12),
+    arrowOffset: Math.round(arrowOffset),
   }
 }
 
 function hideTimeTooltip() {
-  floatingTimeTooltip.value = { ...floatingTimeTooltip.value, visible: false }
+  floatingTimeTooltip.value = { ...floatingTimeTooltip.value, visible: false, arrowOffset: 0 }
 }
 
 function isBaseReport(report: CoverageReportCard) {
@@ -1226,7 +1245,7 @@ onMounted(loadApps)
 .floating-time-tooltip::after {
   content: '';
   position: absolute;
-  left: 50%;
+  left: calc(50% + var(--arrow-offset, 0px));
   top: 100%;
   border: 6px solid transparent;
   border-top-color: rgba(15, 23, 42, 0.96);
