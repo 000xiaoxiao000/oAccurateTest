@@ -1825,16 +1825,24 @@ onBeforeUnmount(() => {
 }
 
 .message-history {
-  max-height: min(46vh, 500px);
+  flex: 1 1 auto;
+  min-height: 180px;
+  max-height: none;
   overflow: auto;
   padding-right: 4px;
 }
 
 .ask-workspace-panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: min(760px, calc(100vh - 138px));
+  max-height: calc(100vh - 118px);
   padding-right: 54px;
   margin-bottom: 0;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
+  overflow: hidden;
 }
 
 .floating-anchors {
@@ -2234,25 +2242,33 @@ onBeforeUnmount(() => {
 
 .ask-form {
   display: grid;
+  flex: 0 0 auto;
   gap: 10px;
+  margin-top: auto;
+  border: 1px solid rgba(15, 118, 110, .12);
+  border-radius: 20px;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(20, 184, 166, .08), transparent 32%),
+    rgba(255, 255, 255, .96);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .08);
 }
 
 .text-area {
   width: 100%;
-  border: 1px solid rgba(15, 23, 42, 0.12);
+  border: 0;
   border-radius: 14px;
-  padding: 12px 14px;
-  min-height: 104px;
-  max-height: 220px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .98));
+  padding: 10px 12px;
+  min-height: 136px;
+  max-height: 280px;
+  background: transparent;
   resize: vertical;
   font: inherit;
 }
 
 .text-area:focus {
   outline: none;
-  border-color: rgba(15, 118, 110, .38);
-  box-shadow: 0 0 0 4px rgba(15, 118, 110, .10);
+  box-shadow: none;
 }
 
 .answer-block {

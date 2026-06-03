@@ -103,9 +103,30 @@ const error = ref('')
 const graphError = ref('')
 
 function labelStyle(color?: string) {
+  const labelColor = color || '#0f766e'
   return {
-    '--label-color': color || '#0f766e',
+    color: labelColor,
+    backgroundColor: labelColorBackground(labelColor),
+    borderColor: labelColorBorder(labelColor),
   }
+}
+
+function labelColorBackground(color: string) {
+  return labelColorWithAlpha(color, 0.14)
+}
+
+function labelColorBorder(color: string) {
+  return labelColorWithAlpha(color, 0.20)
+}
+
+function labelColorWithAlpha(color: string, alpha: number) {
+  const hex = color.trim().replace(/^#/, '')
+  const normalized = hex.length === 3 ? hex.split('').map((char) => `${char}${char}`).join('') : hex
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return 'rgba(15, 118, 110, .14)'
+  const red = Number.parseInt(normalized.slice(0, 2), 16)
+  const green = Number.parseInt(normalized.slice(2, 4), 16)
+  const blue = Number.parseInt(normalized.slice(4, 6), 16)
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }
 
 async function load() {
@@ -232,10 +253,9 @@ onMounted(load)
 }
 
 .label-chip {
+  border: 1px solid rgba(15, 118, 110, .16);
   padding: 6px 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--label-color) 14%, white);
-  color: var(--label-color);
   font-size: 12px;
   font-weight: 800;
 }
