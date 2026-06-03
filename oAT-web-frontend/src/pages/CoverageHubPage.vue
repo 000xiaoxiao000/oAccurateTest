@@ -274,6 +274,7 @@
           <span>生成时间</span>
           <strong>{{ floatingTimeTooltip.text }}</strong>
         </span>
+        <span class="floating-time-tooltip-arrow" :style="floatingTimeTooltipArrowStyle" aria-hidden="true"></span>
       </div>
     </Teleport>
   </section>
@@ -357,7 +358,9 @@ const paginatedReports = computed(() => {
 const floatingTimeTooltipStyle = computed(() => ({
   left: `${floatingTimeTooltip.value.x}px`,
   top: `${floatingTimeTooltip.value.y}px`,
-  '--arrow-offset': `${floatingTimeTooltip.value.arrowOffset}px`,
+}))
+const floatingTimeTooltipArrowStyle = computed(() => ({
+  left: `calc(50% + ${floatingTimeTooltip.value.arrowOffset}px)`,
 }))
 const incrementalBaseOptions = computed(() => {
   const currentVersion = incrementalDialogVersion.value
@@ -402,8 +405,7 @@ function displayTime(item: { createTimeRelativeText?: string; createTimeText?: s
 }
 
 function timeTooltip(item: { createTimeText?: string }) {
-  const absoluteTime = formatAbsoluteTime(item.createTimeText)
-  return absoluteTime
+  return formatAbsoluteTime(item.createTimeText)
 }
 
 function formatAbsoluteTime(value?: string) {
@@ -1242,10 +1244,8 @@ onMounted(loadApps)
   white-space: nowrap;
 }
 
-.floating-time-tooltip::after {
-  content: '';
+.floating-time-tooltip-arrow {
   position: absolute;
-  left: calc(50% + var(--arrow-offset, 0px));
   top: 100%;
   border: 6px solid transparent;
   border-top-color: rgba(15, 23, 42, 0.96);
