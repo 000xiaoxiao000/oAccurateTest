@@ -82,7 +82,7 @@
             </div>
           </section>
 
-          <section class="panel">
+          <section class="panel ability-panel">
             <div class="card-title">
               <h2>能力卡片</h2>
             </div>
@@ -1196,6 +1196,7 @@ onBeforeUnmount(() => {
 .ai-page {
   --ai-card-radius: var(--oat-radius-xl);
   --ai-control-height: 42px;
+  --ai-workspace-height: calc(100vh - 116px);
   position: relative;
   isolation: isolate;
 }
@@ -1457,7 +1458,8 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
+  height: var(--ai-workspace-height);
 }
 
 .side-stack,
@@ -1533,9 +1535,31 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.ability-panel {
+  padding-bottom: var(--oat-space-4);
+}
+
+.ability-list {
+  gap: var(--oat-space-2);
+}
+
+.ability-card {
+  gap: var(--oat-space-1);
+  padding: var(--oat-space-3) var(--oat-space-4);
+  border-radius: var(--oat-radius-md);
+}
+
+.ability-card p {
+  margin: var(--oat-space-2) 0 0;
+  line-height: 1.45;
+}
+
 .ability-value {
+  display: block;
   color: #0f766e;
-  font-weight: 700;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .session-card,
@@ -1561,7 +1585,8 @@ onBeforeUnmount(() => {
 .side-stack {
   position: sticky;
   top: 92px;
-  max-height: calc(100vh - 116px);
+  height: 100%;
+  max-height: 100%;
   overflow: auto;
   padding-right: 4px;
   scrollbar-gutter: stable;
@@ -1891,8 +1916,9 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: min(760px, calc(100vh - 138px));
-  max-height: calc(100vh - 118px);
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
   padding-right: 54px;
   margin-bottom: 0;
   padding-bottom: 16px;
@@ -2580,13 +2606,19 @@ onBeforeUnmount(() => {
 .content-stack {
   position: relative;
   min-width: 0;
+  height: 100%;
 }
 
 .session-list,
 .timeline-list,
-.ability-list,
 .question-list {
   max-height: 330px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.ability-list {
+  max-height: 252px;
   overflow: auto;
   padding-right: 2px;
 }
@@ -2630,6 +2662,18 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 980px) {
+  .page-grid,
+  .side-stack,
+  .content-stack,
+  .ask-workspace-panel {
+    height: auto;
+    max-height: none;
+  }
+
+  .ask-workspace-panel {
+    min-height: min(760px, calc(100vh - 138px));
+  }
+
   .hero-card {
     grid-template-columns: minmax(0, 1fr) 120px;
   }
