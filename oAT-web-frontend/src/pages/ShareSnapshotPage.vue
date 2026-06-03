@@ -24,7 +24,7 @@
               v-for="label in payload.labels"
               :key="label.name"
               class="label-chip"
-              :style="{ '--label-color': label.color || '#0f766e' }"
+              :style="labelStyle(label.color)"
             >
               {{ label.name }}
             </span>
@@ -101,6 +101,12 @@ const loading = ref(false)
 const graphLoading = ref(false)
 const error = ref('')
 const graphError = ref('')
+
+function labelStyle(color?: string) {
+  return {
+    '--label-color': color || '#0f766e',
+  }
+}
 
 async function load() {
   if (!snapshotId.value) {

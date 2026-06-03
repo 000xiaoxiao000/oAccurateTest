@@ -55,7 +55,7 @@
             <div class="message-body">
               <div class="message-name">{{ item.role === 'user' ? '你' : 'AI 助手' }}</div>
               <div class="message-card">
-                <button v-if="item.role === 'assistant'" class="copy-button" type="button" aria-label="复制回复内容" @pointerdown.stop @click="copyMessage(item.text)">复制</button>
+                <button class="copy-button" type="button" :aria-label="item.role === 'assistant' ? '复制回复内容' : '复制提问内容'" @pointerdown.stop @click="copyMessage(item.text)">复制</button>
                 <div class="message-text">{{ item.text }}</div>
                 <div v-if="item.suggestions?.length" class="message-actions">
                   <button v-for="suggestion in item.suggestions" :key="suggestion" class="message-action" type="button" @click="sendPresetQuestion(suggestion)">{{ suggestion }}</button>
@@ -156,7 +156,7 @@
           title="拖拽调整区域大小"
           @pointerdown.stop.prevent="startLayoutResize($event, 'compose', direction)"
         ></span>
-        <textarea v-model="question" rows="3" placeholder="随时提问，例如：这个页面的数据该从哪里看"></textarea>
+        <textarea v-model="question" rows="3" placeholder="随时提问，例如：这个页面的数据该从哪里看" @keydown.enter.exact="handleQuestionEnter"></textarea>
         <input ref="imageInput" type="file" accept="image/*" class="hidden-input" @change="handleImageChange" />
         <div class="compose-actions">
           <span class="state">{{ stateText }}</span>
@@ -860,6 +860,7 @@ function savePanelLayout() {
 }
 
 async function sendQuestion() {
+  if (asking.value) return
   const text = question.value.trim()
   if (!projectId.value) {
     error.value = '请先进入或选择一个项目后再使用 AI 助手'
@@ -901,6 +902,12 @@ async function sendQuestion() {
   } finally {
     asking.value = false
   }
+}
+
+async function handleQuestionEnter(event: KeyboardEvent) {
+  if (event.isComposing) return
+  event.preventDefault()
+  await sendQuestion()
 }
 
 async function sendPresetQuestion(text: string) {

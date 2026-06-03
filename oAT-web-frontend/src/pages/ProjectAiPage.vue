@@ -275,6 +275,7 @@
                 class="text-area"
                 rows="6"
                 placeholder="例如：帮我总结当前项目的测试覆盖盲区，优先按风险排序。"
+                @keydown.enter.exact="handleAskEnter"
               ></textarea>
               <input ref="imageInput" class="hidden-input" type="file" accept="image/*" @change="handleImageChange" />
               <div class="form-actions">
@@ -823,6 +824,7 @@ function updateActiveAnchorFromScroll() {
 }
 
 async function submitAsk() {
+  if (asking.value) return
   if (!question.value.trim() && !imageData.value) {
     error.value = '请输入问题或上传图片'
     return
@@ -867,6 +869,12 @@ async function submitAsk() {
     askAbortController = null
     asking.value = false
   }
+}
+
+async function handleAskEnter(event: KeyboardEvent) {
+  if (event.isComposing) return
+  event.preventDefault()
+  await submitAsk()
 }
 
 function stopAsk() {

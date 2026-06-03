@@ -24,7 +24,7 @@
               v-for="label in payload.labels"
               :key="label.name"
               class="label-chip"
-              :style="{ '--label-color': label.color || '#0f766e' }"
+              :style="labelStyle(label.color)"
             >
               {{ label.name }}
             </span>
@@ -112,6 +112,12 @@ const usecaseId = computed(() => String(route.params.usecaseId || ''))
 const payload = ref<PublicUsecasePayload>()
 const loading = ref(false)
 const error = ref('')
+
+function labelStyle(color?: string) {
+  return {
+    '--label-color': color || '#0f766e',
+  }
+}
 
 async function load() {
   if (!usecaseId.value) {
