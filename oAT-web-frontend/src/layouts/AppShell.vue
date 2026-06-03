@@ -84,7 +84,6 @@
         <small>顶部</small>
       </button>
     </Transition>
-    <AiFloatingAssistant v-if="route.name !== 'project-ai'" />
   </div>
 </template>
 
@@ -95,7 +94,6 @@ import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
-import AiFloatingAssistant from '@/components/AiFloatingAssistant.vue'
 import AppBreadcrumbs from '@/components/AppBreadcrumbs.vue'
 import type { AppSummary } from '@/api/types'
 

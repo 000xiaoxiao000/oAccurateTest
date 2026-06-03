@@ -1,12 +1,16 @@
 <template>
   <RouterView />
+  <AiFloatingAssistant v-if="route.name !== 'project-ai'" />
   <GlobalProbeAlertToasts />
   <AppDialogHost />
 </template>
 
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 
+import AiFloatingAssistant from '@/components/AiFloatingAssistant.vue'
 import AppDialogHost from '@/components/AppDialogHost.vue'
 import GlobalProbeAlertToasts from '@/components/GlobalProbeAlertToasts.vue'
+
+const route = useRoute()
 </script>

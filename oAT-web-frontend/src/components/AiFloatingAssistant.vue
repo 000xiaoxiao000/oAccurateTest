@@ -1,5 +1,5 @@
 <template>
-  <div v-if="projectId" ref="rootRef" class="ai-floating" :class="{ open: panelOpen, hidden: mascotHidden }" :style="floatingStyle">
+  <div ref="rootRef" class="ai-floating" :class="{ open: panelOpen, hidden: mascotHidden }" :style="floatingStyle">
     <button v-if="mascotHidden" class="restore-button" type="button" @pointerdown="startDrag" @click="showMascot">显示 AI 助手</button>
 
     <button v-else class="launcher" type="button" title="打开 AI 助手" data-tooltip="打开 AI 助手" @pointerdown="startDrag" @click="togglePanel">
@@ -480,7 +480,6 @@ function hideMascot() {
   mascotHidden.value = true
   panelOpen.value = false
   preserveFloatingAnchor(anchor)
-  localStorage.setItem(`${storagePrefix.value}:hidden`, '1')
 }
 
 function showMascot() {
@@ -492,7 +491,6 @@ function showMascot() {
   mascotHidden.value = false
   panelOpen.value = true
   preserveFloatingAnchor(anchor)
-  localStorage.setItem(`${storagePrefix.value}:hidden`, '0')
 }
 
 function getFloatingAnchor() {
@@ -863,6 +861,10 @@ function savePanelLayout() {
 
 async function sendQuestion() {
   const text = question.value.trim()
+  if (!projectId.value) {
+    error.value = '请先进入或选择一个项目后再使用 AI 助手'
+    return
+  }
   if (!text && !imageData.value) {
     error.value = '请输入问题或上传图片'
     return
@@ -1024,6 +1026,11 @@ function quickLinkPriority(link: AIQuickLink) {
 }
 
 function buildAdaptiveQuickLinks(links: AIQuickLink[]) {
+  if (!projectId.value) {
+    return [
+      { title: '项目列表', description: '选择一个项目后使用完整 AI 助手能力', url: '/projects' },
+    ]
+  }
   const base = `/p/${projectId.value}`
   const next = [...links]
   if (liveSignals.value.tableSelection) {
@@ -1287,7 +1294,7 @@ onBeforeUnmount(() => {
   position: fixed;
   right: 22px;
   bottom: 24px;
-  z-index: 1000;
+  z-index: 4500;
   display: flex;
   flex-direction: row-reverse;
   align-items: flex-end;

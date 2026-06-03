@@ -79,7 +79,6 @@
         @select-node="selectNode"
       />
     </template>
-    <AiFloatingAssistant />
   </main>
 </template>
 
@@ -89,7 +88,6 @@ import { RouterLink, useRoute } from 'vue-router'
 
 import { fetchShareSnapshot, fetchShareSnapshotGraph, fetchShareSnapshotGraphNode } from '@/api/bootstrap'
 import type { GraphNodeDetailPayload, GraphViewPayload, PublicSnapshotPayload } from '@/api/types'
-import AiFloatingAssistant from '@/components/AiFloatingAssistant.vue'
 import MascotCanvas from '@/components/MascotCanvas.vue'
 import GraphView from '@/components/snapshot/GraphView.vue'
 

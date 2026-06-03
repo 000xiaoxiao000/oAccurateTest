@@ -96,7 +96,6 @@
         </aside>
       </div>
     </template>
-    <AiFloatingAssistant />
   </main>
 </template>
 
@@ -106,7 +105,6 @@ import { RouterLink, useRoute } from 'vue-router'
 
 import { fetchShareUsecase } from '@/api/bootstrap'
 import type { PublicUsecasePayload } from '@/api/types'
-import AiFloatingAssistant from '@/components/AiFloatingAssistant.vue'
 import MascotCanvas from '@/components/MascotCanvas.vue'
 
 const route = useRoute()
