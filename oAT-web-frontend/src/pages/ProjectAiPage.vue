@@ -266,11 +266,13 @@
                   {{ copiedMessageId === section.id ? '已复制' : '复制' }}
                 </button>
                 <div class="message-role">{{ section.message.role === 'user' ? '你' : 'AI' }}</div>
-                <div class="message-text">{{ section.message.text }}</div>
+                <div v-if="section.message.role === 'assistant'" class="message-text markdown-message" v-html="formatAssistantMessage(section.message.text)"></div>
+                <div v-else class="message-text">{{ section.message.text }}</div>
               </article>
             </div>
-            <form class="ask-form" @submit.prevent="submitAsk">
+            <form ref="askFormRef" class="ask-form" @submit.prevent="submitAsk">
               <textarea
+                ref="askInputRef"
                 v-model="question"
                 class="text-area"
                 rows="6"
@@ -395,6 +397,7 @@ import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
+import { renderMarkdown } from '@/utils/markdown'
 import type { AIAction, AIFeedbackPayload, AIQuickLink } from '@/api/types'
 
 const route = useRoute()
@@ -425,6 +428,8 @@ const loading = ref(false)
 const asking = ref(false)
 const error = ref('')
 const question = ref('')
+const askFormRef = ref<HTMLFormElement | null>(null)
+const askInputRef = ref<HTMLTextAreaElement | null>(null)
 const imageInput = ref<HTMLInputElement | null>(null)
 const imageData = ref('')
 const recording = ref(false)
@@ -445,6 +450,10 @@ const feedbackMessage = ref('')
 let askAbortController: AbortController | null = null
 let targetAnchorTimer: number | undefined
 let copiedMessageTimer: number | undefined
+
+function formatAssistantMessage(text: string) {
+  return renderMarkdown(text)
+}
 
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || null)
 const activeMessages = computed(() => activeSession.value?.messages || [])
@@ -568,8 +577,15 @@ async function load() {
   }
 }
 
-function useQuestion(text: string) {
+async function useQuestion(text: string) {
   question.value = text
+  await focusAskForm()
+}
+
+async function focusAskForm() {
+  await nextTick()
+  askFormRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  askInputRef.value?.focus({ preventScroll: true })
 }
 
 function uid() {
@@ -2102,6 +2118,95 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   line-height: 1.7;
   color: #334155;
+}
+
+.markdown-message {
+  white-space: normal;
+}
+
+.markdown-message :deep(h1),
+.markdown-message :deep(h2),
+.markdown-message :deep(h3),
+.markdown-message :deep(h4) {
+  margin: 0 0 10px;
+  color: #0f172a;
+  line-height: 1.45;
+}
+
+.markdown-message :deep(h1) { font-size: 20px; }
+.markdown-message :deep(h2) { font-size: 18px; }
+.markdown-message :deep(h3),
+.markdown-message :deep(h4) { font-size: 16px; }
+
+.markdown-message :deep(p),
+.markdown-message :deep(ul),
+.markdown-message :deep(ol),
+.markdown-message :deep(blockquote),
+.markdown-message :deep(pre),
+.markdown-message :deep(.markdown-table-scroll) {
+  margin: 10px 0 0;
+}
+
+.markdown-message :deep(ul),
+.markdown-message :deep(ol) {
+  padding-left: 22px;
+}
+
+.markdown-message :deep(code) {
+  padding: 2px 6px;
+  border-radius: 7px;
+  background: rgba(15, 118, 110, .10);
+  color: #0f766e;
+  font-size: .92em;
+}
+
+.markdown-message :deep(pre) {
+  overflow: auto;
+  padding: 12px;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.markdown-message :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.markdown-message :deep(blockquote) {
+  padding: 10px 12px;
+  border-left: 3px solid rgba(15, 118, 110, .35);
+  border-radius: 10px;
+  background: rgba(240, 253, 250, .74);
+}
+
+.markdown-message :deep(.markdown-table-scroll) {
+  overflow-x: auto;
+}
+
+.markdown-message :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.markdown-message :deep(th),
+.markdown-message :deep(td) {
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 118, 110, .16);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-message :deep(th) {
+  background: rgba(240, 253, 250, .92);
+  color: #0f766e;
+}
+
+.markdown-message :deep(a) {
+  color: #0f766e;
+  font-weight: 700;
 }
 
 .ask-form {

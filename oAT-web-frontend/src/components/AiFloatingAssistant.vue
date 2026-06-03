@@ -55,8 +55,11 @@
             <div class="message-body">
               <div class="message-name">{{ item.role === 'user' ? '你' : 'AI 助手' }}</div>
               <div class="message-card">
-                <button class="copy-button" type="button" :aria-label="item.role === 'assistant' ? '复制回复内容' : '复制提问内容'" @pointerdown.stop @click="copyMessage(item.text)">复制</button>
-                <div class="message-text">{{ item.text }}</div>
+                <button class="copy-button" type="button" :class="{ copied: copiedMessageId === item.id }" :aria-label="item.role === 'assistant' ? '复制回复内容' : '复制提问内容'" @pointerdown.stop @click="copyMessage(item.text, item.id)">
+                  {{ copiedMessageId === item.id ? '已复制' : '复制' }}
+                </button>
+                <div v-if="item.role === 'assistant'" class="message-text markdown-message" v-html="renderMarkdown(item.text)"></div>
+                <div v-else class="message-text">{{ item.text }}</div>
                 <div v-if="item.suggestions?.length" class="message-actions">
                   <button v-for="suggestion in item.suggestions" :key="suggestion" class="message-action" type="button" @click="sendPresetQuestion(suggestion)">{{ suggestion }}</button>
                 </div>
@@ -71,7 +74,7 @@
             <div class="message-body">
               <div class="message-name">AI 助手</div>
               <div class="message-card">
-                <div class="message-text">{{ assistantContext.mascotHint || assistantContext.welcomeMessage }}</div>
+                <div class="message-text markdown-message" v-html="renderMarkdown(assistantContext.mascotHint || assistantContext.welcomeMessage)"></div>
               </div>
             </div>
           </article>
@@ -182,6 +185,7 @@ import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
 import { useDialog } from '@/composables/useDialog'
 import MascotCanvas from '@/components/MascotCanvas.vue'
+import { renderMarkdown } from '@/utils/markdown'
 import type { AIAction, AIInteractivePagePayload, AIQuickLink } from '@/api/types'
 
 type Message = { id: string; role: 'user' | 'assistant'; text: string; suggestions?: string[]; actions?: AIAction[] }
@@ -230,6 +234,7 @@ const panelOpen = ref(false)
 const mascotHidden = ref(false)
 const asking = ref(false)
 const error = ref('')
+const copiedMessageId = ref('')
 const imageInput = ref<HTMLInputElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
@@ -252,6 +257,7 @@ let selectedRowEl: HTMLElement | null = null
 let panelResizeActive = false
 let lastPanelBounds: LayoutBounds | null = null
 let panelResizeStartLayout: Partial<Record<LayoutItemName, LayoutRect>> | null = null
+let copiedMessageTimer: number | undefined
 
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : '')
 const context = computed(() => projectId.value ? projectStore.aiContextByProjectId[projectId.value] : undefined)
@@ -916,9 +922,14 @@ async function sendPresetQuestion(text: string) {
   await sendQuestion()
 }
 
-async function copyMessage(text: string) {
+async function copyMessage(text: string, messageId: string) {
   try {
     await navigator.clipboard?.writeText(text)
+    copiedMessageId.value = messageId
+    if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer)
+    copiedMessageTimer = window.setTimeout(() => {
+      if (copiedMessageId.value === messageId) copiedMessageId.value = ''
+    }, 1400)
     error.value = ''
   } catch {
     error.value = '复制失败，请手动选择文本复制'
@@ -1293,6 +1304,7 @@ onBeforeUnmount(() => {
   unbindLivePageSignals()
   clearLiveRowState()
   recognition?.stop()
+  if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer)
 })
 </script>
 
@@ -1772,6 +1784,91 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
 }
 
+.markdown-message {
+  white-space: normal;
+}
+
+.markdown-message :deep(h1),
+.markdown-message :deep(h2),
+.markdown-message :deep(h3),
+.markdown-message :deep(h4) {
+  margin: 0 0 8px;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.markdown-message :deep(p),
+.markdown-message :deep(ul),
+.markdown-message :deep(ol),
+.markdown-message :deep(blockquote),
+.markdown-message :deep(pre),
+.markdown-message :deep(.markdown-table-scroll) {
+  margin: 8px 0 0;
+}
+
+.markdown-message :deep(ul),
+.markdown-message :deep(ol) {
+  padding-left: 20px;
+}
+
+.markdown-message :deep(code) {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: rgba(15, 118, 110, .10);
+  color: #0f766e;
+  font-size: .92em;
+}
+
+.markdown-message :deep(pre) {
+  overflow: auto;
+  padding: 10px;
+  border-radius: 12px;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.markdown-message :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.markdown-message :deep(blockquote) {
+  padding: 8px 10px;
+  border-left: 3px solid rgba(15, 118, 110, .35);
+  border-radius: 8px;
+  background: rgba(240, 253, 250, .74);
+}
+
+.markdown-message :deep(.markdown-table-scroll) {
+  overflow-x: auto;
+}
+
+.markdown-message :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.markdown-message :deep(th),
+.markdown-message :deep(td) {
+  padding: 6px 8px;
+  border: 1px solid rgba(15, 118, 110, .16);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-message :deep(th) {
+  background: rgba(240, 253, 250, .92);
+  color: #0f766e;
+}
+
+.markdown-message :deep(a) {
+  color: #0f766e;
+  font-weight: 700;
+}
+
 .copy-button {
   position: absolute;
   top: 7px;
@@ -1797,7 +1894,10 @@ onBeforeUnmount(() => {
   transform: translateY(0);
 }
 
-.copy-button:hover {
+.copy-button:hover,
+.copy-button.copied {
+  opacity: 1;
+  transform: translateY(0);
   background: #0f766e;
   color: #fff;
 }
