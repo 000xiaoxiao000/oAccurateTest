@@ -49,7 +49,16 @@
                 <span class="branch-name">{{ version.repoBranch || '-' }}</span>
                 <span class="commit-id" :title="commitTooltip(version.repoCommitId)">{{ version.repoCommitId || '-' }}</span>
               </div>
-              <span class="time-text">{{ version.createTimeRelativeText || version.createTimeText || '-' }}</span>
+              <span
+                class="time-text time-tooltip"
+                :class="{ 'has-tooltip': timeTooltip(version) }"
+                :aria-label="timeTooltip(version) || undefined"
+                :tabindex="timeTooltip(version) ? 0 : undefined"
+                @mouseenter="showTimeTooltip($event, timeTooltip(version))"
+                @mouseleave="hideTimeTooltip"
+                @focus="showTimeTooltip($event, timeTooltip(version))"
+                @blur="hideTimeTooltip"
+              >{{ displayTime(version) }}</span>
             </div>
             <div class="action-row">
               <RouterLink
@@ -127,7 +136,16 @@
                 <span><b>{{ coverageRate(report.coveredMethods, report.totalMethods) }}</b><small>{{ report.coveredMethods }} / {{ report.totalMethods }} 方法</small></span>
                 <span><b>{{ coverageRate(report.coveredLines, report.totalLines) }}</b><small>{{ report.coveredLines }} / {{ report.totalLines }} 行</small></span>
               </div>
-              <span class="time-text">{{ report.createTimeRelativeText || report.createTimeText || '-' }}</span>
+              <span
+                class="time-text time-tooltip"
+                :class="{ 'has-tooltip': timeTooltip(report) }"
+                :aria-label="timeTooltip(report) || undefined"
+                :tabindex="timeTooltip(report) ? 0 : undefined"
+                @mouseenter="showTimeTooltip($event, timeTooltip(report))"
+                @mouseleave="hideTimeTooltip"
+                @focus="showTimeTooltip($event, timeTooltip(report))"
+                @blur="hideTimeTooltip"
+              >{{ displayTime(report) }}</span>
             </div>
             <div class="action-row">
               <RouterLink
@@ -243,6 +261,20 @@
         </div>
       </form>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="floatingTimeTooltip.visible"
+        class="floating-time-tooltip"
+        :style="{ left: `${floatingTimeTooltip.x}px`, top: `${floatingTimeTooltip.y}px` }"
+      >
+        <span class="floating-time-tooltip-icon" aria-hidden="true">⏱</span>
+        <span class="floating-time-tooltip-content">
+          <span>生成时间</span>
+          <strong>{{ floatingTimeTooltip.text }}</strong>
+        </span>
+      </div>
+    </Teleport>
   </section>
 </template>
 
@@ -284,6 +316,7 @@ const incrementalDialogOpen = ref(false)
 const incrementalDialogVersion = ref<VersionItemSummary | null>(null)
 const incrementalError = ref('')
 const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '', baseReportId: '' })
+const floatingTimeTooltip = ref({ visible: false, text: '', x: 0, y: 0 })
 
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
 const keywordTerm = computed(() => keyword.value.toLowerCase())
@@ -355,6 +388,58 @@ function coverageRate(covered?: number, total?: number) {
 function shortHash(value?: string) {
   if (!value) return '-'
   return value.length > 10 ? value.slice(0, 10) : value
+}
+
+function displayTime(item: { createTimeRelativeText?: string; createTimeText?: string }) {
+  return item.createTimeRelativeText || item.createTimeText || '-'
+}
+
+function timeTooltip(item: { createTimeText?: string }) {
+  const absoluteTime = formatAbsoluteTime(item.createTimeText)
+  return absoluteTime
+}
+
+function formatAbsoluteTime(value?: string) {
+  if (!value) return ''
+  const trimmed = value.trim()
+  if (!trimmed || /^[-–—]$/.test(trimmed)) return ''
+  if (/^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?/.test(trimmed)) {
+    return trimmed.replace('T', ' ')
+  }
+  const timestamp = Date.parse(trimmed)
+  if (!Number.isFinite(timestamp)) return trimmed
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(timestamp)).replace(/\//g, '-')
+}
+
+function showTimeTooltip(event: MouseEvent | FocusEvent, text: string) {
+  if (!text) return
+  const target = event.currentTarget as HTMLElement | null
+  if (!target) return
+  const rect = target.getBoundingClientRect()
+  const viewportPadding = 12
+  const tooltipMaxWidth = Math.min(320, window.innerWidth - viewportPadding * 2)
+  const minX = tooltipMaxWidth / 2 + viewportPadding
+  const maxX = window.innerWidth - tooltipMaxWidth / 2 - viewportPadding
+  const centerX = rect.left + rect.width / 2
+  const clampedX = maxX < minX ? window.innerWidth / 2 : Math.min(Math.max(centerX, minX), maxX)
+  floatingTimeTooltip.value = {
+    visible: true,
+    text,
+    x: Math.round(clampedX),
+    y: Math.round(rect.top - 12),
+  }
+}
+
+function hideTimeTooltip() {
+  floatingTimeTooltip.value = { ...floatingTimeTooltip.value, visible: false }
 }
 
 function isBaseReport(report: CoverageReportCard) {
@@ -828,6 +913,26 @@ onMounted(loadApps)
   white-space: nowrap;
 }
 
+.time-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  outline: none;
+  cursor: default;
+  transition: color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+.time-tooltip.has-tooltip:hover,
+.time-tooltip.has-tooltip:focus-visible {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.14);
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1062,6 +1167,70 @@ onMounted(loadApps)
 .modal-actions {
   justify-content: flex-end;
   align-items: center;
+}
+
+.floating-time-tooltip {
+  position: fixed;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
+  color: #fff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  text-align: left;
+  white-space: normal;
+  transform: translate(-50%, -100%);
+}
+
+.floating-time-tooltip-icon {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(20, 184, 166, 0.16);
+  color: #99f6e4;
+  font-size: 15px;
+}
+
+.floating-time-tooltip-content {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.floating-time-tooltip-content span {
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.floating-time-tooltip-content strong {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.floating-time-tooltip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  border: 6px solid transparent;
+  border-top-color: rgba(15, 23, 42, 0.96);
+  transform: translateX(-50%);
 }
 
 @media (max-width: 900px) {
