@@ -2247,7 +2247,7 @@ onBeforeUnmount(() => {
   margin-top: auto;
   border: 1px solid rgba(15, 118, 110, .12);
   border-radius: 20px;
-  padding: 12px;
+  padding: 14px;
   background:
     radial-gradient(circle at 12% 0%, rgba(20, 184, 166, .08), transparent 32%),
     rgba(255, 255, 255, .96);
@@ -2259,8 +2259,8 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 14px;
   padding: 10px 12px;
-  min-height: 136px;
-  max-height: 280px;
+  min-height: 190px;
+  max-height: 340px;
   background: transparent;
   resize: vertical;
   font: inherit;
