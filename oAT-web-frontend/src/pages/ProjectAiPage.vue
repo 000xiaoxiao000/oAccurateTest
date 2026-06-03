@@ -1,5 +1,5 @@
 <template>
-  <section class="ai-page">
+  <section class="ai-page" :style="{ '--ai-accent': context?.mascot?.mascotPrimary || '#0f766e' }">
     <div class="page-header">
       <div>
         <div class="eyebrow">AI Workspace</div>
@@ -15,7 +15,7 @@
     <div v-if="loading" class="status-card">正在加载 AI 工作台...</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="context">
-      <div class="hero-card" :style="{ '--hero-accent': context.mascot?.mascotPrimary || '#0f766e' }">
+      <div class="hero-card">
         <div>
           <div class="hero-kicker">智能协作</div>
           <h2>{{ context.welcomeMessage }}</h2>
@@ -1194,6 +1194,14 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ai-page {
+  --ai-accent: #0f766e;
+  --ai-accent-strong: color-mix(in srgb, var(--ai-accent) 78%, #0f172a);
+  --ai-accent-soft: color-mix(in srgb, var(--ai-accent) 8%, transparent);
+  --ai-accent-surface: color-mix(in srgb, var(--ai-accent) 10%, white);
+  --ai-accent-surface-strong: color-mix(in srgb, var(--ai-accent) 16%, white);
+  --ai-accent-border: color-mix(in srgb, var(--ai-accent) 18%, transparent);
+  --ai-accent-border-strong: color-mix(in srgb, var(--ai-accent) 34%, transparent);
+  --hero-accent: var(--ai-accent);
   --ai-card-radius: var(--oat-radius-xl);
   --ai-control-height: 42px;
   --ai-workspace-height: calc(100vh - 116px);
@@ -1216,7 +1224,7 @@ onBeforeUnmount(() => {
   height: 360px;
   left: -120px;
   top: 64px;
-  background: radial-gradient(circle, rgba(20, 184, 166, .14), transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ai-accent) 14%, transparent), transparent 70%);
 }
 
 .ai-page::after {
@@ -1224,7 +1232,7 @@ onBeforeUnmount(() => {
   height: 420px;
   right: -150px;
   bottom: 40px;
-  background: radial-gradient(circle, rgba(182, 217, 0, .16), transparent 72%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--ai-accent) 16%, white), transparent 72%);
 }
 
 .page-header,
@@ -1273,7 +1281,7 @@ onBeforeUnmount(() => {
 
 .eyebrow,
 .hero-kicker {
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1324,7 +1332,7 @@ onBeforeUnmount(() => {
 }
 
 .primary-button {
-  background: #0f766e;
+  background: var(--ai-accent);
 }
 
 .danger-button {
@@ -1359,9 +1367,9 @@ onBeforeUnmount(() => {
 }
 
 .ghost-button {
-  border: 1px solid rgba(15, 118, 110, 0.2);
-  background: rgba(15, 118, 110, 0.06);
-  color: #0f766e;
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--ai-accent) 6%, transparent);
+  color: var(--ai-accent);
 }
 
 .ghost-button.small {
@@ -1382,7 +1390,6 @@ onBeforeUnmount(() => {
 }
 
 .hero-card {
-  --hero-accent: #0f766e;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 132px minmax(300px, 340px);
   align-items: center;
@@ -1513,11 +1520,11 @@ onBeforeUnmount(() => {
 }
 
 .app-chip {
-  border: 1px solid rgba(15, 118, 110, .18);
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 18%, transparent);
   border-radius: 999px;
   padding: 6px 10px;
-  background: rgba(15, 118, 110, .06);
-  color: #0f766e;
+  background: color-mix(in srgb, var(--ai-accent) 6%, transparent);
+  color: var(--ai-accent);
   font-size: 12px;
   font-weight: 800;
 }
@@ -1556,7 +1563,7 @@ onBeforeUnmount(() => {
 
 .ability-value {
   display: block;
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 17px;
   font-weight: 800;
   line-height: 1.2;
@@ -1574,12 +1581,12 @@ onBeforeUnmount(() => {
 }
 
 .session-card.active {
-  background: linear-gradient(180deg, #f0fdfa, #ecfeff);
-  border-color: rgba(15, 118, 110, 0.22);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 10%, white), color-mix(in srgb, var(--ai-accent) 6%, white));
+  border-color: color-mix(in srgb, var(--ai-accent) 22%, transparent);
 }
 
 .session-card.pinned {
-  box-shadow: inset 3px 0 0 #0f766e;
+  box-shadow: inset 3px 0 0 var(--ai-accent);
 }
 
 .side-stack {
@@ -1617,9 +1624,9 @@ onBeforeUnmount(() => {
 }
 
 .text-input:focus {
-  border-color: rgba(15, 118, 110, .38);
+  border-color: color-mix(in srgb, var(--ai-accent) 38%, transparent);
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(15, 118, 110, .10);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ai-accent) 10%, transparent);
 }
 
 .small-input {
@@ -1662,10 +1669,10 @@ onBeforeUnmount(() => {
 .timeline-item,
 .anchor-filter-button,
 .anchor-link-button {
-  border: 1px solid rgba(15, 118, 110, .16);
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 16%, transparent);
   border-radius: 999px;
   background: rgba(255, 255, 255, .72);
-  color: #0f766e;
+  color: var(--ai-accent);
   font: inherit;
   font-size: 12px;
   font-weight: 800;
@@ -1680,8 +1687,8 @@ onBeforeUnmount(() => {
 .timeline-item:hover,
 .anchor-filter-button:hover,
 .anchor-link-button:hover {
-  border-color: rgba(15, 118, 110, .34);
-  background: rgba(15, 118, 110, .08);
+  border-color: color-mix(in srgb, var(--ai-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--ai-accent) 8%, transparent);
 }
 
 .anchor-tools {
@@ -1703,9 +1710,9 @@ onBeforeUnmount(() => {
 .anchor-filter-button.active,
 .anchor-item.active,
 .timeline-item.active {
-  border-color: rgba(15, 118, 110, .34);
-  background: linear-gradient(180deg, #f0fdfa, #ecfeff);
-  box-shadow: inset 3px 0 0 #0f766e, 0 10px 24px rgba(15, 118, 110, .08);
+  border-color: color-mix(in srgb, var(--ai-accent) 34%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 10%, white), color-mix(in srgb, var(--ai-accent) 6%, white));
+  box-shadow: inset 3px 0 0 var(--ai-accent), 0 10px 24px color-mix(in srgb, var(--ai-accent) 8%, transparent);
 }
 
 .anchor-search-row {
@@ -1768,7 +1775,7 @@ onBeforeUnmount(() => {
 }
 
 .anchor-item.answered {
-  border-color: rgba(15, 118, 110, .16);
+  border-color: color-mix(in srgb, var(--ai-accent) 16%, transparent);
 }
 
 .anchor-top,
@@ -1780,7 +1787,7 @@ onBeforeUnmount(() => {
 }
 
 .anchor-top strong {
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 12px;
 }
 
@@ -1801,12 +1808,12 @@ onBeforeUnmount(() => {
 }
 
 .anchor-status.answered {
-  background: rgba(15, 118, 110, .12);
-  color: #0f766e;
+  background: color-mix(in srgb, var(--ai-accent) 12%, transparent);
+  color: var(--ai-accent);
 }
 
 .anchor-status.answered i {
-  background: #0f766e;
+  background: var(--ai-accent);
 }
 
 .anchor-status.pending {
@@ -1877,7 +1884,7 @@ onBeforeUnmount(() => {
   min-width: 30px;
   height: 22px;
   border-radius: 999px;
-  background: rgba(15, 118, 110, .10);
+  background: color-mix(in srgb, var(--ai-accent) 10%, transparent);
 }
 
 .timeline-item small {
@@ -1894,13 +1901,13 @@ onBeforeUnmount(() => {
 }
 
 .message-card.user {
-  background: rgba(15, 118, 110, 0.06);
+  background: color-mix(in srgb, var(--ai-accent) 6%, transparent);
 }
 
 .message-card.assistant {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(248, 253, 252, .92));
-  border-color: rgba(20, 184, 166, .18);
+  border-color: color-mix(in srgb, var(--ai-accent) 18%, transparent);
 }
 
 .message-history {
@@ -1932,7 +1939,7 @@ onBeforeUnmount(() => {
   right: 12px;
   width: 42px;
   padding: 10px 8px;
-  border: 1px solid rgba(15, 118, 110, .12);
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 12%, transparent);
   border-radius: 999px;
   background: rgba(255, 255, 255, .82);
   box-shadow: 0 16px 38px rgba(15, 23, 42, .10);
@@ -1942,7 +1949,7 @@ onBeforeUnmount(() => {
 
 .floating-anchor-head {
   margin-bottom: 8px;
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 10px;
   font-weight: 900;
   text-align: center;
@@ -1960,7 +1967,7 @@ onBeforeUnmount(() => {
   left: 12px;
   width: 2px;
   border-radius: 999px;
-  background: linear-gradient(180deg, rgba(15, 118, 110, .14), rgba(20, 184, 166, .28));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 14%, transparent), color-mix(in srgb, var(--ai-accent) 28%, transparent));
   content: '';
 }
 
@@ -1975,7 +1982,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: rgba(255, 255, 255, .92);
   box-shadow: 0 4px 12px rgba(15, 23, 42, .10);
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 10px;
   font-weight: 900;
   cursor: pointer;
@@ -1989,8 +1996,8 @@ onBeforeUnmount(() => {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #0f766e;
-  box-shadow: 0 0 0 4px rgba(15, 118, 110, .12);
+  background: var(--ai-accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ai-accent) 12%, transparent);
   content: '';
   transform: translateY(-50%);
   transition: box-shadow .18s ease, background .18s ease;
@@ -2012,18 +2019,18 @@ onBeforeUnmount(() => {
 
 .floating-anchor-dot:hover::before,
 .floating-anchor-dot:focus-visible::before {
-  box-shadow: 0 0 0 7px rgba(15, 118, 110, .16);
+  box-shadow: 0 0 0 7px color-mix(in srgb, var(--ai-accent) 16%, transparent);
 }
 
 .floating-anchor-dot.active {
-  outline: 2px solid rgba(15, 118, 110, .18);
+  outline: 2px solid color-mix(in srgb, var(--ai-accent) 18%, transparent);
   outline-offset: 2px;
 }
 
 .floating-anchor-dot:hover,
 .floating-anchor-dot:focus-visible {
-  background: #0f766e;
-  box-shadow: 0 10px 20px rgba(15, 118, 110, .22);
+  background: var(--ai-accent);
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--ai-accent) 22%, transparent);
   color: #fff;
   transform: translateX(-3px);
 }
@@ -2047,7 +2054,7 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 4px;
   width: 210px;
-  border: 1px solid rgba(15, 118, 110, .16);
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 16%, transparent);
   border-radius: 14px;
   padding: 10px 12px;
   background: rgba(255, 255, 255, .96);
@@ -2066,7 +2073,7 @@ onBeforeUnmount(() => {
 }
 
 .floating-anchor-tooltip strong {
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 11px;
 }
 
@@ -2097,11 +2104,11 @@ onBeforeUnmount(() => {
   top: 12px;
   right: 12px;
   z-index: 1;
-  border: 1px solid rgba(15, 118, 110, .18);
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 18%, transparent);
   border-radius: 999px;
   padding: 5px 9px;
   background: rgba(255, 255, 255, .84);
-  color: #0f766e;
+  color: var(--ai-accent);
   font: inherit;
   font-size: 11px;
   font-weight: 900;
@@ -2119,8 +2126,8 @@ onBeforeUnmount(() => {
 
 .message-copy-button:hover,
 .message-copy-button:focus-visible {
-  border-color: rgba(15, 118, 110, .32);
-  background: #0f766e;
+  border-color: color-mix(in srgb, var(--ai-accent) 32%, transparent);
+  background: var(--ai-accent);
   color: #fff;
   transform: translateY(-1px);
 }
@@ -2153,8 +2160,8 @@ onBeforeUnmount(() => {
 .message-card.is-active::after,
 .message-card.is-target::after {
   opacity: 1;
-  background: linear-gradient(180deg, rgba(15, 118, 110, .95), rgba(20, 184, 166, .75));
-  box-shadow: 0 0 0 4px rgba(15, 118, 110, .12);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 95%, transparent), color-mix(in srgb, var(--ai-accent) 75%, white));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ai-accent) 12%, transparent);
 }
 
 .message-card.is-preview::after {
@@ -2166,8 +2173,8 @@ onBeforeUnmount(() => {
 .message-card.is-target,
 .message-card.is-preview,
 .message-card.is-active {
-  border-color: rgba(15, 118, 110, .26);
-  box-shadow: 0 16px 30px rgba(15, 118, 110, .10);
+  border-color: color-mix(in srgb, var(--ai-accent) 26%, transparent);
+  box-shadow: 0 16px 30px color-mix(in srgb, var(--ai-accent) 10%, transparent);
 }
 
 .message-card.qa-group-start {
@@ -2187,7 +2194,7 @@ onBeforeUnmount(() => {
   width: 22px;
   height: 22px;
   border-radius: 999px;
-  background: #0f766e;
+  background: var(--ai-accent);
   color: #fff;
   content: 'AI';
   font-size: 10px;
@@ -2200,7 +2207,7 @@ onBeforeUnmount(() => {
 }
 
 .message-role {
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 12px;
   font-weight: 800;
 }
@@ -2266,8 +2273,8 @@ onBeforeUnmount(() => {
 .markdown-message :deep(code) {
   padding: 1px 6px;
   border-radius: 7px;
-  background: rgba(15, 118, 110, .10);
-  color: #0f766e;
+  background: color-mix(in srgb, var(--ai-accent) 10%, transparent);
+  color: var(--ai-accent);
   font-size: .92em;
 }
 
@@ -2287,9 +2294,9 @@ onBeforeUnmount(() => {
 
 .markdown-message :deep(blockquote) {
   padding: 10px 12px;
-  border-left: 3px solid rgba(15, 118, 110, .35);
+  border-left: 3px solid color-mix(in srgb, var(--ai-accent) 35%, transparent);
   border-radius: 10px;
-  background: rgba(240, 253, 250, .74);
+  background: color-mix(in srgb, var(--ai-accent) 8%, white);
 }
 
 .markdown-message :deep(.markdown-table-scroll) {
@@ -2305,18 +2312,18 @@ onBeforeUnmount(() => {
 .markdown-message :deep(th),
 .markdown-message :deep(td) {
   padding: 7px 9px;
-  border: 1px solid rgba(15, 118, 110, .16);
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 16%, transparent);
   text-align: left;
   vertical-align: top;
 }
 
 .markdown-message :deep(th) {
-  background: rgba(240, 253, 250, .92);
-  color: #0f766e;
+  background: color-mix(in srgb, var(--ai-accent) 10%, white);
+  color: var(--ai-accent);
 }
 
 .markdown-message :deep(a) {
-  color: #0f766e;
+  color: var(--ai-accent);
   font-weight: 700;
 }
 
@@ -2325,11 +2332,11 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   gap: 10px;
   margin-top: auto;
-  border: 1px solid rgba(15, 118, 110, .12);
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 12%, transparent);
   border-radius: 20px;
   padding: 14px;
   background:
-    radial-gradient(circle at 12% 0%, rgba(20, 184, 166, .08), transparent 32%),
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--ai-accent) 8%, transparent), transparent 32%),
     rgba(255, 255, 255, .96);
   box-shadow: 0 14px 34px rgba(15, 23, 42, .08);
 }
@@ -2408,13 +2415,13 @@ onBeforeUnmount(() => {
 
 .feedback-message {
   margin: 8px 0 0;
-  color: #0f766e;
+  color: var(--ai-accent);
   font-size: 13px;
   font-weight: 700;
 }
 
 .inline-link {
-  color: #0f766e;
+  color: var(--ai-accent);
   font-weight: 700;
 }
 
@@ -2428,7 +2435,7 @@ onBeforeUnmount(() => {
 
 .link-button:hover,
 .action-inline-button:hover {
-  color: #0b5f59;
+  color: var(--ai-accent-strong);
   text-decoration: underline;
 }
 
@@ -2464,7 +2471,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   padding: 0 var(--oat-space-4);
   background: rgba(255, 255, 255, .82);
-  color: #0f766e;
+  color: var(--ai-accent);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -2522,15 +2529,15 @@ onBeforeUnmount(() => {
 
 .send-button {
   min-width: 118px;
-  box-shadow: 0 16px 30px rgba(15, 118, 110, .18);
+  box-shadow: 0 16px 30px color-mix(in srgb, var(--ai-accent) 18%, transparent);
 }
 
 .send-button.loading {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: linear-gradient(135deg, var(--ai-accent), color-mix(in srgb, var(--ai-accent) 74%, white));
 }
 
 .save-button:disabled {
-  background: rgba(15, 118, 110, .04);
+  background: color-mix(in srgb, var(--ai-accent) 4%, transparent);
   color: #7f9f9a;
 }
 
@@ -2591,7 +2598,7 @@ onBeforeUnmount(() => {
 }
 
 .ghost-button.active {
-  background: #0f766e;
+  background: var(--ai-accent);
   color: #fff;
 }
 
