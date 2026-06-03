@@ -29,8 +29,7 @@
         <div class="hero-mascot">
           <div class="stage-ring one"></div>
           <div class="stage-ring two"></div>
-          <MascotCanvas :size="170" :color="context.mascot?.mascotPrimary || '#0f766e'" :seed="projectId" :mood="asking ? 'thinking' : error ? 'error' : 'happy'" :interactive="true" />
-          <span>{{ context.mascot?.mascotName || 'AI Assistant' }}</span>
+          <MascotCanvas :size="118" :color="context.mascot?.mascotPrimary || '#0f766e'" :seed="projectId" :mood="asking ? 'thinking' : error ? 'error' : 'happy'" :interactive="true" />
         </div>
         <div class="hero-meta">
           <div class="hero-chip">
@@ -1195,6 +1194,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ai-page {
+  --ai-card-radius: var(--oat-radius-xl);
+  --ai-control-height: 42px;
   position: relative;
   isolation: isolate;
 }
@@ -1238,8 +1239,35 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
-.page-header {
-  margin-bottom: 20px;
+.ai-page .page-header {
+  min-height: auto;
+  margin-bottom: var(--oat-space-4);
+  padding: var(--oat-space-4) var(--oat-space-5);
+  border-radius: var(--ai-card-radius);
+}
+
+.ai-page .page-header h1 {
+  margin: var(--oat-space-1) 0;
+  font-size: clamp(22px, 1.8vw, 28px);
+  line-height: 1.18;
+}
+
+.ai-page .page-header .subtext {
+  max-width: 780px;
+  margin: 0;
+  color: var(--oat-text-muted);
+  line-height: 1.45;
+}
+
+.ai-page .page-header > div:first-child,
+.hero-card > :first-child {
+  min-width: 0;
+}
+
+.ai-page .header-actions {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .eyebrow,
@@ -1266,12 +1294,14 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--oat-space-2);
+  min-height: var(--ai-control-height);
   border: 0;
   border-radius: 999px;
-  padding: 10px 14px;
+  padding: 0 var(--oat-space-4);
   font: inherit;
   font-weight: 800;
+  white-space: nowrap;
   cursor: pointer;
   transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease, opacity .16s ease;
 }
@@ -1353,22 +1383,23 @@ onBeforeUnmount(() => {
 .hero-card {
   --hero-accent: #0f766e;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) minmax(240px, .62fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 132px minmax(300px, 340px);
+  align-items: center;
+  gap: var(--oat-space-4);
   position: relative;
   overflow: hidden;
-  padding: 24px;
-  border-radius: 24px;
-  margin-bottom: 18px;
+  padding: var(--oat-space-5) var(--oat-space-6);
+  border-radius: var(--ai-card-radius);
+  margin-bottom: var(--oat-space-4);
   background:
     linear-gradient(90deg, rgba(255, 255, 255, .13) 1px, transparent 1px),
     linear-gradient(rgba(255, 255, 255, .13) 1px, transparent 1px),
     radial-gradient(circle at top right, color-mix(in srgb, var(--hero-accent) 20%, white) 0%, transparent 36%),
     linear-gradient(135deg, color-mix(in srgb, var(--hero-accent) 82%, #0f172a), #0f172a 68%);
-  background-size: 38px 38px, 38px 38px, auto, auto;
+  background-size: 40px 40px, 40px 40px, auto, auto;
   border: 1px solid color-mix(in srgb, var(--hero-accent) 28%, transparent);
   color: #fff;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, .18);
+  box-shadow: var(--oat-shadow-md);
 }
 
 .hero-card h2,
@@ -1378,17 +1409,31 @@ onBeforeUnmount(() => {
 }
 
 .hero-card p {
+  max-width: 680px;
+  margin: var(--oat-space-2) 0 0;
   opacity: .84;
+  line-height: 1.55;
+}
+
+.hero-card h2 {
+  max-width: 760px;
+  margin: var(--oat-space-2) 0 0;
+  font-size: clamp(20px, 1.7vw, 24px);
+  line-height: 1.42;
+  letter-spacing: -.02em;
 }
 
 .hero-meta {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--oat-space-2);
 }
 
 .hero-chip {
-  padding: 16px;
-  border-radius: 18px;
+  min-width: 0;
+  min-height: 82px;
+  padding: var(--oat-space-3);
+  border-radius: var(--oat-radius-md);
   background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(10px);
@@ -1396,7 +1441,16 @@ onBeforeUnmount(() => {
 
 .hero-chip strong {
   display: block;
-  font-size: 24px;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.hero-chip span {
+  display: block;
+  margin-top: var(--oat-space-1);
+  color: rgba(255, 255, 255, .86);
+  line-height: 1.35;
+  word-break: keep-all;
 }
 
 .page-grid {
@@ -2358,7 +2412,7 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr;
   }
 
-  .page-header,
+  .ai-page .page-header,
   .header-actions,
   .form-actions {
     flex-direction: column;
@@ -2369,33 +2423,31 @@ onBeforeUnmount(() => {
 .hero-actions {
   justify-content: flex-start;
   flex-wrap: wrap;
-  margin-top: 18px;
+  margin-top: var(--oat-space-3);
+}
+
+.hero-actions .primary-button,
+.hero-actions .ghost-button,
+.ghost-link {
+  min-height: var(--ai-control-height);
 }
 
 .ghost-link {
+  display: inline-flex;
+  align-items: center;
   border-radius: 999px;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, .78);
+  padding: 0 var(--oat-space-4);
+  background: rgba(255, 255, 255, .82);
   color: #0f766e;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .hero-mascot {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 190px;
-}
-
-.hero-mascot span {
-  position: absolute;
-  bottom: 4px;
-  border-radius: 999px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, .82);
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 900;
+  min-height: 132px;
 }
 
 .stage-ring {
@@ -2406,13 +2458,13 @@ onBeforeUnmount(() => {
 }
 
 .stage-ring.one {
-  width: 170px;
-  height: 170px;
+  width: 130px;
+  height: 130px;
 }
 
 .stage-ring.two {
-  width: 210px;
-  height: 210px;
+  width: 158px;
+  height: 158px;
   animation-delay: -1.4s;
 }
 
@@ -2571,11 +2623,53 @@ onBeforeUnmount(() => {
   .floating-anchors {
     display: none;
   }
+
+  .hero-card {
+    grid-template-columns: minmax(0, 1fr) 120px minmax(260px, 300px);
+  }
 }
 
 @media (max-width: 980px) {
   .hero-card {
+    grid-template-columns: minmax(0, 1fr) 120px;
+  }
+
+  .hero-meta {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .ai-page .header-actions {
+    justify-content: stretch;
+  }
+
+  .ai-page .header-actions > *,
+  .hero-actions > * {
+    flex: 1 1 auto;
+  }
+
+  .ai-page .page-header,
+  .hero-card {
+    padding: var(--oat-space-4);
+    border-radius: var(--oat-radius-lg);
+  }
+
+  .hero-card {
     grid-template-columns: 1fr;
+  }
+
+  .hero-mascot {
+    display: none;
+  }
+
+  .hero-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-chip {
+    min-height: 0;
   }
 }
 

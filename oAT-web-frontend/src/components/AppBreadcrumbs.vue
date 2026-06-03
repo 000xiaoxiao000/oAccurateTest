@@ -92,7 +92,7 @@ const routeLabels: Record<string, string> = {
   projects: '项目列表',
   'account-settings': '用户设置',
   'project-home': '项目首页',
-  'project-ai': 'AI Interactive',
+  'project-ai': 'AI 工作台',
   'project-apps': '应用管理',
   'online-apps': '在线应用',
   'app-settings': '应用设置',
