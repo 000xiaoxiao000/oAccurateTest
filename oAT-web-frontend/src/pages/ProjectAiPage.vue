@@ -584,7 +584,7 @@ async function useQuestion(text: string) {
 
 async function focusAskForm() {
   await nextTick()
-  askFormRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  askFormRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   askInputRef.value?.focus({ preventScroll: true })
 }
 
@@ -1819,12 +1819,13 @@ onBeforeUnmount(() => {
 }
 
 .message-card.assistant {
-  background: #f8fbfb;
-  border-color: rgba(20, 184, 166, .16);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(248, 253, 252, .92));
+  border-color: rgba(20, 184, 166, .18);
 }
 
 .message-history {
-  max-height: min(44vh, 460px);
+  max-height: min(46vh, 500px);
   overflow: auto;
   padding-right: 4px;
 }
@@ -1832,6 +1833,8 @@ onBeforeUnmount(() => {
 .ask-workspace-panel {
   position: relative;
   padding-right: 54px;
+  margin-bottom: 0;
+  padding-bottom: 14px;
 }
 
 .floating-anchors {
@@ -1997,7 +2000,7 @@ onBeforeUnmount(() => {
 
 .message-card {
   position: relative;
-  padding-left: 44px;
+  padding: 13px 14px 13px 44px;
   transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
 }
 
@@ -2111,32 +2114,52 @@ onBeforeUnmount(() => {
 .message-role {
   color: #0f766e;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .message-text {
   white-space: pre-wrap;
-  line-height: 1.7;
+  line-height: 1.65;
   color: #334155;
 }
 
 .markdown-message {
   white-space: normal;
+  color: #243244;
+  font-size: 14px;
 }
 
 .markdown-message :deep(h1),
 .markdown-message :deep(h2),
 .markdown-message :deep(h3),
 .markdown-message :deep(h4) {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   color: #0f172a;
-  line-height: 1.45;
+  font-weight: 850;
+  line-height: 1.38;
 }
 
-.markdown-message :deep(h1) { font-size: 20px; }
-.markdown-message :deep(h2) { font-size: 18px; }
+.markdown-message :deep(h1) { font-size: 17px; }
+.markdown-message :deep(h2) { font-size: 16px; }
 .markdown-message :deep(h3),
-.markdown-message :deep(h4) { font-size: 16px; }
+.markdown-message :deep(h4) { font-size: 15px; }
+
+.markdown-message :deep(.markdown-lead) {
+  margin: 0;
+  color: #172033;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.72;
+}
+
+.markdown-message :deep(p:first-child),
+.markdown-message :deep(ul:first-child),
+.markdown-message :deep(ol:first-child),
+.markdown-message :deep(blockquote:first-child),
+.markdown-message :deep(pre:first-child),
+.markdown-message :deep(.markdown-table-scroll:first-child) {
+  margin-top: 0;
+}
 
 .markdown-message :deep(p),
 .markdown-message :deep(ul),
@@ -2144,7 +2167,7 @@ onBeforeUnmount(() => {
 .markdown-message :deep(blockquote),
 .markdown-message :deep(pre),
 .markdown-message :deep(.markdown-table-scroll) {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
 }
 
 .markdown-message :deep(ul),
@@ -2153,7 +2176,7 @@ onBeforeUnmount(() => {
 }
 
 .markdown-message :deep(code) {
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 7px;
   background: rgba(15, 118, 110, .10);
   color: #0f766e;
@@ -2193,7 +2216,7 @@ onBeforeUnmount(() => {
 
 .markdown-message :deep(th),
 .markdown-message :deep(td) {
-  padding: 8px 10px;
+  padding: 7px 9px;
   border: 1px solid rgba(15, 118, 110, .16);
   text-align: left;
   vertical-align: top;
@@ -2211,7 +2234,7 @@ onBeforeUnmount(() => {
 
 .ask-form {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .text-area {
@@ -2219,7 +2242,8 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 14px;
   padding: 12px 14px;
-  min-height: 150px;
+  min-height: 104px;
+  max-height: 220px;
   background: linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .98));
   resize: vertical;
   font: inherit;
@@ -2384,6 +2408,7 @@ onBeforeUnmount(() => {
 .form-actions {
   align-items: flex-start;
   flex-wrap: wrap;
+  gap: 10px;
 }
 
 .ask-submit-actions {

@@ -102,6 +102,10 @@ export function renderMarkdown(markdown: string) {
     if (heading) {
       closeBlocks()
       const level = heading[1].length
+      if (heading[2].length > 72) {
+        html.push(`<p class="markdown-lead">${inlineMarkdown(heading[2])}</p>`)
+        continue
+      }
       html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`)
       continue
     }

@@ -129,6 +129,9 @@ const systemSnapshotRoute = computed(() => {
 
 const mainModeClass = computed(() => {
   const name = String(route.name || '')
+  if (name === 'project-ai') {
+    return 'shell-main-wide shell-main-ai'
+  }
   if (['monitor', 'map-home', 'map-app', 'map-code', 'project-ai', 'search-center'].includes(name)) {
     return 'shell-main-wide'
   }
@@ -509,6 +512,10 @@ async function handleLogout() {
 
 .shell-main-wide {
   width: min(1560px, calc(100vw - clamp(24px, 4vw, 48px)));
+}
+
+.shell-main-ai {
+  padding-bottom: 8px;
 }
 
 .shell-main-focus {
