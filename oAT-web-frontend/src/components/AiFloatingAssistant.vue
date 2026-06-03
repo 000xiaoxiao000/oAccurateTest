@@ -346,9 +346,11 @@ function restoreState() {
   } catch {
     messages.value = []
   }
-  mascotHidden.value = localStorage.getItem(`${storagePrefix.value}:hidden`) === '1'
+  mascotHidden.value = false
+  localStorage.removeItem(`${storagePrefix.value}:hidden`)
   panelOpen.value = sessionStorage.getItem(`${storagePrefix.value}:panel`) === '1'
-  position.value = isCurrentLayout ? readJson<FloatingPosition | null>(`${storagePrefix.value}:position`, null) : null
+  position.value = null
+  localStorage.removeItem(`${storagePrefix.value}:position`)
   panelSize.value = isCurrentLayout ? normalizePanelSize(readJson<PanelSize | null>(`${storagePrefix.value}:panel-size`, null)) : null
   collapsedSections.value = normalizeCollapsedSections(
     isCurrentLayout ? readJson<SectionName[]>(`${storagePrefix.value}:sections`, DEFAULT_COLLAPSED_SECTIONS) : DEFAULT_COLLAPSED_SECTIONS,
