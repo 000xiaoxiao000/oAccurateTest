@@ -111,6 +111,7 @@ export const useProjectStore = defineStore('project', () => {
   const usecaseDetailByKey = ref<Record<string, UsecaseDetailPayload>>({})
   const aiContextByProjectId = ref<Record<string, AIInteractivePagePayload>>({})
   const aiLastReplyByProjectId = ref<Record<string, AIInteractiveReply>>({})
+  const aiAssistantLastReplyByProjectId = ref<Record<string, AIInteractiveReply>>({})
   const systemSnapshotListByKey = ref<Record<string, SystemSnapshotListPayload>>({})
   const systemSnapshotDetailByKey = ref<Record<string, SystemSnapshotDetailPayload>>({})
   const systemSnapshotReportByKey = ref<Record<string, SystemSnapshotReportPayload>>({})
@@ -405,8 +406,12 @@ export const useProjectStore = defineStore('project', () => {
 
   async function askAi(projectId: string, payload: Parameters<typeof askAiInteractive>[1]) {
     const reply = await askAiInteractive(projectId, payload)
-    assignByKey(aiLastReplyByProjectId, projectId, reply)
-    if (reply.sessionState !== undefined) {
+    if (payload.memoryScope === 'assistant') {
+      assignByKey(aiAssistantLastReplyByProjectId, projectId, reply)
+    } else {
+      assignByKey(aiLastReplyByProjectId, projectId, reply)
+    }
+    if (typeof reply.sessionState === 'string') {
       const current = aiContextByProjectId.value[projectId]
       if (current) {
         assignByKey(aiContextByProjectId, projectId, { ...current, sessionState: reply.sessionState })
@@ -424,13 +429,17 @@ export const useProjectStore = defineStore('project', () => {
     return saved
   }
 
-  async function resetAiSessionState(projectId: string) {
-    const cleared = await clearAiSessionState(projectId)
-    const current = aiContextByProjectId.value[projectId]
-    if (current) {
-      assignByKey(aiContextByProjectId, projectId, { ...current, sessionState: cleared })
+  async function resetAiSessionState(projectId: string, memoryScope: 'workbench' | 'assistant' = 'workbench') {
+    const cleared = await clearAiSessionState(projectId, memoryScope)
+    if (memoryScope === 'workbench') {
+      const current = aiContextByProjectId.value[projectId]
+      if (current) {
+        assignByKey(aiContextByProjectId, projectId, { ...current, sessionState: cleared })
+      }
+      assignByKey(aiLastReplyByProjectId, projectId, {})
+    } else {
+      assignByKey(aiAssistantLastReplyByProjectId, projectId, {})
     }
-    assignByKey(aiLastReplyByProjectId, projectId, {})
     return cleared
   }
 
@@ -636,6 +645,7 @@ export const useProjectStore = defineStore('project', () => {
     usecaseDetailByKey,
     aiContextByProjectId,
     aiLastReplyByProjectId,
+    aiAssistantLastReplyByProjectId,
     systemSnapshotListByKey,
     systemSnapshotDetailByKey,
     systemSnapshotReportByKey,

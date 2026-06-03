@@ -293,7 +293,7 @@ const floatingStyle = computed(() => position.value ? { left: `${position.value.
 const panelStyle = computed(() => panelSize.value ? { width: `${panelSize.value.width}px`, height: `${panelSize.value.height}px` } : {})
 
 const normalizedQuickLinks = computed(() => normalizeLinks(buildAdaptiveQuickLinks(dynamicQuickLinks.value.length ? dynamicQuickLinks.value : assistantContext.value.quickLinks || [])))
-const lastReply = computed(() => projectId.value ? projectStore.aiLastReplyByProjectId[projectId.value] : undefined)
+const lastReply = computed(() => projectId.value ? projectStore.aiAssistantLastReplyByProjectId[projectId.value] : undefined)
 const dynamicQuickLinks = ref<AIQuickLink[]>([])
 const contextChips = computed(() => buildContextChips().filter((chip) => !hiddenContextChips.value.includes(chip.id)))
 const starterQuestions = computed(() => {
@@ -521,7 +521,7 @@ function preserveFloatingAnchor(anchor: { right: number; bottom: number } | null
 async function clearConversation() {
   const confirmed = await dialog.confirm({
     title: '清空 AI 对话',
-    message: '确认清空当前项目的悬浮助手对话和后端 AI 记忆？清空后会重新开始上下文。',
+    message: '确认清空当前项目的悬浮助手对话和后端 AI 助手记忆？AI 工作台会话不会受影响。',
     confirmText: '确认清空',
     tone: 'danger',
   })
@@ -531,7 +531,7 @@ async function clearConversation() {
   question.value = ''
   imageData.value = ''
   try {
-    await projectStore.resetAiSessionState(projectId.value)
+    await projectStore.resetAiSessionState(projectId.value, 'assistant')
   } catch (err) {
     error.value = friendlyAiError(err)
   }
@@ -885,6 +885,7 @@ async function sendQuestion() {
       pageContext: buildPageContext(text),
       imageData: imageData.value || undefined,
       sessionState: JSON.stringify({ messages: messages.value.slice(-20) }),
+      memoryScope: 'assistant',
     })
     const links = normalizeLinks(result.quickLinks || [], false)
     if (links.length) {
@@ -924,7 +925,7 @@ async function sendPresetQuestion(text: string) {
 
 async function copyMessage(text: string, messageId: string) {
   try {
-    await navigator.clipboard?.writeText(text)
+    await writeClipboardText(getSelectedMessageText() || text)
     copiedMessageId.value = messageId
     if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer)
     copiedMessageTimer = window.setTimeout(() => {
@@ -934,6 +935,39 @@ async function copyMessage(text: string, messageId: string) {
   } catch {
     error.value = '复制失败，请手动选择文本复制'
   }
+}
+
+async function writeClipboardText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) throw new Error('copy failed')
+}
+
+function getSelectedMessageText() {
+  const selection = window.getSelection()
+  const panel = panelRef.value
+  if (!selection || !panel || selection.isCollapsed || selection.rangeCount === 0) return ''
+  const range = selection.getRangeAt(0)
+  if (!isNodeInside(panel, range.startContainer) || !isNodeInside(panel, range.endContainer)) return ''
+  return selection.toString().trim()
+}
+
+function isNodeInside(container: HTMLElement, node: Node) {
+  const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement
+  return Boolean(element && container.contains(element))
 }
 
 function quickLinkIcon(title?: string) {
@@ -1180,6 +1214,82 @@ function collectTexts(selector: string, limit: number) {
   return values
 }
 
+function collectCoverageSourceContext(currentQuestion: string) {
+  const source = document.querySelector<HTMLElement>('.source-container')
+  if (!source || rootRef.value?.contains(source)) return ''
+
+  const sourceText = normalizeContextText(source.innerText || source.textContent || '')
+  if (!sourceText) return ''
+
+  const methodNames = collectSourceMethodNames()
+  const targetMethod = findTargetMethodName(currentQuestion, methodNames)
+  const snippet = buildSourceSnippet(sourceText, targetMethod)
+  const className = collectCoverageClassName()
+  const selectedMethodSummary = collectSelectedMethodSummary(targetMethod)
+  const parts = ['页面类型:覆盖率源码页']
+  if (className) parts.push(`当前类:${className}`)
+  if (targetMethod) parts.push(`目标方法:${targetMethod}`)
+  if (selectedMethodSummary) parts.push(`方法覆盖信息:${selectedMethodSummary}`)
+  if (snippet) parts.push(`当前源码片段:\n${snippet}`)
+  return parts.join('；')
+}
+
+function normalizeContextText(text: string) {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function collectSourceMethodNames() {
+  const names: string[] = []
+  for (const button of Array.from(document.querySelectorAll<HTMLElement>('.method-jump'))) {
+    if (rootRef.value?.contains(button)) continue
+    const raw = normalizeContextText(button.textContent || '')
+    const name = raw.split('(')[0]?.trim()
+    if (name && !names.includes(name)) names.push(name)
+  }
+  return names
+}
+
+function findTargetMethodName(question: string, methodNames: string[]) {
+  const normalizedQuestion = question.toLowerCase()
+  const selected = normalizeContextText(selectedRowEl?.textContent || '')
+  return methodNames.find((name) => normalizedQuestion.includes(name.toLowerCase()))
+    || methodNames.find((name) => selected.toLowerCase().includes(name.toLowerCase()))
+    || ''
+}
+
+function buildSourceSnippet(sourceText: string, methodName: string) {
+  const lines = sourceText.split('\n').map((line) => line.trimEnd()).filter((line) => line.trim())
+  if (!lines.length) return ''
+  const methodLineIndex = methodName
+    ? lines.findIndex((line) => new RegExp(`\\b${escapeRegExp(methodName)}\\s*\\(`).test(line))
+    : -1
+  const start = methodLineIndex >= 0 ? Math.max(0, methodLineIndex - 4) : 0
+  const end = methodLineIndex >= 0 ? Math.min(lines.length, methodLineIndex + 42) : Math.min(lines.length, 52)
+  return lines.slice(start, end).join('\n').slice(0, 6000)
+}
+
+function collectCoverageClassName() {
+  const title = document.querySelector<HTMLElement>('.coverage-code-view h1')?.textContent
+    || document.querySelector<HTMLElement>('h1')?.textContent
+    || ''
+  return normalizeContextText(title)
+}
+
+function collectSelectedMethodSummary(targetMethod: string) {
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('.method-table tbody tr'))
+  const targetRow = rows.find((row) => targetMethod && normalizeContextText(row.textContent || '').includes(targetMethod))
+    || (selectedRowEl && selectedRowEl.closest('.method-table') ? selectedRowEl : null)
+  return targetRow ? summarizeRow(targetRow).slice(0, 300) : ''
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function buildPageContext(currentQuestion: string) {
   const parts = [`route=${route.fullPath}`]
   const pageTitle = document.title.trim()
@@ -1193,6 +1303,8 @@ function buildPageContext(currentQuestion: string) {
   if (liveSignals.value.filters.length) parts.push(`当前筛选:${liveSignals.value.filters.join('、')}`)
   if (liveSignals.value.tableSelection) parts.push(`当前选中行:${liveSignals.value.tableSelection}`)
   if (liveSignals.value.tableHover) parts.push(`当前悬停行:${liveSignals.value.tableHover}`)
+  const coverageSourceContext = collectCoverageSourceContext(currentQuestion)
+  if (coverageSourceContext) parts.push(coverageSourceContext)
   if (currentQuestion) parts.push(`当前问题:${currentQuestion}`)
   return parts.join('；')
 }
@@ -1769,6 +1881,7 @@ onBeforeUnmount(() => {
   line-height: 1.55;
   word-break: break-word;
   overflow-wrap: anywhere;
+  user-select: text;
 }
 
 .message.assistant .message-card {
@@ -1782,10 +1895,12 @@ onBeforeUnmount(() => {
 .message-text {
   color: inherit;
   white-space: pre-wrap;
+  user-select: text;
 }
 
 .markdown-message {
   white-space: normal;
+  user-select: text;
 }
 
 .markdown-message :deep(h1),

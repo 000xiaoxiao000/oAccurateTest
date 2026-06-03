@@ -60,6 +60,8 @@ public class AIAgentService {
 
     private static final int MAX_RELEVANT_TOOLS_PER_REQUEST = 8;
 
+    private static final String DEFAULT_MEMORY_SCOPE = "default";
+
     private static final List<DateTimeFormatter> LOCAL_DATE_FORMATTERS = Arrays.asList(
             DateTimeFormatter.ISO_LOCAL_DATE,
             DateTimeFormatter.ofPattern("yyyy/MM/dd"),
@@ -2389,12 +2391,14 @@ public class AIAgentService {
         StringBuilder enhanced = new StringBuilder();
 
         // 尝试获取会话上下文
-        ConversationMemoryService.ConversationSession activeSession = conversationMemory.getActiveSession(context.getUserId());
+        ConversationMemoryService.ConversationSession activeSession = conversationMemory.getActiveSession(
+                context.getUserId(), context.getProjectId(), getMemoryScope(context));
         if (activeSession != null && activeSession.getMessageCount() > 2) {
             String ctxSummary = conversationMemory.buildContextForLLM(activeSession.getSessionId(), 5);
             if (ctxSummary != null && !ctxSummary.isEmpty()) {
                 enhanced.append("[之前的对话上下文]\n").append(ctxSummary).append("\n\n");
-                logger.debug("Added conversation context for user {}", context.getUserId());
+                logger.debug("Added conversation context for user {} project {} scope {}",
+                        context.getUserId(), context.getProjectId(), getMemoryScope(context));
             }
         }
 
@@ -2407,6 +2411,10 @@ public class AIAgentService {
             enhanced.append("[当前页面上下文]\n").append(context.getPageContext()).append("\n");
             enhanced.append("[页面上下文使用要求]\n");
             enhanced.append("如果当前问题只给出方法名或部分类名，必须优先从当前页面上下文、覆盖率详情、代码关系页面或上一轮对话中识别真实类名/方法名；仍无法唯一确定时先说明无法确定，不要使用示例类、示例方法或猜测包名。\n\n");
+            if (context.getPageContext().contains("当前源码片段")) {
+                enhanced.append("[源码页上下文使用要求]\n");
+                enhanced.append("当前页面上下文已经包含用户正在查看的真实源码片段。遇到源码 Bug 检测、业务逻辑分析、方法调用或覆盖率问题时，必须优先基于该源码片段分析；工具无法读取源码时，不要声称完全无法分析，也不要编造源码之外的类名或方法名。\n\n");
+            }
         }
 
         enhanced.append("[当前问题]\n").append(question);
@@ -2602,16 +2610,18 @@ public class AIAgentService {
     }
 
     private String createOrGetSession(AgentContext context) {
-        ConversationMemoryService.ConversationSession existing = conversationMemory.getActiveSession(context.getUserId());
+        ConversationMemoryService.ConversationSession existing = conversationMemory.getActiveSession(
+                context.getUserId(), context.getProjectId(), getMemoryScope(context));
         if (existing != null) return existing.getSessionId();
-        return conversationMemory.createSession(context.getUserId(), context.getProjectId());
+        return conversationMemory.createSession(context.getUserId(), context.getProjectId(), getMemoryScope(context));
     }
 
     /**
      * 记录AI回复到对话记忆
      */
     public void recordAssistantResponse(AgentContext context, String answer) {
-        ConversationMemoryService.ConversationSession session = conversationMemory.getActiveSession(context.getUserId());
+        ConversationMemoryService.ConversationSession session = conversationMemory.getActiveSession(
+                context.getUserId(), context.getProjectId(), getMemoryScope(context));
         if (session != null) {
             conversationMemory.addAssistantMessage(session.getSessionId(), answer, null);
         }
@@ -2619,6 +2629,21 @@ public class AIAgentService {
 
     public String clearConversationMemory(String userId, String projectId) {
         return conversationMemory.clearUserProjectSessions(userId, projectId);
+    }
+
+    public String clearConversationMemory(String userId, String projectId, String memoryScope) {
+        return conversationMemory.clearUserProjectSessions(userId, projectId, normalizeMemoryScope(memoryScope));
+    }
+
+    private String getMemoryScope(AgentContext context) {
+        return context == null ? DEFAULT_MEMORY_SCOPE : normalizeMemoryScope(context.getMemoryScope());
+    }
+
+    private String normalizeMemoryScope(String memoryScope) {
+        if (memoryScope == null || memoryScope.trim().isEmpty()) {
+            return DEFAULT_MEMORY_SCOPE;
+        }
+        return memoryScope.trim().toLowerCase(Locale.ROOT);
     }
 
     // ==================== 公开访问接口 ====================

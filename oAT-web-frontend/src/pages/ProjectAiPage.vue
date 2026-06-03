@@ -1006,6 +1006,7 @@ async function askAiWithFallback(currentQuestion: string, assistantMessage: Sess
       sessionState: buildSessionState(),
       activeSessionId: activeSessionId.value,
       sessionSortMode: sessionSort.value,
+      memoryScope: 'workbench',
     })
     assistantMessage.text = reply.answer || reply.topic || 'AI 已返回结果，但没有可展示的文本。'
   }
@@ -1032,6 +1033,7 @@ async function askAiStreaming(currentQuestion: string, assistantMessage: Session
   body.set('sessionState', buildSessionState())
   body.set('activeSessionId', activeSessionId.value)
   body.set('sessionSortMode', sessionSort.value)
+  body.set('memoryScope', 'workbench')
   if (imageData.value) body.set('imageData', imageData.value)
   const response = await fetch(backendApiUrl(`/api/projects/${projectId.value}/ai/ask/stream`), {
     method: 'POST',

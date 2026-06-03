@@ -69,7 +69,8 @@ public class AIInteractiveApiControl {
                 request.getSessionState(),
                 request.getActiveSessionId(),
                 request.getSessionSortMode(),
-                request.getTimelineExpanded()
+                request.getTimelineExpanded(),
+                request.getMemoryScope()
         );
         return new ResultNotified<>(true, "分析完成", reply);
     }
@@ -84,9 +85,11 @@ public class AIInteractiveApiControl {
 
     @PostMapping("/session-state/clear")
     public ResultNotified<String> clearSessionState(@PathVariable String projectId,
-                                                    @SessionAttribute UserVo user) {
+                                                    @SessionAttribute UserVo user,
+                                                    @RequestBody(required = false) SessionStateRequest request) {
+        String memoryScope = request == null ? null : request.getMemoryScope();
         return new ResultNotified<>(true, "记忆已清空",
-                aiInteractiveService.clearSessionMemory(projectId, user));
+                aiInteractiveService.clearSessionMemory(projectId, user, memoryScope));
     }
 
     public static class AIInteractivePagePayload {
@@ -143,6 +146,7 @@ public class AIInteractiveApiControl {
         private String activeSessionId;
         private String sessionSortMode;
         private Boolean timelineExpanded;
+        private String memoryScope;
 
         public String getQuestion() { return question; }
         public void setQuestion(String question) { this.question = question; }
@@ -158,12 +162,17 @@ public class AIInteractiveApiControl {
         public void setSessionSortMode(String sessionSortMode) { this.sessionSortMode = sessionSortMode; }
         public Boolean getTimelineExpanded() { return timelineExpanded; }
         public void setTimelineExpanded(Boolean timelineExpanded) { this.timelineExpanded = timelineExpanded; }
+        public String getMemoryScope() { return memoryScope; }
+        public void setMemoryScope(String memoryScope) { this.memoryScope = memoryScope; }
     }
 
     public static class SessionStateRequest {
         private String sessionState;
+        private String memoryScope;
 
         public String getSessionState() { return sessionState; }
         public void setSessionState(String sessionState) { this.sessionState = sessionState; }
+        public String getMemoryScope() { return memoryScope; }
+        public void setMemoryScope(String memoryScope) { this.memoryScope = memoryScope; }
     }
 }

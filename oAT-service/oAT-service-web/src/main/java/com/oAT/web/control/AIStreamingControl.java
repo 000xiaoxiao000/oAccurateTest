@@ -49,6 +49,7 @@ public class AIStreamingControl {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final Long SSE_TIMEOUT = 300_000L; // 5分钟
+    private static final String DEFAULT_STREAM_MEMORY_SCOPE = "workbench";
 
     private final ExecutorService sseExecutor = Executors.newFixedThreadPool(10);
 
@@ -67,7 +68,8 @@ public class AIStreamingControl {
                                    @SessionAttribute UserVo user,
                                    @RequestParam String question,
                                    @RequestParam(required = false) String pageContext,
-                                   @RequestParam(required = false) String imageData) {
+                                   @RequestParam(required = false) String imageData,
+                                   @RequestParam(required = false) String memoryScope) {
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
         AtomicBoolean completed = new AtomicBoolean(false);
@@ -92,6 +94,7 @@ public class AIStreamingControl {
 
                 // 3. 设置上下文
                 AgentContext context = new AgentContext(projectId, user.getId(), user.getName());
+                context.setMemoryScope(normalizeMemoryScope(memoryScope));
                 if (pageContext != null) {
                     context.setPageContext(pageContext);
                 }
@@ -528,6 +531,14 @@ public class AIStreamingControl {
         payload.put("phase", phase);
         payload.put("message", message);
         sendJsonEvent(emitter, "status", payload);
+    }
+
+    private String normalizeMemoryScope(String memoryScope) {
+        if (memoryScope == null || memoryScope.trim().isEmpty()) {
+            return DEFAULT_STREAM_MEMORY_SCOPE;
+        }
+        String sanitized = memoryScope.trim().toLowerCase().replaceAll("[^a-z0-9_-]", "");
+        return sanitized.isEmpty() ? DEFAULT_STREAM_MEMORY_SCOPE : sanitized;
     }
 
     private void emitFallbackToolEvents(SseEmitter emitter) throws IOException {

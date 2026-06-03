@@ -849,6 +849,7 @@ export function askAiInteractive(
     activeSessionId?: string
     sessionSortMode?: string
     timelineExpanded?: boolean
+    memoryScope?: 'workbench' | 'assistant'
   },
 ) {
   return apiPost<AIInteractiveReply>(`/api/projects/${projectId}/ai/ask`, JSON.stringify(payload), 'application/json')
@@ -862,8 +863,12 @@ export function saveAiSessionState(projectId: string, sessionState: string) {
   )
 }
 
-export function clearAiSessionState(projectId: string) {
-  return apiPost<string>(`/api/projects/${projectId}/ai/session-state/clear`, '', 'application/json')
+export function clearAiSessionState(projectId: string, memoryScope: 'workbench' | 'assistant' = 'workbench') {
+  return apiPost<string>(
+    `/api/projects/${projectId}/ai/session-state/clear`,
+    JSON.stringify({ memoryScope }),
+    'application/json',
+  )
 }
 
 export function submitAiFeedback(payload: AIFeedbackPayload) {

@@ -47,6 +47,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     private static final String[] MASCOT_MOODS = {"专注", "活跃", "机敏", "稳健", "可靠"};
     private static final String SESSION_STORE_KEY_PREFIX = "oAT:ai-interactive:v1:sessions:";
     private static final String LEGACY_SESSION_STORE_KEY_PREFIX = "oAT:ai-interactive:sessions:";
+    private static final String MEMORY_SCOPE_WORKBENCH = "workbench";
     private static final long SESSION_STORE_TTL_DAYS = 30L;
     private static final String SESSION_LOG_PREFIX = "[AI-INTERACTIVE-SESSION]";
     private static final AtomicLong SESSION_RESTORE_COUNTER = new AtomicLong();
@@ -95,7 +96,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         page.setAppNames(apps.stream().map(AppVo::getName).collect(Collectors.toList()));
         page.setMascotHint(buildMascotHint(project, apps));
         page.setQuickLinks(buildQuickLinks(projectId, apps, new RouteContext("project", "project.overview")));
-        page.setSessionState(loadSessionState(projectId, user));
+        page.setSessionState(loadSessionState(projectId, user, MEMORY_SCOPE_WORKBENCH));
         page.setMascot(mascot);
         page.setAiTimeout(aiTimeout);
         return page;
@@ -104,7 +105,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     @Override
     public AIInteractiveReplyVo ask(String projectId, UserVo user, String question, String pageContext, String imageData,
                                     String sessionState, String activeSessionId, String sessionSortMode,
-                                    Boolean timelineExpanded) {
+                                    Boolean timelineExpanded, String memoryScope) {
         long startTime = System.currentTimeMillis();
         ProjectVo project = projectService.getProject(projectId);
         List<AppVo> apps = loadApps(projectId);
@@ -119,7 +120,8 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         reply.setQuestion(cleanQuestion);
         reply.setTopic(routeContext.topicKey);
 
-        String answer = callAIAgent(project, apps, user, cleanQuestion, contextSummary, imageData);
+        String normalizedMemoryScope = normalizeMemoryScope(memoryScope);
+        String answer = callAIAgent(project, apps, user, cleanQuestion, contextSummary, imageData, normalizedMemoryScope);
         reply.setAnswer(answer);
 
         long responseTime = System.currentTimeMillis() - startTime;
@@ -131,7 +133,9 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         reply.setSuggestions(buildFollowUpSuggestions(apps, routeContext));
         reply.setQuickLinks(buildQuickLinks(projectId, apps, routeContext));
         reply.setActions(buildActions(projectId, apps, cleanQuestion, contextSummary, routeContext));
-        reply.setSessionState(loadSessionState(projectId, user));
+        if (MEMORY_SCOPE_WORKBENCH.equals(normalizedMemoryScope)) {
+            reply.setSessionState(loadSessionState(projectId, user, normalizedMemoryScope));
+        }
         return reply;
     }
 
@@ -140,9 +144,9 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         if (!StringUtils.hasText(sessionState)) {
             logger.info("{} action=save status=skipped projectId={} userId={} reason=empty_payload", SESSION_LOG_PREFIX,
                     projectId, user.getId());
-            return loadSessionState(projectId, user);
+            return loadSessionState(projectId, user, MEMORY_SCOPE_WORKBENCH);
         }
-        String cacheKey = buildSessionStoreKey(projectId, user.getId());
+        String cacheKey = buildSessionStoreKey(projectId, user.getId(), MEMORY_SCOPE_WORKBENCH);
         redisTemplate.opsForValue().set(cacheKey, sessionState, SESSION_STORE_TTL_DAYS, TimeUnit.DAYS);
         long saveCount = SESSION_SAVE_COUNTER.incrementAndGet();
         logger.info("{} action=save status=success projectId={} userId={} payloadLength={} ttlDays={} saveCount={}",
@@ -152,22 +156,31 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
     @Override
     public String clearSessionMemory(String projectId, UserVo user) {
+        return clearSessionMemory(projectId, user, MEMORY_SCOPE_WORKBENCH);
+    }
+
+    @Override
+    public String clearSessionMemory(String projectId, UserVo user, String memoryScope) {
         if (user == null || !StringUtils.hasText(projectId)) {
             return "";
         }
+        String normalizedMemoryScope = normalizeMemoryScope(memoryScope);
         if (aiAgentService != null) {
-            aiAgentService.clearConversationMemory(user.getId(), projectId);
+            aiAgentService.clearConversationMemory(user.getId(), projectId, normalizedMemoryScope);
         }
-        String cacheKey = buildSessionStoreKey(projectId, user.getId());
-        String legacyCacheKey = buildLegacySessionStoreKey(projectId, user.getId());
-        redisTemplate.delete(cacheKey);
-        redisTemplate.delete(legacyCacheKey);
-        logger.info("{} action=clear status=success projectId={} userId={}", SESSION_LOG_PREFIX, projectId, user.getId());
+        if (MEMORY_SCOPE_WORKBENCH.equals(normalizedMemoryScope)) {
+            String cacheKey = buildSessionStoreKey(projectId, user.getId(), normalizedMemoryScope);
+            String legacyCacheKey = buildLegacySessionStoreKey(projectId, user.getId());
+            redisTemplate.delete(cacheKey);
+            redisTemplate.delete(legacyCacheKey);
+        }
+        logger.info("{} action=clear status=success projectId={} userId={} scope={}",
+                SESSION_LOG_PREFIX, projectId, user.getId(), normalizedMemoryScope);
         return "";
     }
 
     private String callAIAgent(ProjectVo project, List<AppVo> apps, UserVo user,
-                               String question, String pageContext, String imageData) {
+                               String question, String pageContext, String imageData, String memoryScope) {
         if (aiAgentService == null) {
             logger.warn("AI Agent bean is not available in Spring context");
             return "AI 服务暂不可用：AI Agent Bean 未加载，请检查模块装配与 Spring 配置。";
@@ -179,6 +192,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
 
         try {
             AgentContext context = new AgentContext(project.getId(), user.getId(), user.getName());
+            context.setMemoryScope(memoryScope);
             logger.info("Calling AI Agent for question: {} (hasImage: {})", question, StringUtils.hasText(imageData));
 
             if (StringUtils.hasText(imageData)) {
@@ -648,34 +662,58 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
     }
 
     private String loadSessionState(String projectId, UserVo user) {
-        String cacheKey = buildSessionStoreKey(projectId, user.getId());
+        return loadSessionState(projectId, user, MEMORY_SCOPE_WORKBENCH);
+    }
+
+    private String loadSessionState(String projectId, UserVo user, String memoryScope) {
+        String normalizedMemoryScope = normalizeMemoryScope(memoryScope);
+        String cacheKey = buildSessionStoreKey(projectId, user.getId(), normalizedMemoryScope);
         Object stored = redisTemplate.opsForValue().get(cacheKey);
         if (stored instanceof String && StringUtils.hasText((String) stored)) {
             long restoreCount = SESSION_RESTORE_COUNTER.incrementAndGet();
-            logger.info("{} action=restore status=hit source=current projectId={} userId={} payloadLength={} restoreCount={}",
-                    SESSION_LOG_PREFIX, projectId, user.getId(), ((String) stored).length(), restoreCount);
+            logger.info("{} action=restore status=hit source=current projectId={} userId={} scope={} payloadLength={} restoreCount={}",
+                    SESSION_LOG_PREFIX, projectId, user.getId(), normalizedMemoryScope, ((String) stored).length(), restoreCount);
             return (String) stored;
         }
 
         String legacyCacheKey = buildLegacySessionStoreKey(projectId, user.getId());
-        Object legacyStored = redisTemplate.opsForValue().get(legacyCacheKey);
+        Object legacyStored = MEMORY_SCOPE_WORKBENCH.equals(normalizedMemoryScope)
+                ? redisTemplate.opsForValue().get(legacyCacheKey)
+                : null;
         if (legacyStored instanceof String && StringUtils.hasText((String) legacyStored)) {
             String migratedPayload = (String) legacyStored;
             redisTemplate.opsForValue().set(cacheKey, migratedPayload, SESSION_STORE_TTL_DAYS, TimeUnit.DAYS);
             long restoreCount = SESSION_RESTORE_COUNTER.incrementAndGet();
-            logger.info("{} action=restore status=hit source=legacy_migrated projectId={} userId={} payloadLength={} restoreCount={} ttlDays={}",
-                    SESSION_LOG_PREFIX, projectId, user.getId(), migratedPayload.length(), restoreCount, SESSION_STORE_TTL_DAYS);
+            logger.info("{} action=restore status=hit source=legacy_migrated projectId={} userId={} scope={} payloadLength={} restoreCount={} ttlDays={}",
+                    SESSION_LOG_PREFIX, projectId, user.getId(), normalizedMemoryScope, migratedPayload.length(), restoreCount, SESSION_STORE_TTL_DAYS);
             return migratedPayload;
         }
 
         long missCount = SESSION_MISS_COUNTER.incrementAndGet();
-        logger.info("{} action=restore status=miss source=all projectId={} userId={} missCount={}",
-                SESSION_LOG_PREFIX, projectId, user.getId(), missCount);
+        logger.info("{} action=restore status=miss source=all projectId={} userId={} scope={} missCount={}",
+                SESSION_LOG_PREFIX, projectId, user.getId(), normalizedMemoryScope, missCount);
         return "";
     }
 
     private String buildSessionStoreKey(String projectId, String userId) {
-        return SESSION_STORE_KEY_PREFIX + projectId + ":" + userId;
+        return buildSessionStoreKey(projectId, userId, MEMORY_SCOPE_WORKBENCH);
+    }
+
+    private String buildSessionStoreKey(String projectId, String userId, String memoryScope) {
+        String normalizedMemoryScope = normalizeMemoryScope(memoryScope);
+        if (MEMORY_SCOPE_WORKBENCH.equals(normalizedMemoryScope)) {
+            return SESSION_STORE_KEY_PREFIX + projectId + ":" + userId;
+        }
+        return SESSION_STORE_KEY_PREFIX + projectId + ":" + userId + ":" + normalizedMemoryScope;
+    }
+
+    private String normalizeMemoryScope(String memoryScope) {
+        if (!StringUtils.hasText(memoryScope)) {
+            return MEMORY_SCOPE_WORKBENCH;
+        }
+        String normalized = memoryScope.trim().toLowerCase();
+        String sanitized = normalized.replaceAll("[^a-z0-9_-]", "");
+        return StringUtils.hasText(sanitized) ? sanitized : MEMORY_SCOPE_WORKBENCH;
     }
 
     private String buildLegacySessionStoreKey(String projectId, String userId) {

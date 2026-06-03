@@ -29,7 +29,7 @@ public class ConversationMemoryService {
     /** 会话存储：sessionId -> ConversationSession */
     private final ConcurrentHashMap<String, ConversationSession> sessions = new ConcurrentHashMap<>();
 
-    /** 用户活跃会话：userId -> sessionId（最近一次使用的会话） */
+    /** 用户活跃会话：userId:projectId:memoryScope -> sessionId（最近一次使用的会话） */
     private final ConcurrentHashMap<String, String> userActiveSession = new ConcurrentHashMap<>();
 
     /** 最大消息轮数 */
@@ -58,11 +58,24 @@ public class ConversationMemoryService {
      * @return 新会话ID
      */
     public String createSession(String userId, String projectId) {
+        return createSession(userId, projectId, null);
+    }
+
+    /**
+     * 创建新会话
+     *
+     * @param userId      用户ID
+     * @param projectId   项目ID
+     * @param memoryScope 记忆作用域
+     * @return 新会话ID
+     */
+    public String createSession(String userId, String projectId, String memoryScope) {
         String sessionId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-        ConversationSession session = new ConversationSession(sessionId, userId, projectId);
+        ConversationSession session = new ConversationSession(sessionId, userId, projectId, normalizeMemoryScope(memoryScope));
         sessions.put(sessionId, session);
-        userActiveSession.put(userId, sessionId);
-        logger.info("Created conversation session: {} for user:{} project:{}", sessionId, userId, projectId);
+        userActiveSession.put(buildActiveSessionKey(userId, projectId, memoryScope), sessionId);
+        logger.info("Created conversation session: {} for user:{} project:{} scope:{}",
+                sessionId, userId, projectId, session.getMemoryScope());
         return sessionId;
     }
 
@@ -70,7 +83,26 @@ public class ConversationMemoryService {
      * 获取用户的活跃会话
      */
     public ConversationSession getActiveSession(String userId) {
-        String sessionId = userActiveSession.get(userId);
+        if (userId == null) {
+            return null;
+        }
+        String userPrefix = safeKeyPart(userId) + ":";
+        for (Map.Entry<String, String> entry : userActiveSession.entrySet()) {
+            if (entry.getKey().startsWith(userPrefix)) {
+                ConversationSession session = sessions.get(entry.getValue());
+                if (session != null) {
+                    return session;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取指定用户、项目和作用域的活跃会话
+     */
+    public ConversationSession getActiveSession(String userId, String projectId, String memoryScope) {
+        String sessionId = userActiveSession.get(buildActiveSessionKey(userId, projectId, memoryScope));
         return sessionId != null ? sessions.get(sessionId) : null;
     }
 
@@ -168,9 +200,18 @@ public class ConversationMemoryService {
      * 清空指定用户在指定项目下的全部会话记忆，并返回新的空会话
      */
     public synchronized String clearUserProjectSessions(String userId, String projectId) {
+        return clearUserProjectSessions(userId, projectId, null);
+    }
+
+    /**
+     * 清空指定用户在指定项目和作用域下的全部会话记忆，并返回新的空会话
+     */
+    public synchronized String clearUserProjectSessions(String userId, String projectId, String memoryScope) {
         if (userId == null || projectId == null) {
             return null;
         }
+
+        String normalizedScope = memoryScope == null ? null : normalizeMemoryScope(memoryScope);
 
         List<String> sessionIdsToRemove = new ArrayList<>();
         for (Map.Entry<String, ConversationSession> entry : sessions.entrySet()) {
@@ -178,7 +219,9 @@ public class ConversationMemoryService {
             if (session == null) {
                 continue;
             }
-            if (userId.equals(session.getUserId()) && projectId.equals(session.getProjectId())) {
+            if (userId.equals(session.getUserId())
+                    && projectId.equals(session.getProjectId())
+                    && (normalizedScope == null || normalizedScope.equals(session.getMemoryScope()))) {
                 sessionIdsToRemove.add(entry.getKey());
             }
         }
@@ -187,7 +230,7 @@ public class ConversationMemoryService {
             deleteSession(sessionId);
         }
 
-        return createSession(userId, projectId);
+        return createSession(userId, projectId, normalizedScope);
     }
 
     /**
@@ -304,6 +347,21 @@ public class ConversationMemoryService {
         return text.length() > maxLength ? text.substring(0, maxLength) + "..." : text;
     }
 
+    private String buildActiveSessionKey(String userId, String projectId, String memoryScope) {
+        return safeKeyPart(userId) + ":" + safeKeyPart(projectId) + ":" + normalizeMemoryScope(memoryScope);
+    }
+
+    private String normalizeMemoryScope(String memoryScope) {
+        if (memoryScope == null || memoryScope.trim().isEmpty()) {
+            return "default";
+        }
+        return memoryScope.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String safeKeyPart(String value) {
+        return value == null || value.trim().isEmpty() ? "default" : value.trim();
+    }
+
     // ==================== 内部类 ====================
 
     /**
@@ -313,6 +371,7 @@ public class ConversationMemoryService {
         private final String sessionId;
         private final String userId;
         private final String projectId;
+        private final String memoryScope;
         private final List<MessageRecord> messages = new ArrayList<>();
         private final List<String> intents = new ArrayList<>(10); // 最近意图（环形缓冲）
         private volatile String summary;
@@ -320,9 +379,14 @@ public class ConversationMemoryService {
         private volatile long lastActiveTime;
 
         ConversationSession(String sessionId, String userId, String projectId) {
+            this(sessionId, userId, projectId, "default");
+        }
+
+        ConversationSession(String sessionId, String userId, String projectId, String memoryScope) {
             this.sessionId = sessionId;
             this.userId = userId;
             this.projectId = projectId;
+            this.memoryScope = memoryScope;
             this.createTime = System.currentTimeMillis();
             this.lastActiveTime = this.createTime;
         }
@@ -372,6 +436,7 @@ public class ConversationMemoryService {
         String getSessionId() { return sessionId; }
         String getUserId() { return userId; }
         String getProjectId() { return projectId; }
+        String getMemoryScope() { return memoryScope; }
         long getLastActiveTime() { return lastActiveTime; }
         long getCreateTime() { return createTime; }
     }

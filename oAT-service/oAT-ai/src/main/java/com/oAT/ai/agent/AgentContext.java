@@ -32,6 +32,11 @@ public class AgentContext implements Serializable {
     private String pageContext;
 
     /**
+     * 对话记忆作用域，用于隔离不同 AI 入口的上下文记忆。
+     */
+    private String memoryScope;
+
+    /**
      * 当前页面数据摘要（用于增强AI理解）
      * 例如: "当前查看的是user-service应用的覆盖率报告，行覆盖率75%"
      */
@@ -125,6 +130,14 @@ public class AgentContext implements Serializable {
         this.pageContext = pageContext;
     }
 
+    public String getMemoryScope() {
+        return memoryScope;
+    }
+
+    public void setMemoryScope(String memoryScope) {
+        this.memoryScope = memoryScope;
+    }
+
     public String getPageDataSummary() {
         return pageDataSummary;
     }
@@ -156,6 +169,7 @@ public class AgentContext implements Serializable {
                 ", userId='" + userId + '\'' +
                 ", userName='" + userName + '\'' +
                 ", pageContext='" + pageContext + '\'' +
+                ", memoryScope='" + memoryScope + '\'' +
                 ", pageDataSummary='" + pageDataSummary + '\'' +
                 ", selectedEntityId='" + selectedEntityId + '\'' +
                 ", selectedEntityName='" + selectedEntityName + '\'' +
