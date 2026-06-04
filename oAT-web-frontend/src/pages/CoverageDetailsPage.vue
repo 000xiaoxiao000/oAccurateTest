@@ -76,6 +76,17 @@
         </div>
         <div class="table-shell">
           <table class="report-table class-table">
+            <colgroup>
+              <col class="col-name" />
+              <col class="col-method-count" />
+              <col class="col-method-rate" />
+              <col class="col-branch-count" />
+              <col class="col-branch-rate" />
+              <col class="col-line-count" />
+              <col class="col-line-rate" />
+              <col class="col-complexity" />
+              <col class="col-action" />
+            </colgroup>
             <thead>
               <tr>
                 <th>类名</th>
@@ -97,11 +108,11 @@
                   <span class="class-name">{{ item.className }}</span>
                 </td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
-                <td :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
+                <td class="coverage-rate" :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
                 <td>{{ item.coveredBranchTargets }} / {{ item.totalBranchTargets }}</td>
-                <td :class="rateTone(item.branchRate, item.totalBranchTargets)">{{ item.totalBranchTargets > 0 ? percent(item.branchRate) : 'N/A' }}</td>
+                <td class="coverage-rate" :class="rateTone(item.branchRate, item.totalBranchTargets)">{{ item.totalBranchTargets > 0 ? percent(item.branchRate) : 'N/A' }}</td>
                 <td>{{ item.coveredLines }} / {{ item.totalLines }}</td>
-                <td :class="rateTone(item.lineRate)">{{ percent(item.lineRate) }}</td>
+                <td class="coverage-rate" :class="rateTone(item.lineRate)">{{ percent(item.lineRate) }}</td>
                 <td>{{ item.totalComplexity }}</td>
                 <td>
                   <RouterLink class="table-link code-link" :to="buildCodeRoute(item.className)">代码</RouterLink>
@@ -128,6 +139,16 @@
         </div>
         <div class="table-shell">
           <table class="report-table tree-table">
+            <colgroup>
+              <col class="col-name" />
+              <col class="col-method-count" />
+              <col class="col-method-rate" />
+              <col class="col-branch-count" />
+              <col class="col-branch-rate" />
+              <col class="col-line-count" />
+              <col class="col-line-rate" />
+              <col class="col-complexity" />
+            </colgroup>
             <thead>
               <tr>
                 <th>包/类</th>
@@ -152,11 +173,11 @@
                   <RouterLink v-if="row.type === 'class'" class="code-link" :to="buildCodeRoute(row.fullName || row.name)">代码</RouterLink>
                 </td>
                 <td>{{ row.coveredMethods }} / {{ row.totalMethods }}</td>
-                <td :class="rateTone(row.methodRate)">{{ percent(row.methodRate) }}</td>
+                <td class="coverage-rate" :class="rateTone(row.methodRate)">{{ percent(row.methodRate) }}</td>
                 <td>{{ row.coveredBranchTargets }} / {{ row.totalBranchTargets }}</td>
-                <td :class="rateTone(row.branchRate, row.totalBranchTargets)">{{ row.totalBranchTargets > 0 ? percent(row.branchRate) : 'N/A' }}</td>
+                <td class="coverage-rate" :class="rateTone(row.branchRate, row.totalBranchTargets)">{{ row.totalBranchTargets > 0 ? percent(row.branchRate) : 'N/A' }}</td>
                 <td>{{ row.coveredLines }} / {{ row.totalLines }}</td>
-                <td :class="rateTone(row.lineRate)">{{ percent(row.lineRate) }}</td>
+                <td class="coverage-rate" :class="rateTone(row.lineRate)">{{ percent(row.lineRate) }}</td>
                 <td>{{ row.totalComplexity }}</td>
               </tr>
             </tbody>
@@ -681,7 +702,7 @@ onMounted(() => {
 
 .report-table {
   width: 100%;
-  min-width: 1040px;
+  min-width: 1200px;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -711,25 +732,52 @@ onMounted(() => {
   table-layout: fixed;
 }
 
-.class-table th:first-child,
-.class-table td:first-child {
-  width: 34%;
-}
-
-.class-table th:last-child,
-.class-table td:last-child {
-  width: 8%;
-}
-
-.class-table th:not(:first-child):not(:last-child),
-.class-table td:not(:first-child):not(:last-child) {
-  width: 9.7%;
+.class-table th:not(:first-child),
+.class-table td:not(:first-child),
+.tree-table th:not(:first-child),
+.tree-table td:not(:first-child) {
   text-align: center;
 }
 
-.class-table th:last-child,
-.class-table td:last-child {
-  text-align: center;
+.class-table .col-name {
+  width: 32%;
+}
+
+.tree-table .col-name {
+  width: 37.5%;
+}
+
+.class-table .col-method-count,
+.class-table .col-branch-count,
+.tree-table .col-method-count,
+.tree-table .col-branch-count {
+  width: 9.5%;
+}
+
+.class-table .col-line-count,
+.tree-table .col-line-count {
+  width: 10.5%;
+}
+
+.class-table .col-method-rate,
+.class-table .col-branch-rate,
+.tree-table .col-method-rate,
+.tree-table .col-branch-rate {
+  width: 8.5%;
+}
+
+.class-table .col-line-rate,
+.tree-table .col-line-rate {
+  width: 9%;
+}
+
+.class-table .col-complexity,
+.tree-table .col-complexity {
+  width: 7%;
+}
+
+.class-table .col-action {
+  width: 5.5%;
 }
 
 .class-table td,
@@ -750,21 +798,6 @@ onMounted(() => {
   vertical-align: middle;
 }
 
-.tree-table {
-  min-width: 1120px;
-}
-
-.tree-table th:first-child,
-.tree-table td:first-child {
-  width: 34%;
-}
-
-.tree-table th:not(:first-child),
-.tree-table td:not(:first-child) {
-  width: 9.4%;
-  text-align: center;
-}
-
 .tree-table td {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -774,6 +807,11 @@ onMounted(() => {
 .tree-table .package-row {
   background: #f9fafb;
   font-weight: 800;
+}
+
+.report-table .coverage-rate {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .tree-fold {
@@ -813,11 +851,11 @@ onMounted(() => {
   margin-left: 0;
 }
 
-.positive {
+.report-table .positive {
   color: #047857;
 }
 
-.negative {
+.report-table .negative {
   color: #b91c1c;
 }
 

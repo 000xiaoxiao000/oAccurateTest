@@ -185,6 +185,9 @@ public class CompactDataInput {
         Map<String, Boolean> recursiveMap = info.getRecursiveMap();
         Map<String, Boolean> asyncMap = info.getAsyncMethodMap();
 
+        CLASS_STATIC_INFO.computeIfAbsent(finalClassName,
+                k -> new ClassStaticInfo(info.getClassId(), finalClassName));
+
         for (Map.Entry<String, Set<Integer>> entry : methodLineNumberMap.entrySet()) {
             String fullKey = entry.getKey();
             Set<Integer> lineNums = entry.getValue();
@@ -212,8 +215,7 @@ public class CompactDataInput {
                 continue;
             }
 
-            ClassStaticInfo cInfo = CLASS_STATIC_INFO.computeIfAbsent(finalClassName,
-                    k -> new ClassStaticInfo(info.getClassId(), finalClassName));
+            ClassStaticInfo cInfo = CLASS_STATIC_INFO.get(finalClassName);
 
             Map<Integer, Set<Integer>> methodBranchTargets = buildMethodBranchTargets(
                     shortMethodKey, lineNums, branchMap, branchTargetMap, info);

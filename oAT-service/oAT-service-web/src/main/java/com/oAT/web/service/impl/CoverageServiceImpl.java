@@ -287,10 +287,6 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             appendStaticClassCoverage(classCov, classInfo, incrementalDiffMap);
         }
 
-        if (normalizeReportType(reportType) != REPORT_TYPE_VERSION_FULL) {
-            coverageMap.entrySet().removeIf(entry -> entry.getValue().getTotalLines() <= 0);
-        }
-
         if (coverageMap.isEmpty()) {
              throw new RuntimeException("筛选后没有可覆盖的代码行，无法生成报告。");
         }
