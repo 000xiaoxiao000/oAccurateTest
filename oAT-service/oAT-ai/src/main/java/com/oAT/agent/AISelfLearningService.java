@@ -52,6 +52,15 @@ public class AISelfLearningService {
     /** 优化建议队列 */
     private final List<OptimizationSuggestion> suggestions = Collections.synchronizedList(new ArrayList<>());
 
+    /** 已被用户清空的建议 ID：同一批反馈下刷新报告不再重新生成 */
+    private final Set<String> clearedSuggestionIds = ConcurrentHashMap.newKeySet();
+
+    /** 反馈版本号：收到新反馈后解除清空抑制 */
+    private volatile long feedbackRevision = 0;
+
+    /** 最近一次清空建议时的反馈版本号 */
+    private volatile long suggestionsClearedRevision = -1;
+
     /** 定时任务调度器 */
     private final ScheduledExecutorService scheduler =
             Executors.newScheduledThreadPool(2, r -> {
@@ -90,6 +99,9 @@ public class AISelfLearningService {
      */
     public void onNewFeedback(FeedbackPersistenceService.FeedbackRecord record) {
         if (record == null || record.getQuestion() == null) return;
+
+        feedbackRevision++;
+        clearedSuggestionIds.clear();
 
         if (record.getTopic() == null || record.getTopic().trim().isEmpty()) {
             inferTopic(record);
@@ -256,6 +268,13 @@ public class AISelfLearningService {
         return report;
     }
 
+    /**
+     * 获取当前学习报告，不触发新一轮学习，供前端刷新面板使用。
+     */
+    public LearningReport getCurrentReport() {
+        return buildReport();
+    }
+
     private void learnToolWeightsFromRecords(List<FeedbackPersistenceService.FeedbackRecord> records) {
         if (toolRecommender == null || records == null) {
             return;
@@ -299,6 +318,24 @@ public class AISelfLearningService {
     public List<OptimizationSuggestion> getSuggestions() {
         synchronized (suggestions) {
             return new ArrayList<>(suggestions);
+        }
+    }
+
+    /**
+     * 清空当前优化建议缓存，不删除用户反馈与学习统计。
+     */
+    public int clearSuggestions() {
+        synchronized (suggestions) {
+            int count = suggestions.size();
+            clearedSuggestionIds.clear();
+            for (OptimizationSuggestion suggestion : suggestions) {
+                if (suggestion != null && suggestion.id != null) {
+                    clearedSuggestionIds.add(suggestion.id);
+                }
+            }
+            suggestionsClearedRevision = feedbackRevision;
+            suggestions.clear();
+            return count;
         }
     }
 
@@ -496,7 +533,8 @@ public class AISelfLearningService {
             suggestions.removeIf(s ->
                 s.id.startsWith("topic_quality_") ||
                 s.id.startsWith("pattern_hash_") ||
-                s.id.startsWith("failure_pattern_"));
+                s.id.startsWith("failure_pattern_") ||
+                s.id.startsWith("pattern_"));
         }
         
         // 1. 低满意度主题检测
@@ -516,7 +554,7 @@ public class AISelfLearningService {
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                 .limit(3)
                 .forEach(e -> {
-                    if (e.getValue() >= 2) {
+                    if (e.getValue() >= 1) {
                         String patternId = "pattern_hash_" + e.getKey().hashCode();
                         addSuggestion(OptimizationSuggestion.Priority.MEDIUM,
                                 "需要关注的失败模式",
@@ -541,17 +579,30 @@ public class AISelfLearningService {
                     entry.getValue().satisfactionRate());
         }
 
-        // 清理旧建议（保留最近20条）
-        synchronized (suggestions) {
-            while (suggestions.size() > 20) {
-                suggestions.remove(0);
-            }
-        }
-
-        // 将当前建议列表附到报告中
-        report.suggestions = getSuggestions();
+        // 清理旧建议（保留最近20条）并按 ID 去重，避免旧版本 pattern_N 建议残留
+        report.suggestions = normalizeSuggestions();
+        report.suggestionsGenerated = report.suggestions.size();
 
         return report;
+    }
+
+    private List<OptimizationSuggestion> normalizeSuggestions() {
+        synchronized (suggestions) {
+            LinkedHashMap<String, OptimizationSuggestion> unique = new LinkedHashMap<>();
+            for (OptimizationSuggestion suggestion : suggestions) {
+                if (suggestion == null || suggestion.id == null) {
+                    continue;
+                }
+                unique.put(suggestion.id, suggestion);
+            }
+            suggestions.clear();
+            suggestions.addAll(unique.values());
+            suggestions.sort(Comparator.comparingLong((OptimizationSuggestion s) -> s.createdTime).reversed());
+            while (suggestions.size() > 20) {
+                suggestions.remove(suggestions.size() - 1);
+            }
+            return new ArrayList<>(suggestions);
+        }
     }
 
     private String extractPattern(String question) {
@@ -627,10 +678,19 @@ public class AISelfLearningService {
 
     private void addSuggestion(OptimizationSuggestion.Priority priority,
                               String title, String description, String id) {
+        if (isSuggestionCleared(id)) {
+            return;
+        }
         synchronized (suggestions) {
             suggestions.removeIf(s -> id.equals(s.id));
             suggestions.add(new OptimizationSuggestion(priority, title, description, id));
         }
+    }
+
+    private boolean isSuggestionCleared(String id) {
+        return id != null
+                && suggestionsClearedRevision == feedbackRevision
+                && clearedSuggestionIds.contains(id);
     }
 
     private void startPeriodicLearning() {

@@ -202,12 +202,35 @@ public class AIFeedbackControl {
             }
 
             AISelfLearningService.LearningReport report = selfLearning.runLearningCycle();
-            report.suggestions = selfLearning.getSuggestions();
 
-            return new ResultNotified<>(true, "学习报告已生成", (Serializable) report);
+            return new ResultNotified<>(true, "学习报告已刷新", (Serializable) report);
         } catch (Exception e) {
             logger.error("Failed to generate learning report", e);
             return new ResultNotified<>(false, "生成学习报告失败：" + e.getMessage());
+        }
+    }
+
+    /**
+     * 清空 AI 自主学习优化建议（不删除反馈记录）
+     */
+    @RequestMapping(value = "/learning-suggestions/clear", method = {RequestMethod.GET, RequestMethod.POST})
+    @ResponseBody
+    public ResultNotified<?> clearLearningSuggestions() {
+        try {
+            if (aiAgentService == null) {
+                return new ResultNotified<>(false, "AI服务不可用");
+            }
+            AISelfLearningService selfLearning = aiAgentService.getSelfLearningService();
+            if (selfLearning == null) {
+                return new ResultNotified<>(false, "自主学习服务未初始化");
+            }
+            int cleared = selfLearning.clearSuggestions();
+            Map<String, Object> result = new HashMap<>();
+            result.put("cleared", cleared);
+            return new ResultNotified<>(true, "优化建议已清空", (Serializable) result);
+        } catch (Exception e) {
+            logger.error("Failed to clear learning suggestions", e);
+            return new ResultNotified<>(false, "清空优化建议失败：" + e.getMessage());
         }
     }
 

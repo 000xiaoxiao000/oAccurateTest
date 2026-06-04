@@ -176,7 +176,10 @@
             <div v-if="learningReport?.suggestions?.length" class="learning-suggestions">
               <div class="learning-suggestions-header">
                 <h3>优化建议</h3>
-                <span class="muted">{{ learningReport.suggestions.length }} 条</span>
+                <div class="learning-suggestions-actions">
+                  <span class="muted">{{ learningReport.suggestions.length }} 条</span>
+                  <button class="ghost-button small" type="button" :disabled="learningLoading" @click="clearLearningSuggestions">清空</button>
+                </div>
               </div>
               <div class="learning-suggestions-list">
                 <article v-for="item in learningReport.suggestions" :key="item.id" class="learning-suggestion" :class="item.priority.toLowerCase()">
@@ -454,7 +457,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { fetchAiFeedbackStats, fetchAiLearningReport, submitAiFeedback } from '@/api/bootstrap'
+import { clearAiLearningSuggestions, fetchAiFeedbackStats, fetchAiLearningReport, submitAiFeedback } from '@/api/bootstrap'
 import { backendApiUrl } from '@/api/http'
 import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useDialog } from '@/composables/useDialog'
@@ -642,6 +645,31 @@ async function refreshLearningPanel() {
     learningReport.value = report
   } catch (err) {
     learningError.value = err instanceof Error ? err.message : '加载学习状态失败'
+  } finally {
+    learningLoading.value = false
+  }
+}
+
+async function clearLearningSuggestions() {
+  const confirmed = await dialog.confirm({
+    title: '清空优化建议',
+    message: '确认清空当前 AI 自主学习面板中的优化建议？这不会删除反馈记录和统计数据。',
+    confirmText: '确认清空',
+    tone: 'warning',
+  })
+  if (!confirmed) return
+  learningLoading.value = true
+  learningError.value = ''
+  try {
+    await clearAiLearningSuggestions()
+    const [stats, report] = await Promise.all([
+      fetchAiFeedbackStats(projectId.value),
+      fetchAiLearningReport(),
+    ])
+    feedbackStats.value = stats
+    learningReport.value = report
+  } catch (err) {
+    learningError.value = err instanceof Error ? err.message : '清空优化建议失败'
   } finally {
     learningLoading.value = false
   }
@@ -2650,6 +2678,12 @@ onBeforeUnmount(() => {
 .learning-suggestions-header h3 {
   margin: 0;
   font-size: 14px;
+}
+
+.learning-suggestions-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .learning-suggestions-list {

@@ -886,6 +886,10 @@ export function fetchAiLearningReport() {
   return apiGet<AILearningReport>('/api/ai/feedback/learning-report')
 }
 
+export function clearAiLearningSuggestions() {
+  return apiGet<{ cleared?: number }>('/api/ai/feedback/learning-suggestions/clear')
+}
+
 export function fetchSystemSnapshotList(
   projectId: string,
   appId: string,

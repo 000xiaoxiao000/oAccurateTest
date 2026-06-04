@@ -33,7 +33,12 @@
             <h2>版本入口</h2>
             <p>选择版本查看覆盖率；仅当前版本允许生成版本全量或增量报告。</p>
           </div>
-          <span class="count-badge">{{ filteredVersions.length }} / {{ visibleVersions.length }}</span>
+          <div class="panel-actions">
+            <span class="count-badge">{{ filteredVersions.length }} / {{ visibleVersions.length }}</span>
+            <button class="ghost-button small-button" type="button" :disabled="refreshingReports || !selectedAppId" @click="refreshReports">
+              {{ refreshingReports ? '刷新中...' : '刷新报告' }}
+            </button>
+          </div>
         </div>
         <div class="card-grid version-card-grid">
           <article v-for="version in paginatedVersions" :key="version.id" class="card">
