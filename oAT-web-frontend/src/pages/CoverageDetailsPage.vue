@@ -14,24 +14,56 @@
     </div>
 
     <form class="filter-card" @submit.prevent="applyFilters">
-      <div class="filter-grid">
-        <label><span>类名搜索</span><input v-model.trim="filters.className" class="text-input" type="search" placeholder="支持模糊匹配" aria-label="搜索类名" /></label>
-        <label><span>方法名搜索</span><input v-model.trim="filters.methodName" class="text-input" type="search" placeholder="类中包含该方法" aria-label="搜索方法名" /></label>
-        <label><span>最小行覆盖率</span><input v-model.number="filters.minRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
-        <label><span>最大行覆盖率</span><input v-model.number="filters.maxRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
-        <label><span>最小分支覆盖</span><input v-model.number="filters.minBranchRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
-        <label><span>最大分支覆盖</span><input v-model.number="filters.maxBranchRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
-        <label><span>最小方法覆盖</span><input v-model.number="filters.minMethodRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
-        <label><span>最大方法覆盖</span><input v-model.number="filters.maxMethodRate" class="text-input" type="number" min="0" max="100" step="0.01" /></label>
-        <label><span>最小圈复杂度</span><input v-model.number="filters.minComplexity" class="text-input" type="number" min="0" /></label>
-        <label><span>最大圈复杂度</span><input v-model.number="filters.maxComplexity" class="text-input" type="number" min="0" /></label>
+      <div class="filter-row">
+        <div class="quick-filters" aria-label="常用筛选条件">
+          <label class="search-field">
+            <span>类名</span>
+            <input v-model.trim="filters.className" class="text-input" type="search" placeholder="支持模糊匹配" aria-label="搜索类名" />
+          </label>
+          <label class="search-field">
+            <span>方法名</span>
+            <input v-model.trim="filters.methodName" class="text-input" type="search" placeholder="类中包含该方法" aria-label="搜索方法名" />
+          </label>
+        </div>
+
+        <div class="filter-actions">
+          <button class="primary-button" type="submit">搜索</button>
+          <button class="ghost-button" type="button" @click="clearFilters">清空</button>
+          <div class="view-toggle" role="group" aria-label="切换展示方式">
+            <button type="button" :class="['tab-button', viewType === 'list' && 'active']" @click="switchView('list')">列表</button>
+            <button type="button" :class="['tab-button', viewType === 'tree' && 'active']" @click="switchView('tree')">树结构</button>
+          </div>
+        </div>
       </div>
-      <div class="toolbar">
-        <button class="primary-button" type="submit">搜索</button>
-        <button class="ghost-button" type="button" @click="clearFilters">清空筛选</button>
-        <button type="button" :class="['tab-button', viewType === 'list' && 'active']" @click="switchView('list')">列表</button>
-        <button type="button" :class="['tab-button', viewType === 'tree' && 'active']" @click="switchView('tree')">树结构</button>
-      </div>
+
+      <details class="advanced-filters">
+        <summary>
+          <span>高级筛选</span>
+          <em v-if="advancedFilterCount">已选 {{ advancedFilterCount }} 项</em>
+        </summary>
+        <div class="metric-filter-grid">
+          <fieldset class="metric-filter-group">
+            <legend>行覆盖率</legend>
+            <label><span>最小</span><input v-model.number="filters.minRate" class="text-input" type="number" min="0" max="100" step="0.01" placeholder="0" /></label>
+            <label><span>最大</span><input v-model.number="filters.maxRate" class="text-input" type="number" min="0" max="100" step="0.01" placeholder="100" /></label>
+          </fieldset>
+          <fieldset class="metric-filter-group">
+            <legend>分支覆盖</legend>
+            <label><span>最小</span><input v-model.number="filters.minBranchRate" class="text-input" type="number" min="0" max="100" step="0.01" placeholder="0" /></label>
+            <label><span>最大</span><input v-model.number="filters.maxBranchRate" class="text-input" type="number" min="0" max="100" step="0.01" placeholder="100" /></label>
+          </fieldset>
+          <fieldset class="metric-filter-group">
+            <legend>方法覆盖</legend>
+            <label><span>最小</span><input v-model.number="filters.minMethodRate" class="text-input" type="number" min="0" max="100" step="0.01" placeholder="0" /></label>
+            <label><span>最大</span><input v-model.number="filters.maxMethodRate" class="text-input" type="number" min="0" max="100" step="0.01" placeholder="100" /></label>
+          </fieldset>
+          <fieldset class="metric-filter-group">
+            <legend>圈复杂度</legend>
+            <label><span>最小</span><input v-model.number="filters.minComplexity" class="text-input" type="number" min="0" placeholder="0" /></label>
+            <label><span>最大</span><input v-model.number="filters.maxComplexity" class="text-input" type="number" min="0" placeholder="不限" /></label>
+          </fieldset>
+        </div>
+      </details>
     </form>
 
     <div v-if="loading" class="status-card">正在加载覆盖率明细...</div>
@@ -170,6 +202,19 @@ const filters = reactive({
   minComplexity: undefined as number | undefined,
   maxComplexity: undefined as number | undefined,
 })
+const advancedFilterCount = computed(
+  () =>
+    [
+      filters.minRate,
+      filters.maxRate,
+      filters.minBranchRate,
+      filters.maxBranchRate,
+      filters.minMethodRate,
+      filters.maxMethodRate,
+      filters.minComplexity,
+      filters.maxComplexity,
+    ].filter((value) => value !== undefined && value !== null).length,
+)
 
 function percent(value?: number) {
   return value === undefined || value === null ? '-' : `${value.toFixed(1)}%`
@@ -428,31 +473,154 @@ onMounted(() => {
 }
 
 .filter-card {
-  position: sticky;
-  top: 12px;
+  position: relative;
   z-index: 4;
-  padding: 14px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(15, 23, 42, 0.06);
 }
 
-.filter-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
-  gap: 10px;
+.filter-row,
+.quick-filters,
+.filter-actions,
+.view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.filter-grid label {
+.filter-row {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.quick-filters {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-field {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+}
+
+.search-field span {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  z-index: 1;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  transform: translateY(-50%);
+}
+
+.search-field .text-input {
+  padding-left: 58px;
+}
+
+.filter-actions {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.view-toggle {
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.advanced-filters {
+  margin-top: 8px;
+}
+
+.advanced-filters summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.advanced-filters summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-filters summary::after {
+  content: '⌄';
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.advanced-filters[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.advanced-filters em {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.metric-filter-grid {
   display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.metric-filter-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.7);
+}
+
+.metric-filter-group legend {
+  padding: 0 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.metric-filter-group label {
+  display: grid;
+  gap: 4px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .text-input {
   width: 100%;
-  border-radius: 12px;
+  min-height: 36px;
+  border-radius: 10px;
   border: 1px solid rgba(15, 23, 42, 0.12);
-  padding: 9px 10px;
+  padding: 7px 10px;
+}
+
+.filter-card :is(.primary-button, .ghost-button, .tab-button) {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.filter-card .tab-button {
+  min-height: 30px;
+  padding: 5px 10px;
 }
 
 .status-card,
@@ -468,14 +636,36 @@ onMounted(() => {
   color: #b91c1c;
 }
 
-.toolbar,
 .panel {
   margin-top: 12px;
 }
 
 .table-shell {
-  max-height: min(620px, calc(100vh - 280px));
+  max-height: min(680px, calc(100vh - 240px));
   overflow: auto;
+}
+
+@media (max-width: 980px) {
+  .quick-filters,
+  .filter-actions {
+    width: 100%;
+  }
+
+  .metric-filter-grid {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .search-field,
+  .filter-actions,
+  .view-toggle {
+    width: 100%;
+  }
+
+  .metric-filter-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .report-table {
