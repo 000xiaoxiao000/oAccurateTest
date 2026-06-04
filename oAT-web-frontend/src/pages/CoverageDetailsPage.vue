@@ -75,26 +75,36 @@
           <span>{{ payload.classPage?.totalElements || 0 }}</span>
         </div>
         <div class="table-shell">
-          <table class="report-table">
+          <table class="report-table class-table">
             <thead>
               <tr>
                 <th>类名</th>
+                <th>方法 (覆盖/总)</th>
                 <th>方法覆盖率</th>
+                <th>分支 (覆盖/总)</th>
                 <th>分支覆盖率</th>
-                <th>行覆盖率</th>
-                <th>复杂度</th>
+                <th>代码行 (覆盖/总)</th>
+                <th>代码行覆盖率</th>
+                <th>圈复杂度</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in payload.classPage?.content || []" :key="item.className">
-                <td>{{ item.className }}</td>
-                <td>{{ percent(item.methodRate) }}</td>
-                <td>{{ percent(item.branchRate) }}</td>
-                <td>{{ percent(item.lineRate) }}</td>
+              <tr v-for="item in payload.classPage?.content || []" :key="item.className" class="class-row">
+                <td :title="item.className">
+                  <span class="tree-fold muted">−</span>
+                  <span class="tree-icon">📄</span>
+                  <span class="class-name">{{ item.className }}</span>
+                </td>
+                <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
+                <td :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
+                <td>{{ item.coveredBranchTargets }} / {{ item.totalBranchTargets }}</td>
+                <td :class="rateTone(item.branchRate, item.totalBranchTargets)">{{ item.totalBranchTargets > 0 ? percent(item.branchRate) : 'N/A' }}</td>
+                <td>{{ item.coveredLines }} / {{ item.totalLines }}</td>
+                <td :class="rateTone(item.lineRate)">{{ percent(item.lineRate) }}</td>
                 <td>{{ item.totalComplexity }}</td>
                 <td>
-                  <RouterLink class="table-link" :to="buildCodeRoute(item.className)">源码</RouterLink>
+                  <RouterLink class="table-link code-link" :to="buildCodeRoute(item.className)">代码</RouterLink>
                 </td>
               </tr>
             </tbody>
@@ -643,6 +653,7 @@ onMounted(() => {
 .table-shell {
   max-height: min(680px, calc(100vh - 240px));
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 980px) {
@@ -670,18 +681,77 @@ onMounted(() => {
 
 .report-table {
   width: 100%;
-  border-collapse: collapse;
+  min-width: 1040px;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .report-table th,
 .report-table td {
-  padding: 11px 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
 }
 
+.report-table th {
+  white-space: nowrap;
+}
+
+.report-table tbody tr {
+  transition: background 0.16s ease, box-shadow 0.16s ease;
+}
+
+.report-table tbody tr:hover {
+  background: rgba(15, 118, 110, 0.04);
+  box-shadow: inset 3px 0 0 rgba(15, 118, 110, 0.62);
+}
+
+.class-table,
 .tree-table {
   table-layout: fixed;
+}
+
+.class-table th:first-child,
+.class-table td:first-child {
+  width: 34%;
+}
+
+.class-table th:last-child,
+.class-table td:last-child {
+  width: 8%;
+}
+
+.class-table th:not(:first-child):not(:last-child),
+.class-table td:not(:first-child):not(:last-child) {
+  width: 9.7%;
+  text-align: center;
+}
+
+.class-table th:last-child,
+.class-table td:last-child {
+  text-align: center;
+}
+
+.class-table td,
+.tree-table td {
+  height: 46px;
+}
+
+.class-table td:first-child,
+.tree-table td:first-child {
+  overflow: hidden;
+  color: #172033;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.class-name {
+  vertical-align: middle;
+}
+
+.tree-table {
+  min-width: 1120px;
 }
 
 .tree-table th:first-child,
@@ -696,8 +766,6 @@ onMounted(() => {
 }
 
 .tree-table td {
-  padding-top: 7px;
-  padding-bottom: 7px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -729,9 +797,20 @@ onMounted(() => {
 }
 
 .code-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
   margin-left: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.08);
   color: #0f766e;
   font-weight: 800;
+}
+
+.class-table .code-link {
+  margin-left: 0;
 }
 
 .positive {
