@@ -3,6 +3,8 @@ import type {
   AIInteractivePagePayload,
   AIInteractiveReply,
   AIFeedbackPayload,
+  AIFeedbackStats,
+  AILearningReport,
   AppSummary,
   AppSettingsPayload,
   CompareJobPayload,
@@ -873,6 +875,15 @@ export function clearAiSessionState(projectId: string, memoryScope: 'workbench' 
 
 export function submitAiFeedback(payload: AIFeedbackPayload) {
   return apiPost<string>('/api/ai/feedback/submit', JSON.stringify(payload), 'application/json')
+}
+
+export function fetchAiFeedbackStats(projectId?: string) {
+  const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''
+  return apiGet<AIFeedbackStats>(`/api/ai/feedback/stats${query}`)
+}
+
+export function fetchAiLearningReport() {
+  return apiGet<AILearningReport>('/api/ai/feedback/learning-report')
 }
 
 export function fetchSystemSnapshotList(

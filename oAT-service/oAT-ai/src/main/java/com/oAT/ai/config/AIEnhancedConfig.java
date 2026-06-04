@@ -65,7 +65,19 @@ public class AIEnhancedConfig {
     }
 
     public static class SelfLearning {
+        private boolean enabled = true;
         private int intervalHours = 6;
+        private boolean knowledgeHitEnabled = true;
+        private double knowledgeHitThreshold = 0.7;
+        private boolean dynamicGuideEnabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
 
         public int getIntervalHours() {
             return intervalHours;
@@ -73,6 +85,30 @@ public class AIEnhancedConfig {
 
         public void setIntervalHours(int intervalHours) {
             this.intervalHours = intervalHours;
+        }
+
+        public boolean isKnowledgeHitEnabled() {
+            return knowledgeHitEnabled;
+        }
+
+        public void setKnowledgeHitEnabled(boolean knowledgeHitEnabled) {
+            this.knowledgeHitEnabled = knowledgeHitEnabled;
+        }
+
+        public double getKnowledgeHitThreshold() {
+            return knowledgeHitThreshold;
+        }
+
+        public void setKnowledgeHitThreshold(double knowledgeHitThreshold) {
+            this.knowledgeHitThreshold = knowledgeHitThreshold;
+        }
+
+        public boolean isDynamicGuideEnabled() {
+            return dynamicGuideEnabled;
+        }
+
+        public void setDynamicGuideEnabled(boolean dynamicGuideEnabled) {
+            this.dynamicGuideEnabled = dynamicGuideEnabled;
         }
     }
 

@@ -26,6 +26,8 @@ public class AIAutoConfiguration {
         FeedbackPersistenceService.setDefaultRetentionDays(enhancedConfig.getFeedback().getRetentionDays());
         System.setProperty("ai.enhanced.self-learning.interval-hours",
                 String.valueOf(enhancedConfig.getSelfLearning().getIntervalHours()));
+        System.setProperty("ai.enhanced.self-learning.knowledge-hit-threshold",
+                String.valueOf(enhancedConfig.getSelfLearning().getKnowledgeHitThreshold()));
         return new FeedbackPersistenceService(oatDataPath);
     }
 }

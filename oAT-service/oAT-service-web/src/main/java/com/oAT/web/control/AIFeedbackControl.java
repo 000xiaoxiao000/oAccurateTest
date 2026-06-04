@@ -1,6 +1,7 @@
 package com.oAT.web.control;
 
 import com.oAT.ai.agent.AIAgentService;
+import com.oAT.ai.agent.ToolRecommender;
 import com.oAT.agent.AISelfLearningService;
 import com.oAT.ai.agent.FeedbackPersistenceService;
 import com.oAT.web.control.entity.ResultNotified;
@@ -55,6 +56,12 @@ public class AIFeedbackControl {
             record.setComment(feedback.getComment());
             record.setUsedTools(feedback.getUsedTools());
             record.setResponseTime(feedback.getResponseTime());
+            if (aiAgentService != null && aiAgentService.getToolRecommender() != null && record.getQuestion() != null) {
+                ToolRecommender.Recommendation recommendation = aiAgentService.getToolRecommender().recommend(record.getQuestion());
+                if (recommendation != null && recommendation.detectedIntent != null) {
+                    record.setTopic(recommendation.detectedIntent);
+                }
+            }
 
             // 持久化到文件
             record = feedbackPersistence.submit(record);
@@ -98,6 +105,18 @@ public class AIFeedbackControl {
             boolean updated = feedbackPersistence.update(feedbackId, updates);
             if (!updated) {
                 return new ResultNotified<>(false, "反馈记录不存在");
+            }
+
+            if (aiAgentService != null) {
+                try {
+                    FeedbackPersistenceService.FeedbackRecord record = feedbackPersistence.get(feedbackId);
+                    AISelfLearningService selfLearning = aiAgentService.getSelfLearningService();
+                    if (selfLearning != null && record != null) {
+                        selfLearning.onNewFeedback(record);
+                    }
+                } catch (Exception e) {
+                    logger.warn("Self-learning trigger on quick rate failed (non-critical): {}", e.getMessage());
+                }
             }
 
             logger.info("Quick rate: id={}, helpful={}", feedbackId, helpful);

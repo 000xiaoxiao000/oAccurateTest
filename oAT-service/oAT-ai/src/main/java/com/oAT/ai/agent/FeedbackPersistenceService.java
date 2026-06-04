@@ -43,9 +43,10 @@ public class FeedbackPersistenceService {
 
     public FeedbackPersistenceService(String oatDataPath) {
         this.dataPath = oatDataPath != null ? oatDataPath : System.getProperty("user.home") + "/oAT/codeData";
-        loadTodayFeedback();
+        loadRecentFeedback(defaultRetentionDays);
         cleanup(defaultRetentionDays);
-        logger.info("FeedbackPersistenceService initialized, path={}, retentionDays={}", getTodayFilePath(), defaultRetentionDays);
+        logger.info("FeedbackPersistenceService initialized, path={}, retentionDays={}, loadedRecords={}",
+                getTodayFilePath(), defaultRetentionDays, index.size());
     }
 
     public static void setDefaultRetentionDays(int retentionDays) {
@@ -156,6 +157,13 @@ public class FeedbackPersistenceService {
     }
 
     /**
+     * 获取所有反馈记录（内存索引）
+     */
+    public List<FeedbackRecord> getAllRecords() {
+        return new ArrayList<>(index.values());
+    }
+
+    /**
      * 获取用于自主学习的训练数据
      * 返回正面和负面样本对，供 AI 自我优化使用
      */
@@ -246,16 +254,48 @@ public class FeedbackPersistenceService {
                 "feedback_" + LocalDateTime.now().format(DATE_FORMAT) + ".jsonl");
     }
 
+    private void loadRecentFeedback(int retainDays) {
+        Path dir = Paths.get(dataPath, FEEDBACK_DIR);
+        if (!Files.exists(dir)) {
+            return;
+        }
+
+        LocalDate cutoff = LocalDate.now().minusDays(Math.max(1, retainDays));
+        int loadedFiles = 0;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "feedback_*.jsonl")) {
+            for (Path file : stream) {
+                String fileName = file.getFileName().toString();
+                try {
+                    String dateStr = fileName.replace("feedback_", "").replace(".jsonl", "");
+                    LocalDate fileDate = LocalDate.parse(dateStr, DATE_FORMAT);
+                    if (fileDate.isBefore(cutoff)) {
+                        continue;
+                    }
+                    loadedFiles++;
+                    loadFeedbackFile(file);
+                } catch (Exception e) {
+                    logger.warn("Failed to parse feedback file {}: {}", fileName, e.getMessage());
+                }
+            }
+            logger.info("Loaded {} feedback records from {} recent files", index.size(), loadedFiles);
+        } catch (IOException e) {
+            logger.error("Failed to load recent feedback files", e);
+        }
+    }
+
     @SuppressWarnings("unchecked")
-    private void loadTodayFeedback() {
-        Path file = getTodayFilePath();
-        if (!Files.exists(file)) return;
+    private void loadFeedbackFile(Path file) {
+        if (!Files.exists(file)) {
+            return;
+        }
 
         try (BufferedReader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
-                if (line.isEmpty()) continue;
+                if (line.isEmpty()) {
+                    continue;
+                }
                 try {
                     Map<String, Object> map = OBJECT_MAPPER.readValue(line, Map.class);
                     FeedbackRecord record = mapToRecord(map);
@@ -263,12 +303,11 @@ public class FeedbackPersistenceService {
                         index.put(record.getFeedbackId(), record);
                     }
                 } catch (Exception e) {
-                    logger.warn("Failed to parse feedback line: {}", e.getMessage());
+                    logger.warn("Failed to parse feedback line in {}: {}", file.getFileName(), e.getMessage());
                 }
             }
-            logger.info("Loaded {} today's feedback records into memory", index.size());
         } catch (IOException e) {
-            logger.error("Failed to load today feedback file", e);
+            logger.error("Failed to load feedback file {}", file, e);
         }
     }
 

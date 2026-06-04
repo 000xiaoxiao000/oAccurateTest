@@ -198,19 +198,62 @@ public class ToolRecommender {
      * 记录工具调用结果（用于学习优化）
      */
     public void recordToolCall(String toolName, boolean success) {
-        ToolMeta meta = tools.get(toolName);
+        ToolMeta meta = resolveToolMeta(toolName);
         if (meta == null) return;
 
         synchronized (meta) {
             meta.callCount++;
             meta.lastCalledTime = System.currentTimeMillis();
             if (success) {
-                // 指数移动平均更新成功率
                 meta.successRate = meta.successRate * 0.9 + 0.1;
             } else {
-                meta.successRate = meta.successRate * 0.9 + 0.0 * 0.1;
+                meta.successRate = meta.successRate * 0.9;
             }
         }
+    }
+
+    /**
+     * 记录用户显式反馈对工具的评价（权重高于普通调用结果）
+     */
+    public void recordFeedback(String toolName, boolean positive) {
+        ToolMeta meta = resolveToolMeta(toolName);
+        if (meta == null) {
+            return;
+        }
+
+        synchronized (meta) {
+            meta.callCount++;
+            meta.lastCalledTime = System.currentTimeMillis();
+            if (positive) {
+                meta.successRate = meta.successRate * 0.7 + 0.3;
+            } else {
+                meta.successRate = meta.successRate * 0.7;
+            }
+        }
+        logger.debug("Recorded {} feedback for tool '{}', successRate={}",
+                positive ? "positive" : "negative", meta.toolName, meta.successRate);
+    }
+
+    private ToolMeta resolveToolMeta(String toolName) {
+        if (toolName == null || toolName.trim().isEmpty()) {
+            return null;
+        }
+        String normalized = normalizeToolLookupKey(toolName);
+        ToolMeta direct = tools.get(normalized);
+        if (direct != null) {
+            return direct;
+        }
+        for (ToolMeta meta : tools.values()) {
+            if (normalized.equals(normalizeToolLookupKey(meta.toolName))
+                    || normalized.equals(normalizeToolLookupKey(meta.displayName))) {
+                return meta;
+            }
+        }
+        return null;
+    }
+
+    private String normalizeToolLookupKey(String value) {
+        return value.trim().toLowerCase(Locale.ROOT).replace(" ", "");
     }
 
     /**

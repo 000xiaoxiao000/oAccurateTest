@@ -35,32 +35,27 @@
             <table class="method-table">
               <colgroup>
                 <col class="method-col" />
-                <col class="rate-col" />
-                <col class="rate-col" />
-                <col class="complexity-col" />
                 <col class="status-col" />
               </colgroup>
               <thead>
                 <tr>
-                  <th>方法</th>
-                  <th>代码行覆盖率</th>
-                  <th>分支覆盖率</th>
-                  <th>复杂度</th>
+                  <th>方法与覆盖率</th>
                   <th>状态</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="item in paginatedMethods" :key="`${item.method.methodName}-${item.index}`">
                   <td class="method-name">
-                    <button class="method-jump" type="button" @click="jumpToMethod(item.method.methodName)">{{ item.method.methodName }}</button>
-                    <small>{{ item.method.methodDesc || '-' }}</small>
+                    <div class="method-mainline">
+                      <button class="method-jump" type="button" :title="item.method.methodName" @click="jumpToMethod(item.method.methodName)">{{ item.method.methodName }}</button>
+                      <span class="complexity-chip">复杂度 {{ item.method.complexity }}</span>
+                    </div>
+                    <div class="method-subline">
+                      <small :title="item.method.methodDesc || '-'">{{ item.method.methodDesc || '-' }}</small>
+                      <span class="metric-chip">行 {{ item.method.coveredLines }}/{{ item.method.totalLines }} {{ formatRate(item.method.coveredLines, item.method.totalLines) }}</span>
+                      <span class="metric-chip">分支 {{ item.method.coveredBranchTargets }}/{{ item.method.totalBranchTargets }} {{ formatBranchRate(item.method.branchRate, item.method.totalBranchTargets) }}</span>
+                    </div>
                   </td>
-                  <td class="metric-cell">{{ item.method.coveredLines }} / {{ item.method.totalLines }} ({{ formatRate(item.method.coveredLines, item.method.totalLines) }})</td>
-                  <td class="metric-cell">
-                    {{ item.method.coveredBranchTargets }} / {{ item.method.totalBranchTargets }}
-                    ({{ formatBranchRate(item.method.branchRate, item.method.totalBranchTargets) }})
-                  </td>
-                  <td class="metric-cell">{{ item.method.complexity }}</td>
                   <td class="status-cell">
                     <span class="status-pill" :data-tone="coverageTone(item.method)">
                       {{ coverageText(item.method) }}
@@ -76,7 +71,7 @@
             v-model:page-size="methodPageSize"
             :total="filteredMethods.length"
             item-name="个方法"
-            :page-sizes="[10, 20, 50, 100]"
+            :page-sizes="[20, 50, 100, 200]"
           />
         </section>
 
@@ -116,7 +111,7 @@ const props = defineProps<{
 const methodKeyword = ref('')
 const statusFilter = ref('')
 const methodPage = ref(1)
-const methodPageSize = ref(20)
+const methodPageSize = ref(50)
 const sourceRef = ref<HTMLElement | null>(null)
 
 const filteredMethods = computed(() => {
@@ -312,11 +307,15 @@ function coverageText(method: MethodCoverageSummary) {
 }
 
 .method-jump {
-  width: fit-content;
+  width: auto;
+  max-width: 100%;
   border: none;
   padding: 0;
   background: transparent;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
@@ -368,7 +367,7 @@ function coverageText(method: MethodCoverageSummary) {
 
 .code-workspace {
   grid-template-columns: minmax(360px, .72fr) minmax(620px, 1.28fr);
-  height: var(--page-data-height, calc(100vh - 146px));
+  height: max(760px, var(--page-data-height, calc(100vh - 96px)));
   min-height: 0;
 }
 
@@ -382,6 +381,36 @@ function coverageText(method: MethodCoverageSummary) {
 .source-panel {
   display: flex;
   flex-direction: column;
+  height: 100%;
+}
+
+.method-panel :deep(.app-pagination) {
+  position: static;
+  flex: 0 0 auto;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.method-panel :deep(.page-stepper button),
+.method-panel :deep(.page-size-control select) {
+  min-height: 32px;
+}
+
+.method-panel :deep(.page-stepper button) {
+  padding: 5px 10px;
+}
+
+.method-panel :deep(.page-summary),
+.method-panel :deep(.page-size-control),
+.method-panel :deep(.page-index) {
+  font-size: 12px;
+}
+
+.method-panel :deep(.page-summary strong) {
+  font-size: 13px;
 }
 
 .table-shell,
@@ -393,8 +422,14 @@ function coverageText(method: MethodCoverageSummary) {
 }
 
 .table-shell {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   padding: 0;
+  overflow-x: hidden;
+  height: 536px;
+  min-height: 536px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 14px;
+  background: #fff;
 }
 
 .source-container {
@@ -410,33 +445,26 @@ function coverageText(method: MethodCoverageSummary) {
 
 .method-table {
   width: 100%;
-  min-width: 780px;
+  min-width: 0;
   table-layout: fixed;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .method-col {
-  width: 46%;
-}
-
-.rate-col {
-  width: 18%;
-}
-
-.complexity-col {
-  width: 8%;
+  width: auto;
 }
 
 .status-col {
-  width: 10%;
+  width: 76px;
 }
 
 .method-table th,
 .method-table td {
-  padding: 8px 9px;
+  padding: 6px 10px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
-  vertical-align: middle;
+  vertical-align: top;
 }
 
 .method-table th {
@@ -445,31 +473,84 @@ function coverageText(method: MethodCoverageSummary) {
   z-index: 1;
   background: rgba(255, 255, 255, .96);
   color: #0f172a;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.method-table tbody tr {
+  height: 50px;
+}
+
+.method-table tbody tr:hover {
+  background: rgba(15, 118, 110, .035);
 }
 
 .method-name {
   display: grid;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.method-name small {
-  display: block;
-  max-width: 100%;
-  font-size: 12px;
-  line-height: 1.3;
+.method-mainline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
 }
 
-.metric-cell {
-  color: #1f2937;
+.method-mainline .method-jump {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.method-subline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: #64748b;
+}
+
+.method-name small {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.2;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metric-chip,
+.complexity-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.metric-chip {
+  padding: 2px 6px;
+  background: rgba(15, 23, 42, .04);
+  color: #475569;
+}
+
+.complexity-chip {
+  padding: 2px 7px;
+  background: rgba(14, 165, 233, .10);
+  color: #0369a1;
 }
 
 .status-cell {
-  padding-right: 24px;
+  padding-right: 10px;
   white-space: nowrap;
+  text-align: right;
+  vertical-align: middle;
 }
 
 .status-pill {
@@ -477,7 +558,7 @@ function coverageText(method: MethodCoverageSummary) {
   align-items: center;
   justify-content: center;
   min-width: 58px;
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;

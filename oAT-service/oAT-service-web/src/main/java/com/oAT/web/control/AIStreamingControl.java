@@ -147,9 +147,6 @@ public class AIStreamingControl {
                     if (!vizData.isEmpty()) {
                         sendJsonEvent(emitter, "visualization", vizData);
                     }
-
-                    // 9. 记录对话到记忆服务
-                    aiAgentService.recordAssistantResponse(context, response);
                 } else {
                     sendJsonEvent(emitter, "error", Map.of("message", "AI服务暂时无法响应"));
                 }

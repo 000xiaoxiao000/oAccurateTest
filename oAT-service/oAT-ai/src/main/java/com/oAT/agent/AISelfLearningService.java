@@ -34,6 +34,9 @@ public class AISelfLearningService {
     /** 学习报告周期（小时） */
     private final int learningReportIntervalHours;
 
+    /** 知识库相似度阈值 */
+    private final double knowledgeHitThreshold;
+
     /** 知识库条目最大数量 */
     private static final int MAX_KNOWLEDGE_ENTRIES = 200;
 
@@ -57,17 +60,25 @@ public class AISelfLearningService {
                 return t;
             });
 
+    /** 动态话题约束：topic@project → 追加提示 */
+    private final ConcurrentHashMap<TopicKey, String> topicGuidanceMap = new ConcurrentHashMap<>();
+
     /** 数据源 */
     private final FeedbackPersistenceService feedbackPersistence;
 
     /** 工具推荐器引用（用于学习工具调用模式） */
     private ToolRecommender toolRecommender;
 
-    public AISelfLearningService(FeedbackPersistenceService feedbackPersistence, int learningReportIntervalHours) {
+    public AISelfLearningService(FeedbackPersistenceService feedbackPersistence,
+                                 int learningReportIntervalHours,
+                                 double knowledgeHitThreshold) {
         this.feedbackPersistence = feedbackPersistence;
         this.learningReportIntervalHours = learningReportIntervalHours;
+        this.knowledgeHitThreshold = Math.max(0.5, Math.min(0.95, knowledgeHitThreshold));
+        bootstrapFromHistoricalFeedback();
         startPeriodicLearning();
-        logger.info("AISelfLearningService initialized, intervalHours={}", learningReportIntervalHours);
+        logger.info("AISelfLearningService initialized, intervalHours={}, knowledgeHitThreshold={}",
+                learningReportIntervalHours, this.knowledgeHitThreshold);
     }
 
     public void setToolRecommender(ToolRecommender recommender) {
@@ -79,6 +90,10 @@ public class AISelfLearningService {
      */
     public void onNewFeedback(FeedbackPersistenceService.FeedbackRecord record) {
         if (record == null || record.getQuestion() == null) return;
+
+        if (record.getTopic() == null || record.getTopic().trim().isEmpty()) {
+            inferTopic(record);
+        }
 
         // 1. 如果是好评，加入知识库
         if (isPositiveFeedback(record)) {
@@ -92,6 +107,116 @@ public class AISelfLearningService {
         if (isNegativeFeedback(record)) {
             analyzeFailurePattern(record);
         }
+
+        // 4. 根据反馈调整工具推荐权重
+        applyFeedbackToToolRecommender(record);
+    }
+
+    /**
+     * 启动时从历史反馈中恢复学习状态
+     */
+    private void bootstrapFromHistoricalFeedback() {
+        try {
+            FeedbackPersistenceService.SelfLearningDataset dataset = feedbackPersistence.getLearningDataset();
+            learnFromPositives(dataset.positiveSamples);
+            learnFromNegatives(dataset.negativeSamples);
+            for (FeedbackPersistenceService.FeedbackRecord record : feedbackPersistence.getAllRecords()) {
+                if (record.getTopic() == null || record.getTopic().trim().isEmpty()) {
+                    inferTopic(record);
+                }
+                updateTopicStats(record);
+            }
+            learnToolWeightsFromRecords(feedbackPersistence.getAllRecords());
+            generateOptimizationSuggestions();
+            refreshTopicGuidance();
+            logger.info("Bootstrapped self-learning from {} historical feedback records",
+                    feedbackPersistence.getAllRecords().size());
+        } catch (Exception e) {
+            logger.warn("Failed to bootstrap self-learning from historical feedback: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 根据用户反馈更新工具推荐权重
+     */
+    public void applyFeedbackToToolRecommender(FeedbackPersistenceService.FeedbackRecord record) {
+        if (toolRecommender == null || record == null) {
+            return;
+        }
+        boolean positive = isPositiveFeedback(record);
+        boolean negative = isNegativeFeedback(record);
+        if (!positive && !negative) {
+            return;
+        }
+
+        List<String> tools = parseUsedTools(record.getUsedTools());
+        if (tools.isEmpty() && record.getTopic() != null) {
+            ToolRecommender.Recommendation recommendation = toolRecommender.recommend(record.getQuestion());
+            if (recommendation != null && recommendation.primaryTool != null) {
+                tools = Collections.singletonList(recommendation.primaryTool);
+            }
+        }
+
+        for (String toolName : tools) {
+            toolRecommender.recordFeedback(toolName, positive);
+        }
+    }
+
+    /**
+     * 构建动态学习约束，注入到 LLM 上下文
+     */
+    public String buildDynamicLearningGuide(String question, String projectId) {
+        if (question == null || question.trim().isEmpty()) {
+            return null;
+        }
+
+        StringBuilder guide = new StringBuilder();
+        String pattern = extractPattern(question);
+
+        Integer failureCount = failurePatterns.get(pattern);
+        if (failureCount != null && failureCount >= 2) {
+            guide.append("- 类似问题曾收到 ")
+                    .append(failureCount)
+                    .append(" 条负面反馈：必须优先调用最相关工具获取实时数据，直接回答用户问题，禁止泛泛建议或编造数据。\n");
+        }
+
+        for (Map.Entry<TopicKey, TopicStats> entry : topicStatsMap.entrySet()) {
+            TopicKey key = entry.getKey();
+            if (projectId != null && key.projectId != null && !projectId.equals(key.projectId)) {
+                continue;
+            }
+            TopicStats stats = entry.getValue();
+            if (stats.totalFeedbacks < 3 || stats.satisfactionRate() >= 0.6) {
+                continue;
+            }
+            if (!questionMatchesTopic(question, key.topic)) {
+                continue;
+            }
+            String topicGuide = topicGuidanceMap.get(key);
+            if (topicGuide != null && !topicGuide.isEmpty()) {
+                guide.append("- ").append(topicGuide).append("\n");
+            } else {
+                guide.append("- 主题「")
+                        .append(key.topic)
+                        .append("」历史满意度仅 ")
+                        .append(String.format("%.0f%%", stats.satisfactionRate() * 100))
+                        .append("：请基于工具返回的数据给出具体结论，不要改答成通用提升建议。\n");
+            }
+        }
+
+        for (OptimizationSuggestion suggestion : getSuggestions()) {
+            if (suggestion.priority != OptimizationSuggestion.Priority.HIGH) {
+                continue;
+            }
+            if (questionMatchesSuggestion(question, suggestion)) {
+                guide.append("- ").append(suggestion.description.replace('\n', ' ')).append("\n");
+            }
+        }
+
+        if (guide.length() == 0) {
+            return null;
+        }
+        return "[AI自主学习约束]\n" + guide;
     }
 
     /**
@@ -111,11 +236,23 @@ public class AISelfLearningService {
         // 3. 生成优化建议
         generateOptimizationSuggestions();
 
+        // 4. 刷新动态话题约束
+        refreshTopicGuidance();
+
         LearningReport report = buildReport();
         logger.info("--- Learning cycle completed: {} knowledge entries, {} suggestions ---",
                 knowledgeBase.size(), suggestions.size());
 
         return report;
+    }
+
+    private void learnToolWeightsFromRecords(List<FeedbackPersistenceService.FeedbackRecord> records) {
+        if (toolRecommender == null || records == null) {
+            return;
+        }
+        for (FeedbackPersistenceService.FeedbackRecord record : records) {
+            applyFeedbackToToolRecommender(record);
+        }
     }
 
     /**
@@ -127,7 +264,7 @@ public class AISelfLearningService {
         if (question == null || knowledgeBase.isEmpty()) return null;
 
         String normalizedQ = normalizeQuestion(question);
-        double bestScore = 0.7; // 最低匹配阈值
+        double bestScore = knowledgeHitThreshold;
         String bestAnswer = null;
 
         for (KnowledgeEntry entry : knowledgeBase.values()) {
@@ -174,8 +311,103 @@ public class AISelfLearningService {
                     String.format("满意度%.0f%%(%d评)", rate * 100, ts.totalFeedbacks));
         }
         status.put("topicHealth", topicHealth);
+        status.put("topicGuidanceCount", topicGuidanceMap.size());
 
         return status;
+    }
+
+    private void inferTopic(FeedbackPersistenceService.FeedbackRecord record) {
+        if (toolRecommender == null || record.getQuestion() == null) {
+            record.setTopic("general");
+            return;
+        }
+        ToolRecommender.Recommendation recommendation = toolRecommender.recommend(record.getQuestion());
+        record.setTopic(recommendation != null && recommendation.detectedIntent != null
+                ? recommendation.detectedIntent
+                : "general");
+    }
+
+    private void refreshTopicGuidance() {
+        topicGuidanceMap.clear();
+        for (Map.Entry<TopicKey, TopicStats> entry : topicStatsMap.entrySet()) {
+            TopicStats stats = entry.getValue();
+            if (stats.totalFeedbacks < 3 || stats.satisfactionRate() >= 0.6) {
+                continue;
+            }
+            TopicKey key = entry.getKey();
+            topicGuidanceMap.put(key, String.format(
+                    "主题「%s」历史满意度仅 %.0f%%（%d/%d）：请优先调用最相关工具并直接回答用户问题。",
+                    key.topic, stats.satisfactionRate() * 100, stats.positiveCount, stats.totalFeedbacks));
+        }
+    }
+
+    private List<String> parseUsedTools(String usedTools) {
+        if (usedTools == null || usedTools.trim().isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<String> tools = new ArrayList<>();
+        for (String part : usedTools.split("[,，、;；]")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) {
+                tools.add(trimmed);
+            }
+        }
+        return tools;
+    }
+
+    private boolean questionMatchesTopic(String question, String topic) {
+        if (question == null || topic == null) {
+            return false;
+        }
+        String normalizedQuestion = normalizeQuestion(question);
+        if ("general".equalsIgnoreCase(topic)) {
+            return true;
+        }
+        if (normalizedQuestion.contains(normalizeQuestion(topic))) {
+            return true;
+        }
+        Map<String, Set<String>> topicKeywords = defaultTopicKeywords();
+        Set<String> keywords = topicKeywords.get(topic);
+        if (keywords == null) {
+            return false;
+        }
+        for (String keyword : keywords) {
+            if (normalizedQuestion.contains(keyword.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean questionMatchesSuggestion(String question, OptimizationSuggestion suggestion) {
+        if (question == null || suggestion == null || suggestion.title == null) {
+            return false;
+        }
+        String normalizedQuestion = normalizeQuestion(question);
+        String normalizedTitle = normalizeQuestion(suggestion.title);
+        for (String token : normalizedTitle.split("\\s+")) {
+            if (token.length() >= 2 && normalizedQuestion.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Map<String, Set<String>> defaultTopicKeywords() {
+        Map<String, Set<String>> map = new HashMap<>();
+        map.put("coverage", Set.of("覆盖", "coverage", "覆盖率", "低覆盖", "未覆盖"));
+        map.put("performance", Set.of("性能", "慢接口", "响应时间", "延迟", "p95", "p99"));
+        map.put("defect", Set.of("缺陷", "异常", "错误", "bug", "根因", "故障"));
+        map.put("trace", Set.of("链路", "trace", "调用链", "上下游"));
+        map.put("testcase", Set.of("测试", "用例", "补测", "回归"));
+        map.put("code_relation", Set.of("调用关系", "调用图", "依赖", "代码关系"));
+        map.put("bug_detect", Set.of("bug", "缺陷", "空指针", "源码"));
+        map.put("business_logic", Set.of("业务", "需求", "逻辑", "职责"));
+        map.put("project_info", Set.of("项目", "概览", "统计"));
+        map.put("code_quality", Set.of("质量", "复杂度", "审查"));
+        map.put("snapshot", Set.of("快照", "版本", "上线", "发布"));
+        map.put("app_status", Set.of("应用", "在线", "状态"));
+        return map;
     }
 
     // ==================== 内部学习方法 ====================
@@ -244,6 +476,7 @@ public class AISelfLearningService {
                     "问题模式「" + truncate(pattern, 50) + "」已收到 " + count + " 条负面反馈。"
                             + "\n建议检查该类问题的处理逻辑，或补充相关工具数据。",
                     "failure_pattern_" + count);
+            refreshTopicGuidance();
         }
     }
 

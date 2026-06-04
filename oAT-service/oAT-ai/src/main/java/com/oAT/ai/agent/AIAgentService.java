@@ -113,6 +113,18 @@ public class AIAgentService {
     /** 是否启用语义缓存 */
     private final boolean semanticCacheEnabled;
 
+    /** 是否启用 AI 自主学习 */
+    private final boolean selfLearningEnabled;
+
+    /** 是否启用优质 Q&A 知识库命中 */
+    private final boolean knowledgeHitEnabled;
+
+    /** 是否注入动态学习约束 */
+    private final boolean dynamicGuideEnabled;
+
+    /** 反馈持久化（与 Web 层共享） */
+    private FeedbackPersistenceService feedbackPersistenceService;
+
     /** 智能工具推荐器 */
     private final ToolRecommender toolRecommender;
 
@@ -138,6 +150,9 @@ public class AIAgentService {
 
         // 初始化增强服务
         this.semanticCacheEnabled = enhancedConfig.getSemanticCache().isEnabled();
+        this.selfLearningEnabled = enhancedConfig.getSelfLearning().isEnabled();
+        this.knowledgeHitEnabled = enhancedConfig.getSelfLearning().isKnowledgeHitEnabled();
+        this.dynamicGuideEnabled = enhancedConfig.getSelfLearning().isDynamicGuideEnabled();
         this.semanticCacheService = new SemanticCacheService(enhancedConfig.getSemanticCache().getThreshold(), 500);
         this.toolRecommender = new ToolRecommender();
         this.llmSwitcher = new DynamicLLMSwitcher(aiConfig);
@@ -163,6 +178,11 @@ public class AIAgentService {
                     AiServices.class.getPackage().getImplementationVersion(), tools.size());
             logger.info("{}", this.initializationStatus);
         }
+    }
+
+    @Autowired(required = false)
+    public void setFeedbackPersistenceService(FeedbackPersistenceService feedbackPersistenceService) {
+        this.feedbackPersistenceService = feedbackPersistenceService;
     }
 
     private List<Object> createTools() {
@@ -450,58 +470,22 @@ public class AIAgentService {
         }
         try {
             AgentContext.setContext(context);
-
-            // 1. 语义缓存检查（相似问题命中直接返回）
-            if (semanticCacheEnabled) {
-                SemanticCacheService.CachedResponse cached = semanticCacheService.get(question);
-                if (cached != null && cached.isFromCache() && cached.getAnswer() != null) {
-                    logger.info("Semantic cache hit for question: {}",
-                            question.length() > 50 ? question.substring(0, 50) + "..." : question);
-                    return cached.getAnswer();
-                }
+            String earlyAnswer = resolveEarlyAnswer(question);
+            if (earlyAnswer != null) {
+                recordAssistantResponse(context, earlyAnswer);
+                return earlyAnswer;
             }
 
-            // 2. 智能工具推荐（日志记录，供后续分析）
             ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
             logger.debug("Tool recommendation: primary={}, intent={}, confidence={}",
                     recommendation.primaryTool, recommendation.detectedIntent, recommendation.confidence);
 
-            // 3. 构建增强的上下文（包含多轮对话摘要）
             String enhancedQuestion = buildEnhancedQuestion(context, question, recommendation);
-
             long startTime = System.currentTimeMillis();
             String response = aiAgent.chat(enhancedQuestion, context.getProjectId(), context.getUserName());
-            long responseTime = System.currentTimeMillis() - startTime;
-
-            // 4. 兜底检查
-            String fallbackResult = tryFallbackToolExecution(response);
-            if (fallbackResult != null) {
-                logger.info("Detected raw tool call in AI response, executed via fallback");
-                response = fallbackResult;
-            }
-
-            // 5. 将结果存入语义缓存
-            if (response != null && !response.isEmpty()) {
-                if (semanticCacheEnabled) {
-                    semanticCacheService.put(question, response, null);
-                }
-                // 记录工具推荐结果（用于学习优化）
-                toolRecommender.recordToolCall(recommendation.primaryTool, true);
-                llmSwitcher.recordResult(llmSwitcher.getDefaultModelName(), true, responseTime);
-            } else {
-                llmSwitcher.recordResult(llmSwitcher.getDefaultModelName(), false, responseTime);
-            }
-
-            logger.info("AI Agent response: {}ms, length={}",
-                    responseTime, response != null ? response.length() : 0);
-            return response;
+            return finalizeAgentResponse(context, question, recommendation, startTime, response);
         } catch (Exception e) {
-            if (isToolInvocationLoopLimit(e)) {
-                logger.warn("AI Agent stopped because tool invocation loop limit was reached: {}", e.getMessage());
-                return "抱歉，AI 助手连续调用工具次数过多，已自动停止以避免无效循环。请把问题缩小到一个具体目标（例如覆盖率概览、某个应用的慢接口、某条调用链详情），我会重新查询。";
-            }
-            logger.error("AI Agent chat failed", e);
-            return null;
+            return handleChatException(e);
         } finally {
             AgentContext.clearContext();
         }
@@ -520,24 +504,20 @@ public class AIAgentService {
         try {
             context.setPageContext(pageContext);
             AgentContext.setContext(context);
+            String earlyAnswer = resolveEarlyAnswer(question);
+            if (earlyAnswer != null) {
+                recordAssistantResponse(context, earlyAnswer);
+                return earlyAnswer;
+            }
+
             ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
             String enhancedQuestion = buildEnhancedQuestion(context, question, recommendation);
-            String response = aiAgent.chatWithContext(enhancedQuestion, context.getProjectId(), context.getUserName(), pageContext);
-
-            String fallbackResult = tryFallbackToolExecution(response);
-            if (fallbackResult != null) {
-                logger.info("Detected raw tool call in AI response (withContext), executed via fallback");
-                return fallbackResult;
-            }
-
-            return response;
+            long startTime = System.currentTimeMillis();
+            String response = aiAgent.chatWithContext(enhancedQuestion, context.getProjectId(),
+                    context.getUserName(), pageContext);
+            return finalizeAgentResponse(context, question, recommendation, startTime, response);
         } catch (Exception e) {
-            if (isToolInvocationLoopLimit(e)) {
-                logger.warn("AI Agent with context stopped because tool invocation loop limit was reached: {}", e.getMessage());
-                return "抱歉，AI 助手连续调用工具次数过多，已自动停止以避免无效循环。请把问题缩小到当前页面中的一个具体分析目标后重试。";
-            }
-            logger.error("AI Agent chat with context failed", e);
-            return null;
+            return handleChatException(e);
         } finally {
             AgentContext.clearContext();
         }
@@ -556,32 +536,89 @@ public class AIAgentService {
         try {
             context.setPageContext(pageContext);
             AgentContext.setContext(context);
-            // 截断过长的 base64 数据，防止超过模型上下文限制（保留前 500KB）
             String truncatedImage = imageData != null && imageData.length() > 680000
                     ? imageData.substring(0, 680000) + "... [图片数据已截断]"
                     : imageData;
+
             ToolRecommender.Recommendation recommendation = toolRecommender.recommend(question);
             String enhancedQuestion = buildEnhancedQuestion(context, question, recommendation);
+            long startTime = System.currentTimeMillis();
             String response = aiAgent.chatWithImage(enhancedQuestion, context.getProjectId(), context.getUserName(),
                     pageContext, truncatedImage);
-
-            String fallbackResult = tryFallbackToolExecution(response);
-            if (fallbackResult != null) {
-                logger.info("Detected raw tool call in AI response (withImage), executed via fallback");
-                return fallbackResult;
-            }
-
-            return response;
+            return finalizeAgentResponse(context, question, recommendation, startTime, response);
         } catch (Exception e) {
-            if (isToolInvocationLoopLimit(e)) {
-                logger.warn("AI Agent with image stopped because tool invocation loop limit was reached: {}", e.getMessage());
-                return "抱歉，AI 助手连续调用工具次数过多，已自动停止以避免无效循环。请结合截图指定一个更具体的问题后重试。";
-            }
-            logger.error("AI Agent chat with image failed", e);
-            return null;
+            return handleChatException(e);
         } finally {
             AgentContext.clearContext();
         }
+    }
+
+    private String resolveEarlyAnswer(String question) {
+        if (semanticCacheEnabled) {
+            SemanticCacheService.CachedResponse cached = semanticCacheService.get(question);
+            if (cached != null && cached.isFromCache() && cached.getAnswer() != null) {
+                logger.info("Semantic cache hit for question: {}",
+                        question.length() > 50 ? question.substring(0, 50) + "..." : question);
+                return cached.getAnswer();
+            }
+        }
+
+        if (selfLearningEnabled && knowledgeHitEnabled) {
+            try {
+                AISelfLearningService selfLearning = getSelfLearningService();
+                String learnedAnswer = selfLearning.findBestPracticeAnswer(question);
+                if (learnedAnswer != null && !learnedAnswer.isEmpty()) {
+                    logger.info("Knowledge base hit for question: {}",
+                            question.length() > 50 ? question.substring(0, 50) + "..." : question);
+                    if (semanticCacheEnabled) {
+                        semanticCacheService.put(question, learnedAnswer, null);
+                    }
+                    return learnedAnswer;
+                }
+            } catch (Exception e) {
+                logger.debug("Knowledge base lookup failed (non-critical): {}", e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    private String finalizeAgentResponse(AgentContext context,
+                                         String question,
+                                         ToolRecommender.Recommendation recommendation,
+                                         long startTime,
+                                         String response) {
+        long responseTime = System.currentTimeMillis() - startTime;
+        String fallbackResult = tryFallbackToolExecution(response);
+        if (fallbackResult != null) {
+            logger.info("Detected raw tool call in AI response, executed via fallback");
+            response = fallbackResult;
+        }
+
+        boolean success = response != null && !response.isEmpty();
+        if (success) {
+            if (semanticCacheEnabled) {
+                semanticCacheService.put(question, response, null);
+            }
+            toolRecommender.recordToolCall(recommendation.primaryTool, true);
+            llmSwitcher.recordResult(llmSwitcher.getDefaultModelName(), true, responseTime);
+            recordAssistantResponse(context, response);
+        } else {
+            toolRecommender.recordToolCall(recommendation.primaryTool, false);
+            llmSwitcher.recordResult(llmSwitcher.getDefaultModelName(), false, responseTime);
+        }
+
+        logger.info("AI Agent response: {}ms, length={}, success={}",
+                responseTime, response != null ? response.length() : 0, success);
+        return response;
+    }
+
+    private String handleChatException(Exception e) {
+        if (isToolInvocationLoopLimit(e)) {
+            logger.warn("AI Agent stopped because tool invocation loop limit was reached: {}", e.getMessage());
+            return "抱歉，AI 助手连续调用工具次数过多，已自动停止以避免无效循环。请把问题缩小到一个具体目标（例如覆盖率概览、某个应用的慢接口、某条调用链详情），我会重新查询。";
+        }
+        logger.error("AI Agent chat failed", e);
+        return null;
     }
 
     private boolean isToolInvocationLoopLimit(Throwable error) {
@@ -2407,6 +2444,18 @@ public class AIAgentService {
             enhanced.append(scenarioGuide).append("\n\n");
         }
 
+        if (selfLearningEnabled && dynamicGuideEnabled) {
+            try {
+                AISelfLearningService selfLearning = getSelfLearningService();
+                String learningGuide = selfLearning.buildDynamicLearningGuide(question, context.getProjectId());
+                if (learningGuide != null && !learningGuide.isEmpty()) {
+                    enhanced.append(learningGuide).append("\n\n");
+                }
+            } catch (Exception e) {
+                logger.debug("Dynamic learning guide injection failed (non-critical): {}", e.getMessage());
+            }
+        }
+
         if (context != null && context.getPageContext() != null && !context.getPageContext().trim().isEmpty()) {
             enhanced.append("[当前页面上下文]\n").append(context.getPageContext()).append("\n");
             enhanced.append("[页面上下文使用要求]\n");
@@ -2655,15 +2704,23 @@ public class AIAgentService {
      * 获取自主学习服务（懒加载）
      */
     public AISelfLearningService getSelfLearningService() {
+        if (!selfLearningEnabled) {
+            return null;
+        }
         if (selfLearningService == null) {
             synchronized (this) {
                 if (selfLearningService == null) {
-                    // 使用系统属性获取数据路径
-                    String dataPath = System.getProperty("oat.data.path",
-                            System.getProperty("user.home") + "/oAT/codeData");
-                    FeedbackPersistenceService fps = new FeedbackPersistenceService(dataPath);
+                    FeedbackPersistenceService fps = feedbackPersistenceService;
+                    if (fps == null) {
+                        String dataPath = System.getProperty("oat.data.path",
+                                System.getProperty("user.home") + "/oAT/codeData");
+                        fps = new FeedbackPersistenceService(dataPath);
+                    }
+                    double knowledgeThreshold = Double.parseDouble(
+                            System.getProperty("ai.enhanced.self-learning.knowledge-hit-threshold", "0.7"));
                     selfLearningService = new AISelfLearningService(fps,
-                            Math.max(1, Integer.getInteger("ai.enhanced.self-learning.interval-hours", 6)));
+                            Math.max(1, Integer.getInteger("ai.enhanced.self-learning.interval-hours", 6)),
+                            knowledgeThreshold);
                     selfLearningService.setToolRecommender(toolRecommender);
                 }
             }
@@ -2682,6 +2739,18 @@ public class AIAgentService {
         stats.put("conversationMemory", conversationMemory.getStats());
         stats.put("fallbackReports", getRecentFallbackReports(5));
         stats.put("agentAvailable", isAvailable());
+        stats.put("selfLearningEnabled", selfLearningEnabled);
+        stats.put("knowledgeHitEnabled", knowledgeHitEnabled);
+        stats.put("dynamicGuideEnabled", dynamicGuideEnabled);
+        if (selfLearningEnabled) {
+            try {
+                AISelfLearningService selfLearning = getSelfLearningService();
+                if (selfLearning != null) {
+                    stats.put("selfLearning", selfLearning.getStatus());
+                }
+            } catch (Exception ignored) {
+            }
+        }
         return stats;
     }
 }

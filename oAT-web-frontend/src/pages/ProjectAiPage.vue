@@ -147,6 +147,42 @@
             </div>
           </section>
 
+          <section class="panel learning-panel">
+            <div class="card-title">
+              <h2>AI 自主学习</h2>
+              <button class="ghost-button small" type="button" :disabled="learningLoading" @click="refreshLearningPanel">
+                {{ learningLoading ? '刷新中...' : '刷新报告' }}
+              </button>
+            </div>
+            <div v-if="learningError" class="learning-error">{{ learningError }}</div>
+            <div v-else class="learning-grid">
+              <article class="meta-card">
+                <span>反馈总数</span>
+                <strong>{{ feedbackStats?.total ?? 0 }}</strong>
+              </article>
+              <article class="meta-card">
+                <span>满意度</span>
+                <strong>{{ feedbackStats?.satisfactionRate || '0%' }}</strong>
+              </article>
+              <article class="meta-card">
+                <span>知识库条目</span>
+                <strong>{{ selfLearningStatus?.knowledgeBaseSize ?? 0 }}</strong>
+              </article>
+              <article class="meta-card">
+                <span>跟踪主题</span>
+                <strong>{{ selfLearningStatus?.trackedTopics ?? 0 }}</strong>
+              </article>
+            </div>
+            <div v-if="learningReport?.suggestions?.length" class="learning-suggestions">
+              <h3>优化建议</h3>
+              <article v-for="item in learningReport.suggestions" :key="item.id" class="learning-suggestion" :class="item.priority.toLowerCase()">
+                <strong>{{ item.title }}</strong>
+                <p>{{ item.description }}</p>
+              </article>
+            </div>
+            <p v-else class="learning-empty">提交回答反馈后，系统会自动积累知识并生成优化建议。</p>
+          </section>
+
           <section class="panel">
             <div class="card-title">
               <h2>提问锚点</h2>
@@ -390,14 +426,14 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
-import { submitAiFeedback } from '@/api/bootstrap'
+import { fetchAiFeedbackStats, fetchAiLearningReport, submitAiFeedback } from '@/api/bootstrap'
 import { backendApiUrl } from '@/api/http'
 import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useDialog } from '@/composables/useDialog'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
 import { renderMarkdown } from '@/utils/markdown'
-import type { AIAction, AIFeedbackPayload, AIQuickLink } from '@/api/types'
+import type { AIAction, AIFeedbackPayload, AIFeedbackStats, AILearningReport, AIQuickLink } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -446,6 +482,11 @@ const expandedAnchorIds = ref(new Set<string>())
 const copiedMessageId = ref('')
 const feedbackSubmitting = ref(false)
 const feedbackMessage = ref('')
+const learningLoading = ref(false)
+const learningError = ref('')
+const feedbackStats = ref<AIFeedbackStats | null>(null)
+const learningReport = ref<AILearningReport | null>(null)
+const selfLearningStatus = computed(() => feedbackStats.value?.selfLearning || null)
 let askAbortController: AbortController | null = null
 let targetAnchorTimer: number | undefined
 let copiedMessageTimer: number | undefined
@@ -560,6 +601,23 @@ const floatingAnchorDots = computed(() => {
   return dots
 })
 
+async function refreshLearningPanel() {
+  learningLoading.value = true
+  learningError.value = ''
+  try {
+    const [stats, report] = await Promise.all([
+      fetchAiFeedbackStats(projectId.value),
+      fetchAiLearningReport(),
+    ])
+    feedbackStats.value = stats
+    learningReport.value = report
+  } catch (err) {
+    learningError.value = err instanceof Error ? err.message : '加载学习状态失败'
+  } finally {
+    learningLoading.value = false
+  }
+}
+
 async function load() {
   if (!projectId.value) {
     error.value = '缺少 projectId'
@@ -569,6 +627,7 @@ async function load() {
   error.value = ''
   try {
     await projectStore.loadAiContext(projectId.value)
+    await refreshLearningPanel()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载 AI 工作台失败'
   } finally {
@@ -922,6 +981,7 @@ async function submitFeedback(feedbackType: AIFeedbackPayload['feedbackType'], r
       responseTime: typeof reply.value?.metadata?.responseTime === 'number' ? reply.value.metadata.responseTime : undefined,
     })
     feedbackMessage.value = '反馈已提交，感谢帮助 AI 改进。'
+    await refreshLearningPanel()
   } catch (err) {
     feedbackMessage.value = err instanceof Error ? err.message : '反馈提交失败'
   } finally {
@@ -2420,6 +2480,69 @@ onBeforeUnmount(() => {
   color: var(--ai-accent);
   font-size: 13px;
   font-weight: 700;
+}
+
+.learning-panel .card-title {
+  align-items: center;
+}
+
+.learning-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.learning-error,
+.learning-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.learning-error {
+  color: #b91c1c;
+}
+
+.learning-suggestions {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.learning-suggestions h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.learning-suggestion {
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(248, 250, 252, .92);
+}
+
+.learning-suggestion strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #172033;
+}
+
+.learning-suggestion p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.learning-suggestion.high {
+  border-color: rgba(220, 38, 38, .18);
+  background: rgba(254, 242, 242, .9);
+}
+
+.learning-suggestion.medium {
+  border-color: rgba(217, 119, 6, .18);
+  background: rgba(255, 251, 235, .92);
 }
 
 .inline-link {

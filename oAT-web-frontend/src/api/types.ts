@@ -452,6 +452,42 @@ export interface AIFeedbackPayload {
   responseTime?: number
 }
 
+export interface AISelfLearningStatus {
+  knowledgeBaseSize?: number
+  trackedTopics?: number
+  failurePatterns?: number
+  pendingSuggestions?: number
+  topicGuidanceCount?: number
+  topicHealth?: Record<string, string>
+}
+
+export interface AIFeedbackStats {
+  total?: number
+  positive?: number
+  negative?: number
+  neutral?: number
+  satisfactionRate?: string
+  selfLearning?: AISelfLearningStatus
+}
+
+export interface AILearningSuggestion {
+  priority: 'HIGH' | 'MEDIUM' | 'LOW'
+  title: string
+  description: string
+  id: string
+  createdTime?: number
+}
+
+export interface AILearningReport {
+  timestamp?: string
+  knowledgeBaseEntries?: number
+  trackedTopics?: number
+  failurePatternsAnalyzed?: number
+  suggestionsGenerated?: number
+  topicHealthScores?: Record<string, number>
+  suggestions?: AILearningSuggestion[]
+}
+
 export interface SnapshotDirectorySummary {
   id: string
   parentId?: string
