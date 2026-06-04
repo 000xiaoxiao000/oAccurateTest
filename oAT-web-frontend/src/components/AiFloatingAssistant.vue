@@ -60,6 +60,39 @@
                 </button>
                 <div v-if="item.role === 'assistant'" class="message-text markdown-message" v-html="renderMarkdown(item.text)"></div>
                 <div v-else class="message-text">{{ item.text }}</div>
+                
+                <div v-if="item.role === 'assistant'" class="feedback-actions">
+                  <button 
+                    class="feedback-btn" 
+                    type="button" 
+                    :disabled="feedbackSubmitting" 
+                    :class="{ active: getMessageFeedback(item.id) === 'helpful' }"
+                    :title="getMessageFeedback(item.id) === 'helpful' ? '已标记有帮助' : '有帮助'"
+                    @click.stop="submitMessageFeedback(item.id, item.text, 'helpful', 5)"
+                  >
+                    <span class="feedback-icon">👍</span>
+                  </button>
+                  <button 
+                    class="feedback-btn" 
+                    type="button" 
+                    :disabled="feedbackSubmitting" 
+                    :class="{ active: getMessageFeedback(item.id) === 'not_helpful' }"
+                    :title="getMessageFeedback(item.id) === 'not_helpful' ? '已标记没帮助' : '没帮助'"
+                    @click.stop="submitMessageFeedback(item.id, item.text, 'not_helpful', 1)"
+                  >
+                    <span class="feedback-icon">👎</span>
+                  </button>
+                  <button 
+                    class="feedback-btn" 
+                    type="button" 
+                    :disabled="feedbackSubmitting"
+                    title="标记为不正确"
+                    @click.stop="submitMessageFeedback(item.id, item.text, 'incorrect', 1, true)"
+                  >
+                    <span class="feedback-icon">⚠️</span>
+                  </button>
+                </div>
+                
                 <div v-if="item.suggestions?.length" class="message-actions">
                   <button v-for="suggestion in item.suggestions" :key="suggestion" class="message-action" type="button" @click="sendPresetQuestion(suggestion)">{{ suggestion }}</button>
                 </div>
@@ -186,7 +219,8 @@ import { useAuthStore } from '@/stores/auth'
 import { useDialog } from '@/composables/useDialog'
 import MascotCanvas from '@/components/MascotCanvas.vue'
 import { renderMarkdown } from '@/utils/markdown'
-import type { AIAction, AIInteractivePagePayload, AIQuickLink } from '@/api/types'
+import { submitAiFeedback } from '@/api/bootstrap'
+import type { AIAction, AIFeedbackPayload, AIInteractivePagePayload, AIQuickLink } from '@/api/types'
 
 type Message = { id: string; role: 'user' | 'assistant'; text: string; suggestions?: string[]; actions?: AIAction[] }
 type ContextChipId = 'route' | 'apps' | 'online' | 'topic' | 'image' | 'filter' | 'hover' | 'selection'
@@ -235,6 +269,8 @@ const mascotHidden = ref(false)
 const asking = ref(false)
 const error = ref('')
 const copiedMessageId = ref('')
+const feedbackSubmitting = ref(false)
+const messageFeedbacks = ref<Record<string, string>>({})
 const imageInput = ref<HTMLInputElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
@@ -934,6 +970,45 @@ async function copyMessage(text: string, messageId: string) {
     error.value = ''
   } catch {
     error.value = '复制失败，请手动选择文本复制'
+  }
+}
+
+function getMessageFeedback(messageId: string): string {
+  return messageFeedbacks.value[messageId] || ''
+}
+
+async function submitMessageFeedback(
+  messageId: string,
+  answerText: string,
+  feedbackType: 'helpful' | 'not_helpful' | 'incorrect' | 'incomplete',
+  rating: number,
+  requireComment = false,
+) {
+  if (getMessageFeedback(messageId) === feedbackType) return
+  let comment = ''
+  if (requireComment) {
+    comment = window.prompt('请简单说明哪里需要改进，便于 AI 后续学习。\n例如：回答不准确、信息过时...') || ''
+    if (!comment.trim()) return
+  }
+  feedbackSubmitting.value = true
+  try {
+    const question = messages.value
+      .slice(0, messages.value.findIndex((m) => m.id === messageId))
+      .reverse()
+      .find((m) => m.role === 'user')?.text || ''
+    await submitAiFeedback({
+      projectId: projectId.value,
+      question,
+      answer: answerText,
+      rating,
+      feedbackType,
+      comment,
+    })
+    messageFeedbacks.value = { ...messageFeedbacks.value, [messageId]: feedbackType }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '反馈提交失败'
+  } finally {
+    feedbackSubmitting.value = false
   }
 }
 
@@ -2015,6 +2090,61 @@ onBeforeUnmount(() => {
   transform: translateY(0);
   background: #0f766e;
   color: #fff;
+}
+
+.feedback-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(15, 23, 42, .06);
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+
+.message-card:hover .feedback-actions,
+.message-card:focus-within .feedback-actions {
+  opacity: 1;
+}
+
+.feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: background .14s ease, transform .1s ease;
+  padding: 0;
+}
+
+.feedback-btn:hover {
+  background: rgba(15, 23, 42, .06);
+  transform: scale(1.1);
+}
+
+.feedback-btn:active {
+  transform: scale(.94);
+}
+
+.feedback-btn.active {
+  background: rgba(15, 118, 110, .12);
+}
+
+.feedback-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.feedback-icon {
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .message-actions {

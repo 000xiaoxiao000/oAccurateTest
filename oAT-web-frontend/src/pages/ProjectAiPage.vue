@@ -303,6 +303,38 @@
                 <div class="message-role">{{ section.message.role === 'user' ? '你' : 'AI' }}</div>
                 <div v-if="section.message.role === 'assistant'" class="message-text markdown-message" v-html="formatAssistantMessage(section.message.text)"></div>
                 <div v-else class="message-text">{{ section.message.text }}</div>
+                
+                <div v-if="section.message.role === 'assistant' && section.endsAnswer" class="message-actions">
+                  <button 
+                    class="message-action-btn" 
+                    type="button" 
+                    :disabled="feedbackSubmitting" 
+                    :class="{ active: getMessageFeedback(section.id) === 'helpful' }"
+                    :title="getMessageFeedback(section.id) === 'helpful' ? '已标记有帮助' : '有帮助'"
+                    @click.stop="submitMessageFeedback(section.id, section.message.text, 'helpful', 5)"
+                  >
+                    <span class="action-icon">👍</span>
+                  </button>
+                  <button 
+                    class="message-action-btn" 
+                    type="button" 
+                    :disabled="feedbackSubmitting" 
+                    :class="{ active: getMessageFeedback(section.id) === 'not_helpful' }"
+                    :title="getMessageFeedback(section.id) === 'not_helpful' ? '已标记没帮助' : '没帮助'"
+                    @click.stop="submitMessageFeedback(section.id, section.message.text, 'not_helpful', 1)"
+                  >
+                    <span class="action-icon">👎</span>
+                  </button>
+                  <button 
+                    class="message-action-btn" 
+                    type="button" 
+                    :disabled="feedbackSubmitting"
+                    title="标记为不正确"
+                    @click.stop="submitMessageFeedback(section.id, section.message.text, 'incorrect', 1, true)"
+                  >
+                    <span class="action-icon">⚠️</span>
+                  </button>
+                </div>
               </article>
             </div>
             <form ref="askFormRef" class="ask-form" @submit.prevent="submitAsk">
@@ -404,18 +436,9 @@
                 </article>
               </div>
             </div>
-
-            <div class="subsection feedback-box">
-              <h3>回答反馈</h3>
-              <div class="chip-list">
-                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('helpful', 5)">有帮助</button>
-                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('not_helpful', 1)">没帮助</button>
-                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('incorrect', 1, true)">不正确</button>
-                <button class="ghost-button small" type="button" :disabled="feedbackSubmitting" @click="submitFeedback('incomplete', 2, true)">不完整</button>
-              </div>
-              <p v-if="feedbackMessage" class="feedback-message">{{ feedbackMessage }}</p>
-            </div>
           </section>
+
+
         </div>
       </div>
     </template>
@@ -482,6 +505,7 @@ const expandedAnchorIds = ref(new Set<string>())
 const copiedMessageId = ref('')
 const feedbackSubmitting = ref(false)
 const feedbackMessage = ref('')
+const messageFeedbacks = ref<Record<string, string>>({})
 const learningLoading = ref(false)
 const learningError = ref('')
 const feedbackStats = ref<AIFeedbackStats | null>(null)
@@ -981,6 +1005,53 @@ async function submitFeedback(feedbackType: AIFeedbackPayload['feedbackType'], r
       responseTime: typeof reply.value?.metadata?.responseTime === 'number' ? reply.value.metadata.responseTime : undefined,
     })
     feedbackMessage.value = '反馈已提交，感谢帮助 AI 改进。'
+    await refreshLearningPanel()
+  } catch (err) {
+    feedbackMessage.value = err instanceof Error ? err.message : '反馈提交失败'
+  } finally {
+    feedbackSubmitting.value = false
+  }
+}
+
+function getMessageFeedback(messageId: string): string {
+  return messageFeedbacks.value[messageId] || ''
+}
+
+async function submitMessageFeedback(
+  messageId: string,
+  answerText: string,
+  feedbackType: AIFeedbackPayload['feedbackType'],
+  rating: number,
+  requireComment = false,
+) {
+  if (getMessageFeedback(messageId) === feedbackType) return
+  let comment = ''
+  if (requireComment) {
+    comment = (await dialog.prompt({
+      title: '补充反馈',
+      message: '请简单说明哪里需要改进，便于 AI 后续学习。',
+      placeholder: '例如：回答不准确、信息过时...',
+      confirmText: '提交反馈',
+    }) || '').trim()
+    if (!comment) return
+  }
+  feedbackSubmitting.value = true
+  try {
+    const question = activeMessages.value
+      .slice(0, activeMessages.value.findIndex((m) => m.id === messageId))
+      .reverse()
+      .find((m) => m.role === 'user')?.text || lastUserQuestion.value
+    await submitAiFeedback({
+      projectId: projectId.value,
+      question,
+      answer: answerText,
+      rating,
+      feedbackType,
+      comment,
+      usedTools: reply.value?.usedTools?.join(','),
+      responseTime: typeof reply.value?.metadata?.responseTime === 'number' ? reply.value.metadata.responseTime : undefined,
+    })
+    messageFeedbacks.value = { ...messageFeedbacks.value, [messageId]: feedbackType }
     await refreshLearningPanel()
   } catch (err) {
     feedbackMessage.value = err instanceof Error ? err.message : '反馈提交失败'
@@ -2480,6 +2551,61 @@ onBeforeUnmount(() => {
   color: var(--ai-accent);
   font-size: 13px;
   font-weight: 700;
+}
+
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(15, 23, 42, .06);
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+
+.message-card:hover .message-actions,
+.message-card:focus-within .message-actions {
+  opacity: 1;
+}
+
+.message-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: background .14s ease, transform .1s ease;
+  padding: 0;
+}
+
+.message-action-btn:hover {
+  background: rgba(15, 23, 42, .06);
+  transform: scale(1.1);
+}
+
+.message-action-btn:active {
+  transform: scale(.94);
+}
+
+.message-action-btn.active {
+  background: color-mix(in srgb, var(--ai-accent) 12%, transparent);
+}
+
+.message-action-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.action-icon {
+  font-size: 14px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .learning-panel .card-title {
