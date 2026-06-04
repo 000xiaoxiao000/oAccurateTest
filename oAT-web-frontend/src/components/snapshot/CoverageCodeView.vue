@@ -44,7 +44,18 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in paginatedMethods" :key="`${item.method.methodName}-${item.index}`">
+                <tr
+                  v-for="item in paginatedMethods"
+                  :key="`${item.method.methodName}-${item.index}`"
+                  data-oat-coverage-method-row="true"
+                  :data-method-name="methodBaseName(item.method.methodName)"
+                  :data-method-display-name="item.method.methodName"
+                  :data-method-desc="item.method.methodDesc || ''"
+                  :data-method-complexity="item.method.complexity"
+                  :data-method-line-rate="formatRate(item.method.coveredLines, item.method.totalLines)"
+                  :data-method-branch-rate="formatBranchRate(item.method.branchRate, item.method.totalBranchTargets)"
+                  :data-method-summary="methodContextSummary(item.method)"
+                >
                   <td class="method-name">
                     <div class="method-mainline">
                       <button class="method-jump" type="button" :title="item.method.methodName" @click="jumpToMethod(item.method.methodName)">{{ item.method.methodName }}</button>
@@ -142,6 +153,21 @@ watch(filteredMethods, () => {
 function clearFilters() {
   methodKeyword.value = ''
   statusFilter.value = ''
+}
+
+function methodBaseName(methodName: string) {
+  return methodName.split('(')[0]?.trim() || methodName.trim()
+}
+
+function methodContextSummary(method: MethodCoverageSummary) {
+  return [
+    `方法=${method.methodName}`,
+    method.methodDesc ? `签名=${method.methodDesc}` : '',
+    `复杂度=${method.complexity}`,
+    `行覆盖=${method.coveredLines}/${method.totalLines} ${formatRate(method.coveredLines, method.totalLines)}`,
+    `分支覆盖=${method.coveredBranchTargets}/${method.totalBranchTargets} ${formatBranchRate(method.branchRate, method.totalBranchTargets)}`,
+    `状态=${coverageText(method)}`,
+  ].filter(Boolean).join('；')
 }
 
 function scrollTop() {

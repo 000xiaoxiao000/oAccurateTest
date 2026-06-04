@@ -987,8 +987,15 @@ async function submitMessageFeedback(
   if (getMessageFeedback(messageId) === feedbackType) return
   let comment = ''
   if (requireComment) {
-    comment = window.prompt('请简单说明哪里需要改进，便于 AI 后续学习。\n例如：回答不准确、信息过时...') || ''
-    if (!comment.trim()) return
+    const result = await dialog.prompt({
+      title: '补充反馈',
+      message: '请简单说明哪里需要改进，便于 AI 后续学习。',
+      placeholder: '例如：回答不准确、信息过时...',
+      confirmText: '提交反馈',
+      maxLength: 200,
+    })
+    if (result === null || !result.trim()) return
+    comment = result
   }
   feedbackSubmitting.value = true
   try {
@@ -1297,7 +1304,7 @@ function collectCoverageSourceContext(currentQuestion: string) {
   if (!sourceText) return ''
 
   const methodNames = collectSourceMethodNames()
-  const targetMethod = findTargetMethodName(currentQuestion, methodNames)
+  const targetMethod = findTargetMethodName(currentQuestion, methodNames, sourceText)
   const snippet = buildSourceSnippet(sourceText, targetMethod)
   const className = collectCoverageClassName()
   const selectedMethodSummary = collectSelectedMethodSummary(targetMethod)
@@ -1305,6 +1312,7 @@ function collectCoverageSourceContext(currentQuestion: string) {
   if (className) parts.push(`当前类:${className}`)
   if (targetMethod) parts.push(`目标方法:${targetMethod}`)
   if (selectedMethodSummary) parts.push(`方法覆盖信息:${selectedMethodSummary}`)
+  if (isMethodBugQuestion(currentQuestion) && snippet) parts.push('用户意图:分析当前/目标方法可能存在的 Bug，请直接基于下方真实源码片段回答')
   if (snippet) parts.push(`当前源码片段:\n${snippet}`)
   return parts.join('；')
 }
@@ -1325,15 +1333,46 @@ function collectSourceMethodNames() {
     const name = raw.split('(')[0]?.trim()
     if (name && !names.includes(name)) names.push(name)
   }
+  for (const row of Array.from(document.querySelectorAll<HTMLElement>('[data-oat-coverage-method-row="true"], .method-table tbody tr'))) {
+    if (rootRef.value?.contains(row)) continue
+    const name = extractMethodNameFromRow(row)
+    if (name && !names.includes(name)) names.push(name)
+  }
   return names
 }
 
-function findTargetMethodName(question: string, methodNames: string[]) {
-  const normalizedQuestion = question.toLowerCase()
-  const selected = normalizeContextText(selectedRowEl?.textContent || '')
-  return methodNames.find((name) => normalizedQuestion.includes(name.toLowerCase()))
-    || methodNames.find((name) => selected.toLowerCase().includes(name.toLowerCase()))
+function findTargetMethodName(question: string, methodNames: string[], sourceText: string) {
+  const selectedMethod = selectedRowEl ? extractMethodNameFromRow(selectedRowEl) : ''
+  if (selectedMethod) return selectedMethod
+
+  const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('[data-oat-coverage-method-row="true"], .method-table tbody tr'))
+    .filter((row) => !rootRef.value?.contains(row) && row.offsetParent !== null)
+  if (visibleRows.length === 1) {
+    const visibleMethod = extractMethodNameFromRow(visibleRows[0])
+    if (visibleMethod) return visibleMethod
+  }
+
+  const contextText = [
+    question,
+    liveSignals.value.filters.join(' '),
+    liveSignals.value.tableSelection,
+    liveSignals.value.tableHover,
+  ].join(' ').toLowerCase()
+  return methodNames.find((name) => contextText.includes(name.toLowerCase()))
+    || methodNames.find((name) => contextText.includes(name.split('(')[0]?.trim().toLowerCase() || name.toLowerCase()))
+    || inferMethodNameFromQuestion(question, sourceText)
     || ''
+}
+
+function inferMethodNameFromQuestion(question: string, sourceText: string) {
+  const tokens = Array.from(question.matchAll(/[A-Za-z_$][\w$]*\s*(?=\()/g)).map((match) => match[0].trim())
+  tokens.push(...Array.from(question.matchAll(/[A-Za-z_$][\w$]{2,}/g)).map((match) => match[0].trim()))
+  const ignored = new Set(['bug', 'method', 'null', 'true', 'false', 'return', 'public', 'private', 'protected', 'static', 'void', 'int', 'long', 'string', 'integer', 'number', 'boolean'])
+  for (const token of Array.from(new Set(tokens))) {
+    if (ignored.has(token.toLowerCase())) continue
+    if (new RegExp(`\\b${escapeRegExp(token)}\\s*\\(`).test(sourceText)) return token
+  }
+  return ''
 }
 
 function buildSourceSnippet(sourceText: string, methodName: string) {
@@ -1355,10 +1394,31 @@ function collectCoverageClassName() {
 }
 
 function collectSelectedMethodSummary(targetMethod: string) {
-  const rows = Array.from(document.querySelectorAll<HTMLElement>('.method-table tbody tr'))
-  const targetRow = rows.find((row) => targetMethod && normalizeContextText(row.textContent || '').includes(targetMethod))
+  const rows = Array.from(document.querySelectorAll<HTMLElement>('[data-oat-coverage-method-row="true"], .method-table tbody tr'))
+  const targetRow = rows.find((row) => targetMethod && rowMatchesMethod(row, targetMethod))
     || (selectedRowEl && selectedRowEl.closest('.method-table') ? selectedRowEl : null)
-  return targetRow ? summarizeRow(targetRow).slice(0, 300) : ''
+  if (!targetRow) return ''
+  return (targetRow.dataset.methodSummary || summarizeRow(targetRow)).slice(0, 500)
+}
+
+function extractMethodNameFromRow(row: HTMLElement) {
+  const fromData = row.dataset.methodName || row.dataset.methodDisplayName
+  if (fromData) return fromData.split('(')[0]?.trim() || fromData.trim()
+  const raw = normalizeContextText(row.querySelector<HTMLElement>('.method-jump')?.textContent || row.textContent || '')
+  return raw.split('(')[0]?.trim() || ''
+}
+
+function rowMatchesMethod(row: HTMLElement, methodName: string) {
+  const normalized = methodName.toLowerCase()
+  return [row.dataset.methodName, row.dataset.methodDisplayName, row.dataset.methodDesc, row.textContent]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(normalized))
+}
+
+function isMethodBugQuestion(question: string) {
+  const text = question.toLowerCase()
+  return (text.includes('bug') || text.includes('缺陷') || text.includes('风险') || text.includes('可能存在') || text.includes('潜在问题'))
+    && (text.includes('方法') || text.includes('method') || text.includes('函数') || text.includes('此') || text.includes('这个'))
 }
 
 function escapeRegExp(value: string) {

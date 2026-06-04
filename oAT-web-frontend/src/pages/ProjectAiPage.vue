@@ -174,11 +174,16 @@
               </article>
             </div>
             <div v-if="learningReport?.suggestions?.length" class="learning-suggestions">
-              <h3>优化建议</h3>
-              <article v-for="item in learningReport.suggestions" :key="item.id" class="learning-suggestion" :class="item.priority.toLowerCase()">
-                <strong>{{ item.title }}</strong>
-                <p>{{ item.description }}</p>
-              </article>
+              <div class="learning-suggestions-header">
+                <h3>优化建议</h3>
+                <span class="muted">{{ learningReport.suggestions.length }} 条</span>
+              </div>
+              <div class="learning-suggestions-list">
+                <article v-for="item in learningReport.suggestions" :key="item.id" class="learning-suggestion" :class="item.priority.toLowerCase()">
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.description }}</p>
+                </article>
+              </div>
             </div>
             <p v-else class="learning-empty">提交回答反馈后，系统会自动积累知识并生成优化建议。</p>
           </section>
@@ -2631,13 +2636,29 @@ onBeforeUnmount(() => {
 
 .learning-suggestions {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin-top: 14px;
 }
 
-.learning-suggestions h3 {
+.learning-suggestions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.learning-suggestions-header h3 {
   margin: 0;
   font-size: 14px;
+}
+
+.learning-suggestions-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 2px;
+  scrollbar-gutter: stable;
 }
 
 .learning-suggestion {

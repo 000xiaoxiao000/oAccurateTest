@@ -2463,6 +2463,10 @@ public class AIAgentService {
             if (context.getPageContext().contains("当前源码片段")) {
                 enhanced.append("[源码页上下文使用要求]\n");
                 enhanced.append("当前页面上下文已经包含用户正在查看的真实源码片段。遇到源码 Bug 检测、业务逻辑分析、方法调用或覆盖率问题时，必须优先基于该源码片段分析；工具无法读取源码时，不要声称完全无法分析，也不要编造源码之外的类名或方法名。\n\n");
+                if (isSourceMethodBugContext(question, context.getPageContext())) {
+                    enhanced.append("[当前方法 Bug 分析强制要求]\n");
+                    enhanced.append("用户正在覆盖率源码页询问当前/目标方法可能存在的 Bug。当前页面上下文已提供 当前类、目标方法、方法覆盖信息 和 当前源码片段；必须直接基于这些真实源码内容输出潜在 bug、触发条件、影响和修复建议。不要改查调用链，不要回答“未找到调用链数据”，也不要要求用户再次提供方法名。\n\n");
+                }
             }
         }
 
@@ -2474,6 +2478,14 @@ public class AIAgentService {
                 question);
 
         return enhanced.toString();
+    }
+
+    private boolean isSourceMethodBugContext(String question, String pageContext) {
+        String text = ((question == null ? "" : question) + " " + (pageContext == null ? "" : pageContext)).toLowerCase(Locale.ROOT);
+        return text.contains("当前源码片段")
+                && (text.contains("目标方法") || text.contains("当前选中行") || text.contains("方法覆盖信息"))
+                && containsAny(text, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误", "风险")
+                && containsAny(text, "方法", "method", "函数", "此方法", "这个方法", "目标方法");
     }
 
     private String buildScenarioGuide(String question, ToolRecommender.Recommendation recommendation) {

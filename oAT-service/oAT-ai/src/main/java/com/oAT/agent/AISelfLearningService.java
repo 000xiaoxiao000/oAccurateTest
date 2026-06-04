@@ -227,6 +227,16 @@ public class AISelfLearningService {
 
         FeedbackPersistenceService.SelfLearningDataset dataset = feedbackPersistence.getLearningDataset();
 
+        // 重建派生统计，避免每次刷新报告时重复累计历史反馈
+        failurePatterns.clear();
+        topicStatsMap.clear();
+        for (FeedbackPersistenceService.FeedbackRecord record : feedbackPersistence.getAllRecords()) {
+            if (record.getTopic() == null || record.getTopic().trim().isEmpty()) {
+                inferTopic(record);
+            }
+            updateTopicStats(record);
+        }
+
         // 1. 从正面样本中提炼知识
         learnFromPositives(dataset.positiveSamples);
 
@@ -471,16 +481,24 @@ public class AISelfLearningService {
         // 如果某模式频繁出现负面反馈，生成建议
         int count = failurePatterns.getOrDefault(pattern, 0);
         if (count >= 3) {
+            String patternId = "failure_pattern_" + pattern.hashCode();
             addSuggestion(OptimizationSuggestion.Priority.HIGH,
                     "高频负面反馈模式检测到",
                     "问题模式「" + truncate(pattern, 50) + "」已收到 " + count + " 条负面反馈。"
                             + "\n建议检查该类问题的处理逻辑，或补充相关工具数据。",
-                    "failure_pattern_" + count);
+                    patternId);
             refreshTopicGuidance();
         }
     }
 
     private void generateOptimizationSuggestions() {
+        synchronized (suggestions) {
+            suggestions.removeIf(s ->
+                s.id.startsWith("topic_quality_") ||
+                s.id.startsWith("pattern_hash_") ||
+                s.id.startsWith("failure_pattern_"));
+        }
+        
         // 1. 低满意度主题检测
         for (Map.Entry<TopicKey, TopicStats> entry : topicStatsMap.entrySet()) {
             TopicStats ts = entry.getValue();
@@ -493,16 +511,17 @@ public class AISelfLearningService {
             }
         }
 
-        // 2. 高频失败模式
+        // 2. 高频失败模式（按模式文本hash而非计数生成id，避免重复累积）
         failurePatterns.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                 .limit(3)
                 .forEach(e -> {
                     if (e.getValue() >= 2) {
+                        String patternId = "pattern_hash_" + e.getKey().hashCode();
                         addSuggestion(OptimizationSuggestion.Priority.MEDIUM,
                                 "需要关注的失败模式",
                                 "「" + truncate(e.getKey(), 40) + "」出现 " + e.getValue() + " 次负面反馈",
-                                "pattern_" + e.getValue());
+                                patternId);
                     }
                 });
     }
@@ -608,11 +627,10 @@ public class AISelfLearningService {
 
     private void addSuggestion(OptimizationSuggestion.Priority priority,
                               String title, String description, String id) {
-        // 避免重复
-        for (OptimizationSuggestion s : getSuggestions()) {
-            if (id.equals(s.id)) return;
+        synchronized (suggestions) {
+            suggestions.removeIf(s -> id.equals(s.id));
+            suggestions.add(new OptimizationSuggestion(priority, title, description, id));
         }
-        suggestions.add(new OptimizationSuggestion(priority, title, description, id));
     }
 
     private void startPeriodicLearning() {
