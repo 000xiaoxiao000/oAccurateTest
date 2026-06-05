@@ -89,6 +89,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     @Autowired
     private ElasticsearchOperations elasticsearchOperations;
 
+    private final Set<String> sourceClassIndexEnsuredReports = ConcurrentHashMap.newKeySet();
+
     private ExecutorService jobExecutors;
     private java.util.concurrent.ScheduledExecutorService jobCleanupExecutor;
     private List<Job<String>> jobs;
@@ -869,6 +871,29 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     }
 
     @Override
+    public void ensureSourceClassesIndexed(String reportId) {
+        if (!StringUtils.hasText(reportId) || sourceClassIndexEnsuredReports.contains(reportId)) {
+            return;
+        }
+        CoverageReportIndex report = getReport(reportId);
+        if (report == null || !StringUtils.hasText(report.getAppId())) {
+            return;
+        }
+        synchronized (sourceClassIndexEnsuredReports) {
+            if (sourceClassIndexEnsuredReports.contains(reportId)) {
+                return;
+            }
+            try {
+                fillMissingSourceClassCoverage(report);
+            } catch (Exception e) {
+                logger.warn("补齐覆盖率源码类失败, reportId={}", reportId, e);
+            } finally {
+                sourceClassIndexEnsuredReports.add(reportId);
+            }
+        }
+    }
+
+    @Override
     public CoverageComparisonVo getComparison(String reportId) {
         CoverageComparisonVo comparison = new CoverageComparisonVo();
         if (!StringUtils.hasText(reportId)) {
@@ -925,6 +950,152 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         comparison.setDecreasedCount(comparison.getDecreasedMethods().size());
 
         return comparison;
+    }
+
+    private void fillMissingSourceClassCoverage(CoverageReportIndex report) {
+        File codeFile = resolveReportSourceFile(report);
+        if (codeFile == null || !codeFile.exists()) {
+            return;
+        }
+
+        Set<String> sourceClassNames = scanJavaSourceClassNames(codeFile);
+        if (sourceClassNames.isEmpty()) {
+            return;
+        }
+
+        Set<String> existingClassNames = classCoverageRepository.findByReportId(report.getId()).stream()
+                .map(ClassCoverageIndex::getClassName)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        Set<String> existingRootPackages = existingClassNames.stream()
+                .map(this::firstPackageSegment)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        List<ClassCoverageIndex> missingClasses = new ArrayList<>();
+        for (String className : sourceClassNames) {
+            String ownerClassName = resolveCoverageOwnerClassName(className);
+            if (!existingRootPackages.isEmpty() && !existingRootPackages.contains(firstPackageSegment(ownerClassName))) {
+                continue;
+            }
+            if (existingClassNames.contains(ownerClassName)) {
+                continue;
+            }
+            ClassCoverageIndex classCov = createInitialClassCoverage(report.getAppId(), ownerClassName);
+            classCov.setReportId(report.getId());
+            classCov.setId(report.getId() + "_" + ownerClassName.hashCode());
+            classCov.setLineRate(0.0);
+            classCov.setBranchRate(0.0);
+            classCov.setMethodRate(0.0);
+            missingClasses.add(classCov);
+            existingClassNames.add(ownerClassName);
+        }
+
+        if (!missingClasses.isEmpty()) {
+            classCoverageRepository.saveAll(missingClasses);
+            logger.info("已从源码包补齐覆盖率类, reportId={}, count={}", report.getId(), missingClasses.size());
+        }
+    }
+
+    private File resolveReportSourceFile(CoverageReportIndex report) {
+        VersionCenterIndex vIndex = findVersionIndexForReport(report);
+        if (vIndex == null || vIndex.getVersionItem() == null || !StringUtils.hasText(vIndex.getVersionItem().getProgramFile())) {
+            return null;
+        }
+        File codeFile = new File(vIndex.getVersionItem().getProgramFile());
+        return codeFile.isAbsolute() ? codeFile : new File(resourceService.getCacheRoot(), vIndex.getVersionItem().getProgramFile());
+    }
+
+    private VersionCenterIndex findVersionIndexForReport(CoverageReportIndex report) {
+        if (report == null) {
+            return null;
+        }
+        List<VersionCenterIndex> vIndices = null;
+        if (StringUtils.hasText(report.getVersionNumber()) && StringUtils.hasText(report.getRepoBranch()) && StringUtils.hasText(report.getRepoCommitId())) {
+            vIndices = versionCenterRepository.findTop1ByVersionItem_AppIdAndVersionItem_VersionNumberAndVersionItem_RepoBranchAndVersionItem_RepoCommitId(
+                    report.getAppId(), report.getVersionNumber(), report.getRepoBranch(), report.getRepoCommitId());
+        }
+        if ((vIndices == null || vIndices.isEmpty()) && StringUtils.hasText(report.getRepoCommitId()) && !"head".equalsIgnoreCase(report.getRepoCommitId())) {
+            vIndices = versionCenterRepository.findTop1ByVersionItem_AppIdAndVersionItem_RepoCommitId(report.getAppId(), report.getRepoCommitId());
+        }
+        if ((vIndices == null || vIndices.isEmpty()) && StringUtils.hasText(report.getVersionNumber())) {
+            vIndices = versionCenterRepository.findTop1ByVersionItem_AppIdAndVersionItem_VersionNumber(report.getAppId(), report.getVersionNumber());
+        }
+        if (vIndices == null || vIndices.isEmpty()) {
+            vIndices = versionCenterRepository.findTop1ByVersionItem_AppIdOrderByCreateTimeDesc(report.getAppId());
+        }
+        return vIndices == null || vIndices.isEmpty() ? null : vIndices.get(0);
+    }
+
+    private Set<String> scanJavaSourceClassNames(File codeFile) {
+        Set<String> classNames = new TreeSet<>();
+        try {
+            if (codeFile.isDirectory()) {
+                try (Stream<java.nio.file.Path> stream = java.nio.file.Files.walk(codeFile.toPath())) {
+                    stream.filter(path -> !java.nio.file.Files.isDirectory(path))
+                            .map(path -> path.toString().replace('\\', '/'))
+                            .filter(path -> path.endsWith(".java"))
+                            .map(this::toClassNameFromSourcePath)
+                            .filter(StringUtils::hasText)
+                            .forEach(classNames::add);
+                }
+            } else if (isArchiveFile(codeFile)) {
+                try (ZipFile zip = new ZipFile(codeFile)) {
+                    Enumeration<? extends ZipEntry> entries = zip.entries();
+                    while (entries.hasMoreElements()) {
+                        ZipEntry entry = entries.nextElement();
+                        if (!entry.isDirectory() && entry.getName().replace('\\', '/').endsWith(".java")) {
+                            String className = toClassNameFromSourcePath(entry.getName());
+                            if (StringUtils.hasText(className)) {
+                                classNames.add(className);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (IOException e) {
+            logger.warn("扫描源码包类失败, file={}", codeFile.getAbsolutePath(), e);
+        }
+        return classNames;
+    }
+
+    private boolean isArchiveFile(File file) {
+        String lowerName = file.getName().toLowerCase(Locale.ROOT);
+        return lowerName.endsWith(".zip") || lowerName.endsWith(".jar") || lowerName.endsWith(".war");
+    }
+
+    private String toClassNameFromSourcePath(String sourcePath) {
+        if (!StringUtils.hasText(sourcePath)) {
+            return null;
+        }
+        String normalized = sourcePath.replace('\\', '/');
+        
+        // 只处理主代码路径，排除测试代码
+        int sourceRootIndex = normalized.lastIndexOf("/src/main/java/");
+        int startIndex = sourceRootIndex >= 0 ? sourceRootIndex + "/src/main/java/".length() : -1;
+        
+        if (startIndex < 0) {
+            if (normalized.startsWith("src/main/java/")) {
+                startIndex = "src/main/java/".length();
+            } else {
+                // 不处理测试路径（src/test/java/）和其他路径
+                return null;
+            }
+        }
+        
+        String relativePath = normalized.substring(startIndex);
+        if (!relativePath.endsWith(".java") || relativePath.contains("/target/") || relativePath.contains("/build/")) {
+            return null;
+        }
+        return relativePath.substring(0, relativePath.length() - ".java".length()).replace('/', '.');
+    }
+
+    private String firstPackageSegment(String className) {
+        if (!StringUtils.hasText(className)) {
+            return null;
+        }
+        int dotIndex = className.indexOf('.');
+        return dotIndex > 0 ? className.substring(0, dotIndex) : className;
     }
 
     private CoverageReportIndex selectPreviousReport(CoverageReportIndex currentReport) {
@@ -2070,7 +2241,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 .must(QueryBuilders.termQuery("reportId", reportId));
 
         if (classNameSearch != null && !classNameSearch.isEmpty()) {
-            boolQuery.must(QueryBuilders.wildcardQuery("className", "*" + classNameSearch.toLowerCase() + "*"));
+            boolQuery.must(QueryBuilders.wildcardQuery("className", "*" + classNameSearch + "*"));
         }
 
         if (methodNameSearch != null && !methodNameSearch.isEmpty()) {
@@ -2198,11 +2369,23 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         }
 
         int firstTypeSegment = CoverageSourceClassUtil.findFirstTypeSegmentIndex(segments);
-        if (firstTypeSegment <= 0) {
-            String nodeName = CoverageSourceClassUtil.toTreeDisplayName(segments[0], "class");
-            return new TreeNodeIdentity(nodeName, prefix + segments[0], "class");
+        
+        // 当 remaining 只有一个段时，根据是否为类型段决定节点类型
+        // 当 remaining 有多个段时，始终先展示第一段作为包节点，由懒加载继续展开
+        if (segments.length == 1) {
+            if (firstTypeSegment == 0) {
+                // 单段且是类型（首字母大写），展示为类节点
+                String nodeName = CoverageSourceClassUtil.toTreeDisplayName(segments[0], "class");
+                return new TreeNodeIdentity(nodeName, prefix + segments[0], "class");
+            } else {
+                // 单段但不是类型（首字母小写），展示为包节点
+                String nodeName = segments[0];
+                String fullName = prefix + nodeName;
+                return new TreeNodeIdentity(nodeName, fullName, "package");
+            }
         }
 
+        // 多段路径：始终展示第一段为包节点，由下一层懒加载继续展开
         String nodeName = segments[0];
         String fullName = prefix + nodeName;
         return new TreeNodeIdentity(nodeName, fullName, "package");

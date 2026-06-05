@@ -313,6 +313,8 @@ public class CoverageApiControl {
         payload.setMinComplexity(minComplexity);
         payload.setMaxComplexity(maxComplexity);
 
+        coverageService.ensureSourceClassesIndexed(reportId);
+
         if ("tree".equalsIgnoreCase(viewType)) {
             payload.setTreeNodes(coverageService.getTreeNodes(reportId, "", className, methodName,
                     minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity));
@@ -342,6 +344,7 @@ public class CoverageApiControl {
                                                             @RequestParam(required = false) Integer maxComplexity) {
         ensureProjectAccess(projectId, user);
         Assert.hasText(reportId, "reportId不能为空");
+        coverageService.ensureSourceClassesIndexed(reportId);
         return new ResultNotified<>(true, "获取覆盖率树节点成功", coverageService.getTreeNodes(reportId, parentPackage, className, methodName,
                 minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity));
     }
@@ -361,6 +364,7 @@ public class CoverageApiControl {
         Assert.notNull(app, "应用不存在");
         CoverageReportIndex report = coverageService.getReport(reportId);
         Assert.notNull(report, "覆盖率报告不存在");
+        coverageService.ensureSourceClassesIndexed(reportId);
 
         ClassCoverageIndex classCoverage = coverageService.getClassCoverage(reportId, className);
         if (classCoverage != null && classCoverage.getMethods() != null) {
@@ -381,7 +385,7 @@ public class CoverageApiControl {
         payload.setReport(toCoverageReportSummary(report));
         payload.setClassName(className);
         payload.setMethods(toMethodSummaries(classCoverage == null ? null : classCoverage.getMethods()));
-        payload.setColoredSourceHtml(coverageService.getColoredSource(appId, classCoverage));
+        payload.setColoredSourceHtml(classCoverage == null ? "Coverage data not found for class: " + className : coverageService.getColoredSource(appId, classCoverage));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取覆盖率源码详情成功", payload);
     }

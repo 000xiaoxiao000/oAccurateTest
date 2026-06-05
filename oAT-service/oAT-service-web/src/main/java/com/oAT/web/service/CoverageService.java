@@ -52,6 +52,11 @@ public interface CoverageService {
     CoverageReportIndex getLatestReportByType(String appId, String versionNumber, Integer reportType);
 
     /**
+     * 从报告对应源码包中补齐没有可执行方法的类（如接口/空类）
+     */
+    void ensureSourceClassesIndexed(String reportId);
+
+    /**
      * 获取二级页面分页数据（支持查询）
      */
     Page<ClassCoverageIndex> getClassCoveragePage(String reportId, String className, String methodName,
