@@ -383,12 +383,11 @@ const incrementalBaseOptions = computed(() => {
 })
 
 function versionDisplayKey(version: VersionItemSummary) {
-  return `${version.versionNumber || ''}::${version.repoBranch || ''}`
+  return `${version.versionNumber || ''}::${version.repoBranch || ''}::${version.repoCommitId || ''}`
 }
 
 function compactVersionEntries(versions: VersionItemSummary[]) {
-  const currentKeys = new Set(versions.filter((version) => version.current).map(versionDisplayKey))
-  return versions.filter((version) => version.current || !currentKeys.has(versionDisplayKey(version)))
+  return versions
 }
 
 function commitTooltip(value?: string) {

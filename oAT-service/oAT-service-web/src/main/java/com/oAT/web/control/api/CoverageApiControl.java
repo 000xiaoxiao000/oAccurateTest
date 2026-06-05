@@ -575,6 +575,7 @@ public class CoverageApiControl {
         summary.setLineRate(item.getLineRate());
         summary.setBranchRate(item.getBranchRate());
         summary.setMethodRate(item.getMethodRate());
+        summary.setHasCodeChanges(Boolean.TRUE.equals(item.getHasCodeChanges()));
         return summary;
     }
 
@@ -595,6 +596,7 @@ public class CoverageApiControl {
             summary.setTotalBranchTargets(item.getTotalBranchTargets());
             summary.setCoveredBranchTargets(item.getCoveredBranchTargets());
             summary.setBranchRate(item.getBranchRate());
+            summary.setHasCodeChanges(item.isHasCodeChanges());
             return summary;
         }).collect(Collectors.toList());
     }
@@ -930,6 +932,7 @@ public class CoverageApiControl {
         private Double lineRate;
         private Double branchRate;
         private Double methodRate;
+        private boolean hasCodeChanges;
 
         public String getClassName() { return className; }
         public void setClassName(String className) { this.className = className; }
@@ -957,6 +960,8 @@ public class CoverageApiControl {
         public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
         public Double getMethodRate() { return methodRate; }
         public void setMethodRate(Double methodRate) { this.methodRate = methodRate; }
+        public boolean isHasCodeChanges() { return hasCodeChanges; }
+        public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
     }
 
     public static class MethodCoverageSummary {
@@ -971,6 +976,7 @@ public class CoverageApiControl {
         private int totalBranchTargets;
         private int coveredBranchTargets;
         private Double branchRate;
+        private boolean hasCodeChanges;
 
         public String getMethodName() { return methodName; }
         public void setMethodName(String methodName) { this.methodName = methodName; }
@@ -994,5 +1000,7 @@ public class CoverageApiControl {
         public void setCoveredBranchTargets(int coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
         public Double getBranchRate() { return branchRate; }
         public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
+        public boolean isHasCodeChanges() { return hasCodeChanges; }
+        public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
     }
 }

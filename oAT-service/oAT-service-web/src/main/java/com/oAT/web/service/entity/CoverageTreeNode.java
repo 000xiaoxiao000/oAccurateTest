@@ -24,6 +24,7 @@ public class CoverageTreeNode implements Serializable {
     private Double lineRate;
     private Double branchRate;
     private Double methodRate;
+    private boolean hasCodeChanges;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -63,4 +64,6 @@ public class CoverageTreeNode implements Serializable {
     public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
     public Double getMethodRate() { return methodRate; }
     public void setMethodRate(Double methodRate) { this.methodRate = methodRate; }
+    public boolean isHasCodeChanges() { return hasCodeChanges; }
+    public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
 }

@@ -194,6 +194,11 @@ public class VersionApiControl {
                 abbreviateCommit(app.getCurrentCommitId()));
         String newVersionText = String.format("[%s (分支:%s, Commit:%s)]",
                 versionNumber, branch != null ? branch : "-", abbreviateCommit(commitId));
+        
+        boolean versionChanged = !versionNumber.equals(app.getCurrentVersion()) 
+                || (branch != null && !branch.equals(app.getCurrentBranch()))
+                || (commitId != null && !commitId.equals(app.getCurrentCommitId()));
+        
         app.setCurrentVersion(versionNumber);
         app.setCurrentBranch(branch);
         app.setCurrentCommitId(commitId);
@@ -205,6 +210,31 @@ public class VersionApiControl {
         log.setProjectId(projectId);
         log.setAction(SystemLogService.Action.editApp.toString());
         systemLogService.addLog(log);
+        
+        if (versionChanged) {
+            try {
+                String jobId = coverageService.startGenerateJob(appId, versionNumber, branch, commitId);
+                SystemLog coverageLog = new SystemLog();
+                coverageLog.setTitle(String.format("当前版本变更后自动生成版本全量覆盖率报告 [应用:%s, 版本:%s, 分支:%s, Commit:%s]", 
+                        app.getName(), versionNumber, branch, abbreviateCommit(commitId)));
+                coverageLog.setUserId(user.getId());
+                coverageLog.setUserName(user.getName());
+                coverageLog.setProjectId(projectId);
+                coverageLog.setAction(SystemLogService.Action.generateReport.toString());
+                systemLogService.addLog(coverageLog);
+            } catch (Exception e) {
+                // Log the error but don't fail the version change
+                SystemLog errorLog = new SystemLog();
+                errorLog.setTitle(String.format("当前版本变更后自动生成覆盖率报告失败 [应用:%s, 错误:%s]", 
+                        app.getName(), e.getMessage()));
+                errorLog.setUserId(user.getId());
+                errorLog.setUserName(user.getName());
+                errorLog.setProjectId(projectId);
+                errorLog.setAction(SystemLogService.Action.generateReport.toString());
+                systemLogService.addLog(errorLog);
+            }
+        }
+        
         return new ResultNotified<>(true, "设置当前版本成功");
     }
 

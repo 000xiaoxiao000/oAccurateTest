@@ -375,6 +375,26 @@ public class SystemSnapshotControl {
         return new ResultNotified<>(true, "覆盖率计算任务已启动");
     }
 
+    /**
+     * 手工补录快照-Commit 关联关系。
+     * 为当前 appId 下指定版本中无关联的快照，按版本中心当前 Commit 补录。
+     * versionNumber 为空时处理该应用所有快照。
+     */
+    @RequestMapping(value = "/commit-mapping/backfill", method = RequestMethod.POST)
+    @ResponseBody
+    public ResultNotified<Integer> backfillCommitMapping(@PathVariable String appId,
+                                                         @RequestParam(required = false) String versionNumber) {
+        try {
+            int count = systemSnapshotService.backfillCommitMapping(appId, versionNumber);
+            return new ResultNotified<>(true, "补录完成，共补录 " + count + " 条关联记录", count);
+        } catch (Exception e) {
+            logger.warn("手工补录快照 Commit 关联失败, appId={}, versionNumber={}", appId, versionNumber, e);
+            ResultNotified<Integer> result = new ResultNotified<>(false, "补录失败: " + e.getMessage());
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
+    }
+
     @RequestMapping("/report/status/{id}")
     @ResponseBody
     public ResultNotified<SystemSnapshot> getReportStatus(@PathVariable String id) {

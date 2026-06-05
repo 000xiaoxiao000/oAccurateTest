@@ -253,8 +253,15 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in paginatedClassStats" :key="item.className">
-                <td class="class-cell" :title="item.className">{{ item.className }}</td>
+              <tr v-for="item in paginatedClassStats" :key="item.className" :class="item.hasCodeChanges && 'row-changed'">
+                <td class="class-cell" :title="item.className">
+                  <span>{{ item.className }}</span>
+                  <span
+                    v-if="item.hasCodeChanges"
+                    class="change-badge"
+                    title="该类在本版本多个 Commit 间覆盖率结果不完全一致。当前报告已汇总所有 Commit，源码展示使用最新 Commit，建议优先复核。"
+                  >覆盖有差异</span>
+                </td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
                 <td>{{ formatRate(item.coveredMethods, item.totalMethods) }}</td>
                 <td>{{ item.coveredBranches }} / {{ item.totalBranches }}</td>
@@ -810,6 +817,29 @@ function relationshipText(method: SnapshotCodeRelationshipMethodSummary) {
   word-break: normal;
   overflow-wrap: anywhere;
   line-height: 1.55;
+}
+
+.change-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.row-changed {
+  background: rgba(217, 119, 6, 0.04);
+  box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.42);
+}
+
+.row-changed:hover {
+  background: rgba(217, 119, 6, 0.08);
 }
 
 .interface-panel {

@@ -87,6 +87,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     private SystemSnapshotRepository systemSnapshotRepository;
 
     @Autowired
+    private SnapshotCommitMappingRepository snapshotCommitMappingRepository;
+
+    @Autowired
     private ElasticsearchOperations elasticsearchOperations;
 
     private final Set<String> sourceClassIndexEnsuredReports = ConcurrentHashMap.newKeySet();
@@ -219,6 +222,13 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         diffCache.clear();
         zipEntryCache.clear();
 
+        if (normalizeReportType(reportType) == REPORT_TYPE_VERSION_FULL) {
+            String aggregatedReportId = tryGenerateVersionFullFromCommitReports(appId, versionNumber, branch, commitId, job);
+            if (StringUtils.hasText(aggregatedReportId)) {
+                return aggregatedReportId;
+            }
+        }
+
         // 1. Get Static Source Info
         if (job != null) job.getProgress().next("加载静态源码信息", 10);
 
@@ -308,7 +318,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         }
 
         // 2. Build snapshot context and decide whether this run can reuse the previous report.
-        SnapshotCoverageContext snapshotContext = buildSnapshotCoverageContext(app, versionNumber);
+        SnapshotCoverageContext snapshotContext = buildSnapshotCoverageContext(app, versionNumber, commitId, reportType);
         if (snapshotContext.getSnapshotIds().isEmpty()) {
             throw new RuntimeException("当前版本下没有可用系统快照，无法生成覆盖率报告。");
         }
@@ -321,12 +331,30 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         CoverageReportIndex candidateLastReport =
                 getBestReportForAccumulation(appId, versionNumber, branch, commitId, reportType);
         
+        // For VERSION_FULL reports: check if commitId has changed - if yes, MUST regenerate
+        // VERSION_FULL should aggregate ALL commits under the version, but code structure follows latest commit
+        boolean mustRegenerateForCommitChange = false;
+        if (normalizeReportType(reportType) == REPORT_TYPE_VERSION_FULL 
+                && candidateLastReport != null 
+                && StringUtils.hasText(commitId)
+                && StringUtils.hasText(candidateLastReport.getRepoCommitId())
+                && !commitId.equals(candidateLastReport.getRepoCommitId())) {
+            mustRegenerateForCommitChange = true;
+            if (job != null) {
+                job.getLogger().info("版本全量报告：检测到当前 Commit 已变更 [" + 
+                    candidateLastReport.getRepoCommitId().substring(0, Math.min(7, candidateLastReport.getRepoCommitId().length())) + " -> " + 
+                    commitId.substring(0, Math.min(7, commitId.length())) + "]，将基于新 Commit 重新生成报告");
+            }
+        }
+        
+        // Can only reuse if: not a commit change AND snapshot data unchanged
         if (candidateLastReport != null 
+                && !mustRegenerateForCommitChange
                 && StringUtils.hasText(candidateLastReport.getSnapshotFingerprint())
                 && candidateLastReport.getSnapshotFingerprint().equals(snapshotContext.getSnapshotFingerprint())
                 && Objects.equals(candidateLastReport.getSnapshotLastUpdateTime(), snapshotContext.getLastSnapshotTime())) {
             if (job != null) {
-                job.getLogger().info("检测到现有报告快照指纹和更新时间完全一致，跳过重复生成，直接复用报告：" + candidateLastReport.getId());
+                job.getLogger().info("快照指纹和更新时间完全一致，复用已有报告：" + candidateLastReport.getId());
                 job.getProgress().next("复用已有报告（快照数据未变化）", 100);
             }
             return candidateLastReport.getId();
@@ -383,18 +411,38 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         // 3. Aggregate TraceNode data from snapshot timeline
         if (job != null) job.getProgress().next("处理系统快照中的链路追踪数据", 50);
         
-        // Track initial coverage state to detect changes across snapshots
-        Map<String, Map<String, MethodCoverageSnapshot>> initialCoverageState = new HashMap<>();
+        // For VERSION_FULL reports: track per-commit coverage to detect cross-commit differences
         boolean isVersionFullReport = normalizeReportType(reportType) == REPORT_TYPE_VERSION_FULL;
+        Map<String, Map<String, ClassCoverageIndex>> perCommitCoverageSnapshots = new HashMap<>();
         
         int processed = 0;
         int total = traceIdsToProcess.size();
+        
         for (String traceId : traceIdsToProcess) {
-            mergeSnapshotTraceCoverage(traceId, coverageMap);
-            
-            // For VERSION_FULL reports, track coverage state changes
-            if (isVersionFullReport && processed == 0) {
-                captureInitialCoverageState(coverageMap, initialCoverageState);
+            // For VERSION_FULL: capture per-commit coverage state before merging
+            if (isVersionFullReport && processed < snapshotContext.getSnapshotIds().size()) {
+                String snapshotId = snapshotContext.getSnapshotIds().get(processed);
+                Optional<SystemSnapshot> snapshotOpt = systemSnapshotRepository.findById(snapshotId);
+                
+                if (snapshotOpt.isPresent()) {
+                    SystemSnapshot snapshot = snapshotOpt.get();
+                    String snapshotVersion = snapshot.getVersion();
+                    
+                    // Group by version (same version could have snapshots from different commits)
+                    if (StringUtils.hasText(snapshotVersion) && snapshotVersion.equals(versionNumber)) {
+                        mergeSnapshotTraceCoverage(traceId, coverageMap);
+                        
+                        // Store the coverage state after this snapshot (for later comparison)
+                        String snapshotKey = snapshotId + "_" + processed;
+                        perCommitCoverageSnapshots.put(snapshotKey, deepCloneCoverageMap(coverageMap));
+                    } else {
+                        mergeSnapshotTraceCoverage(traceId, coverageMap);
+                    }
+                } else {
+                    mergeSnapshotTraceCoverage(traceId, coverageMap);
+                }
+            } else {
+                mergeSnapshotTraceCoverage(traceId, coverageMap);
             }
             
             processed++;
@@ -405,12 +453,13 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             }
         }
         
-        // For VERSION_FULL with multiple snapshots, mark coverage differences
-        if (isVersionFullReport && total > 1) {
+        // For VERSION_FULL with multiple commit states: mark classes/methods with coverage differences
+        if (isVersionFullReport && perCommitCoverageSnapshots.size() > 1) {
             if (job != null) {
-                job.getLogger().info("版本全量报告：正在检测并标记跨快照的覆盖率差异...");
+                job.getLogger().info("版本全量报告：检测到 " + perCommitCoverageSnapshots.size() + 
+                    " 个快照覆盖率状态，正在标记跨 Commit 的覆盖率差异...");
             }
-            markCoverageChanges(coverageMap, initialCoverageState, job);
+            markCrossCommitCoverageChanges(coverageMap, perCommitCoverageSnapshots, job);
         }
 
         // 4. Final Calculation & Save
@@ -443,6 +492,355 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         saveAndCalculateSummary(report, coverageMap, inheritanceDiffMap);
 
         return report.getId();
+    }
+
+    private String tryGenerateVersionFullFromCommitReports(String appId, String versionNumber, String branch,
+                                                           String latestCommitId, Job<String> job) {
+        List<CoverageReportIndex> commitReports = selectVersionCommitReports(appId, versionNumber);
+        if (commitReports.isEmpty()) {
+            if (job != null) {
+                job.getLogger().info("未找到可汇总的本次 Commit 覆盖率报告，将按当前版本快照生成版本全量报告。");
+            }
+            return null;
+        }
+
+        CoverageReportIndex latestCommitReport = selectLatestCodeReport(commitReports, branch, latestCommitId);
+        if (latestCommitReport == null) {
+            return null;
+        }
+
+        if (job != null) {
+            job.getProgress().next("汇总本版本 Commit 覆盖率", 45);
+            job.getLogger().info("版本全量报告将汇总 " + commitReports.size() + " 份本次 Commit 报告，源码着色使用最新 Commit [" + shortCommit(latestCommitReport.getRepoCommitId()) + "]。");
+        }
+
+        CoverageReportIndex reusableReport = findReusableVersionFullReport(appId, versionNumber, latestCommitReport, commitReports);
+        if (reusableReport != null) {
+            if (job != null) {
+                job.getLogger().info("Commit 报告集合未变化，复用已有版本全量报告：" + reusableReport.getId());
+                job.getProgress().next("复用已有版本全量报告", 100);
+            }
+            return reusableReport.getId();
+        }
+
+        Map<String, ClassCoverageIndex> coverageMap = loadLatestCodeCoverageSkeleton(latestCommitReport);
+        if (coverageMap.isEmpty()) {
+            if (job != null) {
+                job.getLogger().info("最新 Commit 报告缺少类覆盖率明细，将按当前版本快照生成版本全量报告。");
+            }
+            return null;
+        }
+
+        Map<String, Map<String, ClassCoverageIndex>> perCommitSnapshots = new LinkedHashMap<>();
+        int processed = 0;
+        for (CoverageReportIndex commitReport : commitReports) {
+            List<ClassCoverageIndex> classCoverages = classCoverageRepository.findByReportId(commitReport.getId());
+            if (classCoverages == null || classCoverages.isEmpty()) {
+                continue;
+            }
+            Map<String, ClassCoverageIndex> commitCoverageMap = toCoverageMap(classCoverages);
+            perCommitSnapshots.put(commitReport.getId(), commitCoverageMap);
+            mergeCommitCoverageIntoLatestSkeleton(coverageMap, commitCoverageMap);
+            processed++;
+            if (job != null) {
+                job.getProgress().loaded = processed;
+                job.getProgress().total = commitReports.size();
+            }
+        }
+
+        if (perCommitSnapshots.isEmpty()) {
+            if (job != null) {
+                job.getLogger().info("本次 Commit 报告明细为空，将按当前版本快照生成版本全量报告。");
+            }
+            return null;
+        }
+
+        recalculateClassCoverageCounters(coverageMap.values());
+        markCrossCommitCoverageChanges(coverageMap, perCommitSnapshots, job);
+
+        CoverageReportIndex report = new CoverageReportIndex();
+        report.setId(UUID.randomUUID().toString());
+        report.setAppId(appId);
+        report.setVersionNumber(versionNumber);
+        report.setRepoBranch(StringUtils.hasText(branch) ? branch : latestCommitReport.getRepoBranch());
+        report.setRepoCommitId(latestCommitReport.getRepoCommitId());
+        report.setCreateTime(new Date());
+        report.setLastProcessedTime(latestCommitReport.getLastProcessedTime());
+        report.setReportType(REPORT_TYPE_VERSION_FULL);
+        report.setSnapshotFingerprint(buildCommitReportFingerprint(commitReports));
+        report.setSnapshotLastUpdateTime(buildCommitReportLastUpdateTime(commitReports));
+        report.setSnapshotCount(commitReports.stream()
+                .mapToInt(reportIndex -> reportIndex.getSnapshotCount() == null ? 0 : Math.max(0, reportIndex.getSnapshotCount()))
+                .sum());
+        report.setSnapshotIds(commitReports.stream()
+                .map(CoverageReportIndex::getId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.joining(",")));
+
+        if (job != null) {
+            job.getProgress().next("保存版本全量汇总报告", 20);
+        }
+        saveAndCalculateSummary(report, coverageMap, null);
+        return report.getId();
+    }
+
+    private List<CoverageReportIndex> selectVersionCommitReports(String appId, String versionNumber) {
+        List<CoverageReportIndex> reports = coverageReportRepository.findByAppIdAndVersionNumber(appId, versionNumber);
+        if (reports == null || reports.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, CoverageReportIndex> latestByCommit = new LinkedHashMap<>();
+        for (CoverageReportIndex report : reports) {
+            if (report == null || !StringUtils.hasText(report.getId())) {
+                continue;
+            }
+            if (normalizeReportType(report.getReportType()) != REPORT_TYPE_CURRENT_COMMIT) {
+                continue;
+            }
+            String commitKey = normalizeCommitKey(report.getRepoCommitId());
+            if (!StringUtils.hasText(commitKey)) {
+                commitKey = report.getId();
+            }
+            CoverageReportIndex existing = latestByCommit.get(commitKey);
+            if (existing == null || isReportAfter(report, existing)) {
+                latestByCommit.put(commitKey, report);
+            }
+        }
+        List<CoverageReportIndex> selected = new ArrayList<>(latestByCommit.values());
+        selected.sort(Comparator.comparing(CoverageReportIndex::getCreateTime, Comparator.nullsLast(Comparator.naturalOrder())));
+        return selected;
+    }
+
+    private CoverageReportIndex selectLatestCodeReport(List<CoverageReportIndex> commitReports, String branch, String latestCommitId) {
+        if (commitReports == null || commitReports.isEmpty()) {
+            return null;
+        }
+        if (StringUtils.hasText(latestCommitId)) {
+            String expectedCommit = normalizeCommitKey(latestCommitId);
+            for (CoverageReportIndex report : commitReports) {
+                if (expectedCommit.equals(normalizeCommitKey(report.getRepoCommitId()))) {
+                    return report;
+                }
+            }
+        }
+        List<CoverageReportIndex> candidates = new ArrayList<>(commitReports);
+        if (StringUtils.hasText(branch)) {
+            List<CoverageReportIndex> branchMatches = candidates.stream()
+                    .filter(report -> branch.equals(report.getRepoBranch()))
+                    .collect(Collectors.toList());
+            if (!branchMatches.isEmpty()) {
+                candidates = branchMatches;
+            }
+        }
+        candidates.sort((a, b) -> {
+            if (a.getCreateTime() == null) return 1;
+            if (b.getCreateTime() == null) return -1;
+            return b.getCreateTime().compareTo(a.getCreateTime());
+        });
+        return candidates.get(0);
+    }
+
+    private CoverageReportIndex findReusableVersionFullReport(String appId, String versionNumber,
+                                                              CoverageReportIndex latestCommitReport,
+                                                              List<CoverageReportIndex> commitReports) {
+        List<CoverageReportIndex> reports = coverageReportRepository.findByAppIdAndVersionNumberAndReportType(appId, versionNumber, REPORT_TYPE_VERSION_FULL);
+        if (reports == null || reports.isEmpty()) {
+            return null;
+        }
+        String fingerprint = buildCommitReportFingerprint(commitReports);
+        String latestCommit = normalizeCommitKey(latestCommitReport.getRepoCommitId());
+        for (CoverageReportIndex report : reports) {
+            if (!Objects.equals(fingerprint, report.getSnapshotFingerprint())) {
+                continue;
+            }
+            if (StringUtils.hasText(latestCommit) && !latestCommit.equals(normalizeCommitKey(report.getRepoCommitId()))) {
+                continue;
+            }
+            return report;
+        }
+        return null;
+    }
+
+    private Map<String, ClassCoverageIndex> loadLatestCodeCoverageSkeleton(CoverageReportIndex latestCommitReport) {
+        List<ClassCoverageIndex> latestClasses = classCoverageRepository.findByReportId(latestCommitReport.getId());
+        Map<String, ClassCoverageIndex> coverageMap = new LinkedHashMap<>();
+        if (latestClasses == null) {
+            return coverageMap;
+        }
+        for (ClassCoverageIndex latestClass : latestClasses) {
+            if (latestClass == null || !StringUtils.hasText(latestClass.getClassName())) {
+                continue;
+            }
+            ClassCoverageIndex skeleton = cloneClassCoverage(latestClass);
+            resetCoverageCounters(skeleton);
+            coverageMap.put(skeleton.getClassName(), skeleton);
+        }
+        return coverageMap;
+    }
+
+    private Map<String, ClassCoverageIndex> toCoverageMap(List<ClassCoverageIndex> classCoverages) {
+        Map<String, ClassCoverageIndex> coverageMap = new LinkedHashMap<>();
+        if (classCoverages == null) {
+            return coverageMap;
+        }
+        for (ClassCoverageIndex classCoverage : classCoverages) {
+            if (classCoverage != null && StringUtils.hasText(classCoverage.getClassName())) {
+                coverageMap.put(classCoverage.getClassName(), classCoverage);
+            }
+        }
+        return coverageMap;
+    }
+
+    private void mergeCommitCoverageIntoLatestSkeleton(Map<String, ClassCoverageIndex> targetMap,
+                                                       Map<String, ClassCoverageIndex> commitCoverageMap) {
+        for (Map.Entry<String, ClassCoverageIndex> entry : commitCoverageMap.entrySet()) {
+            ClassCoverageIndex targetClass = targetMap.get(entry.getKey());
+            if (targetClass == null || targetClass.getMethods() == null) {
+                continue;
+            }
+            ClassCoverageIndex sourceClass = entry.getValue();
+            if (sourceClass == null || sourceClass.getMethods() == null) {
+                continue;
+            }
+            Map<String, MethodCoverageDetail> targetMethods = targetClass.getMethods().stream()
+                    .collect(Collectors.toMap(method -> buildMethodKey(method.getMethodName(), method.getMethodDesc()), method -> method, (a, b) -> a, LinkedHashMap::new));
+            for (MethodCoverageDetail sourceMethod : sourceClass.getMethods()) {
+                MethodCoverageDetail targetMethod = targetMethods.get(buildMethodKey(sourceMethod.getMethodName(), sourceMethod.getMethodDesc()));
+                if (targetMethod == null) {
+                    continue;
+                }
+                mergeMethodCoverage(targetMethod, sourceMethod);
+            }
+        }
+    }
+
+    private void mergeMethodCoverage(MethodCoverageDetail targetMethod, MethodCoverageDetail sourceMethod) {
+        targetMethod.setCoveredLineNumbers(unionIntegerLists(targetMethod.getCoveredLineNumbers(), sourceMethod.getCoveredLineNumbers()));
+        targetMethod.setCoveredLines(targetMethod.getCoveredLineNumbers() == null ? 0 : targetMethod.getCoveredLineNumbers().size());
+        targetMethod.setCoveredBranchLines(unionIntegerLists(targetMethod.getCoveredBranchLines(), sourceMethod.getCoveredBranchLines()));
+        targetMethod.setCoveredBranches(Math.min(targetMethod.getTotalBranches(), targetMethod.getCoveredBranchLines() == null ? 0 : targetMethod.getCoveredBranchLines().size()));
+        targetMethod.setCoveredBranchTargetProbeMap(mergeCoveredBranchTargetProbeMaps(targetMethod.getCoveredBranchTargetProbeMap(), sourceMethod.getCoveredBranchTargetProbeMap()));
+        targetMethod.setCoveredBranchTargets(Math.min(targetMethod.getTotalBranchTargets(), countBranchTargets(targetMethod.getCoveredBranchTargetProbeMap())));
+        targetMethod.setCovered(targetMethod.getCoveredLines() > 0 || targetMethod.getCoveredBranchTargets() > 0);
+        targetMethod.setBranchRate(calculateBranchRate(targetMethod.getCoveredBranchTargets(), targetMethod.getTotalBranchTargets()));
+    }
+
+    private void recalculateClassCoverageCounters(Collection<ClassCoverageIndex> classCoverages) {
+        if (classCoverages == null) {
+            return;
+        }
+        for (ClassCoverageIndex classCoverage : classCoverages) {
+            int coveredMethods = 0;
+            int coveredLines = 0;
+            int coveredBranches = 0;
+            int coveredBranchTargets = 0;
+            if (classCoverage.getMethods() != null) {
+                for (MethodCoverageDetail method : classCoverage.getMethods()) {
+                    boolean methodCovered = method.getCoveredLines() > 0 || method.getCoveredBranchTargets() > 0 || method.isCovered();
+                    method.setCovered(methodCovered);
+                    if (methodCovered) {
+                        coveredMethods++;
+                    }
+                    coveredLines += method.getCoveredLines();
+                    coveredBranches += method.getCoveredBranches();
+                    coveredBranchTargets += method.getCoveredBranchTargets();
+                }
+            }
+            classCoverage.setCoveredMethods(Math.min(classCoverage.getTotalMethods(), coveredMethods));
+            classCoverage.setCoveredLines(Math.min(classCoverage.getTotalLines(), coveredLines));
+            classCoverage.setCoveredBranches(Math.min(classCoverage.getTotalBranches(), coveredBranches));
+            classCoverage.setCoveredBranchTargets(Math.min(classCoverage.getTotalBranchTargets(), coveredBranchTargets));
+        }
+    }
+
+    private List<Integer> unionIntegerLists(List<Integer> first, List<Integer> second) {
+        LinkedHashSet<Integer> values = new LinkedHashSet<>();
+        if (first != null) values.addAll(first);
+        if (second != null) values.addAll(second);
+        return new ArrayList<>(values);
+    }
+
+    private Map<String, List<Integer>> mergeCoveredBranchTargetProbeMaps(Map<String, List<Integer>> first,
+                                                                         Map<String, List<Integer>> second) {
+        Map<String, LinkedHashSet<Integer>> merged = new LinkedHashMap<>();
+        appendBranchTargetProbeMap(merged, first);
+        appendBranchTargetProbeMap(merged, second);
+        Map<String, List<Integer>> result = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashSet<Integer>> entry : merged.entrySet()) {
+            result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+        }
+        return result;
+    }
+
+    private void resetCoverageCounters(ClassCoverageIndex classCoverage) {
+        classCoverage.setCoveredMethods(0);
+        classCoverage.setCoveredLines(0);
+        classCoverage.setCoveredBranches(0);
+        classCoverage.setCoveredBranchTargets(0);
+        classCoverage.setHasCodeChanges(false);
+        if (classCoverage.getMethods() == null) {
+            return;
+        }
+        for (MethodCoverageDetail method : classCoverage.getMethods()) {
+            method.setCovered(false);
+            method.setCoveredLines(0);
+            method.setCoveredLineNumbers(new ArrayList<>());
+            method.setCoveredBranches(0);
+            method.setCoveredBranchLines(new ArrayList<>());
+            method.setCoveredBranchTargets(0);
+            method.setCoveredBranchTargetProbeMap(new LinkedHashMap<>());
+            method.setBranchRate(calculateBranchRate(0, method.getTotalBranchTargets()));
+            method.setHasCodeChanges(false);
+        }
+    }
+
+    private ClassCoverageIndex cloneClassCoverage(ClassCoverageIndex original) {
+        return deepCloneCoverageMap(Collections.singletonMap(original.getClassName(), original)).get(original.getClassName());
+    }
+
+    private String buildCommitReportFingerprint(List<CoverageReportIndex> commitReports) {
+        if (commitReports == null || commitReports.isEmpty()) {
+            return "";
+        }
+        return sha256Hex(commitReports.stream()
+                .map(report -> String.join("|",
+                        report.getId() == null ? "" : report.getId(),
+                        normalizeCommitKey(report.getRepoCommitId()) == null ? "" : normalizeCommitKey(report.getRepoCommitId()),
+                        report.getCreateTime() == null ? "" : String.valueOf(report.getCreateTime().getTime()),
+                        report.getSnapshotFingerprint() == null ? "" : report.getSnapshotFingerprint()))
+                .collect(Collectors.joining(";")));
+    }
+
+    private String buildCommitReportLastUpdateTime(List<CoverageReportIndex> commitReports) {
+        Date latest = null;
+        if (commitReports != null) {
+            for (CoverageReportIndex report : commitReports) {
+                Date candidate = report.getCreateTime();
+                if (candidate != null && (latest == null || candidate.after(latest))) {
+                    latest = candidate;
+                }
+            }
+        }
+        return latest == null ? null : new SimpleDateFormat(StandardDate.dateFormat).format(latest);
+    }
+
+    private String normalizeCommitKey(String commitId) {
+        return StringUtils.hasText(commitId) ? commitId.trim().toLowerCase(Locale.ROOT) : null;
+    }
+
+    private boolean isReportAfter(CoverageReportIndex candidate, CoverageReportIndex current) {
+        if (candidate == null) return false;
+        if (current == null) return true;
+        if (candidate.getCreateTime() == null) return false;
+        if (current.getCreateTime() == null) return true;
+        return candidate.getCreateTime().after(current.getCreateTime());
+    }
+
+    private String shortCommit(String commitId) {
+        if (!StringUtils.hasText(commitId)) {
+            return "-";
+        }
+        return commitId.substring(0, Math.min(7, commitId.length()));
     }
 
     private CoverageReportIndex getBestReportForAccumulation(String appId, String versionNumber, String branch,
@@ -617,6 +1015,147 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 classesWithChanges, methodsWithChanges
             ));
         }
+    }
+
+    private Map<String, ClassCoverageIndex> deepCloneCoverageMap(Map<String, ClassCoverageIndex> source) {
+        if (source == null) {
+            return new HashMap<>();
+        }
+        Map<String, ClassCoverageIndex> clone = new HashMap<>();
+        for (Map.Entry<String, ClassCoverageIndex> entry : source.entrySet()) {
+            ClassCoverageIndex original = entry.getValue();
+            ClassCoverageIndex copy = new ClassCoverageIndex();
+            copy.setId(original.getId());
+            copy.setReportId(original.getReportId());
+            copy.setAppId(original.getAppId());
+            copy.setClassName(original.getClassName());
+            copy.setTotalMethods(original.getTotalMethods());
+            copy.setCoveredMethods(original.getCoveredMethods());
+            copy.setTotalLines(original.getTotalLines());
+            copy.setCoveredLines(original.getCoveredLines());
+            copy.setTotalBranches(original.getTotalBranches());
+            copy.setCoveredBranches(original.getCoveredBranches());
+            copy.setTotalBranchTargets(original.getTotalBranchTargets());
+            copy.setCoveredBranchTargets(original.getCoveredBranchTargets());
+            copy.setTotalComplexity(original.getTotalComplexity());
+            copy.setLineRate(original.getLineRate());
+            copy.setBranchRate(original.getBranchRate());
+            copy.setMethodRate(original.getMethodRate());
+            if (original.getMethods() != null) {
+                List<MethodCoverageDetail> methodsCopy = new ArrayList<>();
+                for (MethodCoverageDetail m : original.getMethods()) {
+                    MethodCoverageDetail mc = new MethodCoverageDetail();
+                    mc.setMethodName(m.getMethodName());
+                    mc.setMethodDesc(m.getMethodDesc());
+                    mc.setTotalLines(m.getTotalLines());
+                    mc.setCoveredLines(m.getCoveredLines());
+                    mc.setTotalBranches(m.getTotalBranches());
+                    mc.setCoveredBranches(m.getCoveredBranches());
+                    mc.setTotalBranchTargets(m.getTotalBranchTargets());
+                    mc.setCoveredBranchTargets(m.getCoveredBranchTargets());
+                    mc.setBranchRate(m.getBranchRate());
+                    mc.setComplexity(m.getComplexity());
+                    mc.setCovered(m.isCovered());
+                    mc.setTotalLineNumbers(m.getTotalLineNumbers() != null ? new ArrayList<>(m.getTotalLineNumbers()) : null);
+                    mc.setCoveredLineNumbers(m.getCoveredLineNumbers() != null ? new ArrayList<>(m.getCoveredLineNumbers()) : new ArrayList<>());
+                    mc.setCoveredBranchLines(m.getCoveredBranchLines() != null ? new ArrayList<>(m.getCoveredBranchLines()) : new ArrayList<>());
+                    mc.setTotalBranchTargetProbeMap(copyBranchTargetProbeMap(m.getTotalBranchTargetProbeMap()));
+                    mc.setCoveredBranchTargetProbeMap(copyBranchTargetProbeMap(m.getCoveredBranchTargetProbeMap()));
+                    methodsCopy.add(mc);
+                }
+                copy.setMethods(methodsCopy);
+            } else {
+                copy.setMethods(new ArrayList<>());
+            }
+            clone.put(entry.getKey(), copy);
+        }
+        return clone;
+    }
+
+    private void markCrossCommitCoverageChanges(Map<String, ClassCoverageIndex> finalCoverageMap,
+                                                Map<String, Map<String, ClassCoverageIndex>> perCommitSnapshots,
+                                                Job<String> job) {
+        int classesWithChanges = 0;
+        int methodsWithChanges = 0;
+
+        for (Map.Entry<String, ClassCoverageIndex> entry : finalCoverageMap.entrySet()) {
+            String className = entry.getKey();
+            ClassCoverageIndex finalClassCov = entry.getValue();
+            if (finalClassCov.getMethods() == null) {
+                continue;
+            }
+
+            boolean classHasChanges = false;
+            for (MethodCoverageDetail method : finalClassCov.getMethods()) {
+                String key = buildMethodKey(method.getMethodName(), method.getMethodDesc());
+                Set<String> signatures = new LinkedHashSet<>();
+                for (Map<String, ClassCoverageIndex> snapshot : perCommitSnapshots.values()) {
+                    ClassCoverageIndex snapshotClass = snapshot.get(className);
+                    MethodCoverageDetail snapshotMethod = findMethodByKey(snapshotClass, key);
+                    signatures.add(buildCoverageSignature(snapshotMethod));
+                }
+                if (signatures.size() > 1) {
+                    method.setHasCodeChanges(true);
+                    classHasChanges = true;
+                    methodsWithChanges++;
+                }
+            }
+
+            if (classHasChanges) {
+                finalClassCov.setHasCodeChanges(true);
+                classesWithChanges++;
+            }
+        }
+
+        if (job != null && (classesWithChanges > 0 || methodsWithChanges > 0)) {
+            job.getLogger().info(String.format(
+                "跨 Commit 覆盖率差异标记完成：%d 个类、%d 个方法存在覆盖率变化",
+                classesWithChanges, methodsWithChanges
+            ));
+        }
+    }
+
+    private MethodCoverageDetail findMethodByKey(ClassCoverageIndex classCoverage, String methodKey) {
+        if (classCoverage == null || classCoverage.getMethods() == null) {
+            return null;
+        }
+        for (MethodCoverageDetail method : classCoverage.getMethods()) {
+            if (Objects.equals(methodKey, buildMethodKey(method.getMethodName(), method.getMethodDesc()))) {
+                return method;
+            }
+        }
+        return null;
+    }
+
+    private String buildCoverageSignature(MethodCoverageDetail method) {
+        if (method == null) {
+            return "missing";
+        }
+        return method.getTotalLines() + ":" + sortedIntegerList(method.getTotalLineNumbers())
+                + "|" + method.getCoveredLines() + ":" + sortedIntegerList(method.getCoveredLineNumbers())
+                + "|" + method.getTotalBranchTargets() + ":" + normalizedBranchTargetProbeMap(method.getTotalBranchTargetProbeMap())
+                + "|" + method.getCoveredBranchTargets() + ":" + normalizedBranchTargetProbeMap(method.getCoveredBranchTargetProbeMap());
+    }
+
+    private String sortedIntegerList(List<Integer> values) {
+        if (values == null || values.isEmpty()) {
+            return "[]";
+        }
+        List<Integer> sorted = new ArrayList<>(new LinkedHashSet<>(values));
+        Collections.sort(sorted);
+        return sorted.toString();
+    }
+
+    private String normalizedBranchTargetProbeMap(Map<String, List<Integer>> probeMap) {
+        if (probeMap == null || probeMap.isEmpty()) {
+            return "{}";
+        }
+        List<String> parts = new ArrayList<>();
+        for (Map.Entry<String, List<Integer>> entry : probeMap.entrySet()) {
+            parts.add(entry.getKey() + "=" + sortedIntegerList(entry.getValue()));
+        }
+        Collections.sort(parts);
+        return parts.toString();
     }
 
     private ClassCoverageIndex createInitialClassCoverage(String appId, String className) {
@@ -1428,12 +1967,26 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
     @Override
     public boolean hasNewerData(String appId, String versionNumber, CoverageReportIndex report) {
-        AppVo app = appService.getApp(appId);
-        SnapshotCoverageContext latestSnapshotContext = buildSnapshotCoverageContext(app, versionNumber);
-
         if (report == null) {
+            AppVo app = appService.getApp(appId);
+            SnapshotCoverageContext latestSnapshotContext = buildSnapshotCoverageContext(app, versionNumber);
             return !latestSnapshotContext.getSnapshotIds().isEmpty();
         }
+
+        if (normalizeReportType(report.getReportType()) == REPORT_TYPE_VERSION_FULL) {
+            List<CoverageReportIndex> commitReports = selectVersionCommitReports(appId, versionNumber);
+            if (!commitReports.isEmpty()) {
+                CoverageReportIndex latestCommitReport = selectLatestCodeReport(commitReports, report.getRepoBranch(), report.getRepoCommitId());
+                String expectedFingerprint = buildCommitReportFingerprint(commitReports);
+                boolean fingerprintChanged = !Objects.equals(report.getSnapshotFingerprint(), expectedFingerprint);
+                boolean latestCommitChanged = latestCommitReport != null
+                        && !Objects.equals(normalizeCommitKey(report.getRepoCommitId()), normalizeCommitKey(latestCommitReport.getRepoCommitId()));
+                return fingerprintChanged || latestCommitChanged;
+            }
+        }
+
+        AppVo app = appService.getApp(appId);
+        SnapshotCoverageContext latestSnapshotContext = buildSnapshotCoverageContext(app, versionNumber);
 
         if (!StringUtils.hasText(report.getSnapshotFingerprint())) {
             // 兼容旧报告：仍保留老逻辑兜底
@@ -1449,6 +2002,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     }
 
     private SnapshotCoverageContext buildSnapshotCoverageContext(AppVo app, String versionNumber) {
+        return buildSnapshotCoverageContext(app, versionNumber, null, null);
+    }
+
+    private SnapshotCoverageContext buildSnapshotCoverageContext(AppVo app, String versionNumber, 
+                                                                 String commitId, Integer reportType) {
         SnapshotCoverageContext context = new SnapshotCoverageContext();
         if (app == null || !StringUtils.hasText(app.getId()) || !StringUtils.hasText(app.getCreateProjectId())) {
             return context;
@@ -1469,6 +2027,26 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             }
             if (!versionMatched.isEmpty()) {
                 selectedSnapshots = versionMatched;
+            }
+        }
+
+        if (normalizeReportType(reportType) == REPORT_TYPE_CURRENT_COMMIT && StringUtils.hasText(commitId)) {
+            List<SnapshotCommitMapping> mappings = snapshotCommitMappingRepository
+                    .findByAppIdAndRepoCommitId(app.getId(), commitId);
+            
+            if (mappings != null && !mappings.isEmpty()) {
+                Set<String> commitSnapshotIds = mappings.stream()
+                        .map(SnapshotCommitMapping::getSnapshotId)
+                        .collect(java.util.stream.Collectors.toSet());
+                
+                selectedSnapshots = selectedSnapshots.stream()
+                        .filter(s -> commitSnapshotIds.contains(s.getId()))
+                        .collect(java.util.stream.Collectors.toList());
+                
+                logger.info("本次 Commit 报告：通过关联表过滤快照，commitId={}, 匹配快照数={}", 
+                        commitId, selectedSnapshots.size());
+            } else {
+                logger.warn("本次 Commit 报告：commitId={} 未找到关联快照，降级使用版本匹配", commitId);
             }
         }
 
@@ -2482,6 +3060,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                     node.setTotalLines(node.getTotalLines() + cc.getTotalLines());
                     node.setCoveredLines(node.getCoveredLines() + cc.getCoveredLines());
                     node.setTotalComplexity(node.getTotalComplexity() + cc.getTotalComplexity());
+                    if (Boolean.TRUE.equals(cc.getHasCodeChanges())) {
+                        node.setHasCodeChanges(true);
+                    }
                 }
             }
             page++;

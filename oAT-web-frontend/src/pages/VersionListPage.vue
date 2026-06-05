@@ -7,6 +7,9 @@
         <p class="subtext">管理版本创建、当前版本切换和文件清理。</p>
       </div>
       <div class="header-actions">
+        <button class="ghost-button" type="button" :disabled="refreshing || saving" aria-label="刷新版本列表" @click="refreshVersions">
+          {{ refreshing ? '刷新中...' : '刷新' }}
+        </button>
         <RouterLink class="ghost-link" :to="`/p/${projectId}/apps/${appId}/versions/new`">新增版本</RouterLink>
         <RouterLink class="ghost-link" :to="`/p/${projectId}/apps/${appId}/compare`">比对与报告</RouterLink>
       </div>
@@ -118,6 +121,7 @@ const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const payload = ref<VersionCenterPayload | null>(null)
 const loading = ref(false)
+const refreshing = ref(false)
 const saving = ref(false)
 const error = ref('')
 const keyword = ref('')
@@ -161,6 +165,18 @@ async function load() {
     error.value = err instanceof Error ? err.message : '加载版本列表失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshVersions() {
+  refreshing.value = true
+  error.value = ''
+  try {
+    payload.value = await fetchVersionCenter(projectId.value, appId.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '刷新版本列表失败'
+  } finally {
+    refreshing.value = false
   }
 }
 
@@ -265,9 +281,36 @@ onMounted(load)
 }
 
 .ghost-link,
+.ghost-button,
 .text-link {
   color: #0f766e;
   font-weight: 700;
+}
+
+.ghost-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(15, 118, 110, 0.08);
+  cursor: pointer;
+  transition: background .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.ghost-button:hover:not(:disabled) {
+  background: rgba(15, 118, 110, 0.14);
+  box-shadow: 0 10px 20px rgba(15, 118, 110, 0.12);
+  transform: translateY(-1px);
+}
+
+.ghost-button:disabled,
+.text-link:disabled,
+.text-danger:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }
 
 .text-link,

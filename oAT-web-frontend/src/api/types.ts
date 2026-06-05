@@ -667,6 +667,9 @@ export interface ClassCoverageSummary {
   coveredBranchTargets: number
   branchRate: number
   totalComplexity: number
+  lineRate?: number
+  methodRate?: number
+  hasCodeChanges?: boolean
 }
 
 export interface SystemSnapshotReportPayload {

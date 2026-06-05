@@ -30,4 +30,14 @@ public interface SystemSnapshotService {
 
     void asyncCalculateCoverage(String snapshotId);
 
+    /**
+     * 手工补录快照-Commit 关联关系。
+     * 为当前 appId + versionNumber 下所有无关联的快照，按版本中心当前 Commit 补录。
+     *
+     * @param appId         应用ID
+     * @param versionNumber 版本号，为空则处理该应用所有快照
+     * @return 成功补录的数量
+     */
+    int backfillCommitMapping(String appId, String versionNumber);
+
 }

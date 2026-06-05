@@ -109,8 +109,8 @@
                   <span
                     v-if="item.hasCodeChanges"
                     class="change-badge"
-                    title="该类在本版本多个 Commit 之间存在代码变动，覆盖率数据已汇总自所有 Commit，建议重点关注"
-                  >已变更</span>
+                    title="该类在本版本多个 Commit 间覆盖率结果不完全一致。当前报告已汇总所有 Commit，源码展示使用最新 Commit，建议优先复核。"
+                  >覆盖有差异</span>
                 </td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
                 <td class="coverage-rate" :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
@@ -178,8 +178,8 @@
                   <span
                     v-if="row.type === 'class' && row.hasCodeChanges"
                     class="change-badge"
-                    title="该类在本版本多个 Commit 之间存在代码变动，覆盖率数据已汇总自所有 Commit，建议重点关注"
-                  >已变更</span>
+                    title="该类在本版本多个 Commit 间覆盖率结果不完全一致。当前报告已汇总所有 Commit，源码展示使用最新 Commit，建议优先复核。"
+                  >覆盖有差异</span>
                   <RouterLink v-if="row.type === 'class'" class="code-link" :to="buildCodeRoute(row.fullName || row.name)">代码</RouterLink>
                 </td>
                 <td>{{ row.coveredMethods }} / {{ row.totalMethods }}</td>
@@ -888,8 +888,8 @@ onMounted(() => {
   margin-left: 8px;
   padding: 3px 8px;
   border-radius: 999px;
-  background: rgba(234, 88, 12, 0.12);
-  color: #c2410c;
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
   font-size: 11px;
   font-weight: 800;
   cursor: help;
@@ -897,12 +897,12 @@ onMounted(() => {
 }
 
 .row-changed {
-  background: rgba(234, 88, 12, 0.04) !important;
-  border-left: 3px solid rgba(234, 88, 12, 0.42) !important;
+  background: rgba(217, 119, 6, 0.04) !important;
+  border-left: 3px solid rgba(217, 119, 6, 0.42) !important;
 }
 
 .row-changed:hover {
-  background: rgba(234, 88, 12, 0.08) !important;
-  box-shadow: inset 3px 0 0 rgba(234, 88, 12, 0.62) !important;
+  background: rgba(217, 119, 6, 0.08) !important;
+  box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.62) !important;
 }
 </style>

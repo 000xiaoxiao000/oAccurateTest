@@ -63,8 +63,8 @@
                       <span
                         v-if="item.method.hasCodeChanges"
                         class="method-change-badge"
-                        title="该方法在本版本不同 Commit 之间存在代码变动，覆盖率数据已按最新代码结构汇总，建议重点验证"
-                      >已变更</span>
+                        title="该方法在本版本多个 Commit 间覆盖率结果不完全一致。当前方法覆盖率已汇总所有 Commit，源码展示使用最新 Commit。"
+                      >覆盖有差异</span>
                       <span class="complexity-chip">复杂度 {{ item.method.complexity }}</span>
                     </div>
                     <div class="method-subline">
@@ -609,6 +609,29 @@ function coverageText(method: MethodCoverageSummary) {
 .status-pill[data-tone="default"] {
   background: rgba(100, 116, 139, 0.12);
   color: #475569;
+}
+
+.method-row-changed {
+  background: rgba(217, 119, 6, 0.05);
+  box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.42);
+}
+
+.method-row-changed:hover {
+  background: rgba(217, 119, 6, 0.09) !important;
+}
+
+.method-change-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: help;
+  white-space: nowrap;
 }
 
 :deep(.source-container pre) {
