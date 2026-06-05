@@ -611,8 +611,10 @@ async function loadApps() {
   error.value = ''
   try {
     apps.value = await fetchProjectApps(projectId.value)
-    if (!selectedAppId.value && apps.value.length) {
-      selectedAppId.value = apps.value[0].id
+    if (!selectedAppId.value) {
+      const queryAppId = String(route.query.appId || '')
+      const match = queryAppId && apps.value.find((app) => app.id === queryAppId)
+      selectedAppId.value = match ? match.id : (apps.value[0]?.id || '')
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载应用失败'

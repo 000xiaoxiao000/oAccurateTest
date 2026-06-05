@@ -229,10 +229,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             throw new RuntimeException("找不到静态源码数据，请确保已进行静态扫描或源码上传。");
         }
 
-        // Filter out classes that don't exist in the current commit for incremental report.
-        // Full report must keep existing static source data; otherwise current Commit reports can be emptied
-        // when source packages are absent, multi-module paths differ, or static data comes from runtime upload.
-        if (StringUtils.hasText(commitId) && normalizeReportType(reportType) != REPORT_TYPE_VERSION_FULL) {
+        // Filter out classes that don't exist in the current commit
+        // This ensures coverage reports only include classes that exist at the specified branch/commit
+        if (StringUtils.hasText(commitId)) {
             if (job != null) job.getLogger().info("正在校验当前 Commit [" + commitId.substring(0, Math.min(7, commitId.length())) + "] 中存在的类...");
             List<StaticSourceInfo> filteredStaticInfos = new ArrayList<>();
 
@@ -2347,7 +2346,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 }
 
                 String remaining = classFullName.substring(prefix.length());
-                TreeNodeIdentity identity = resolveImmediateTreeNode(prefix, remaining, classFullName);
+                TreeNodeIdentity identity = resolveImmediateTreeNode(prefix, remaining, classFullName, exactClassNames);
 
                 CoverageTreeNode node = nodesMap.get(identity.fullName);
                 if (node == null) {
@@ -2403,7 +2402,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         return result;
     }
 
-    private TreeNodeIdentity resolveImmediateTreeNode(String prefix, String remaining, String classFullName) {
+    private TreeNodeIdentity resolveImmediateTreeNode(String prefix, String remaining, String classFullName, Set<String> exactClassNames) {
         String[] segments = remaining.split("\\.");
         if (segments.length == 0) {
             return new TreeNodeIdentity(classFullName, classFullName, "class");
@@ -2411,17 +2410,18 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
         int firstTypeSegment = CoverageSourceClassUtil.findFirstTypeSegmentIndex(segments);
         
-        // 当 remaining 只有一个段时，根据是否为类型段决定节点类型
-        // 当 remaining 有多个段时，始终先展示第一段作为包节点，由懒加载继续展开
+        // 当 remaining 只有一个段时，需要判断该节点是类还是包
+        // 判断标准：该 fullName 是否在 exactClassNames 中精确存在
         if (segments.length == 1) {
-            if (firstTypeSegment == 0) {
-                // 单段且是类型（首字母大写），展示为类节点
+            String fullName = prefix + segments[0];
+            
+            // 如果该 fullName 在 ES 中精确存在为类，则是类节点
+            if (exactClassNames.contains(fullName)) {
                 String nodeName = CoverageSourceClassUtil.toTreeDisplayName(segments[0], "class");
-                return new TreeNodeIdentity(nodeName, prefix + segments[0], "class");
+                return new TreeNodeIdentity(nodeName, fullName, "class");
             } else {
-                // 单段但不是类型（首字母小写），展示为包节点
+                // 否则是包节点（可能是子目录，如 Workflow）
                 String nodeName = segments[0];
-                String fullName = prefix + nodeName;
                 return new TreeNodeIdentity(nodeName, fullName, "package");
             }
         }

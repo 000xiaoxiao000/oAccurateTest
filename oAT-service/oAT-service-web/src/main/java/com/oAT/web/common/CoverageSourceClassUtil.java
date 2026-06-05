@@ -43,6 +43,16 @@ public final class CoverageSourceClassUtil {
     }
 
     public static String resolveSourceOwnerClassName(String className) {
+        if (!StringUtils.hasText(className)) {
+            return className;
+        }
+        // Only apply inner-class collapsing when the original name contains '$'.
+        // A plain dot-separated name like "controller.Workflow.SomeClass" means
+        // Workflow is a package directory, not an outer class, so we must NOT
+        // strip SomeClass off and return "controller.Workflow" as if it were a class.
+        if (!className.contains("$")) {
+            return className;
+        }
         List<String> candidates = buildSourceClassCandidates(className);
         if (candidates.isEmpty()) {
             return className;

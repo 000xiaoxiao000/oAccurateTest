@@ -31,7 +31,7 @@
                 <span class="sub-menu-actions">
                   <RouterLink title="系统快照" :to="`/p/${projectId}/apps/${app.id}/snapshots`" @click="closeMenus">快照</RouterLink>
                   <RouterLink title="版本比对" :to="`/p/${projectId}/apps/${app.id}/compare`" @click="closeMenus">比对</RouterLink>
-                  <RouterLink title="覆盖率报告" :to="`/p/${projectId}/apps/${app.id}/coverage`" @click="closeMenus">覆盖率</RouterLink>
+                  <RouterLink title="覆盖率中心" :to="`/p/${projectId}/coverage?appId=${app.id}`" @click="closeMenus">覆盖率</RouterLink>
                 </span>
               </div>
               <div v-if="!filteredApps.length" class="empty-menu-item">暂无应用</div>

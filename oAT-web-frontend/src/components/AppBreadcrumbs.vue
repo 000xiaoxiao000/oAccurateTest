@@ -133,6 +133,41 @@ const routeLabels: Record<string, string> = {
   'project-labels': '标签管理',
 }
 
+// Routes where the app node should NOT appear as a breadcrumb ancestor.
+// Instead these routes belong to a module hub (coverage, version center, snapshots).
+const routeParentChain: Record<string, Array<{ label: string; to: string }>> = {
+  // Coverage module — parent is 覆盖率中心
+  'coverage-overview': [{ label: '覆盖率中心', to: `/p/${projectId.value}/coverage` }],
+  'coverage-details': [{ label: '覆盖率中心', to: `/p/${projectId.value}/coverage` }],
+  'coverage-code': [{ label: '覆盖率中心', to: `/p/${projectId.value}/coverage` }],
+  // Version module — version-list parent is 版本中心; deeper pages chain through it
+  'version-list': [{ label: '版本中心', to: `/p/${projectId.value}/version/apps` }],
+  'version-create': [
+    { label: '版本中心', to: `/p/${projectId.value}/version/apps` },
+    { label: '版本列表', to: `/p/${projectId.value}/apps/${appId.value}/versions` },
+  ],
+  'version-compare': [
+    { label: '版本中心', to: `/p/${projectId.value}/version/apps` },
+    { label: '版本列表', to: `/p/${projectId.value}/apps/${appId.value}/versions` },
+  ],
+  // System snapshot module
+  'system-snapshot-list': [],
+  'system-snapshot-detail': [{ label: '系统快照', to: `/p/${projectId.value}/apps/${appId.value}/snapshots` }],
+  'system-snapshot-report': [
+    { label: '系统快照', to: `/p/${projectId.value}/apps/${appId.value}/snapshots` },
+    { label: '系统快照详情', to: `/p/${projectId.value}/apps/${appId.value}/snapshots/${route.params.snapshotId}` },
+  ],
+  'system-snapshot-code': [
+    { label: '系统快照', to: `/p/${projectId.value}/apps/${appId.value}/snapshots` },
+    { label: '系统快照详情', to: `/p/${projectId.value}/apps/${appId.value}/snapshots/${route.params.snapshotId}` },
+    { label: '系统快照报告', to: `/p/${projectId.value}/apps/${appId.value}/snapshots/${route.params.snapshotId}/report` },
+  ],
+  'system-snapshot-graph': [
+    { label: '系统快照', to: `/p/${projectId.value}/apps/${appId.value}/snapshots` },
+    { label: '系统快照详情', to: `/p/${projectId.value}/apps/${appId.value}/snapshots/${route.params.snapshotId}` },
+  ],
+}
+
 const items = computed<BreadcrumbItem[]>(() => {
   const name = String(route.name || '')
   if (!name || name === 'not-found' || name === 'projects') return []
@@ -146,7 +181,13 @@ const items = computed<BreadcrumbItem[]>(() => {
     { label: context.value?.project.name || '项目', to: `/p/${projectId.value}/home` },
   ]
 
-  if (appId.value) {
+  if (name in routeParentChain) {
+    // Module-scoped route: insert the module parent chain, no app crumb
+    for (const crumb of routeParentChain[name]) {
+      result.push(crumb)
+    }
+  } else if (appId.value) {
+    // App-scoped route: show the app as breadcrumb ancestor
     result.push({ label: currentApp.value?.name || '应用', to: `/p/${projectId.value}/apps/${appId.value}/settings` })
   }
 
