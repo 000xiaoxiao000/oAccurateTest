@@ -832,19 +832,19 @@ onMounted(load)
 }
 
 .check-col {
-  width: 40px;
+  width: 36px;
 }
 
 .title-col {
-  width: 32%;
+  width: 38%;
 }
 
 .meta-col {
-  width: 20%;
+  width: 14%;
 }
 
 .time-col {
-  width: 12%;
+  width: 10%;
 }
 
 .status-col {
@@ -852,7 +852,7 @@ onMounted(load)
 }
 
 .actions-col {
-  width: 26%;
+  width: 28%;
 }
 
 .snapshot-table thead {
@@ -893,6 +893,8 @@ onMounted(load)
 
 .snapshot-link {
   display: block;
+  max-width: 100%;
+  overflow: hidden;
   color: var(--oat-text);
   font-weight: 700;
   transition: color 0.15s ease;
@@ -906,6 +908,9 @@ onMounted(load)
   display: block;
   font-size: 14px;
   line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subtext {
@@ -913,6 +918,9 @@ onMounted(load)
   color: var(--oat-text-muted);
   font-size: 12px;
   line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meta-group {
