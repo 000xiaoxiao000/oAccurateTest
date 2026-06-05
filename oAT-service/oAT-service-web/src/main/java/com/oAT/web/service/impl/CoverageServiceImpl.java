@@ -90,6 +90,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     private ElasticsearchOperations elasticsearchOperations;
 
     private final Set<String> sourceClassIndexEnsuredReports = ConcurrentHashMap.newKeySet();
+    private final Set<String> runningReportGenerationKeys = ConcurrentHashMap.newKeySet();
 
     private ExecutorService jobExecutors;
     private java.util.concurrent.ScheduledExecutorService jobCleanupExecutor;
@@ -125,7 +126,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
     private String startJob(String appId, String versionNumber, String branch, String commitId,
                           Integer reportType, String baseVersionNumber, String baseCommitId) {
-        // 先获取应用名称，以便显示更直观
+        String taskKey = buildReportGenerationKey(appId, versionNumber, commitId, reportType, baseVersionNumber, baseCommitId);
+        if (!runningReportGenerationKeys.add(taskKey)) {
+            throw new RuntimeException("该应用版本的覆盖率报告正在生成中，请等待当前任务完成后再试。");
+        }
+
         String appDisplayName = appId;
         try {
             AppVo app = appService.getApp(appId);
@@ -152,7 +157,6 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 job.state = Job.JobState.finish;
                 job.getProgress().finish("报告生成完成");
                 job.getLogger().info("报告生成成功: " + reportId);
-                // Delay cleanup to allow frontend to poll the final state
                 scheduleJobCleanup(job);
             } catch (Exception e) {
                 logger.error("Generate report failed", e);
@@ -160,8 +164,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 String errorMsg = toFriendlyError(e.getMessage());
                 job.getProgress().updateName("生成失败: " + errorMsg);
                 job.getLogger().error("生成报告失败: " + errorMsg);
-                // Delay cleanup to allow frontend to poll the final state
                 scheduleJobCleanup(job);
+            } finally {
+                runningReportGenerationKeys.remove(taskKey);
             }
         });
         return job.getId();
@@ -195,12 +200,22 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         return coverageReportRepository.findById(reportId).orElse(null);
     }
 
+    private String buildReportGenerationKey(String appId, String versionNumber, String commitId,
+                                           Integer reportType, String baseVersionNumber, String baseCommitId) {
+        return String.join("|",
+                appId == null ? "" : appId,
+                versionNumber == null ? "" : versionNumber,
+                commitId == null ? "" : commitId,
+                String.valueOf(normalizeReportType(reportType)),
+                baseVersionNumber == null ? "" : baseVersionNumber,
+                baseCommitId == null ? "" : baseCommitId);
+    }
+
     private String generateReportInternal(String appId, String versionNumber, String branch, String commitId,
                                         Integer reportType, String baseVersionNumber, String baseCommitId, Job<String> job) {
         if (job != null) job.getLogger().info("正在获取应用配置信息...");
         AppVo app = appService.getApp(appId);
 
-        // Clear caches for this task
         diffCache.clear();
         zipEntryCache.clear();
 
@@ -302,10 +317,24 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             job.getLogger().info("本次将基于系统快照生成报告，快照数量: " + snapshotContext.getSnapshotIds().size());
         }
 
-        if (job != null) job.getProgress().next("分析历史报告并进行覆盖率数据累积", 15);
+        if (job != null) job.getProgress().next("检查是否存在可复用报告", 12);
 
         CoverageReportIndex candidateLastReport =
                 getBestReportForAccumulation(appId, versionNumber, branch, commitId, reportType);
+        
+        if (candidateLastReport != null 
+                && StringUtils.hasText(candidateLastReport.getSnapshotFingerprint())
+                && candidateLastReport.getSnapshotFingerprint().equals(snapshotContext.getSnapshotFingerprint())
+                && Objects.equals(candidateLastReport.getSnapshotLastUpdateTime(), snapshotContext.getLastSnapshotTime())) {
+            if (job != null) {
+                job.getLogger().info("检测到现有报告快照指纹和更新时间完全一致，跳过重复生成，直接复用报告：" + candidateLastReport.getId());
+                job.getProgress().next("复用已有报告（快照数据未变化）", 100);
+            }
+            return candidateLastReport.getId();
+        }
+
+        if (job != null) job.getProgress().next("分析历史报告并进行覆盖率数据累积", 15);
+
         CoverageReportIndex reusedReport = null;
         Map<String, List<Integer>> inheritanceDiffMap = null;
 
@@ -428,7 +457,14 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                     return report;
                 }
             }
-            return null;
+            if (StringUtils.hasText(branch)) {
+                for (CoverageReportIndex report : filtered) {
+                    if (branch.equals(report.getRepoBranch())) {
+                        return report;
+                    }
+                }
+            }
+            return filtered.get(0);
         }
 
         if (StringUtils.hasText(branch)) {
