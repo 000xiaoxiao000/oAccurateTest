@@ -21,7 +21,7 @@
               v-for="label in payload.labels"
               :key="label.name"
               class="label-chip"
-              :style="{ '--label-color': label.color || '#0f766e' }"
+              :style="({ '--label-color': label.color || '#0f766e' } as any)"
             >
               {{ label.name }}
             </span>
@@ -239,6 +239,8 @@ onMounted(load)
 }
 
 .label-chip {
+  --label-color: #0f766e;
+
   padding: 6px 10px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--label-color) 14%, white);

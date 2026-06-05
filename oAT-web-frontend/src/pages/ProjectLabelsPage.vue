@@ -20,7 +20,7 @@
               :key="`usecase-${label.name}`"
               class="chip"
               type="button"
-              :style="{ '--chip-color': colorHex(label.color) }"
+              :style="({ '--chip-color': colorHex(label.color) } as any)"
               @click="remove('usecase', label.name)"
             >
               {{ label.name }}
@@ -45,7 +45,7 @@
               :key="`snapshot-${label.name}`"
               class="chip"
               type="button"
-              :style="{ '--chip-color': colorHex(label.color) }"
+              :style="({ '--chip-color': colorHex(label.color) } as any)"
               @click="remove('snapshot', label.name)"
             >
               {{ label.name }}
@@ -203,6 +203,8 @@ onMounted(load)
 }
 
 .chip {
+  --chip-color: #64748b;
+
   border: none;
   border-radius: 999px;
   padding: 8px 12px;
