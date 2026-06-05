@@ -2,6 +2,7 @@ package com.oAT.web.service.impl;
 
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.ai.agent.AgentDataProvider;
+import com.oAT.web.common.Job;
 import com.oAT.ai.agent.cache.ToolCallCache;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
@@ -56,6 +57,9 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     @Autowired
     private TraceNodeRepository traceNodeRepository;
+
+    @Autowired
+    private GitService gitService;
 
     @Override
     public Map<String, Object> getProjectInfo(String projectId) {
@@ -633,6 +637,83 @@ public class AgentDataProviderImpl implements AgentDataProvider {
         return result;
     }
 
+    @Override
+    public String startCoverageGenerationJob(String appId, String versionNumber, String branch, String commitId) {
+        try {
+            String jobId = coverageService.startGenerateJob(appId, versionNumber, branch, commitId);
+            logger.info("Started coverage generation job: appId={}, version={}, branch={}, commit={}, jobId={}",
+                    appId, versionNumber, branch, commitId, jobId);
+            return jobId;
+        } catch (Exception e) {
+            logger.error("Failed to start coverage generation job: appId={}, version={}, branch={}, commit={}",
+                    appId, versionNumber, branch, commitId, e);
+            return null;
+        }
+    }
+
+    @Override
+    public Map<String, Object> getJobStatus(String jobId) {
+        Map<String, Object> result = new HashMap<>();
+        try {
+            Job<String> job = coverageService.getJob(jobId);
+            if (job == null) {
+                return result;
+            }
+            result.put("jobId", jobId);
+            result.put("status", mapJobState(job.getState()));
+            result.put("progress", job.getProgress() != null ? job.getProgress().getPercent() : 0);
+            result.put("message", job.getProgress() != null ? job.getProgress().getName() : "");
+            result.put("reportId", job.getData());
+            result.put("startTime", job.getBegin());
+            result.put("log", job.getLog());
+        } catch (Exception e) {
+            logger.error("Failed to get job status: jobId={}", jobId, e);
+        }
+        return result;
+    }
+
+    @Override
+    public String generateReportDownloadUrl(String reportId) {
+        try {
+            return "/api/coverage/reports/" + reportId + "/export";
+        } catch (Exception e) {
+            logger.error("Failed to generate download URL: reportId={}", reportId, e);
+            return null;
+        }
+    }
+
+    @Override
+    public boolean validateGitAccess(String repoUrl, String username, String password, String branch) {
+        try {
+            gitService.checkGitPull(repoUrl, username, password, branch, null);
+            return true;
+        } catch (Exception e) {
+            logger.warn("Git access validation failed: repoUrl={}, branch={}, error={}",
+                    repoUrl, branch, e.getMessage());
+            return false;
+        }
+    }
+
+    private String mapJobState(Job.JobState state) {
+        if (state == null) {
+            return "UNKNOWN";
+        }
+        switch (state) {
+            case finish:
+                return "COMPLETED";
+            case active:
+                return "RUNNING";
+            case error:
+                return "FAILED";
+            case wait:
+                return "PENDING";
+            case terminate:
+                return "TERMINATED";
+            default:
+                return state.name().toUpperCase();
+        }
+    }
+
     private String findSourceCodeInAppInfos(List<StaticSourceInfo> appInfos, String targetClass, String normalizedTarget, String simpleName) {
         if (appInfos == null || appInfos.isEmpty()) {
             return null;
@@ -702,6 +783,10 @@ public class AgentDataProviderImpl implements AgentDataProvider {
         map.put("currentVersion", app.getCurrentVersion());
         map.put("currentBranch", app.getCurrentBranch());
         map.put("currentCommitId", app.getCurrentCommitId());
+        // Git 仓库配置（供覆盖率工作流工具使用）
+        map.put("repoUrl", app.getRepoAddress());
+        map.put("gitUsername", app.getRepoUserName());
+        map.put("gitPassword", app.getRepoPassword());
         return map;
     }
 

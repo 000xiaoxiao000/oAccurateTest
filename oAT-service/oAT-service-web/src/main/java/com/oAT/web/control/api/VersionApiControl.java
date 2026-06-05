@@ -18,6 +18,7 @@ import com.oAT.web.service.VersionService;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ApiEndpointViewVo;
 import com.oAT.web.service.entity.CompareJobVo;
+import com.oAT.web.service.entity.GitCacheInfo;
 import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitJobVo;
 import com.oAT.web.service.entity.GitPullEstimateVo;
@@ -343,6 +344,18 @@ public class VersionApiControl {
                     return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID (版本号: " + existing.getVersionNumber() + ")", null);
                 }
             }
+            
+            // 检查磁盘上是否已存在相同 branch+commitId 的缓存文件（即使数据库中没有版本记录）
+            GitCacheInfo existingCache = gitService.findExistingCache(finalBranch, checkCommitId, excludePaths);
+            if (existingCache != null) {
+                String sizeText = formatFileSize(existingCache.getFileSizeBytes());
+                String dateText = formatDateTime(existingCache.getCreateTime());
+                return new ResultNotified<>(false, 
+                    String.format("该分支和 CommitID 的代码已在磁盘缓存中，请先删除旧文件或直接使用现有缓存创建版本 (缓存路径: %s, 大小: %s, 拉取时间: %s)", 
+                        existingCache.getCachePath(), sizeText, dateText), 
+                    existingCache.getCachePath());
+            }
+            
             String jobId = gitService.startGitPullJob(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, finalCommitId, excludePaths);
             return new ResultNotified<>(true, "开始拉取", jobId);
         } catch (Exception e) {
@@ -1154,6 +1167,17 @@ public class VersionApiControl {
 
     private String formatDate(java.util.Date date) {
         return date == null ? null : new SimpleDateFormat(DATE_TIME_PATTERN, Locale.CHINA).format(date);
+    }
+
+    private String formatDateTime(java.util.Date date) {
+        return date == null ? "-" : new SimpleDateFormat(DATE_TIME_PATTERN, Locale.CHINA).format(date);
+    }
+
+    private String formatFileSize(Long bytes) {
+        if (bytes == null || bytes <= 0) return "-";
+        if (bytes >= 1024 * 1024) return String.format("%.2f MB", bytes / 1024.0 / 1024.0);
+        if (bytes >= 1024) return String.format("%.1f KB", bytes / 1024.0);
+        return bytes + " B";
     }
 
     public static class StartCompareRequest {

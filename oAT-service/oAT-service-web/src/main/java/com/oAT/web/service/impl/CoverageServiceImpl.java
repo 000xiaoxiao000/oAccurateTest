@@ -346,6 +346,11 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 job.getLogger().info("系统快照集合存在新增/删除/重排，将按当前快照全集全量重算覆盖率。");
             }
         }
+        
+        if (normalizeReportType(reportType) == REPORT_TYPE_VERSION_FULL) {
+            baseVersionNumber = null;
+            baseCommitId = null;
+        }
 
         // 3. Aggregate TraceNode data from snapshot timeline
         if (job != null) job.getProgress().next("处理系统快照中的链路追踪数据", 50);
@@ -374,7 +379,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
         report.setReportType(reportType);
         report.setBaseVersionNumber(baseVersionNumber);
-        report.setBaseRepoCommitId(reusedReport != null ? reusedReport.getRepoCommitId() : baseCommitId);
+        report.setBaseRepoCommitId(isIncrementalReport(reportType) ? (reusedReport != null ? reusedReport.getRepoCommitId() : baseCommitId) : null);
 
         report.setSnapshotFingerprint(snapshotContext.getSnapshotFingerprint());
         report.setSnapshotLastUpdateTime(snapshotContext.getLastSnapshotTime());
@@ -620,10 +625,10 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
                 incTotalBranchTargets += classCov.getTotalBranchTargets();
                 incCoveredBranchTargets += classCov.getCoveredBranchTargets();
                 incTotalComplexity += classCov.getTotalComplexity();
-            } else {
+            } else if (diffMap != null && !diffMap.isEmpty()) {
                 // For full report, calculate inc stats vs diffMap (comparison with previous)
                 List<Integer> changedLines = getChangedLinesForClass(diffMap, classCov.getClassName());
-                if (changedLines == null) {
+                if (changedLines == null || changedLines.isEmpty()) {
                     toSave.add(classCov);
                     continue;
                 }

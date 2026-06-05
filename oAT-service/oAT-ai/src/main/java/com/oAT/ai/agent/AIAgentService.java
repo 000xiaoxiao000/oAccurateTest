@@ -202,6 +202,7 @@ public class AIAgentService {
         BugDetectTool bugDetectTool = new BugDetectTool(dataProvider);
         CallChainAnalysisTool callChainAnalysisTool = new CallChainAnalysisTool(dataProvider);
         CallChainCompareTool callChainCompareTool = new CallChainCompareTool(dataProvider);
+        CoverageWorkflowTool coverageWorkflowTool = new CoverageWorkflowTool(dataProvider);
 
         tools.add(projectInfoTool);
         tools.add(appStatusTool);
@@ -216,6 +217,7 @@ public class AIAgentService {
         tools.add(bugDetectTool);
         tools.add(callChainAnalysisTool);
         tools.add(callChainCompareTool);
+        tools.add(coverageWorkflowTool);
 
         // 注册工具实例，用于兜底执行
         registerTool(projectInfoTool);
@@ -231,6 +233,7 @@ public class AIAgentService {
         registerTool(bugDetectTool);
         registerTool(callChainAnalysisTool);
         registerTool(callChainCompareTool);
+        registerTool(coverageWorkflowTool);
 
         return tools;
     }
@@ -327,6 +330,8 @@ public class AIAgentService {
             addAll(toolNames, "searchCodeRelation", "analyzeBusinessRequirement", "getClassCallGraph", "detectBugsInMethod");
         } else if (containsAny(normalized, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误")) {
             addAll(toolNames, "searchCodeRelation", "detectBugsInMethod", "detectBugs", "batchDetectBugs", "getCodeQualityReport");
+        } else if (containsAny(normalized, "生成覆盖率", "拉取代码", "自动生成", "生成报告", "覆盖率生成", "任务进度", "生成好了吗", "任务状态", "下载报告", "导出报告", "检查配置", "验证git", "git配置")) {
+            addAll(toolNames, "generateCoverageReport", "queryJobStatus", "downloadCoverageReport", "checkGitConfiguration", "getApps", "searchAppByName");
         } else if (containsAny(normalized, "覆盖", "coverage", "低覆盖", "未覆盖", "覆盖率")) {
             addAll(toolNames, "getProjectCoverageOverview", "getAppCoverageReport", "getLowCoverageClasses", "getCoverageImprovementSuggestions", "getApps", "searchAppByName");
         } else if (containsAny(normalized, "性能", "performance", "慢接口", "响应时间", "p95", "p99", "耗时", "退化")) {

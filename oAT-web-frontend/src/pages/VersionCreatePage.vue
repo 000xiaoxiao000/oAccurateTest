@@ -102,12 +102,17 @@
             </div>
           </div>
         </div>
-        <div v-if="gitJob" class="panel">
+        <div v-if="gitJob" class="panel task-panel">
           <div class="panel-head">
-            <h2>拉取任务</h2>
-            <span>{{ gitJob.progress }}%</span>
+            <div class="panel-title-block">
+              <h2>拉取任务</h2>
+              <p class="subtext">{{ gitJob.progressName || gitJob.message || '正在处理中' }}</p>
+            </div>
+            <span class="progress-badge">{{ gitJob.progress }}%</span>
           </div>
-          <p class="subtext">{{ gitJob.progressName || gitJob.message || '-' }}</p>
+          <div class="progress-bar-container">
+            <div class="progress-bar-fill" :style="{ width: `${gitJob.progress}%` }"></div>
+          </div>
         </div>
       </template>
 
@@ -291,6 +296,23 @@ async function fetchLatestCommitForBranch() {
   }
 }
 
+function findExistingVersionFile(versionNumber: string, branch: string, commitId: string) {
+  if (!center.value?.versions) return null
+  const normalizedBranch = branch.trim()
+  const normalizedCommitId = commitId.trim()
+  const normalizedVersionNumber = versionNumber.trim()
+  
+  for (const version of center.value.versions) {
+    if (version.versionNumber === normalizedVersionNumber &&
+        version.repoBranch === normalizedBranch &&
+        version.repoCommitId === normalizedCommitId &&
+        version.programFile) {
+      return version.programFile
+    }
+  }
+  return null
+}
+
 async function checkGit() {
   busy.value = true
   error.value = ''
@@ -302,7 +324,14 @@ async function checkGit() {
       excludePaths: excludePaths.value || undefined,
     })
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Git 检测失败'
+    const message = err instanceof Error ? err.message : 'Git 检测失败'
+    error.value = message
+    if (message.includes('该版本号下已存在相同的分支和 CommitID') && form.value.versionNumber && form.value.repoBranch && form.value.repoCommitId) {
+      const existingFile = findExistingVersionFile(form.value.versionNumber, form.value.repoBranch, form.value.repoCommitId)
+      if (existingFile) {
+        gitPulledPath.value = existingFile
+      }
+    }
   } finally {
     busy.value = false
   }
@@ -334,7 +363,24 @@ async function pullGit() {
     })
     await pollGit(jobId)
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'Git 拉取失败'
+    const message = err instanceof Error ? err.message : 'Git 拉取失败'
+    error.value = message
+    
+    // 处理重复错误：数据库中有记录
+    if (message.includes('该版本号下已存在相同的分支和 CommitID') && form.value.versionNumber && form.value.repoBranch && form.value.repoCommitId) {
+      const existingFile = findExistingVersionFile(form.value.versionNumber, form.value.repoBranch, form.value.repoCommitId)
+      if (existingFile) {
+        gitPulledPath.value = existingFile
+      }
+    }
+    
+    // 处理磁盘缓存重复错误：磁盘上有文件但数据库中没有记录
+    if (message.includes('该分支和 CommitID 的代码已在磁盘缓存中')) {
+      const pathMatch = message.match(/缓存路径:\s*([^,\)]+)/)
+      if (pathMatch && pathMatch[1]) {
+        gitPulledPath.value = pathMatch[1].trim()
+      }
+    }
   } finally {
     busy.value = false
   }
@@ -674,6 +720,54 @@ button:disabled {
 .panel {
   margin-top: 16px;
   flex-wrap: wrap;
+}
+
+.task-panel {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.04), rgba(59, 130, 246, 0.04));
+  border-color: rgba(15, 118, 110, 0.18);
+}
+
+.panel-title-block {
+  display: grid;
+  gap: 4px;
+}
+
+.panel-title-block h2,
+.panel-title-block p {
+  margin: 0;
+}
+
+.panel-title-block p.subtext {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.progress-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.progress-bar-container {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  margin-top: 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  transition: width 0.4s ease;
+  box-shadow: 0 0 12px rgba(15, 118, 110, 0.3);
 }
 
 .notice-text {

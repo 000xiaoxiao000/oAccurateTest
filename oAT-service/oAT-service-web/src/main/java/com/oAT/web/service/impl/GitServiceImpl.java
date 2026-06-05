@@ -6,6 +6,7 @@ import com.oAT.web.common.Job;
 import com.oAT.web.exceptions.FriendlyException;
 import com.oAT.web.service.GitService;
 import com.oAT.web.service.ResourceService;
+import com.oAT.web.service.entity.GitCacheInfo;
 import com.oAT.web.service.entity.GitCommitOptionVo;
 import com.oAT.web.service.entity.GitDiffVo;
 import com.oAT.web.service.entity.GitJobVo;
@@ -519,7 +520,7 @@ public class GitServiceImpl implements GitService {
                                 this.taskName = title;
                                 this.totalWork = totalWork;
                                 this.workDone = 0;
-                                job.getProgress().updateName("Git: " + title); // Update title, keep proportion
+                                job.getProgress().updateName(toChineseProgressName(title));
                             }
                             @Override
                             public void update(int completed) {
@@ -703,6 +704,46 @@ public class GitServiceImpl implements GitService {
         }
     }
 
+    private String toChineseProgressName(String gitPhase) {
+        if (gitPhase == null || gitPhase.isEmpty()) {
+            return "正在处理...";
+        }
+        
+        String lower = gitPhase.toLowerCase().trim();
+        
+        // Common JGit progress phase names
+        if (lower.startsWith("remote:") || lower.contains("remote")) {
+            return "连接远程仓库";
+        }
+        if (lower.contains("counting objects")) {
+            return "统计对象";
+        }
+        if (lower.contains("compressing objects")) {
+            return "压缩对象";
+        }
+        if (lower.contains("receiving objects")) {
+            return "接收对象";
+        }
+        if (lower.contains("resolving deltas")) {
+            return "解析增量";
+        }
+        if (lower.contains("checking out")) {
+            return "检出文件";
+        }
+        if (lower.contains("updating references")) {
+            return "更新引用";
+        }
+        if (lower.contains("clone") || lower.contains("cloning")) {
+            return "克隆仓库";
+        }
+        if (lower.contains("fetch")) {
+            return "拉取远程数据";
+        }
+        
+        // Fallback: return original if no match
+        return gitPhase;
+    }
+
     private String getFriendlyErrorMessage(Exception e) {
         return FriendlyErrorMessageUtil.git(e);
     }
@@ -796,6 +837,44 @@ public class GitServiceImpl implements GitService {
             lock.unlock();
         }
         return diffList;
+    }
+
+    @Override
+    public GitCacheInfo findExistingCache(String branch, String commitId, String excludePaths) {
+        if (!StringUtils.hasText(branch) || !StringUtils.hasText(commitId)) {
+            return null;
+        }
+
+        String normalizedBranch = normalizeBranchName(branch);
+        String normalizedCommitId = commitId.trim();
+        String cacheRoot = resourceService.getCacheRoot();
+        File rootDir = new File(cacheRoot);
+
+        if (!rootDir.exists() || !rootDir.isDirectory()) {
+            return null;
+        }
+
+        String expectedPrefix = "git-" + normalizedBranch + "-" + normalizedCommitId;
+
+        File[] subdirs = rootDir.listFiles(File::isDirectory);
+        if (subdirs == null) {
+            return null;
+        }
+
+        for (File subdir : subdirs) {
+            File[] files = subdir.listFiles((dir, name) ->
+                name.startsWith(expectedPrefix) && name.endsWith(".zip"));
+
+            if (files != null && files.length > 0) {
+                File found = files[0];
+                String relativePath = subdir.getName() + "/" + found.getName();
+                logger.info("Found existing cache for branch={}, commitId={}: {}",
+                    normalizedBranch, normalizedCommitId, relativePath);
+                return new GitCacheInfo(relativePath, found.length(), new java.util.Date(found.lastModified()));
+            }
+        }
+
+        return null;
     }
 
     @Override

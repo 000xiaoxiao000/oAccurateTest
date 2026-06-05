@@ -152,4 +152,42 @@ public interface AgentDataProvider {
      * @return 类名 -> 源码的映射
      */
     Map<String, String> getSourceCodes(List<String> classNames);
+
+    /**
+     * 启动覆盖率生成任务（拉取代码 + 生成报告）
+     *
+     * @param appId          应用ID
+     * @param versionNumber  版本号
+     * @param branch         分支名
+     * @param commitId       Commit ID（可选）
+     * @return 任务ID
+     */
+    String startCoverageGenerationJob(String appId, String versionNumber, String branch, String commitId);
+
+    /**
+     * 查询任务状态
+     *
+     * @param jobId 任务ID
+     * @return 任务状态信息（status, progress, message, reportId等）
+     */
+    Map<String, Object> getJobStatus(String jobId);
+
+    /**
+     * 生成覆盖率报告下载链接
+     *
+     * @param reportId 报告ID
+     * @return 下载URL
+     */
+    String generateReportDownloadUrl(String reportId);
+
+    /**
+     * 验证 Git 仓库访问权限
+     *
+     * @param repoUrl  仓库地址
+     * @param username 用户名
+     * @param password 密码/Token
+     * @param branch   分支名
+     * @return 是否可以访问
+     */
+    boolean validateGitAccess(String repoUrl, String username, String password, String branch);
 }

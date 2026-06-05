@@ -101,6 +101,10 @@ public class ToolRecommender {
                 "overview", "统计", "汇总", "总览", "项目概览", "项目总览"));
         INTENT_KEYWORDS.put("code_quality", Set.of("质量", "quality", "复杂度",
                 "圈复杂度", "代码审查", "规范", "技术债", "高复杂度", "复杂度高", "代码质量", "质量报告"));
+        INTENT_KEYWORDS.put("coverage_workflow", Set.of("生成覆盖率", "自动生成", "拉取代码",
+                "生成报告", "覆盖率生成", "自动拉取", "生成覆盖率报告", "下载报告", "导出报告",
+                "任务进度", "生成好了吗", "任务状态", "查询任务", "检查配置", "验证git",
+                "git配置", "仓库配置", "自动化流程", "一键生成"));
     }
 
     /**
@@ -476,6 +480,19 @@ public class ToolRecommender {
                 return 8.0;
             }
         }
+        if (containsAny(lowerQuestion, "生成覆盖率", "拉取代码", "自动生成", "生成报告", "覆盖率生成")) {
+            if ("generateCoverageReport".equals(toolName)) return 20.0;
+            if (Set.of("checkGitConfiguration", "queryJobStatus").contains(toolName)) return 8.0;
+        }
+        if (containsAny(lowerQuestion, "任务进度", "生成好了吗", "任务状态", "查询任务")) {
+            if ("queryJobStatus".equals(toolName)) return 20.0;
+        }
+        if (containsAny(lowerQuestion, "下载报告", "导出报告", "获取报告")) {
+            if ("downloadCoverageReport".equals(toolName)) return 20.0;
+        }
+        if (containsAny(lowerQuestion, "检查配置", "git配置", "验证git", "仓库配置")) {
+            if ("checkGitConfiguration".equals(toolName)) return 20.0;
+        }
         return 0.0;
     }
 
@@ -645,6 +662,26 @@ public class ToolRecommender {
                 "获取类级别的真实调用关系图",
                 new String[]{"类调用图", "类调用关系", "类依赖", "类关系", "调用关系图", "调用图", "上下游"},
                 new String[]{"code_relation", "trace", "business_logic"}));
+
+        registerTool(new ToolMeta("generateCoverageReport", "生成覆盖率报告",
+                "拉取代码并启动覆盖率生成任务，返回任务ID",
+                new String[]{"生成覆盖率", "拉取代码", "生成报告", "自动生成", "覆盖率生成"},
+                new String[]{"coverage_workflow", "coverage"}));
+
+        registerTool(new ToolMeta("queryJobStatus", "查询任务进度",
+                "查询覆盖率生成任务的执行状态和进度",
+                new String[]{"任务进度", "生成好了吗", "任务状态", "查询任务", "进度"},
+                new String[]{"coverage_workflow"}));
+
+        registerTool(new ToolMeta("downloadCoverageReport", "下载覆盖率报告",
+                "生成覆盖率报告的 Excel 下载链接",
+                new String[]{"下载报告", "导出报告", "获取报告", "下载覆盖率"},
+                new String[]{"coverage_workflow", "coverage"}));
+
+        registerTool(new ToolMeta("checkGitConfiguration", "检查 Git 配置",
+                "验证应用的 Git 仓库地址和访问权限是否正确",
+                new String[]{"检查配置", "git配置", "验证git", "仓库配置", "git权限"},
+                new String[]{"coverage_workflow"}));
 
         logger.info("Registered {} built-in tools in recommender", tools.size());
     }

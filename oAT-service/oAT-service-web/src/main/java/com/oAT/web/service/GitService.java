@@ -3,10 +3,7 @@ package com.oAT.web.service;
 import java.io.File;
 import java.util.List;
 
-import com.oAT.web.service.entity.GitCommitOptionVo;
-import com.oAT.web.service.entity.GitDiffVo;
-import com.oAT.web.service.entity.GitJobVo;
-import com.oAT.web.service.entity.GitPullEstimateVo;
+import com.oAT.web.service.entity.*;
 
 public interface GitService {
     List<String> getRemoteBranches(String repoUrl, String username, String password);
@@ -38,4 +35,10 @@ public interface GitService {
      * 返回 null 表示文件在该 commit 中不存在或不可读。
      */
     String getFileContent(String repoUrl, String username, String password, String commitId, String filePath);
+
+    /**
+     * 查找磁盘上已存在的缓存文件信息（基于分支和CommitID）。
+     * 返回 null 表示不存在匹配的缓存文件。
+     */
+    GitCacheInfo findExistingCache(String branch, String commitId, String excludePaths);
 }
