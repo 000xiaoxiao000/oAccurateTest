@@ -186,7 +186,7 @@ erDiagram
 ```mermaid
 flowchart TB
   subgraph Presentation[展示层]
-    FM[FreeMarker]
+    WEB[Web 前端]
     UI[jQuery / Semantic UI / Chart]
   end
 
@@ -839,7 +839,7 @@ conf_service.include=com.company.*
 假设 `OrderService#submit(OrderReq req)` 在新版本里改成了：
 
 ```java
-submit(OrderReq req, String channel)
+submit(OrderReq req, String channel);
 ```
 
 但平台静态源码里还是旧签名。  

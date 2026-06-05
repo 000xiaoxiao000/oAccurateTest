@@ -11,9 +11,9 @@
 - `oAT-service/oAT-service-web/src/main/java/com/oAT/web/service/impl/CoverageServiceImpl.java`
 - `oAT-service/oAT-service-web/src/main/java/com/oAT/web/esDao/entity/CoverageReportIndex.java`
 - `oAT-service/oAT-service-web/src/main/java/com/oAT/web/esDao/entity/ClassCoverageIndex.java`
-- `oAT-service/oAT-service-web/src/main/resources/templates/coverage/overview.ftl`
-- `oAT-service/oAT-service-web/src/main/resources/templates/coverage/details.ftl`
-- `oAT-service/oAT-service-web/src/main/resources/templates/coverage/code_view.ftl`
+- `oAT-web-frontend` 覆盖率概览前端路由
+- `oAT-web-frontend` 覆盖率详情前端路由
+- `oAT-web-frontend` 覆盖率源码视图前端路由
 
 ---
 
@@ -46,9 +46,9 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  V[版本列表 versionList.ftl] --> O[覆盖率概览 overview.ftl]
-  O -->|查看详情| D[覆盖率详情 details.ftl]
-  D -->|查看代码| C[源码视图 code_view.ftl]
+  V[版本列表前端页] --> O[覆盖率概览前端页]
+  O -->|查看详情| D[覆盖率详情前端页]
+  D -->|查看代码| C[源码视图前端页]
   O -->|生成全量/增量| J[任务进度与日志]
   O -->|导出| X[类级Excel/方法级Excel]
   O -->|趋势| T[覆盖率趋势图]
@@ -119,9 +119,9 @@ flowchart TD
   V[VersionCenter/VersionItem 代码版本]
   A[App 应用]
 
-  O1[overview.ftl]
-  O2[details.ftl]
-  O3[code_view.ftl]
+  O1[覆盖率概览前端页]
+  O2[覆盖率详情前端页]
+  O3[源码视图前端页]
 
   S --> R
   T --> C
@@ -144,7 +144,7 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  U[Browser + FreeMarker] --> CC[CoverageControl]
+  U[Browser + Web 前端] --> CC[CoverageControl]
   CC --> CS[CoverageServiceImpl]
   CS --> CR[(coverage_report)]
   CS --> CCR[(class_coverage)]
@@ -226,7 +226,7 @@ erDiagram
 ```mermaid
 flowchart TB
   subgraph 展示层
-    FM[FreeMarker + Semantic UI + jQuery + Chart.js]
+    WEB[Web 前端 + REST API]
   end
 
   subgraph 应用层
@@ -322,7 +322,7 @@ classDiagram
 ```mermaid
 sequenceDiagram
   participant User
-  participant UI as overview.ftl
+  participant UI as 覆盖率前端页
   participant Ctrl as CoverageControl
   participant Svc as CoverageServiceImpl
   participant App as AppService
