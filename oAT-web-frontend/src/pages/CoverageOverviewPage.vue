@@ -1072,13 +1072,6 @@ onMounted(load)
   margin-bottom: 12px;
 }
 
-.eyebrow {
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
 
 .subtext,
 .info-item span {

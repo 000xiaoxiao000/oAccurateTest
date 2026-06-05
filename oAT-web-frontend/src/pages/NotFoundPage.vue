@@ -23,11 +23,4 @@
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
 
-.eyebrow {
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
 </style>

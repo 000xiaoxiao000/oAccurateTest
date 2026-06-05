@@ -186,9 +186,9 @@ a:focus-visible {
 }
 
 .shell-main :is(.page-header, .hero):not(.plain-header) {
-  padding: clamp(18px, 2.4vw, 30px);
+  padding: clamp(14px, 1.6vw, 18px);
   border: 1px solid rgba(15, 23, 42, .07);
-  border-radius: var(--oat-radius-2xl);
+  border-radius: var(--oat-radius-lg);
   background:
     radial-gradient(circle at top right, rgba(var(--oat-primary-rgb), .16), transparent 34%),
     radial-gradient(circle at 18% 0%, rgba(var(--oat-accent-rgb), .08), transparent 36%),
@@ -233,11 +233,11 @@ a:focus-visible {
 }
 
 .shell-main :is(.page-header h1, .hero h1) {
-  margin: 2px 0 6px;
+  margin: 2px 0 4px;
   color: var(--oat-text);
-  font-size: clamp(24px, 2.4vw, 36px);
-  line-height: 1.12;
-  letter-spacing: -.03em;
+  font-size: clamp(20px, 2vw, 28px);
+  line-height: 1.2;
+  letter-spacing: -.02em;
   font-weight: 800;
 }
 
@@ -263,7 +263,7 @@ a:focus-visible {
 }
 
 .shell-main :is(.page-header, .hero, .toolbar-card, .summary-grid, .panel-grid, .hero-grid, .layout-grid, .content-grid, .detail-grid, .section-grid) {
-  margin-bottom: var(--page-gap);
+  margin-bottom: 14px;
 }
 
 .shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card) {
@@ -603,12 +603,12 @@ a:focus-visible {
 
 @media (max-width: 760px) {
   .shell-main :is(.page-header, .hero):not(.plain-header) {
-    padding: 18px;
-    border-radius: var(--oat-radius-lg);
+    padding: 14px;
+    border-radius: var(--oat-radius-md);
   }
 
   .shell-main :is(.page-header h1, .hero h1) {
-    font-size: 24px;
+    font-size: 20px;
   }
 }
 

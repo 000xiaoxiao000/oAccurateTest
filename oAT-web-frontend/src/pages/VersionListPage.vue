@@ -236,10 +236,6 @@ onMounted(load)
   gap: 12px;
 }
 
-.page-header {
-  margin-bottom: 20px;
-}
-
 .list-toolbar {
   position: sticky;
   top: 12px;
@@ -263,13 +259,6 @@ onMounted(load)
   width: 180px;
 }
 
-.eyebrow {
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
 
 .subtext {
   color: #64748b;

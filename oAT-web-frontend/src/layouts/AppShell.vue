@@ -507,7 +507,7 @@ async function handleLogout() {
 }
 
 .shell-main {
-  padding: clamp(18px, 2vw, 28px) 0 80px;
+  padding: clamp(12px, 1.4vw, 18px) 0 60px;
 }
 
 .shell-main-wide {

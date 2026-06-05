@@ -937,13 +937,6 @@ onMounted(load)
   margin-bottom: 20px;
 }
 
-.eyebrow {
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
 
 .subtext,
 .field span,

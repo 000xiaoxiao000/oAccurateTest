@@ -167,9 +167,9 @@ function goBack() {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 14px;
-  padding: 8px 10px;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 5px 8px;
   border: 1px solid rgba(15, 23, 42, .07);
   border-radius: 999px;
   background: rgba(255, 255, 255, .72);
