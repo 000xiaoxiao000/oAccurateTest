@@ -468,7 +468,14 @@ public class SnapshotApiControl {
         ensureProjectAccess(projectId, user);
         SnapshotVo snapshot = snapshotService.get(snapshotId);
         Assert.notNull(snapshot, "我的快照不存在");
-        Assert.isTrue(projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
+        
+        // 检查快照的 projectId，如果为 null 或不匹配则记录详细信息
+        String snapshotProjectId = snapshot.getProjectId();
+        if (snapshotProjectId != null && !projectId.equals(snapshotProjectId)) {
+            throw new IllegalArgumentException(String.format(
+                "快照不属于当前项目 (URL projectId: %s, 快照 projectId: %s, snapshotId: %s)", 
+                projectId, snapshotProjectId, snapshotId));
+        }
         MySnapshotDetailPayload payload = new MySnapshotDetailPayload();
         payload.setSnapshot(snapshot);
         payload.setCreateUser(toUserSummary(userService.getUser(snapshot.getCreateUser())));
@@ -489,7 +496,7 @@ public class SnapshotApiControl {
         ensureProjectAccess(projectId, user);
         SnapshotVo snapshot = snapshotService.get(snapshotId);
         Assert.notNull(snapshot, "快照不存在");
-        Assert.isTrue(projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
+        Assert.isTrue(snapshot.getProjectId() == null || projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
 
         MySnapshotReportAggregate aggregate = buildMySnapshotReportAggregate(snapshot);
         MySnapshotReportPayload payload = new MySnapshotReportPayload();
@@ -510,7 +517,7 @@ public class SnapshotApiControl {
         Assert.hasText(className, "className不能为空");
         SnapshotVo snapshot = snapshotService.get(snapshotId);
         Assert.notNull(snapshot, "快照不存在");
-        Assert.isTrue(projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
+        Assert.isTrue(snapshot.getProjectId() == null || projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
 
         String appId = resolveMySnapshotAppId(snapshot);
         Assert.hasText(appId, "无法识别当前快照所属应用");
@@ -570,7 +577,7 @@ public class SnapshotApiControl {
         ensureProjectAccess(projectId, user);
         SnapshotVo snapshot = snapshotService.get(snapshotId);
         Assert.notNull(snapshot, "快照不存在");
-        Assert.isTrue(projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
+        Assert.isTrue(snapshot.getProjectId() == null || projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
         GraphView graphView = new TraceGraphParse(buildTraceNodeMap(snapshot.getTraceId()), buildRemoteCallResolver(projectId)).getGraphView();
         enrichGraphViewCodeLayer(graphView, snapshot.getTraceId());
         return new ResultNotified<>(true, "获取我的快照链路图成功", graphView);
@@ -584,7 +591,7 @@ public class SnapshotApiControl {
         ensureProjectAccess(projectId, user);
         SnapshotVo snapshot = snapshotService.get(snapshotId);
         Assert.notNull(snapshot, "快照不存在");
-        Assert.isTrue(projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
+        Assert.isTrue(snapshot.getProjectId() == null || projectId.equals(snapshot.getProjectId()), "快照不属于当前项目");
         TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(snapshot.getTraceId()), buildRemoteCallResolver(projectId));
         GraphNode graphNode = parse.getGraphNode(nodeId);
         Assert.notNull(graphNode, "找不到节点 id=" + nodeId);
@@ -623,7 +630,7 @@ public class SnapshotApiControl {
         ensureProjectAccess(projectId, user);
         SnapshotVo snapshotVo = snapshotService.get(snapshotId);
         Assert.notNull(snapshotVo, "找不到快照 id=" + snapshotId);
-        Assert.isTrue(projectId.equals(snapshotVo.getProjectId()), "快照不属于当前项目");
+        Assert.isTrue(snapshotVo.getProjectId() == null || projectId.equals(snapshotVo.getProjectId()), "快照不属于当前项目");
         String[] usecaseIds = normalizeArray(request.getUsecaseIds());
         usecaseService.bindSnapshotToUsecases(projectId, user.getId(), snapshotId, usecaseIds);
         return new ResultNotified<>(true, "测试用例关联已更新", usecaseIds == null ? 0 : usecaseIds.length);

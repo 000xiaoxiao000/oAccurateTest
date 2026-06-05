@@ -382,16 +382,35 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
         // 3. Aggregate TraceNode data from snapshot timeline
         if (job != null) job.getProgress().next("处理系统快照中的链路追踪数据", 50);
+        
+        // Track initial coverage state to detect changes across snapshots
+        Map<String, Map<String, MethodCoverageSnapshot>> initialCoverageState = new HashMap<>();
+        boolean isVersionFullReport = normalizeReportType(reportType) == REPORT_TYPE_VERSION_FULL;
+        
         int processed = 0;
         int total = traceIdsToProcess.size();
         for (String traceId : traceIdsToProcess) {
             mergeSnapshotTraceCoverage(traceId, coverageMap);
+            
+            // For VERSION_FULL reports, track coverage state changes
+            if (isVersionFullReport && processed == 0) {
+                captureInitialCoverageState(coverageMap, initialCoverageState);
+            }
+            
             processed++;
             if (job != null) {
                 job.getProgress().total = total;
                 job.getProgress().loaded = processed;
                 job.getLogger().info("正在处理快照链路数据 (" + processed + "/" + total + ")");
             }
+        }
+        
+        // For VERSION_FULL with multiple snapshots, mark coverage differences
+        if (isVersionFullReport && total > 1) {
+            if (job != null) {
+                job.getLogger().info("版本全量报告：正在检测并标记跨快照的覆盖率差异...");
+            }
+            markCoverageChanges(coverageMap, initialCoverageState, job);
         }
 
         // 4. Final Calculation & Save
@@ -511,6 +530,92 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             if (classCov != null) {
                 mergeStackNode(classCov, sn);
             }
+        }
+    }
+
+    /**
+     * Helper class to track method coverage state for comparison
+     */
+    private static class MethodCoverageSnapshot {
+        int coveredLines;
+        int totalLines;
+        int coveredBranchTargets;
+        int totalBranchTargets;
+        
+        MethodCoverageSnapshot(MethodCoverageDetail method) {
+            this.coveredLines = method.getCoveredLines();
+            this.totalLines = method.getTotalLines();
+            this.coveredBranchTargets = method.getCoveredBranchTargets();
+            this.totalBranchTargets = method.getTotalBranchTargets();
+        }
+        
+        boolean hasDifference(MethodCoverageDetail current) {
+            return this.coveredLines != current.getCoveredLines()
+                || this.coveredBranchTargets != current.getCoveredBranchTargets();
+        }
+    }
+    
+    /**
+     * Capture initial coverage state for version full report difference detection
+     */
+    private void captureInitialCoverageState(Map<String, ClassCoverageIndex> coverageMap,
+                                            Map<String, Map<String, MethodCoverageSnapshot>> initialState) {
+        for (Map.Entry<String, ClassCoverageIndex> entry : coverageMap.entrySet()) {
+            String className = entry.getKey();
+            ClassCoverageIndex classCov = entry.getValue();
+            
+            Map<String, MethodCoverageSnapshot> methodSnapshots = new HashMap<>();
+            if (classCov.getMethods() != null) {
+                for (MethodCoverageDetail method : classCov.getMethods()) {
+                    String methodKey = buildMethodKey(method.getMethodName(), method.getMethodDesc());
+                    methodSnapshots.put(methodKey, new MethodCoverageSnapshot(method));
+                }
+            }
+            initialState.put(className, methodSnapshots);
+        }
+    }
+    
+    /**
+     * Mark classes and methods with coverage differences across snapshots
+     */
+    private void markCoverageChanges(Map<String, ClassCoverageIndex> coverageMap,
+                                    Map<String, Map<String, MethodCoverageSnapshot>> initialState,
+                                    Job<String> job) {
+        int classesWithChanges = 0;
+        int methodsWithChanges = 0;
+        
+        for (Map.Entry<String, ClassCoverageIndex> entry : coverageMap.entrySet()) {
+            String className = entry.getKey();
+            ClassCoverageIndex classCov = entry.getValue();
+            Map<String, MethodCoverageSnapshot> initialMethods = initialState.get(className);
+            
+            if (initialMethods == null || classCov.getMethods() == null) {
+                continue;
+            }
+            
+            boolean classHasChanges = false;
+            for (MethodCoverageDetail method : classCov.getMethods()) {
+                String methodKey = buildMethodKey(method.getMethodName(), method.getMethodDesc());
+                MethodCoverageSnapshot initialSnapshot = initialMethods.get(methodKey);
+                
+                if (initialSnapshot != null && initialSnapshot.hasDifference(method)) {
+                    method.setHasCodeChanges(true);
+                    classHasChanges = true;
+                    methodsWithChanges++;
+                }
+            }
+            
+            if (classHasChanges) {
+                classCov.setHasCodeChanges(true);
+                classesWithChanges++;
+            }
+        }
+        
+        if (job != null && (classesWithChanges > 0 || methodsWithChanges > 0)) {
+            job.getLogger().info(String.format(
+                "检测到覆盖率差异：%d 个类、%d 个方法在不同快照间存在覆盖率变化",
+                classesWithChanges, methodsWithChanges
+            ));
         }
     }
 

@@ -29,29 +29,38 @@
         <div class="hero-main">
           <div class="hero-topline">
             <div class="tag-row">
-              <span v-for="label in payload.labels" :key="label.name" class="tag" :style="{ '--tag-color': label.color || '#0f766e' }">
+              <span
+                v-for="label in payload.labels"
+                :key="label.name"
+                class="tag"
+                :style="{ '--tag-color': label.color || '#0f766e' }"
+                :title="`标签：${label.name}`"
+              >
                 {{ label.name }}
               </span>
-              <span v-if="!payload.labels.length" class="tag muted">暂无标签</span>
+              <span v-if="!payload.labels.length" class="tag muted" title="尚未为该快照设置任何标签">暂无标签</span>
             </div>
-            <span class="status-pill" :class="reportStatusTone(payload.snapshot.reportStatus)">
-              {{ reportStatusText(payload.snapshot.reportStatus) }}
+            <span
+              class="status-pill"
+              :class="reportStatusTone(payload.snapshot.reportStatus)"
+              :title="reportStatusHint(payload.snapshot.reportStatus)"
+            >
+              覆盖率报告 {{ reportStatusText(payload.snapshot.reportStatus) }}
             </span>
           </div>
           <div class="meta-grid">
-            <div class="meta-item">
-              <span>版本</span>
-              <strong>{{ payload.snapshot.version || '-' }}</strong>
-            </div>
-            <div class="meta-item">
+            <div class="meta-item" title="系统快照数据最后更新时间">
               <span>更新时间</span>
               <strong>{{ payload.snapshot.versionLastUpdateText || '-' }}</strong>
             </div>
-            <div class="meta-item">
+            <div
+              class="meta-item"
+              :title="principalMembers.length ? `负责人：${principalMembers.map(m => m.memberName || m.memberId).join('、')}` : '暂无负责人，可在下方负责人字段中选择'"
+            >
               <span>负责人</span>
               <strong>{{ payload.selectedPrincipalIds.length || 0 }}</strong>
             </div>
-            <div class="meta-item">
+            <div class="meta-item" :title="`已关联 ${payload.usecases.length} 个用例`">
               <span>关联用例</span>
               <strong>{{ payload.usecases.length }}</strong>
             </div>
@@ -81,14 +90,6 @@
               <textarea v-model="form.describe" class="text-area" rows="4"></textarea>
             </label>
             <label class="field">
-              <span>版本</span>
-              <input v-model="form.version" class="text-input" type="text" />
-            </label>
-            <label class="field">
-              <span>版本周期</span>
-              <input v-model.number="form.versionCycle" class="text-input" type="number" min="0" />
-            </label>
-            <label class="field">
               <span>标签</span>
               <select v-model="form.labels" class="select" multiple>
                 <option v-for="label in payload.labels" :key="label.name" :value="label.name">
@@ -106,9 +107,18 @@
             </label>
           </div>
           <div class="info-list">
-            <div class="info-item"><span>副标题</span><strong>{{ payload.snapshot.subTitle || '-' }}</strong></div>
-            <div class="info-item"><span>更新时间</span><strong>{{ payload.snapshot.versionLastUpdateText || '-' }}</strong></div>
-            <div class="info-item"><span>报告状态</span><strong>{{ reportStatusText(payload.snapshot.reportStatus) }}</strong></div>
+            <div class="info-item" :title="payload.snapshot.subTitle || '暂无副标题'">
+              <span>副标题</span>
+              <strong>{{ payload.snapshot.subTitle || '-' }}</strong>
+            </div>
+            <div class="info-item" title="系统快照数据最后更新时间">
+              <span>更新时间</span>
+              <strong>{{ payload.snapshot.versionLastUpdateText || '-' }}</strong>
+            </div>
+            <div class="info-item" :title="reportStatusHint(payload.snapshot.reportStatus)">
+              <span>报告状态</span>
+              <strong>{{ reportStatusText(payload.snapshot.reportStatus) }}</strong>
+            </div>
           </div>
           <div class="action-row">
             <RouterLink class="inline-link" :to="`/p/${projectId}/apps/${appId}/snapshots/${snapshotId}/graph`">
@@ -262,8 +272,6 @@ const graphPreviewLoading = ref(false)
 const form = ref({
   title: '',
   describe: '',
-  version: '',
-  versionCycle: 0 as number | undefined,
   labels: [] as string[],
   principals: [] as string[],
 })
@@ -300,8 +308,6 @@ async function load() {
       form.value = {
         title: payload.value.snapshot.title || '',
         describe: payload.value.snapshot.describe || '',
-        version: payload.value.snapshot.version || '',
-        versionCycle: payload.value.snapshot.versionCycle,
         labels: [...payload.value.selectedLabelNames],
         principals: [...payload.value.selectedPrincipalIds],
       }
@@ -320,8 +326,6 @@ async function saveBasic() {
     await projectStore.updateSystemSnapshotBasicInfo(projectId.value, appId.value, snapshotId.value, {
       title: form.value.title.trim(),
       describe: form.value.describe.trim(),
-      version: form.value.version.trim(),
-      versionCycle: form.value.versionCycle,
       labels: form.value.labels,
       principals: form.value.principals,
     })

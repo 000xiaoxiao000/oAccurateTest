@@ -989,7 +989,7 @@ async function saveMySnapshot() {
     const body = new URLSearchParams()
     body.set('traceId', selectedTraceId.value)
     body.set('autoSave', 'true')
-    body.set('name', buildAutoSnapshotName('自动快照', selectedTrace?.title || graph.value?.title || selectedTraceId.value))
+    body.set('name', (selectedTrace?.title || graph.value?.title || selectedTraceId.value).trim().slice(0, 200))
     body.set('describe', '实时监控自动保存')
     body.append('labels', '自动保存')
     body.append('labels', '实时监控')

@@ -55,10 +55,16 @@
                   :data-method-line-rate="formatRate(item.method.coveredLines, item.method.totalLines)"
                   :data-method-branch-rate="formatBranchRate(item.method.branchRate, item.method.totalBranchTargets)"
                   :data-method-summary="methodContextSummary(item.method)"
+                  :class="item.method.hasCodeChanges && 'method-row-changed'"
                 >
                   <td class="method-name">
                     <div class="method-mainline">
                       <button class="method-jump" type="button" :title="item.method.methodName" @click="jumpToMethod(item.method.methodName)">{{ item.method.methodName }}</button>
+                      <span
+                        v-if="item.method.hasCodeChanges"
+                        class="method-change-badge"
+                        title="该方法在本版本不同 Commit 之间存在代码变动，覆盖率数据已按最新代码结构汇总，建议重点验证"
+                      >已变更</span>
                       <span class="complexity-chip">复杂度 {{ item.method.complexity }}</span>
                     </div>
                     <div class="method-subline">

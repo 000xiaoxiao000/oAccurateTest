@@ -58,6 +58,10 @@ public class ClassCoverageIndex implements Serializable {
     @ExcelIgnore
     private List<MethodCoverageDetail> methods;
 
+    @Field(type = FieldType.Boolean)
+    @ExcelIgnore
+    private Boolean hasCodeChanges;
+
     public static class MethodCoverageDetail implements Serializable {
         private String methodName;
         private String methodDesc;
@@ -75,6 +79,7 @@ public class ClassCoverageIndex implements Serializable {
         private int totalBranchTargets;
         private int coveredBranchTargets;
         private Double branchRate;
+        private boolean hasCodeChanges;
         public String getMethodName() { return methodName; }
         public void setMethodName(String methodName) { this.methodName = methodName; }
         public String getMethodDesc() { return methodDesc; }
@@ -107,6 +112,8 @@ public class ClassCoverageIndex implements Serializable {
         public void setCoveredBranchTargets(int coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
         public Double getBranchRate() { return branchRate; }
         public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
+        public boolean isHasCodeChanges() { return hasCodeChanges; }
+        public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
     }
 
     public String getId() { return id; }
@@ -145,4 +152,7 @@ public class ClassCoverageIndex implements Serializable {
 
     public List<MethodCoverageDetail> getMethods() { return methods; }
     public void setMethods(List<MethodCoverageDetail> methods) { this.methods = methods; }
+
+    public Boolean getHasCodeChanges() { return hasCodeChanges; }
+    public void setHasCodeChanges(Boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
 }

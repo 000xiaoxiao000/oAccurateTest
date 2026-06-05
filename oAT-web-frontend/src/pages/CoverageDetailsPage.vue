@@ -101,11 +101,16 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in payload.classPage?.content || []" :key="item.className" class="class-row">
+              <tr v-for="item in payload.classPage?.content || []" :key="item.className" :class="['class-row', item.hasCodeChanges && 'row-changed']">
                 <td :title="`${item.className}.java`">
                   <span class="tree-fold muted">−</span>
                   <span class="tree-icon">📄</span>
                   <span class="class-name">{{ item.className }}.java</span>
+                  <span
+                    v-if="item.hasCodeChanges"
+                    class="change-badge"
+                    title="该类在本版本多个 Commit 之间存在代码变动，覆盖率数据已汇总自所有 Commit，建议重点关注"
+                  >已变更</span>
                 </td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
                 <td class="coverage-rate" :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
@@ -162,7 +167,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in visibleTreeRows" :key="row.id" :class="[row.type === 'package' ? 'package-row' : 'class-row']">
+              <tr v-for="row in visibleTreeRows" :key="row.id" :class="[row.type === 'package' ? 'package-row' : 'class-row', row.hasCodeChanges && 'row-changed']">
                 <td :title="row.fullName || row.name" :style="{ paddingLeft: `${16 + row.level * 22}px` }">
                   <button v-if="row.hasChildren" class="tree-fold" type="button" :disabled="row.loading" @click="toggleTreeRow(row)">
                     {{ row.loading ? '…' : row.expanded ? '▣' : '▢' }}
@@ -170,6 +175,11 @@
                   <span v-else class="tree-fold muted">−</span>
                   <span class="tree-icon">{{ row.type === 'package' ? '📁' : '📄' }}</span>
                   <span>{{ row.type === 'class' ? `${row.name}.java` : row.name }}</span>
+                  <span
+                    v-if="row.type === 'class' && row.hasCodeChanges"
+                    class="change-badge"
+                    title="该类在本版本多个 Commit 之间存在代码变动，覆盖率数据已汇总自所有 Commit，建议重点关注"
+                  >已变更</span>
                   <RouterLink v-if="row.type === 'class'" class="code-link" :to="buildCodeRoute(row.fullName || row.name)">代码</RouterLink>
                 </td>
                 <td>{{ row.coveredMethods }} / {{ row.totalMethods }}</td>
@@ -870,5 +880,29 @@ onMounted(() => {
   color: #0f766e;
   font-size: 12px;
   font-weight: 700;
+}
+
+.change-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(234, 88, 12, 0.12);
+  color: #c2410c;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.row-changed {
+  background: rgba(234, 88, 12, 0.04) !important;
+  border-left: 3px solid rgba(234, 88, 12, 0.42) !important;
+}
+
+.row-changed:hover {
+  background: rgba(234, 88, 12, 0.08) !important;
+  box-shadow: inset 3px 0 0 rgba(234, 88, 12, 0.62) !important;
 }
 </style>

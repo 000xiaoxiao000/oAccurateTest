@@ -145,8 +145,7 @@ public class SnapshotServiceImpl implements SnapshotService{
         Optional<CaseCenterIndex> indexItem = centerRepository.findById(id);
         if (indexItem.isPresent()) {
             CaseCenterIndex old = indexItem.get();
-            //将快照中新值 替换旧属性
-            BeanUtils.copyProperties(snapshot, old.getSnapshot(), "traceId", "createUser");
+            BeanUtils.copyProperties(snapshot, old.getSnapshot(), "traceId", "createUser", "projectId", "appId");
             old.setUpdateTime(new java.util.Date());
             centerRepository.save(old);
         }

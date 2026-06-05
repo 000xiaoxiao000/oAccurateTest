@@ -690,6 +690,7 @@ export interface MethodCoverageSummary {
   totalBranchTargets: number
   coveredBranchTargets: number
   branchRate?: number
+  hasCodeChanges?: boolean
 }
 
 export interface PageSummary<T> {
@@ -765,6 +766,7 @@ export interface CoverageClassPageItem {
   lineRate?: number
   branchRate?: number
   methodRate?: number
+  hasCodeChanges?: boolean
 }
 
 export interface CoverageTreeNode {
@@ -787,6 +789,7 @@ export interface CoverageTreeNode {
   lineRate?: number
   branchRate?: number
   methodRate?: number
+  hasCodeChanges?: boolean
 }
 
 export interface CoverageDetailsPayload {

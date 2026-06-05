@@ -90,7 +90,6 @@
             <RouterLink class="snapshot-tab" :to="`/p/${projectId}/monitor`">实时监控</RouterLink>
             <RouterLink class="snapshot-tab active" :to="`/p/${projectId}/my-snapshots`">我的快照</RouterLink>
           </nav>
-          <button class="icon-button" type="button" title="刷新列表" @click="load">↻</button>
         </div>
 
         <div v-if="!payload.snapshots.length" class="empty-card">暂无数据</div>
@@ -115,8 +114,12 @@
                       <span>{{ snapshot.name || snapshot.id }}</span>
                     </RouterLink>
                     <div class="snapshot-meta-row">
-                      <span v-if="snapshot.describe" class="snapshot-desc">{{ snapshot.describe }}</span>
-                      <span v-if="snapshot.labels?.length" class="label-summary">标签 {{ snapshot.labels.length }}</span>
+                      <span v-if="snapshot.describe" class="snapshot-desc" :title="snapshot.describe">{{ snapshot.describe }}</span>
+                      <span 
+                        v-if="snapshot.labels?.length" 
+                        class="label-summary"
+                        :title="`标签：${snapshot.labels.join('、')}`"
+                      >标签 {{ snapshot.labels.length }}</span>
                     </div>
                   </td>
                   <td class="coverage-cell">{{ snapshot.apiCoverageText || '-' }}</td>

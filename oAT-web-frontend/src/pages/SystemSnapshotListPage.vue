@@ -102,10 +102,18 @@
                 </div>
                 <p class="snapshot-desc">{{ snapshot.describe || snapshot.subTitle || '暂无说明' }}</p>
                 <div class="tag-row">
-                  <span class="tag">版本 {{ snapshot.version || '-' }}</span>
-                  <span class="tag">标签 {{ snapshot.labels?.length || 0 }}</span>
-                  <span class="tag">负责人 {{ snapshot.principals?.length || 0 }}</span>
-                  <span :class="['status-tag', reportStatusTone(snapshot.reportStatus)]">报告状态 {{ reportStatusText(snapshot.reportStatus) }}</span>
+                  <span
+                    class="tag label-tag"
+                    :title="snapshot.labels?.length ? `标签：${snapshot.labels.join('、')}` : '暂无标签'"
+                  >标签 {{ snapshot.labels?.length || 0 }}</span>
+                  <span
+                    class="tag principal-tag"
+                    :title="snapshot.principals?.length ? `负责人共 ${snapshot.principals.length} 人` : '暂无负责人'"
+                  >负责人 {{ snapshot.principals?.length || 0 }}</span>
+                  <span
+                    :class="['status-tag', 'report-status-tag', reportStatusTone(snapshot.reportStatus)]"
+                    :title="reportStatusTooltip(snapshot.reportStatus)"
+                  >报告状态 {{ reportStatusText(snapshot.reportStatus) }}</span>
                 </div>
                 <div class="snapshot-actions">
                   <button class="ghost-button small" type="button" @click="openSingleUsecasePicker(snapshot.id)">关联用例</button>
@@ -182,6 +190,19 @@ const paginatedSnapshots = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   return snapshots.slice(start, start + pageSize.value)
 })
+
+function reportStatusTooltip(status?: number) {
+  switch (status) {
+    case 1:
+      return '覆盖率报告生成任务正在处理中，请稍后刷新页面查看结果'
+    case 2:
+      return '覆盖率报告生成已完成，可点击「覆盖率报告」按钮查看详细数据。注意：已完成表示报告计算成功，不代表覆盖率高低'
+    case 3:
+      return '覆盖率报告生成失败，请在报告页面重新触发生成'
+    default:
+      return '尚未生成覆盖率报告，可进入报告页面发起首次计算'
+  }
+}
 
 function directoryLink(directoryId: string) {
   const query = new URLSearchParams()
