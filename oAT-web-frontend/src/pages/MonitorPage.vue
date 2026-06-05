@@ -161,6 +161,7 @@
           >
             <strong>{{ trace.title || trace.traceId }}</strong>
             <span>{{ trace.addressIp || '-' }} · {{ trace.clientIp || '-' }}</span>
+            <span class="trace-time">{{ formatTraceDateTime(trace.cacheTime) }}</span>
             <small>{{ trace.traceId }} · #{{ trace.index }}</small>
           </button>
         </div>
@@ -492,7 +493,7 @@ const visibleProbes = computed(() => probesExpanded.value ? filteredProbes.value
 
 const filteredTraces = computed(() => {
   const needle = traceKeyword.value.toLowerCase()
-  return traces.value.filter((trace) => {
+  const filtered = traces.value.filter((trace) => {
     const haystack = [trace.traceId, trace.title, trace.addressIp, trace.clientIp, trace.appId]
       .join(' ')
       .toLowerCase()
@@ -503,6 +504,7 @@ const filteredTraces = computed(() => {
     return matchesApp && (!needle || haystack.includes(needle))
       && matchesIp
   })
+  return filtered.sort((a, b) => (b.cacheTime || 0) - (a.cacheTime || 0))
 })
 const paginatedTraces = computed(() => {
   const start = (tracePage.value - 1) * tracePageSize.value
@@ -521,9 +523,16 @@ const oscilloscopeSubtitle = computed(() => {
 })
 const wavePoints = computed(() => [...filteredTraces.value].reverse().slice(-80).map((trace, index, list) => {
   const cacheTime = Number(trace.cacheTime)
+  const timeText = formatTraceDateTime(trace.cacheTime)
+  const tooltip = [
+    trace.title || trace.traceId,
+    `时间：${timeText}`,
+    `来源：${trace.addressIp || '-'} / ${trace.clientIp || '-'}`,
+    trace.index !== undefined ? `序号：#${trace.index}` : '',
+  ].filter(Boolean).join('\n')
   return {
     id: trace.traceId || `${trace.cacheTime}-${index}`,
-    title: trace.title || trace.traceId,
+    title: tooltip,
     x: list.length <= 1 ? 50 : 4 + (index / (list.length - 1)) * 92,
     y: 18 + ((trace.title || trace.traceId || '').length * 17 + index * 13) % 62,
     fresh: Number.isFinite(cacheTime) && Date.now() - cacheTime < 6000,
@@ -1163,6 +1172,19 @@ function formatTraceTime(value?: number) {
   return date.toLocaleTimeString()
 }
 
+function formatTraceDateTime(value?: number) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
+
 function buildAutoSnapshotName(prefix: string, title: string) {
   const normalizedTitle = (title || '未命名链路').trim().slice(0, 24)
   const now = new Date()
@@ -1723,6 +1745,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.trace-time {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .trace-item.active {

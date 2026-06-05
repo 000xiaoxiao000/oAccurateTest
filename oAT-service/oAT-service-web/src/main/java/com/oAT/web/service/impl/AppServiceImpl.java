@@ -1,5 +1,6 @@
 package com.oAT.web.service.impl;
 
+import com.oAT.web.esDao.SnapshotCommitMappingRepository;
 import com.oAT.web.esDao.SystemRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.entity.*;
@@ -31,6 +32,8 @@ public class AppServiceImpl implements AppService, StandardDate {
     private SystemSnapshotRepository systemSnapshotRepository;
     @Autowired
     private UsecaseService usecaseService;
+    @Autowired
+    private SnapshotCommitMappingRepository snapshotCommitMappingRepository;
     @Autowired
     private ElasticsearchOperations elasticsearchOperations;
 
@@ -320,6 +323,7 @@ public class AppServiceImpl implements AppService, StandardDate {
     @Override
     public void deleteSnapshot(String id) {
         usecaseService.removeSystemSnapshotRelation(id);
+        snapshotCommitMappingRepository.deleteBySnapshotId(id);
         systemSnapshotRepository.deleteById(id);
     }
 

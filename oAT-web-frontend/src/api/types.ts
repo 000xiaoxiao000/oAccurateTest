@@ -524,6 +524,7 @@ export interface SystemSnapshotListPayload {
   directoryTiers: SnapshotDirectorySummary[]
   snapshots: SystemSnapshotSummary[]
   allUsecases: UsecaseSummary[]
+  members: ProjectMemberLite[]
   currentUserRole: string
 }
 

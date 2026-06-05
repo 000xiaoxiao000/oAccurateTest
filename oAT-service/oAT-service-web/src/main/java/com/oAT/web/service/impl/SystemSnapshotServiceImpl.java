@@ -147,7 +147,8 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     }
 
     /**
-     * 根据版本中心推断当前 Commit，写入关联关系（B 方案）。
+     * 根据应用当前版本写入快照关联关系。
+     * 策略：关联到应用设置的当前激活版本（App.currentVersion/currentBranch/currentCommitId）。
      * 一个快照只允许关联一个 Commit，若已存在则跳过。
      */
     private void tryCreateCommitMapping(SystemSnapshot snapshot, String source) {
@@ -159,50 +160,68 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             if (snapshotCommitMappingRepository.existsBySnapshotId(snapshot.getId())) {
                 return;
             }
-            String versionNumber = snapshot.getVersion();
-            List<VersionCenterIndex> candidates = null;
-            if (StringUtils.hasText(versionNumber)) {
-                candidates = versionCenterRepository
-                        .findTop1ByVersionItem_AppIdAndVersionItem_VersionNumber(snapshot.getAppId(), versionNumber);
-            }
-            if (candidates == null || candidates.isEmpty()) {
-                candidates = versionCenterRepository
-                        .findTop1ByVersionItem_AppIdOrderByCreateTimeDesc(snapshot.getAppId());
-            }
-            if (candidates == null || candidates.isEmpty()) {
-                logger.debug("快照 {} 未找到对应版本中心记录，跳过 Commit 关联", snapshot.getId());
+            
+            // 获取应用当前激活的版本信息
+            AppVo app = appService.getApp(snapshot.getAppId());
+            if (app == null) {
+                logger.info("快照 {} 对应应用不存在，跳过自动关联", snapshot.getId());
                 return;
             }
-            VersionItem item = candidates.get(0).getVersionItem();
-            if (item == null || !StringUtils.hasText(item.getRepoCommitId())) {
-                logger.debug("快照 {} 对应版本中心记录无 Commit 信息，跳过关联", snapshot.getId());
+            
+            String currentCommitId = app.getCurrentCommitId();
+            String currentVersion = app.getCurrentVersion();
+            String currentBranch = app.getCurrentBranch();
+            
+            if (!StringUtils.hasText(currentCommitId)) {
+                logger.info("快照 {} 对应应用 {} 未设置当前版本的 Commit，跳过自动关联，请在版本列表页手动补录",
+                        snapshot.getId(), snapshot.getAppId());
                 return;
             }
+            
             SnapshotCommitMapping mapping = new SnapshotCommitMapping();
             mapping.setId(snapshot.getId());
             mapping.setSnapshotId(snapshot.getId());
             mapping.setAppId(snapshot.getAppId());
             mapping.setProjectId(snapshot.getProjectId());
-            mapping.setVersionNumber(item.getVersionNumber());
-            mapping.setRepoBranch(item.getRepoBranch());
-            mapping.setRepoCommitId(item.getRepoCommitId());
+            mapping.setVersionNumber(currentVersion);
+            mapping.setRepoBranch(currentBranch);
+            mapping.setRepoCommitId(currentCommitId);
             mapping.setCreateTime(new Date());
             mapping.setSnapshotCreateTime(snapshot.getCreateTime());
             mapping.setMappingSource(source);
             snapshotCommitMappingRepository.save(mapping);
-            logger.info("快照 {} 已关联 Commit {}（来源: {}）", snapshot.getId(), item.getRepoCommitId(), source);
+            logger.info("快照 {} 已自动关联到应用当前版本 {} Commit {}（来源: {}）", 
+                    snapshot.getId(), currentVersion, currentCommitId, source);
         } catch (Exception e) {
             logger.warn("快照 {} 写入 Commit 关联失败，不影响快照保存", snapshot.getId(), e);
         }
     }
 
     /**
-     * 手工补录：为当前应用下指定版本的所有无关联快照，按版本中心当前 Commit 补录关联关系。
+     * 手工补录：为当前应用下所有无关联快照，按应用当前版本补录关联关系。
      * 返回成功补录的数量。
      */
     @Override
     public int backfillCommitMapping(String appId, String versionNumber) {
         Assert.hasText(appId, "appId 不能为空");
+        
+        // 获取应用当前激活的版本信息
+        AppVo app = appService.getApp(appId);
+        if (app == null) {
+            logger.warn("补录 Commit 关联失败：应用 {} 不存在", appId);
+            return 0;
+        }
+        
+        String currentCommitId = app.getCurrentCommitId();
+        String currentVersion = app.getCurrentVersion();
+        String currentBranch = app.getCurrentBranch();
+        
+        if (!StringUtils.hasText(currentCommitId)) {
+            logger.warn("补录 Commit 关联失败：应用 {} 未设置当前版本的 Commit", appId);
+            return 0;
+        }
+        
+        // 获取所有未关联的快照
         List<SystemSnapshot> snapshots = repository.findByAppId(appId);
         if (StringUtils.hasText(versionNumber)) {
             snapshots = snapshots.stream()
@@ -210,44 +229,27 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                     .collect(java.util.stream.Collectors.toList());
         }
 
-        List<VersionCenterIndex> candidates = null;
-        if (StringUtils.hasText(versionNumber)) {
-            candidates = versionCenterRepository
-                    .findTop1ByVersionItem_AppIdAndVersionItem_VersionNumber(appId, versionNumber);
-        }
-        if (candidates == null || candidates.isEmpty()) {
-            candidates = versionCenterRepository
-                    .findTop1ByVersionItem_AppIdOrderByCreateTimeDesc(appId);
-        }
-        if (candidates == null || candidates.isEmpty()) {
-            logger.warn("补录 Commit 关联失败：appId={} 无可用版本中心记录", appId);
-            return 0;
-        }
-        VersionItem item = candidates.get(0).getVersionItem();
-        if (item == null || !StringUtils.hasText(item.getRepoCommitId())) {
-            logger.warn("补录 Commit 关联失败：appId={} 版本中心记录无 Commit 信息", appId);
-            return 0;
-        }
-
         int count = 0;
         for (SystemSnapshot snapshot : snapshots) {
             if (snapshot == null || !StringUtils.hasText(snapshot.getId())) continue;
             if (snapshotCommitMappingRepository.existsBySnapshotId(snapshot.getId())) continue;
+            
             SnapshotCommitMapping mapping = new SnapshotCommitMapping();
             mapping.setId(snapshot.getId());
             mapping.setSnapshotId(snapshot.getId());
             mapping.setAppId(snapshot.getAppId());
             mapping.setProjectId(snapshot.getProjectId());
-            mapping.setVersionNumber(item.getVersionNumber());
-            mapping.setRepoBranch(item.getRepoBranch());
-            mapping.setRepoCommitId(item.getRepoCommitId());
+            mapping.setVersionNumber(currentVersion);
+            mapping.setRepoBranch(currentBranch);
+            mapping.setRepoCommitId(currentCommitId);
             mapping.setCreateTime(new Date());
             mapping.setSnapshotCreateTime(snapshot.getCreateTime());
             mapping.setMappingSource("manual");
             snapshotCommitMappingRepository.save(mapping);
             count++;
         }
-        logger.info("补录完成：appId={}, versionNumber={}, 补录数量={}, commitId={}", appId, versionNumber, count, item.getRepoCommitId());
+        logger.info("补录完成：appId={}, 应用当前版本={}, 补录数量={}, commitId={}", 
+                appId, currentVersion, count, currentCommitId);
         return count;
     }
 

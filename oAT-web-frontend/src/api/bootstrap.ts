@@ -1139,3 +1139,19 @@ export function deleteMySnapshot(projectId: string, snapshotId: string) {
     'application/json',
   )
 }
+
+export function backfillSnapshotCommitMapping(
+  projectId: string,
+  appId: string,
+  versionNumber?: string,
+) {
+  const body = new URLSearchParams()
+  if (versionNumber) {
+    body.set('versionNumber', versionNumber)
+  }
+  return apiPost<number>(
+    `/api/projects/${projectId}/apps/${appId}/snapshots/commit-mapping/backfill`,
+    body.toString(),
+    'application/x-www-form-urlencoded;charset=UTF-8',
+  )
+}

@@ -1,6 +1,6 @@
 <template>
-  <section class="my-snapshot-page">
-    <div class="page-header snapshot-page-header">
+  <section>
+    <div class="page-header">
       <div>
         <div class="eyebrow">My Snapshots</div>
         <h1>我的快照</h1>
@@ -8,7 +8,7 @@
       </div>
       <div class="header-actions">
         <RouterLink class="ghost-button" :to="`/p/${projectId}/my-snapshots/code-report`">全量代码报告</RouterLink>
-        <button class="action-button" type="button" @click="load">刷新</button>
+        <button class="ghost-button" type="button" :disabled="loading" @click="load">{{ loading ? '刷新中...' : '刷新' }}</button>
       </div>
     </div>
 
@@ -84,17 +84,15 @@
         </div>
       </Teleport>
 
-      <section class="snapshot-panel">
-        <div class="snapshot-panel-header">
-          <nav class="snapshot-tabs" aria-label="快照导航">
-            <RouterLink class="snapshot-tab" :to="`/p/${projectId}/monitor`">实时监控</RouterLink>
-            <RouterLink class="snapshot-tab active" :to="`/p/${projectId}/my-snapshots`">我的快照</RouterLink>
-          </nav>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>快照条目</h2>
+          <span>{{ payload.snapshots.length }}</span>
         </div>
 
         <div v-if="!payload.snapshots.length" class="empty-card">暂无数据</div>
-        <div v-else class="snapshot-table-shell" @scroll.passive="closeRowMenu">
-          <table class="snapshot-table">
+        <div v-else class="table-shell" @scroll.passive="closeRowMenu">
+          <table class="report-table">
             <colgroup>
               <col class="select-col" />
               <col />
@@ -476,52 +474,26 @@ onMounted(load)
 </script>
 
 <style scoped>
-.my-snapshot-page {
-  min-width: 0;
-}
-
 .page-header,
-.header-actions,
-.snapshot-toolbar,
-.bulk-group,
-.snapshot-panel-header,
-.snapshot-tabs,
-.edit-actions {
+.header-actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.page-header {
   justify-content: space-between;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 12px;
 }
 
-.snapshot-page-header {
-  min-height: auto;
-  padding: 24px 30px 22px;
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
-.snapshot-page-header::after {
-  right: 28px;
-  bottom: -48px;
-  width: 104px;
-  height: 104px;
-}
-
-.page-header h1 {
-  margin: 4px 0 6px;
-  font-size: 28px;
-}
-
-.snapshot-page-header .subtext {
+.panel-head h2 {
   margin: 0;
 }
 
-
-.subtext,
-.snapshot-desc,
-.snapshot-meta-row {
+.subtext {
   color: #64748b;
 }
 
@@ -601,15 +573,19 @@ onMounted(load)
 }
 
 .snapshot-toolbar {
-  position: relative;
-  z-index: 12;
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 12px;
-  padding: 9px 10px;
+  gap: 10px;
+  position: sticky;
+  top: 12px;
+  z-index: 12;
+  margin-bottom: 14px;
+  padding: 12px;
   border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, .96);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, .05);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.94);
+  backdrop-filter: blur(10px);
 }
 
 .toolbar-spacer {

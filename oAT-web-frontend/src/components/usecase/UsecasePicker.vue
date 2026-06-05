@@ -1,36 +1,41 @@
 <template>
   <section v-if="open" class="picker-card">
     <div class="picker-head">
-      <div>
+      <div class="picker-head-text">
         <h3>{{ title }}</h3>
-        <p>{{ description }}</p>
+        <p v-if="description">{{ description }}</p>
       </div>
-      <button class="icon-button" type="button" @click="close">x</button>
+      <button class="close-btn" type="button" aria-label="关闭" @click="close">✕</button>
     </div>
 
     <div class="picker-tools">
-      <input v-model="keyword" class="text-input" type="search" placeholder="搜索用例标题、ID 或内容..." aria-label="搜索用例" />
-      <button class="ghost-button small" type="button" @click="selectAll">全选当前结果</button>
-      <button class="ghost-button small" type="button" @click="clearSelection">清空</button>
-      <span class="selected-badge">已选 {{ draftIds.length }} 个</span>
+      <input v-model="keyword" class="search-input" type="search" placeholder="搜索用例标题、ID 或内容..." aria-label="搜索用例" />
+      <div class="tool-actions">
+        <button class="tool-btn" type="button" @click="selectAll">全选</button>
+        <button class="tool-btn" type="button" @click="clearSelection">清空</button>
+        <span class="selection-badge">已选 <strong>{{ draftIds.length }}</strong> 个</span>
+      </div>
     </div>
 
-    <div v-if="!filteredUsecases.length" class="empty-card compact">没有匹配的用例</div>
-    <div v-else class="usecase-options">
+    <div v-if="!filteredUsecases.length" class="empty-state">
+      <span class="empty-icon" aria-hidden="true">🔍</span>
+      <p>没有匹配的用例</p>
+    </div>
+    <div v-else class="usecase-grid">
       <label v-for="usecase in filteredUsecases" :key="usecase.id" class="usecase-option">
         <input v-model="draftIds" type="checkbox" :value="usecase.id" />
-        <span>
-          <strong>{{ usecase.title || usecase.id }}</strong>
-          <small>{{ usecase.updateTimeText || usecase.id }}</small>
-        </span>
+        <div class="option-content">
+          <strong class="option-title">{{ usecase.title || usecase.id }}</strong>
+          <small class="option-meta">{{ usecase.updateTimeText || usecase.id }}</small>
+        </div>
       </label>
     </div>
 
     <div class="picker-footer">
-      <button class="submit-button" type="button" :disabled="busy" @click="submit">
+      <button class="primary-btn" type="button" :disabled="busy" @click="submit">
         {{ busy ? '保存中...' : '保存关联' }}
       </button>
-      <button class="ghost-button" type="button" :disabled="busy" @click="close">取消</button>
+      <button class="secondary-btn" type="button" :disabled="busy" @click="close">取消</button>
     </div>
   </section>
 </template>
@@ -110,125 +115,266 @@ function submit() {
   gap: 14px;
   margin: 14px 0;
   padding: 16px;
-  border: 1px solid rgba(15, 118, 110, 0.16);
-  border-radius: 18px;
-  background: linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.96));
-}
-
-.picker-head,
-.picker-tools,
-.picker-footer,
-.usecase-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  border: 1px solid rgba(var(--oat-primary-rgb), 0.2);
+  border-radius: var(--oat-radius-lg);
+  background: linear-gradient(135deg, rgba(240, 253, 250, 0.5) 0%, rgba(255, 255, 255, 0.9) 100%);
+  box-shadow: 0 4px 16px rgba(var(--oat-primary-rgb), 0.06);
 }
 
 .picker-head {
+  display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.picker-head h3,
-.picker-head p {
+.picker-head-text h3 {
+  margin: 0 0 4px;
+  color: var(--oat-text);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.picker-head-text p {
   margin: 0;
+  color: var(--oat-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.picker-head p,
-.usecase-option small {
-  color: #64748b;
+.close-btn {
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--oat-border);
+  border-radius: 999px;
+  background: var(--oat-surface);
+  color: var(--oat-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.close-btn:hover {
+  border-color: rgba(220, 38, 38, 0.3);
+  background: rgba(220, 38, 38, 0.05);
+  color: var(--oat-danger);
 }
 
 .picker-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.text-input {
-  min-width: min(360px, 100%);
+.search-input {
   flex: 1;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #fff;
-}
-
-.ghost-button,
-.submit-button,
-.icon-button {
-  border-radius: 999px;
-  padding: 10px 14px;
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.ghost-button,
-.icon-button {
-  border: 1px solid rgba(15, 118, 110, 0.18);
-  background: rgba(15, 118, 110, 0.06);
-  color: #0f766e;
-}
-
-.ghost-button.small {
+  min-width: min(300px, 100%);
+  min-height: 38px;
+  border: 1px solid var(--oat-border);
+  border-radius: var(--oat-radius-md);
   padding: 8px 12px;
+  background: var(--oat-surface);
+  color: var(--oat-text);
+  font-size: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.submit-button {
-  border: none;
-  background: #0f766e;
-  color: #fff;
+.search-input:focus {
+  border-color: rgba(var(--oat-primary-rgb), 0.5);
+  box-shadow: 0 0 0 3px rgba(var(--oat-primary-rgb), 0.1);
+  outline: none;
 }
 
-.submit-button:disabled,
-.ghost-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+.tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.selected-badge {
-  padding: 8px 11px;
+.tool-btn {
+  min-height: 30px;
+  border: 1px solid var(--oat-border);
   border-radius: 999px;
-  background: rgba(15, 118, 110, 0.1);
-  color: #0f766e;
+  padding: 5px 12px;
+  background: var(--oat-surface);
+  color: var(--oat-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tool-btn:hover {
+  border-color: rgba(var(--oat-primary-rgb), 0.3);
+  background: rgba(var(--oat-primary-rgb), 0.05);
+  color: var(--oat-primary-dark);
+}
+
+.selection-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(var(--oat-primary-rgb), 0.1);
+  color: var(--oat-primary-dark);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.selection-badge strong {
   font-weight: 800;
+  margin: 0 2px;
 }
 
-.usecase-options {
+.empty-state {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
-  max-height: 360px;
-  overflow: auto;
-}
-
-.usecase-option {
-  align-items: flex-start;
-  padding: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 14px;
-  background: #fff;
-}
-
-.usecase-option span {
-  display: grid;
-  gap: 4px;
-}
-
-.empty-card {
-  padding: 22px;
-  border-radius: 16px;
-  background: #f8fafc;
-  color: #64748b;
+  place-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  border-radius: var(--oat-radius-md);
+  background: var(--oat-surface-soft);
   text-align: center;
 }
 
-.empty-card.compact {
-  padding: 14px;
+.empty-icon {
+  font-size: 24px;
+  opacity: 0.4;
+}
+
+.empty-state p {
+  margin: 0;
+  color: var(--oat-text-muted);
+  font-size: 14px;
+}
+
+.usecase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--oat-primary-rgb), 0.3) transparent;
+}
+
+.usecase-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--oat-border);
+  border-radius: var(--oat-radius-sm);
+  background: var(--oat-surface);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.usecase-option:hover {
+  border-color: rgba(var(--oat-primary-rgb), 0.25);
+  background: rgba(var(--oat-primary-rgb), 0.03);
+}
+
+.usecase-option input[type='checkbox'] {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.option-content {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.option-title {
+  display: block;
+  color: var(--oat-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option-meta {
+  display: block;
+  color: var(--oat-text-muted);
+  font-size: 11px;
+}
+
+.picker-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--oat-border);
+}
+
+.primary-btn {
+  min-height: 36px;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, var(--oat-primary), var(--oat-primary-hover));
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 12px rgba(var(--oat-primary-rgb), 0.25);
+}
+
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(var(--oat-primary-rgb), 0.3);
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  min-height: 36px;
+  border: 1px solid var(--oat-border);
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: var(--oat-surface);
+  color: var(--oat-text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.secondary-btn:hover:not(:disabled) {
+  border-color: rgba(var(--oat-primary-rgb), 0.3);
+  background: rgba(var(--oat-primary-rgb), 0.05);
+  color: var(--oat-primary-dark);
+}
+
+.secondary-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @media (max-width: 720px) {
   .picker-head,
+  .picker-tools,
   .picker-footer {
-    align-items: stretch;
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .usecase-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

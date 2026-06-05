@@ -206,6 +206,7 @@ public class SnapshotApiControl {
         payload.setDirectories(dirs.stream().map(this::toSnapshotDirectorySummary).collect(Collectors.toList()));
         payload.setDirectoryTiers(toSnapshotDirectorySummaries(appService.getDirectoryTiers(appId, currentDirectory)));
         payload.setSnapshots(snapshots.stream().map(this::toSystemSnapshotSummary).collect(Collectors.toList()));
+        payload.setMembers(projectService.getProjectMembers(projectId));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         payload.setAllUsecases(collectAllProjectUsecases(projectId));
         return new ResultNotified<>(true, "获取系统快照列表成功", payload);
@@ -307,6 +308,22 @@ public class SnapshotApiControl {
         GraphNode graphNode = parse.getGraphNode(nodeId);
         Assert.notNull(graphNode, "找不到节点 id=" + nodeId);
         return new ResultNotified<>(true, "获取链路节点详情成功", toGraphNodeDetail(graphNode));
+    }
+
+    @PostMapping("/apps/{appId}/snapshots/commit-mapping/backfill")
+    public ResultNotified<Integer> backfillSnapshotCommitMapping(@PathVariable String projectId,
+                                                                  @PathVariable String appId,
+                                                                  @SessionAttribute UserVo user,
+                                                                  @RequestParam(required = false) String versionNumber) {
+        ensureProjectAccess(projectId, user);
+        try {
+            int count = systemSnapshotService.backfillCommitMapping(appId, versionNumber);
+            return new ResultNotified<>(true, "补录完成，共补录 " + count + " 条关联记录", count);
+        } catch (Exception e) {
+            ResultNotified<Integer> result = new ResultNotified<>(false, "补录失败: " + e.getMessage());
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
     }
 
     @PostMapping("/apps/{appId}/snapshots/{snapshotId}/report/calculate")
@@ -2557,6 +2574,7 @@ public class SnapshotApiControl {
         private List<SnapshotDirectorySummary> directoryTiers;
         private List<SystemSnapshotSummary> snapshots;
         private List<UsecaseVo> allUsecases;
+        private List<ProjectMemberVo> members;
         private String currentUserRole;
 
         public FrontendContextApiControl.AppSummary getApp() { return app; }
@@ -2577,6 +2595,8 @@ public class SnapshotApiControl {
         public void setSnapshots(List<SystemSnapshotSummary> snapshots) { this.snapshots = snapshots; }
         public List<UsecaseVo> getAllUsecases() { return allUsecases; }
         public void setAllUsecases(List<UsecaseVo> allUsecases) { this.allUsecases = allUsecases; }
+        public List<ProjectMemberVo> getMembers() { return members; }
+        public void setMembers(List<ProjectMemberVo> members) { this.members = members; }
         public String getCurrentUserRole() { return currentUserRole; }
         public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
     }

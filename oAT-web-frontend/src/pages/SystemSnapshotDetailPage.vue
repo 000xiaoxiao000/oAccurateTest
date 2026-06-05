@@ -455,8 +455,10 @@ onMounted(load)
 }
 
 .page-header h1 {
-  font-size: clamp(28px, 4vw, 42px);
-  line-height: 1.08;
+  font-size: clamp(20px, 3vw, 26px);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .eyebrow {
@@ -492,11 +494,22 @@ onMounted(load)
 }
 
 .secondary-link,
-.inline-link,
+.inline-link {
+  color: var(--oat-primary);
+  font-weight: 700;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.secondary-link:hover,
+.inline-link:hover {
+  color: var(--oat-primary-dark);
+}
+
 .ghost-button,
 .danger-button {
-  color: #0f766e;
-  font-weight: 800;
+  color: var(--oat-primary-dark);
+  font-weight: 700;
   text-decoration: none;
 }
 
@@ -509,20 +522,31 @@ onMounted(load)
 }
 
 .ghost-button {
-  border: 1px solid rgba(15, 118, 110, 0.18);
-  background: rgba(15, 118, 110, 0.07);
+  border: 1px solid rgba(var(--oat-primary-rgb), 0.16);
+  background: rgba(var(--oat-primary-rgb), 0.08);
 }
 
-.ghost-button:hover,
+.ghost-button:hover:not(:disabled),
 .danger-button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+  background: rgba(var(--oat-primary-rgb), 0.14);
+  box-shadow: 0 10px 20px rgba(var(--oat-primary-rgb), 0.12);
+}
+
+.ghost-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .primary-action {
   color: #fff;
-  border-color: #0f766e;
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  border-color: var(--oat-primary);
+  background: linear-gradient(135deg, var(--oat-primary), var(--oat-primary-hover));
+  box-shadow: 0 12px 26px rgba(var(--oat-primary-rgb), 0.22);
+}
+
+.primary-action:hover:not(:disabled) {
+  background: var(--oat-primary-dark);
 }
 
 .small-button {
@@ -530,23 +554,34 @@ onMounted(load)
   font-size: 13px;
 }
 
-.danger-button,
-.danger-link {
-  color: #b91c1c;
-}
-
 .danger-button {
-  border: 1px solid rgba(185, 28, 28, 0.18);
-  background: rgba(185, 28, 28, 0.06);
+  color: var(--oat-danger);
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.danger-button:hover {
+  background: rgba(220, 38, 38, 0.10);
+  box-shadow: 0 10px 20px rgba(220, 38, 38, 0.12);
 }
 
 .danger-link {
+  display: inline-flex;
+  align-items: center;
   justify-self: start;
   border: 0;
   background: transparent;
-  padding: 0;
+  padding: 4px 6px;
+  color: var(--oat-danger);
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.danger-link:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
 }
 
 .status-card,
@@ -679,8 +714,8 @@ onMounted(load)
 }
 
 .meta-item strong {
-  font-size: 20px;
-  letter-spacing: -0.02em;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .detail-grid {
@@ -713,7 +748,19 @@ onMounted(load)
 
 .panel-heading {
   align-items: flex-start;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--oat-border);
   margin-bottom: 14px;
+}
+
+.panel-heading h2 {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.panel-heading p {
+  font-size: 13px;
 }
 
 .form-grid {

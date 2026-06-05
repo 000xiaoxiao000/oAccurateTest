@@ -10,6 +10,16 @@
         <button class="ghost-button" type="button" :disabled="refreshing || saving" aria-label="刷新版本列表" @click="refreshVersions">
           {{ refreshing ? '刷新中...' : '刷新' }}
         </button>
+        <button 
+          class="ghost-button" 
+          type="button" 
+          :disabled="backfilling || saving" 
+          :title="'手动补录系统快照与版本的关联关系。\n当系统快照在版本之前创建时，可通过此功能将快照关联到当前版本的 Commit。'" 
+          aria-label="手动补录快照关联"
+          @click="backfillMapping"
+        >
+          {{ backfilling ? '补录中...' : '手动补录' }}
+        </button>
         <RouterLink class="ghost-link" :to="`/p/${projectId}/apps/${appId}/versions/new`">新增版本</RouterLink>
         <RouterLink class="ghost-link" :to="`/p/${projectId}/apps/${appId}/compare`">比对与报告</RouterLink>
       </div>
@@ -17,7 +27,9 @@
 
     <div v-if="loading" class="status-card">正在加载版本列表...</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
-    <section v-else-if="payload" class="panel">
+    <template v-else-if="payload">
+    <div v-if="backfillResult" class="status-card success">{{ backfillResult }}</div>
+    <section class="panel">
       <div class="panel-head">
         <h2>版本条目</h2>
         <span>{{ filteredVersions.length }} / {{ payload.versions.length }}</span>
@@ -105,6 +117,7 @@
         item-name="版本"
       />
     </section>
+    </template>
   </section>
 </template>
 
@@ -113,7 +126,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import AppPagination from '@/components/AppPagination.vue'
-import { deleteVersion, deleteVersionFile, fetchVersionCenter, setCurrentVersion } from '@/api/bootstrap'
+import { backfillSnapshotCommitMapping, deleteVersion, deleteVersionFile, fetchVersionCenter, setCurrentVersion } from '@/api/bootstrap'
 import type { VersionCenterPayload, VersionItemSummary } from '@/api/types'
 
 const route = useRoute()
@@ -123,7 +136,9 @@ const payload = ref<VersionCenterPayload | null>(null)
 const loading = ref(false)
 const refreshing = ref(false)
 const saving = ref(false)
+const backfilling = ref(false)
 const error = ref('')
+const backfillResult = ref('')
 const keyword = ref('')
 const statusFilter = ref('')
 const currentPage = ref(1)
@@ -220,6 +235,26 @@ async function removeFile(filePath: string) {
     error.value = err instanceof Error ? err.message : '删除文件失败'
   } finally {
     saving.value = false
+  }
+}
+
+async function backfillMapping() {
+  backfilling.value = true
+  error.value = ''
+  backfillResult.value = ''
+  try {
+    const count = await backfillSnapshotCommitMapping(projectId.value, appId.value)
+    backfillResult.value = `手动补录完成，共补录 ${count} 条快照关联记录`
+    if (count === 0) {
+      backfillResult.value = '无需补录，所有快照已关联或无可关联的快照'
+    }
+    setTimeout(() => {
+      backfillResult.value = ''
+    }, 5000)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '手动补录失败'
+  } finally {
+    backfilling.value = false
   }
 }
 
@@ -346,6 +381,12 @@ onMounted(load)
 
 .status-card.error {
   color: #b91c1c;
+}
+
+.status-card.success {
+  color: #15803d;
+  background: rgba(240, 253, 244, 0.94);
+  border-color: rgba(22, 163, 74, 0.18);
 }
 
 .table-shell {
