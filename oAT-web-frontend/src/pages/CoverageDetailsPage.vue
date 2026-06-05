@@ -102,10 +102,10 @@
             </thead>
             <tbody>
               <tr v-for="item in payload.classPage?.content || []" :key="item.className" class="class-row">
-                <td :title="item.className">
+                <td :title="`${item.className}.java`">
                   <span class="tree-fold muted">−</span>
                   <span class="tree-icon">📄</span>
-                  <span class="class-name">{{ item.className }}</span>
+                  <span class="class-name">{{ item.className }}.java</span>
                 </td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
                 <td class="coverage-rate" :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
@@ -169,7 +169,7 @@
                   </button>
                   <span v-else class="tree-fold muted">−</span>
                   <span class="tree-icon">{{ row.type === 'package' ? '📁' : '📄' }}</span>
-                  <span>{{ row.name }}</span>
+                  <span>{{ row.type === 'class' ? `${row.name}.java` : row.name }}</span>
                   <RouterLink v-if="row.type === 'class'" class="code-link" :to="buildCodeRoute(row.fullName || row.name)">代码</RouterLink>
                 </td>
                 <td>{{ row.coveredMethods }} / {{ row.totalMethods }}</td>
