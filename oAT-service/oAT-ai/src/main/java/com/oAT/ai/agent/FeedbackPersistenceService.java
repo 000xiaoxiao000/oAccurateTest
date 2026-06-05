@@ -359,21 +359,22 @@ public class FeedbackPersistenceService {
         r.setUserId((String) map.getOrDefault("userId", null));
         r.setQuestion((String) map.getOrDefault("question", null));
         r.setAnswer((String) map.getOrDefault("answer", null));
-        r.setRating(map.containsKey("rating") ? ((Number) map.get("rating")).intValue() : null);
+        Number rating = (Number) map.get("rating");
+        r.setRating(rating != null ? rating.intValue() : null);
         r.setFeedbackType((String) map.getOrDefault("feedbackType", null));
         r.setComment((String) map.getOrDefault("comment", null));
         r.setUsedTools((String) map.getOrDefault("usedTools", null));
         r.setTopic((String) map.getOrDefault("topic", null));
         r.setPageContext((String) map.getOrDefault("pageContext", null));
 
-        if (map.containsKey("responseTime")) {
-            r.setResponseTime(((Number) map.get("responseTime")).longValue());
+        Number responseTime = (Number) map.get("responseTime");
+        if (responseTime != null) {
+            r.setResponseTime(responseTime.longValue());
         }
-        if (map.containsKey("createTime")) {
-            Object ct = map.get("createTime");
-            if (ct instanceof Long) r.setCreateTime(new Date((Long) ct));
-            else if (ct instanceof String) r.setCreateDateFromISO((String) ct);
-        }
+        Object ct = map.get("createTime");
+        if (ct instanceof Long) r.setCreateTime(new Date((Long) ct));
+        else if (ct instanceof Integer) r.setCreateTime(new Date(((Integer) ct).longValue()));
+        else if (ct instanceof String) r.setCreateDateFromISO((String) ct);
         return r;
     }
 
