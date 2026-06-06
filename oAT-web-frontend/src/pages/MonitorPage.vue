@@ -185,7 +185,11 @@
         </div>
       </section>
 
-      <div class="monitor-resizer" @pointerdown="startResize"><span>拖拽调整宽度</span></div>
+      <div class="monitor-resizer" @pointerdown="startResize">
+        <span class="resizer-dots">
+          <i></i><i></i><i></i>
+        </span>
+      </div>
 
       <section class="panel graph-panel">
         <div class="panel-head graph-panel-head">
@@ -1921,7 +1925,7 @@ onBeforeUnmount(() => {
 .monitor-grid {
   display: grid;
   gap: 0;
-  align-items: start;
+  align-items: stretch;
   min-height: 600px;
 }
 
@@ -1933,9 +1937,14 @@ onBeforeUnmount(() => {
 }
 
 .trace-panel {
+  align-self: start;
   position: sticky;
   top: 72px;
   max-height: calc(100vh - 140px);
+}
+
+.graph-panel {
+  min-height: calc(100vh - 140px);
 }
 
 .monitor-resizer {
@@ -1950,18 +1959,26 @@ onBeforeUnmount(() => {
   color: #0f766e;
 }
 
-.monitor-resizer span {
-  writing-mode: vertical-rl;
-  padding: 10px 3px;
+.resizer-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 3px;
   border-radius: 999px;
   background: rgba(15, 23, 42, .05);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .04em;
   transition: background 150ms ease;
 }
 
-.monitor-resizer:hover span {
+.resizer-dots i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  font-style: normal;
+}
+
+.monitor-resizer:hover .resizer-dots {
   background: rgba(15, 118, 110, .1);
 }
 
