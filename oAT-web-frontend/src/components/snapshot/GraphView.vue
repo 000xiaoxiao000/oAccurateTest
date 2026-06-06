@@ -76,7 +76,7 @@
                 <text :x="node.x + 34" :y="node.y + 41" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
                 <text :x="node.x + 64" :y="node.y + 30" class="node-title">{{ compactText(node.title || node.id, 20) }}</text>
                 <text :x="node.x + 64" :y="node.y + 54" class="node-subtitle">{{ compactText(node.subTitle || '-', 24) }}</text>
-                <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactText(node.tips || node.type || 'unknown', 30) }}</text>
+                <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactText(node.tips || node.type || '', 30) }}</text>
               </g>
             </g>
           </svg>

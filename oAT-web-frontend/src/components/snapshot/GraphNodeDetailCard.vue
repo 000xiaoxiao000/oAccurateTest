@@ -4,8 +4,14 @@
       <div class="node-header-main">
         <strong class="node-title">{{ detail.title || detail.name || detail.id }}</strong>
         <div class="node-meta">
-          <span v-if="detail.type" class="node-type-badge">{{ detail.type }}</span>
-          <span v-if="detail.ip" class="node-ip">{{ detail.ip }}</span>
+          <span v-if="detail.type" class="node-type-badge">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+            {{ detail.type }}
+          </span>
+          <span v-if="detail.ip" class="node-ip">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            {{ detail.ip }}
+          </span>
         </div>
       </div>
     </div>
@@ -21,10 +27,25 @@
       <div v-if="section.fields?.length" class="field-grid">
         <div v-for="field in section.fields" :key="`${section.title}-${field.label}`" class="field-row">
           <span class="field-label">{{ field.label }}</span>
-          <strong class="field-value" :title="displayValue(field.value)">{{ displayValue(field.value) }}</strong>
+          <div class="field-value-wrap">
+            <strong class="field-value" :title="displayValue(field.value)">{{ displayValue(field.value) }}</strong>
+            <button
+              v-if="displayValue(field.value) !== '-'"
+              class="copy-btn-inline"
+              :class="{ copied: copiedKey === `field-${section.title}-${field.label}` }"
+              @click="copySql(displayValue(field.value), `field-${section.title}-${field.label}`)"
+            >{{ copiedKey === `field-${section.title}-${field.label}` ? '已复制' : '复制' }}</button>
+          </div>
         </div>
       </div>
-      <pre v-if="section.content" class="detail-pre">{{ section.content }}</pre>
+      <div v-if="section.content" class="pre-wrap">
+        <pre class="detail-pre">{{ section.content }}</pre>
+        <button
+          class="copy-btn"
+          :class="{ copied: copiedKey === `section-content-${section.title}` }"
+          @click="copySql(section.content, `section-content-${section.title}`)"
+        >{{ copiedKey === `section-content-${section.title}` ? '已复制' : '复制' }}</button>
+      </div>
     </section>
 
     <section v-if="hasList(detail.sqlGroups) || hasList(detail.sqlStatements)" class="detail-section">
@@ -229,24 +250,40 @@ const copySql = async (sql: string | undefined, key: string) => {
 .node-type-badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 10px;
+  gap: 5px;
+  padding: 4px 11px;
   border-radius: 999px;
-  background: rgba(15, 118, 110, .1);
+  background: linear-gradient(135deg, rgba(15, 118, 110, .12), rgba(20, 184, 166, .08));
   color: #0f766e;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .04em;
   text-transform: uppercase;
+  border: 1px solid rgba(15, 118, 110, .18);
+}
+
+.node-type-badge svg {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .node-ip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
-  font-weight: 500;
-  color: #64748b;
+  font-weight: 600;
+  color: #475569;
   font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
-  background: rgba(241, 245, 249, .9);
-  padding: 2px 8px;
-  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(241, 245, 249, .98), rgba(248, 250, 252, .95));
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 232, 240, .8);
+}
+
+.node-ip svg {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .stat-list {
@@ -355,6 +392,49 @@ const copySql = async (sql: string | undefined, key: string) => {
 .field-row:hover {
   background: rgba(240, 253, 250, .72);
   border-color: rgba(15, 118, 110, .18);
+}
+
+.field-row:hover .copy-btn-inline {
+  opacity: 1;
+}
+
+.field-value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.copy-btn-inline {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease, background 120ms ease, color 120ms ease;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  white-space: nowrap;
+}
+
+.copy-btn-inline:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: rgba(15, 23, 42, 0.15);
+}
+
+.copy-btn-inline.copied {
+  opacity: 1;
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  border-color: rgba(22, 163, 74, 0.2);
 }
 
 .operation-row {

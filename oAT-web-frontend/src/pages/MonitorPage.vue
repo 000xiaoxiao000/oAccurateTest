@@ -188,15 +188,24 @@
       <div class="monitor-resizer" @pointerdown="startResize"><span>拖拽调整宽度</span></div>
 
       <section class="panel graph-panel">
-        <div class="panel-head">
-          <div>
+        <div class="panel-head graph-panel-head">
+          <div class="panel-head-content">
             <h2>{{ graph ? '实时监控详情' : '实时请求示波器' }}</h2>
             <p class="panel-subtitle">{{ selectedTraceId || oscilloscopeSubtitle }}</p>
           </div>
-          <div class="header-actions">
-            <button v-if="graph" class="ghost-button" type="button" @click="showOscilloscope">返回示波器</button>
-            <button class="ghost-button" type="button" :disabled="!selectedTraceId || graphLoading" @click="loadGraph">重载拓扑</button>
-            <button class="ghost-button" type="button" :disabled="!selectedTraceId || savingSnapshot" title="自动保存我的快照和系统快照" @click="autoSaveCurrentTraceSnapshots">自动保存快照</button>
+          <div class="header-actions graph-actions">
+            <button v-if="graph" class="ghost-button secondary-ghost" type="button" @click="showOscilloscope">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              返回示波器
+            </button>
+            <button class="ghost-button" type="button" :disabled="!selectedTraceId || graphLoading" @click="loadGraph">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              重载拓扑
+            </button>
+            <button class="ghost-button primary-ghost" type="button" :disabled="!selectedTraceId || savingSnapshot" title="自动保存我的快照和系统快照" @click="autoSaveCurrentTraceSnapshots">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              自动保存快照
+            </button>
           </div>
         </div>
 
@@ -228,37 +237,15 @@
           </div>
         </div>
         <template v-else>
-          <div class="graph-detail-layout" :class="{ 'detail-mode': activeGraphTab === 'detail' }">
-            <div class="graph-tabs-container">
-              <div class="graph-tabs-header">
-                <button class="graph-tab" :class="{ active: activeGraphTab === 'detail' }" type="button" @click="activeGraphTab = 'detail'">
-                  节点详情
-                </button>
-                <button class="graph-tab" :class="{ active: activeGraphTab === 'snapshot' }" type="button" @click="activeGraphTab = 'snapshot'">
-                  保存状态
-                </button>
+          <section class="panel graph-topology-card">
+            <div class="card-title graph-title-row">
+              <div>
+                <h2>节点拓扑</h2>
+                <p class="subtext">默认自适应居中；支持滚轮缩放、拖拽平移和拖拽节点。</p>
               </div>
-
-              <div class="graph-tabs-content">
-                <div v-show="activeGraphTab === 'detail'" class="graph-tab-panel">
-                  <div v-if="nodeDetailLoading" class="status-card">正在加载节点详情...</div>
-                  <div v-else-if="nodeDetailError" class="status-card error">{{ nodeDetailError }}</div>
-                  <GraphNodeDetailCard v-else :detail="selectedNodeDetail" empty-text="点击图中节点查看详情" />
-                </div>
-
-                <div v-show="activeGraphTab === 'snapshot'" class="graph-tab-panel">
-                  <p v-if="snapshotNotice" class="snapshot-notice-text notice-success">{{ snapshotNotice }}</p>
-                  <p v-else class="snapshot-notice-text">可将当前 trace 自动保存为系统快照，重复保存会由后端去重。</p>
-                  <div class="snapshot-panel-actions">
-                    <button class="ghost-button small-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog('my')">保存我的快照</button>
-                    <button class="ghost-button small-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog('system')">保存系统快照</button>
-                  </div>
-                </div>
-              </div>
+              <span class="graph-count-pill">{{ graph.nodes.length }} 节点 / {{ graph.edges.length }} 连线</span>
             </div>
-
             <div
-              v-show="activeGraphTab !== 'detail'"
               class="graph-board monitor-graph-board"
               @wheel.prevent="handleGraphWheel"
               @pointerdown="startGraphPan"
@@ -303,12 +290,60 @@
                     <text :x="node.x + 34" :y="node.y + 41" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
                     <text :x="node.x + 64" :y="node.y + 30" class="node-title">{{ compactGraphText(node.title || node.id, 20) }}</text>
                     <text :x="node.x + 64" :y="node.y + 54" class="node-subtitle">{{ compactGraphText(node.subTitle || '-', 24) }}</text>
-                    <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactGraphText(node.tips || node.type || 'unknown', 30) }}</text>
+                    <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactGraphText(node.tips || node.type || '', 30) }}</text>
                   </g>
                 </g>
               </svg>
             </div>
-          </div>
+          </section>
+
+          <section class="panel bottom-panel">
+            <div class="category-header">
+              <h3>全部节点</h3>
+              <span class="category-count">{{ sortedGraphNodes.length }} 个节点</span>
+            </div>
+            <div class="node-tabs-bar">
+              <button
+                v-for="node in sortedGraphNodes"
+                :key="node.id"
+                class="node-tab-btn"
+                :class="{ active: selectedNodeId === node.id }"
+                type="button"
+                @click="selectNode(node.id)"
+              >
+                <span class="node-tab-icon">{{ iconGlyph(node.icon || node.type) }}</span>
+                <span class="node-tab-label">{{ node.title || node.id }}</span>
+              </button>
+            </div>
+            <div v-if="selectedNodeId" class="node-content-panel">
+              <div class="node-content-header">
+                <span class="node-content-icon">{{ iconGlyph(selectedGraphNode?.icon || selectedGraphNode?.type) }}</span>
+                <div class="node-content-meta">
+                  <strong>{{ selectedGraphNode?.title || selectedNodeId }}</strong>
+                  <span>{{ selectedGraphNode?.subTitle || '-' }}</span>
+                </div>
+                <span class="node-type-badge">{{ selectedGraphNode?.type || '-' }}</span>
+              </div>
+              <div v-if="nodeDetailLoading" class="node-content-body">
+                <div class="status-card loading-card">
+                  <div class="loading-spinner"></div>
+                  <span>正在加载节点详情...</span>
+                </div>
+              </div>
+              <div v-else-if="nodeDetailError" class="node-content-body">
+                <div class="status-card error">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  {{ nodeDetailError }}
+                </div>
+              </div>
+              <div v-else-if="selectedNodeDetail" class="node-content-body">
+                <GraphNodeDetailCard :detail="selectedNodeDetail" empty-text="" />
+              </div>
+              <div v-else class="node-content-empty">
+                点击图谱中的节点查看详细信息
+              </div>
+            </div>
+          </section>
         </template>
       </section>
     </div>
@@ -569,6 +604,49 @@ const wavePoints = computed(() => [...filteredTraces.value].reverse().slice(-80)
   }
 }))
 const wavePolyline = computed(() => wavePoints.value.map((point) => `${point.x},${point.y}`).join(' '))
+
+const sortedGraphNodes = computed<GraphNodeSummary[]>(() => {
+  const nodes = graph.value?.nodes || []
+  const edges = graph.value?.edges || []
+  const incoming = new Map<string, number>()
+  const children = new Map<string, string[]>()
+
+  nodes.forEach((node) => {
+    incoming.set(node.id, 0)
+    children.set(node.id, [])
+  })
+  edges.forEach((edge) => {
+    if (!incoming.has(edge.from) || !incoming.has(edge.to)) return
+    incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1)
+    children.get(edge.from)?.push(edge.to)
+  })
+
+  const ranks = new Map<string, number>()
+  const roots = nodes.filter((node) => (incoming.get(node.id) || 0) === 0)
+  const queue = (roots.length ? roots : nodes.slice(0, 1)).map((node) => node.id)
+  queue.forEach((id) => ranks.set(id, 0))
+  for (let i = 0; i < queue.length; i += 1) {
+    const id = queue[i]
+    const nextRank = (ranks.get(id) || 0) + 1
+    ;(children.get(id) || []).forEach((childId) => {
+      if ((ranks.get(childId) ?? -1) < nextRank) {
+        ranks.set(childId, nextRank)
+        queue.push(childId)
+      }
+    })
+  }
+
+  return [...nodes].sort((a, b) => {
+    const rankA = ranks.get(a.id) ?? 999
+    const rankB = ranks.get(b.id) ?? 999
+    if (rankA !== rankB) return rankA - rankB
+    return nodes.indexOf(a) - nodes.indexOf(b)
+  })
+})
+
+const selectedGraphNode = computed(() =>
+  sortedGraphNodes.value.find((n) => n.id === selectedNodeId.value) ?? null,
+)
 
 const nodePositions = computed<PositionedNode[]>(() => {
   const nodes = graph.value?.nodes || []
@@ -1402,6 +1480,38 @@ onBeforeUnmount(() => {
   transform: translateY(0);
 }
 
+.ghost-button svg {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.secondary-ghost {
+  background: rgba(100, 116, 139, .08);
+  color: #64748b;
+  border: 1px solid rgba(100, 116, 139, .12);
+}
+
+.secondary-ghost:hover:not(:disabled) {
+  background: rgba(100, 116, 139, .14);
+  color: #475569;
+  border-color: rgba(100, 116, 139, .18);
+}
+
+.primary-ghost {
+  background: linear-gradient(135deg, rgba(15, 118, 110, .1), rgba(20, 184, 166, .08));
+  color: #0f766e;
+  border: 1px solid rgba(15, 118, 110, .2);
+  font-weight: 700;
+}
+
+.primary-ghost:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(15, 118, 110, .16), rgba(20, 184, 166, .12));
+  border-color: rgba(15, 118, 110, .28);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, .12);
+}
+
 .small-button {
   min-height: 34px;
   padding: 7px 14px;
@@ -1811,8 +1921,7 @@ onBeforeUnmount(() => {
 .monitor-grid {
   display: grid;
   gap: 0;
-  align-items: stretch;
-  height: calc(100vh - 380px);
+  align-items: start;
   min-height: 600px;
 }
 
@@ -1821,6 +1930,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.trace-panel {
+  position: sticky;
+  top: 72px;
+  max-height: calc(100vh - 140px);
 }
 
 .monitor-resizer {
@@ -1852,7 +1967,13 @@ onBeforeUnmount(() => {
 
 .trace-panel,
 .graph-panel {
-  overflow: hidden;
+  overflow: auto;
+}
+
+.graph-panel {
+  display: grid;
+  gap: 14px;
+  align-content: start;
 }
 
 .trace-panel-content {
@@ -1889,6 +2010,40 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 360px;
+}
+
+.graph-panel-head {
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, .08);
+}
+
+.panel-head-content {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.panel-head-content h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.panel-head-content .panel-subtitle {
+  margin: 0;
+  font-size: 12px;
+  color: #64748b;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-weight: 500;
+}
+
+.graph-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .trace-head {
@@ -2376,6 +2531,219 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 
+.graph-topology-card {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+}
+
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.graph-title-row {
+  align-items: flex-start;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.graph-title-row h2 {
+  margin: 0;
+}
+
+.graph-count-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 5px 11px;
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.bottom-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 16px 18px 0;
+}
+
+.category-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.category-count {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.node-tabs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 0;
+  padding: 0 18px 12px;
+}
+
+.node-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px 7px 8px;
+  border: 1.5px solid rgba(15, 23, 42, 0.09);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.80);
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .14s, background .14s, color .14s, box-shadow .14s;
+  white-space: nowrap;
+}
+
+.node-tab-btn:hover {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: #f0faf9;
+  color: #0f766e;
+}
+
+.node-tab-btn.active {
+  border-color: #0f766e;
+  background: #edfaf8;
+  color: #0f766e;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.12);
+}
+
+.node-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.10);
+  color: #0f766e;
+  font-size: 10px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.node-tab-btn.active .node-tab-icon {
+  background: rgba(15, 118, 110, 0.18);
+}
+
+.node-tab-label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-content-panel {
+  margin: 12px 18px 18px;
+  border: 1.5px solid rgba(15, 118, 110, 0.22);
+  border-radius: 16px;
+  background: #f8fbfb;
+  overflow: hidden;
+}
+
+.node-content-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.70);
+}
+
+.node-content-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #ecfeff;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.node-content-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.node-content-meta strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-content-meta span {
+  font-size: 12px;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-type-badge {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.10);
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.node-content-body {
+  max-height: 480px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.node-content-body :deep(.detail-card) {
+  border: none;
+  background: transparent;
+  padding: 14px;
+}
+
+.node-content-empty {
+  padding: 24px 14px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
 .graph-detail-layout {
   display: flex;
   flex-direction: column;
@@ -2418,9 +2786,12 @@ onBeforeUnmount(() => {
 
 .graph-tab {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: none;
   border-radius: 10px 10px 0 0;
-  padding: 8px 18px;
+  padding: 8px 16px;
   background: transparent;
   color: #64748b;
   font-size: 13px;
@@ -2428,6 +2799,12 @@ onBeforeUnmount(() => {
   cursor: pointer;
   transition: color 150ms ease, background 150ms ease;
   white-space: nowrap;
+}
+
+.graph-tab svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 150ms ease;
 }
 
 .graph-tab:hover {
@@ -2481,10 +2858,87 @@ onBeforeUnmount(() => {
   border-radius: 10px;
 }
 
+.snapshot-tab-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.loading-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, .95), rgba(241, 245, 249, .9));
+  border: 1px solid rgba(15, 23, 42, .06);
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(15, 118, 110, .2);
+  border-top-color: #0f766e;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.snapshot-notice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, .85);
+  border: 1px solid rgba(15, 23, 42, .08);
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.snapshot-notice-card svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.snapshot-notice-card.notice-success {
+  background: linear-gradient(135deg, rgba(236, 253, 245, .95), rgba(240, 253, 250, .9));
+  border-color: rgba(15, 118, 110, .2);
+  color: #0f766e;
+}
+
+.snapshot-notice-card.notice-success svg {
+  color: #15803d;
+}
+
 .snapshot-panel-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.snapshot-action-btn {
+  flex: 1 1 auto;
+  min-width: 160px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.snapshot-action-btn svg {
+  margin-right: 0;
 }
 
 .modal-backdrop {
