@@ -411,38 +411,81 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         // 3. Aggregate TraceNode data from snapshot timeline
         if (job != null) job.getProgress().next("处理系统快照中的链路追踪数据", 50);
         
-        // For VERSION_FULL reports: track per-commit coverage to detect cross-commit differences
+        // For VERSION_FULL reports: pre-load commit mappings and prepare per-commit coverage tracking
         boolean isVersionFullReport = normalizeReportType(reportType) == REPORT_TYPE_VERSION_FULL;
-        Map<String, Map<String, ClassCoverageIndex>> perCommitCoverageSnapshots = new HashMap<>();
+        Map<String, String> snapshotToCommitMap = new HashMap<>();
+        Map<String, Map<String, ClassCoverageIndex>> perCommitCoverageSnapshots = new LinkedHashMap<>();
+        
+        if (isVersionFullReport && !snapshotContext.getSnapshotIds().isEmpty()) {
+            // Batch query all snapshot-commit mappings once to avoid N+1 queries
+            List<SnapshotCommitMapping> allMappings = snapshotCommitMappingRepository
+                    .findByAppIdAndVersionNumber(appId, versionNumber);
+            
+            for (SnapshotCommitMapping mapping : allMappings) {
+                if (mapping != null && StringUtils.hasText(mapping.getSnapshotId()) 
+                        && StringUtils.hasText(mapping.getRepoCommitId())) {
+                    snapshotToCommitMap.put(mapping.getSnapshotId(), mapping.getRepoCommitId());
+                }
+            }
+            
+            if (!snapshotToCommitMap.isEmpty()) {
+                if (job != null) {
+                    job.getLogger().info("版本全量报告：加载了 " + snapshotToCommitMap.size() + 
+                        " 条快照-Commit 映射关系，将按 Commit 分组追踪覆盖率差异");
+                }
+                
+                // Initialize per-commit coverage maps with empty baseline
+                Set<String> uniqueCommits = new HashSet<>(snapshotToCommitMap.values());
+                for (String commitKey : uniqueCommits) {
+                    Map<String, ClassCoverageIndex> commitCoverageMap = new HashMap<>();
+                    for (Map.Entry<String, ClassCoverageIndex> entry : coverageMap.entrySet()) {
+                        ClassCoverageIndex emptyClassCov = createInitialClassCoverage(appId, entry.getKey());
+                        emptyClassCov.setMethods(new ArrayList<>());
+                        for (MethodCoverageDetail method : entry.getValue().getMethods()) {
+                            MethodCoverageDetail emptyMethod = new MethodCoverageDetail();
+                            emptyMethod.setMethodName(method.getMethodName());
+                            emptyMethod.setMethodDesc(method.getMethodDesc());
+                            emptyMethod.setTotalLines(method.getTotalLines());
+                            emptyMethod.setTotalLineNumbers(method.getTotalLineNumbers());
+                            emptyMethod.setTotalBranches(method.getTotalBranches());
+                            emptyMethod.setTotalBranchTargets(method.getTotalBranchTargets());
+                            emptyMethod.setTotalBranchTargetProbeMap(copyBranchTargetProbeMap(method.getTotalBranchTargetProbeMap()));
+                            emptyMethod.setComplexity(method.getComplexity());
+                            emptyMethod.setCoveredLineNumbers(new ArrayList<>());
+                            emptyMethod.setCoveredBranchLines(new ArrayList<>());
+                            emptyMethod.setCoveredBranchTargetProbeMap(new LinkedHashMap<>());
+                            emptyClassCov.getMethods().add(emptyMethod);
+                        }
+                        emptyClassCov.setTotalMethods(entry.getValue().getTotalMethods());
+                        emptyClassCov.setTotalLines(entry.getValue().getTotalLines());
+                        emptyClassCov.setTotalBranches(entry.getValue().getTotalBranches());
+                        emptyClassCov.setTotalBranchTargets(entry.getValue().getTotalBranchTargets());
+                        emptyClassCov.setTotalComplexity(entry.getValue().getTotalComplexity());
+                        commitCoverageMap.put(entry.getKey(), emptyClassCov);
+                    }
+                    perCommitCoverageSnapshots.put(commitKey, commitCoverageMap);
+                }
+            }
+        }
         
         int processed = 0;
         int total = traceIdsToProcess.size();
         
         for (String traceId : traceIdsToProcess) {
-            // For VERSION_FULL: capture per-commit coverage state before merging
+            // Merge into global coverage map
+            mergeSnapshotTraceCoverage(traceId, coverageMap);
+            
+            // For VERSION_FULL: also merge into per-commit map if this snapshot has a commit mapping
             if (isVersionFullReport && processed < snapshotContext.getSnapshotIds().size()) {
                 String snapshotId = snapshotContext.getSnapshotIds().get(processed);
-                Optional<SystemSnapshot> snapshotOpt = systemSnapshotRepository.findById(snapshotId);
+                String commitKey = snapshotToCommitMap.get(snapshotId);
                 
-                if (snapshotOpt.isPresent()) {
-                    SystemSnapshot snapshot = snapshotOpt.get();
-                    String snapshotVersion = snapshot.getVersion();
-                    
-                    // Group by version (same version could have snapshots from different commits)
-                    if (StringUtils.hasText(snapshotVersion) && snapshotVersion.equals(versionNumber)) {
-                        mergeSnapshotTraceCoverage(traceId, coverageMap);
-                        
-                        // Store the coverage state after this snapshot (for later comparison)
-                        String snapshotKey = snapshotId + "_" + processed;
-                        perCommitCoverageSnapshots.put(snapshotKey, deepCloneCoverageMap(coverageMap));
-                    } else {
-                        mergeSnapshotTraceCoverage(traceId, coverageMap);
+                if (StringUtils.hasText(commitKey)) {
+                    Map<String, ClassCoverageIndex> commitCoverageMap = perCommitCoverageSnapshots.get(commitKey);
+                    if (commitCoverageMap != null) {
+                        mergeSnapshotTraceCoverage(traceId, commitCoverageMap);
                     }
-                } else {
-                    mergeSnapshotTraceCoverage(traceId, coverageMap);
                 }
-            } else {
-                mergeSnapshotTraceCoverage(traceId, coverageMap);
             }
             
             processed++;
@@ -457,7 +500,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         if (isVersionFullReport && perCommitCoverageSnapshots.size() > 1) {
             if (job != null) {
                 job.getLogger().info("版本全量报告：检测到 " + perCommitCoverageSnapshots.size() + 
-                    " 个快照覆盖率状态，正在标记跨 Commit 的覆盖率差异...");
+                    " 个 Commit 的覆盖率数据，正在标记跨 Commit 的覆盖率差异...");
             }
             markCrossCommitCoverageChanges(coverageMap, perCommitCoverageSnapshots, job);
         }

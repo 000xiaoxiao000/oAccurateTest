@@ -38,7 +38,7 @@
           </div>
           <div class="meta-item">
             <span>更新时间</span>
-            <strong>{{ payload.snapshot.updateTimeText || payload.snapshot.updateTimeRelativeText || '-' }}</strong>
+            <strong :title="payload.snapshot.updateTimeText || undefined">{{ payload.snapshot.updateTimeRelativeText || payload.snapshot.updateTimeText || '-' }}</strong>
           </div>
           <div class="meta-item">
             <span>关联用例</span>

@@ -66,7 +66,7 @@
             <div v-else class="item-list">
               <article v-for="snapshot in payload.snapshots" :key="snapshot.id" class="item-card">
                 <strong>{{ snapshot.title || snapshot.id }}</strong>
-                <span>{{ snapshot.updateTimeText || snapshot.updateTimeRelativeText || '-' }}</span>
+                <span :title="snapshot.updateTimeText || undefined">{{ snapshot.updateTimeRelativeText || snapshot.updateTimeText || '-' }}</span>
               </article>
             </div>
           </section>

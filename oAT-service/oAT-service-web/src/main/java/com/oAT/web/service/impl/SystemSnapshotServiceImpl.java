@@ -149,7 +149,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     /**
      * 根据应用当前版本写入快照关联关系。
      * 策略：关联到应用设置的当前激活版本（App.currentVersion/currentBranch/currentCommitId）。
-     * 一个快照只允许关联一个 Commit，若已存在则跳过。
+     * 一个快照只关联一个 Commit，若已存在则跳过。
      */
     private void tryCreateCommitMapping(SystemSnapshot snapshot, String source) {
         if (snapshot == null || !StringUtils.hasText(snapshot.getId())
@@ -160,24 +160,23 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             if (snapshotCommitMappingRepository.existsBySnapshotId(snapshot.getId())) {
                 return;
             }
-            
-            // 获取应用当前激活的版本信息
+
             AppVo app = appService.getApp(snapshot.getAppId());
             if (app == null) {
                 logger.info("快照 {} 对应应用不存在，跳过自动关联", snapshot.getId());
                 return;
             }
-            
+
             String currentCommitId = app.getCurrentCommitId();
             String currentVersion = app.getCurrentVersion();
             String currentBranch = app.getCurrentBranch();
-            
+
             if (!StringUtils.hasText(currentCommitId)) {
                 logger.info("快照 {} 对应应用 {} 未设置当前版本的 Commit，跳过自动关联，请在版本列表页手动补录",
                         snapshot.getId(), snapshot.getAppId());
                 return;
             }
-            
+
             SnapshotCommitMapping mapping = new SnapshotCommitMapping();
             mapping.setId(snapshot.getId());
             mapping.setSnapshotId(snapshot.getId());
@@ -190,7 +189,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             mapping.setSnapshotCreateTime(snapshot.getCreateTime());
             mapping.setMappingSource(source);
             snapshotCommitMappingRepository.save(mapping);
-            logger.info("快照 {} 已自动关联到应用当前版本 {} Commit {}（来源: {}）", 
+            logger.info("快照 {} 已自动关联到应用当前版本 {} Commit {}（来源: {}）",
                     snapshot.getId(), currentVersion, currentCommitId, source);
         } catch (Exception e) {
             logger.warn("快照 {} 写入 Commit 关联失败，不影响快照保存", snapshot.getId(), e);
@@ -204,24 +203,22 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     @Override
     public int backfillCommitMapping(String appId, String versionNumber) {
         Assert.hasText(appId, "appId 不能为空");
-        
-        // 获取应用当前激活的版本信息
+
         AppVo app = appService.getApp(appId);
         if (app == null) {
             logger.warn("补录 Commit 关联失败：应用 {} 不存在", appId);
             return 0;
         }
-        
+
         String currentCommitId = app.getCurrentCommitId();
         String currentVersion = app.getCurrentVersion();
         String currentBranch = app.getCurrentBranch();
-        
+
         if (!StringUtils.hasText(currentCommitId)) {
             logger.warn("补录 Commit 关联失败：应用 {} 未设置当前版本的 Commit", appId);
             return 0;
         }
-        
-        // 获取所有未关联的快照
+
         List<SystemSnapshot> snapshots = repository.findByAppId(appId);
         if (StringUtils.hasText(versionNumber)) {
             snapshots = snapshots.stream()
@@ -233,7 +230,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         for (SystemSnapshot snapshot : snapshots) {
             if (snapshot == null || !StringUtils.hasText(snapshot.getId())) continue;
             if (snapshotCommitMappingRepository.existsBySnapshotId(snapshot.getId())) continue;
-            
+
             SnapshotCommitMapping mapping = new SnapshotCommitMapping();
             mapping.setId(snapshot.getId());
             mapping.setSnapshotId(snapshot.getId());
@@ -248,7 +245,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             snapshotCommitMappingRepository.save(mapping);
             count++;
         }
-        logger.info("补录完成：appId={}, 应用当前版本={}, 补录数量={}, commitId={}", 
+        logger.info("补录完成：appId={}, 应用当前版本={}, 补录数量={}, commitId={}",
                 appId, currentVersion, count, currentCommitId);
         return count;
     }

@@ -297,6 +297,15 @@ onMounted(load)
   text-align: left;
 }
 
+.table th {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
 .owner-chip {
   display: inline-block;
   padding: 4px 10px;

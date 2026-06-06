@@ -70,7 +70,7 @@
                 :to="snapshot.share ? `/share/snapshot/${snapshot.id}` : '/login'"
               >
                 <strong>{{ snapshot.title || snapshot.name || snapshot.id }}</strong>
-                <span>{{ snapshot.updateTimeText || snapshot.updateTimeRelativeText || '-' }}</span>
+                <span :title="snapshot.updateTimeText || undefined">{{ snapshot.updateTimeRelativeText || snapshot.updateTimeText || '-' }}</span>
               </RouterLink>
             </div>
           </section>

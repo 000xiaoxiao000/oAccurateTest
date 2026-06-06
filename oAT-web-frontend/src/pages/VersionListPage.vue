@@ -119,7 +119,9 @@
                   <span v-else class="file-placeholder">-</span>
                 </div>
               </td>
-              <td>{{ item.createTimeRelativeText || item.createTimeText || '-' }}</td>
+              <td>
+                <span :title="item.createTimeText || undefined">{{ item.createTimeRelativeText || item.createTimeText || '-' }}</span>
+              </td>
               <td>
                 <span :class="['tag', item.current ? 'current' : item.fileExist ? 'ok' : 'warn']">
                   {{ item.current ? '当前版本' : item.fileExist ? '文件存在' : '文件缺失' }}
@@ -463,7 +465,8 @@ onMounted(load)
 }
 
 .time-col {
-  width: 7%;
+  width: 90px;
+  white-space: nowrap;
 }
 
 .status-col {
@@ -483,10 +486,19 @@ onMounted(load)
 
 .report-table th,
 .report-table td {
-  padding: 18px 14px;
+  padding: 12px 14px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   text-align: left;
   vertical-align: middle;
+}
+
+.report-table th {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .report-table tbody tr {

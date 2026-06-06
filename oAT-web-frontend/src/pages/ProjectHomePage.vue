@@ -153,7 +153,7 @@
               <RouterLink class="snapshot-link" :to="`/p/${projectId}/my-snapshots/${snapshot.id}`">
                 {{ snapshot.name || snapshot.id }}
               </RouterLink>
-              <span>{{ snapshot.createTimeText || snapshot.updateTimeText || snapshot.updateTimeRelativeText || '-' }}</span>
+              <span :title="snapshot.createTimeText || snapshot.updateTimeText || undefined">{{ snapshot.createTimeText || snapshot.updateTimeRelativeText || snapshot.updateTimeText || '-' }}</span>
             </article>
           </div>
           <div v-else class="empty-card subtle">暂无快照</div>

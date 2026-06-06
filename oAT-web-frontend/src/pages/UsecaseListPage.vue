@@ -82,7 +82,7 @@
                   <button type="button" @click.prevent="deleteDirectory(dir.id, dir.name, dir.parentId || 'root')">删除</button>
                 </div>
               </div>
-              <span>{{ dir.updateTimeRelativeText || dir.updateTimeText || '-' }}</span>
+              <span :title="dir.updateTimeText || undefined">{{ dir.updateTimeRelativeText || dir.updateTimeText || '-' }}</span>
             </RouterLink>
           </div>
         </aside>

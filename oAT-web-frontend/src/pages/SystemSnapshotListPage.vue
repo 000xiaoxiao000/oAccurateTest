@@ -133,7 +133,9 @@
                       </span>
                     </div>
                   </td>
-                  <td>{{ snapshot.versionLastUpdateRelativeText || snapshot.versionLastUpdateText || '-' }}</td>
+                  <td>
+                    <span :title="snapshot.versionLastUpdateText || undefined">{{ snapshot.versionLastUpdateRelativeText || snapshot.versionLastUpdateText || '-' }}</span>
+                  </td>
                   <td>
                     <span :class="['tag', reportStatusTone(snapshot.reportStatus)]" :title="reportStatusTooltip(snapshot.reportStatus)">
                       {{ reportStatusText(snapshot.reportStatus) }}
