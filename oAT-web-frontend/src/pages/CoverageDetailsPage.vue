@@ -103,14 +103,18 @@
             <tbody>
               <tr v-for="item in payload.classPage?.content || []" :key="item.className" :class="['class-row', item.hasCodeChanges && 'row-changed']">
                 <td :title="`${item.className}.java`">
-                  <span class="tree-fold muted">−</span>
-                  <span class="tree-icon">📄</span>
-                  <span class="class-name">{{ item.className }}.java</span>
-                  <span
-                    v-if="item.hasCodeChanges"
-                    class="change-badge"
-                    title="该类在不同 Commit 间覆盖率数据有变化。当前报告汇总了所有 Commit 数据，源码着色使用最新 Commit，建议重点关注此类。"
-                  >跨 Commit 差异</span>
+                  <span class="cell-name-row">
+                    <span class="cell-name-text">
+                      <span class="tree-fold muted">−</span>
+                      <span class="tree-icon">📄</span>
+                      <span class="class-name">{{ item.className }}.java</span>
+                    </span>
+                    <span
+                      v-if="item.hasCodeChanges"
+                      class="change-badge"
+                      title="该类在不同 Commit 间覆盖率数据有变化。当前报告汇总了所有 Commit 数据，源码着色使用最新 Commit，建议重点关注此类。"
+                    >跨 Commit 差异</span>
+                  </span>
                 </td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
                 <td class="coverage-rate" :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
@@ -800,6 +804,25 @@ onMounted(() => {
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cell-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cell-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.cell-name-row .change-badge {
+  flex-shrink: 0;
 }
 
 .class-name {
