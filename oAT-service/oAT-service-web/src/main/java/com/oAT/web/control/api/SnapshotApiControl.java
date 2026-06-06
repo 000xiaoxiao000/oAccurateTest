@@ -472,7 +472,7 @@ public class SnapshotApiControl {
         MySnapshotListPayload payload = new MySnapshotListPayload();
         payload.setSnapshots(snapshots);
         payload.setAllUsecases(collectAllProjectUsecases(projectId));
-        payload.setSnapshotLabels(projectService.getLables(projectId, LableType.snapshot));
+        payload.setSnapshotLabels(mergeSnapshotLabels(projectId, snapshots));
         payload.setApiCoverageSummaryText(buildSnapshotApiCoverageSummaryText(snapshots));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取我的快照成功", payload);
@@ -1164,6 +1164,33 @@ public class SnapshotApiControl {
         return Arrays.stream(filters)
                 .filter(StringUtils::hasText)
                 .allMatch(labelSet::contains);
+    }
+
+    private List<LabelGroup.Label> mergeSnapshotLabels(String projectId, List<SnapshotVo> snapshots) {
+        List<LabelGroup.Label> configuredLabels = projectService.getLables(projectId, LableType.snapshot);
+        Set<String> configuredLabelNames = configuredLabels.stream()
+                .map(LabelGroup.Label::getName)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        
+        Set<String> usedLabelNames = snapshots.stream()
+                .flatMap(snapshot -> {
+                    String[] labels = snapshot.getLabels();
+                    return labels == null ? java.util.stream.Stream.empty() : Arrays.stream(labels);
+                })
+                .filter(StringUtils::hasText)
+                .filter(labelName -> !configuredLabelNames.contains(labelName))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        
+        List<LabelGroup.Label> result = new ArrayList<>(configuredLabels);
+        for (String labelName : usedLabelNames) {
+            LabelGroup.Label label = new LabelGroup.Label();
+            label.setName(labelName);
+            label.setColor("");
+            result.add(label);
+        }
+        
+        return result;
     }
 
     private String buildSnapshotApiCoverageSummaryText(List<SnapshotVo> snapshots) {

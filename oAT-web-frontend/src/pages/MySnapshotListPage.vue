@@ -22,12 +22,12 @@
             <span>{{ labelFilterText }}</span>
           </summary>
           <div class="filter-popover">
-            <label v-for="label in payload.snapshotLabels" :key="label.name" class="label-option">
+            <label v-for="label in availableLabels" :key="label.name" class="label-option">
               <input v-model="labelDrafts" type="checkbox" :value="label.name" />
               <span class="label-dot" :style="labelDotStyle(label.color)"></span>
               <span>{{ label.name }}</span>
             </label>
-            <div v-if="!payload.snapshotLabels.length" class="filter-empty">暂无标签</div>
+            <div v-if="!availableLabels.length" class="filter-empty">暂无标签</div>
           </div>
         </details>
         <label class="search-field">
@@ -209,6 +209,26 @@ const usecasePickerSnapshotId = ref('')
 const usecasePickerSelectedIds = ref<string[]>([])
 const activeRowMenuId = ref('')
 const rowMenuStyle = ref<Record<string, string>>({})
+const availableLabels = computed(() => {
+  if (!payload.value) return []
+  const labelsFromConfig = payload.value.snapshotLabels || []
+  const labelsFromSnapshots = new Map<string, string>()
+  
+  payload.value.snapshots.forEach((snapshot) => {
+    snapshot.labels?.forEach((labelName) => {
+      if (!labelsFromSnapshots.has(labelName) && !labelsFromConfig.find((l) => l.name === labelName)) {
+        labelsFromSnapshots.set(labelName, '')
+      }
+    })
+  })
+  
+  const merged = [...labelsFromConfig]
+  labelsFromSnapshots.forEach((color, name) => {
+    merged.push({ name, color })
+  })
+  
+  return merged
+})
 const labelFilterText = computed(() => (labelDrafts.value.length ? `标签过滤 ${labelDrafts.value.length}` : '标签过滤'))
 const hasActiveFilters = computed(
   () => Boolean(keywordDraft.value.trim()) || sortDraft.value !== 'updateTime' || labelDrafts.value.length > 0,
