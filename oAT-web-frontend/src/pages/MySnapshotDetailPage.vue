@@ -218,13 +218,15 @@ async function load() {
   error.value = ''
   try {
     await projectStore.loadMySnapshotDetail(projectId.value, snapshotId.value)
-    graphPreviewLoading.value = true
-    projectStore.loadMySnapshotGraph(projectId.value, snapshotId.value)
-      .catch(() => undefined)
-      .finally(() => {
-        graphPreviewLoading.value = false
-      })
     syncForm()
+    graphPreviewLoading.value = true
+    try {
+      await projectStore.loadMySnapshotGraph(projectId.value, snapshotId.value)
+    } catch (graphErr) {
+      console.error('Failed to load graph:', graphErr)
+    } finally {
+      graphPreviewLoading.value = false
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载我的快照详情失败'
   } finally {
@@ -336,7 +338,14 @@ onMounted(load)
 }
 
 .page-header h1,
-.card-title h2,
+.card-title h2 {
+  margin: 0;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+  font-size: 15px;
+  font-weight: 800;
+}
+
 .subsection-title h3 {
   margin: 0;
   color: #0f172a;
@@ -344,8 +353,10 @@ onMounted(load)
 }
 
 .page-header h1 {
-  font-size: clamp(28px, 4vw, 42px);
-  line-height: 1.08;
+  font-size: clamp(20px, 3vw, 26px);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .eyebrow {
@@ -513,7 +524,8 @@ onMounted(load)
 .meta-item strong {
   display: block;
   margin-top: 6px;
-  font-size: 20px;
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: -0.02em;
   color: #0f172a;
   overflow-wrap: anywhere;
@@ -539,7 +551,19 @@ onMounted(load)
 
 .panel-heading {
   align-items: flex-start;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--oat-border);
   margin-bottom: 14px;
+}
+
+.panel-heading h2 {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.panel-heading p {
+  font-size: 13px;
 }
 
 .form-grid {

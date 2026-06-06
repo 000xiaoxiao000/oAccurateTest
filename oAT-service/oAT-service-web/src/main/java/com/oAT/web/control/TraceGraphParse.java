@@ -60,7 +60,15 @@ public class TraceGraphParse {
                 node.add(m.getValue());
                 node.setIp(m.getValue().getAddressIp());
                 if (m.getValue() instanceof HttpTraceNode) {
-                    node.setLog(((HttpTraceNode) m.getValue()).getLog());
+                    String newLog = ((HttpTraceNode) m.getValue()).getLog();
+                    if (newLog != null && !newLog.isEmpty()) {
+                        String existingLog = node.getLog();
+                        if (existingLog == null || existingLog.isEmpty()) {
+                            node.setLog(newLog);
+                        } else if (!existingLog.contains(newLog)) {
+                            node.setLog(existingLog + newLog);
+                        }
+                    }
                 }
             }
             // 基于远程应用构建节点

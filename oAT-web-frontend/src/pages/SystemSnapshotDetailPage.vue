@@ -298,12 +298,6 @@ async function load() {
   error.value = ''
   try {
     await projectStore.loadSystemSnapshotDetail(projectId.value, appId.value, snapshotId.value)
-    graphPreviewLoading.value = true
-    projectStore.loadSystemSnapshotGraph(projectId.value, appId.value, snapshotId.value)
-      .catch(() => undefined)
-      .finally(() => {
-        graphPreviewLoading.value = false
-      })
     if (payload.value) {
       form.value = {
         title: payload.value.snapshot.title || '',
@@ -311,6 +305,14 @@ async function load() {
         labels: [...payload.value.selectedLabelNames],
         principals: [...payload.value.selectedPrincipalIds],
       }
+    }
+    graphPreviewLoading.value = true
+    try {
+      await projectStore.loadSystemSnapshotGraph(projectId.value, appId.value, snapshotId.value)
+    } catch (graphErr) {
+      console.error('Failed to load graph:', graphErr)
+    } finally {
+      graphPreviewLoading.value = false
     }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载系统快照详情失败'

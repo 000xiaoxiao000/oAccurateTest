@@ -139,42 +139,50 @@
           </div>
         </div>
 
-        <div class="toolbar">
-          <input v-model.trim="traceKeyword" class="text-input" type="search" placeholder="搜索 URL / traceId / IP" aria-label="搜索调用链" />
-          <select v-model.number="tracePageSize" class="text-input compact" aria-label="Trace 每页条数">
-            <option :value="20">每页 20 条</option>
-            <option :value="50">每页 50 条</option>
-            <option :value="100">每页 100 条</option>
-          </select>
-          <button class="ghost-button" type="button" @click="clearMonitorFilters">清空过滤</button>
-        </div>
+        <div class="trace-panel-content">
+          <div class="toolbar">
+            <input v-model.trim="traceKeyword" class="text-input" type="search" placeholder="搜索 URL / traceId / IP" aria-label="搜索调用链" />
+            <select v-model.number="tracePageSize" class="text-input compact" aria-label="Trace 每页条数">
+              <option :value="20">每页 20 条</option>
+              <option :value="50">每页 50 条</option>
+              <option :value="100">每页 100 条</option>
+            </select>
+            <button class="ghost-button" type="button" @click="clearMonitorFilters">清空过滤</button>
+          </div>
 
-        <div v-if="traceError" class="status-card error">{{ traceError }}</div>
-        <div v-if="traceLoading && traces.length === 0" class="status-card">正在加载 trace...</div>
-        <div v-else-if="filteredTraces.length === 0" class="status-card">暂无 trace 数据</div>
-        <div v-else class="trace-list">
-          <button
-            v-for="trace in paginatedTraces"
-            :key="trace.traceId"
-            class="trace-item"
-            :class="{ active: selectedTraceId === trace.traceId }"
-            type="button"
-            @click="selectTrace(trace)"
-          >
-            <strong>{{ trace.title || trace.traceId }}</strong>
-            <span>{{ trace.addressIp || '-' }} · {{ trace.clientIp || '-' }}</span>
-            <span class="trace-time">{{ formatTraceDateTime(trace.cacheTime) }}</span>
-            <small>{{ trace.traceId }} · #{{ trace.index }}</small>
-          </button>
+          <div v-if="traceError" class="status-card error">{{ traceError }}</div>
+          <div v-if="traceLoading && traces.length === 0" class="status-card">正在加载 trace...</div>
+          <div v-else-if="filteredTraces.length === 0" class="status-card">暂无 trace 数据</div>
+          <div v-else class="trace-list">
+            <button
+              v-for="trace in paginatedTraces"
+              :key="trace.traceId"
+              class="trace-item"
+              :class="{ active: selectedTraceId === trace.traceId }"
+              type="button"
+              @click="selectTrace(trace)"
+            >
+              <div class="trace-item-header">
+                <strong class="trace-title">{{ trace.title || trace.traceId }}</strong>
+                <span class="trace-time">{{ formatTraceTime(trace.cacheTime) }}</span>
+              </div>
+              <div class="trace-item-meta">
+                <span>{{ trace.addressIp || '-' }}</span>
+                <span>{{ trace.clientIp || '-' }}</span>
+              </div>
+              <small class="trace-item-id" :title="trace.traceId">{{ trace.traceId }}</small>
+            </button>
+          </div>
+
+          <AppPagination
+            v-if="filteredTraces.length > tracePageSize"
+            v-model:page="tracePage"
+            v-model:page-size="tracePageSize"
+            :total="filteredTraces.length"
+            item-name="条 Trace"
+            :page-sizes="[20, 50, 100]"
+          />
         </div>
-        <AppPagination
-          v-if="filteredTraces.length > tracePageSize"
-          v-model:page="tracePage"
-          v-model:page-size="tracePageSize"
-          :total="filteredTraces.length"
-          item-name="条 Trace"
-          :page-sizes="[20, 50, 100]"
-        />
       </section>
 
       <div class="monitor-resizer" @pointerdown="startResize"><span>拖拽调整宽度</span></div>
@@ -183,7 +191,7 @@
         <div class="panel-head">
           <div>
             <h2>{{ graph ? '实时监控详情' : '实时请求示波器' }}</h2>
-            <p>{{ selectedTraceId || oscilloscopeSubtitle }}</p>
+            <p class="panel-subtitle">{{ selectedTraceId || oscilloscopeSubtitle }}</p>
           </div>
           <div class="header-actions">
             <button v-if="graph" class="ghost-button" type="button" @click="showOscilloscope">返回示波器</button>
@@ -220,72 +228,86 @@
           </div>
         </div>
         <template v-else>
-          <div
-            class="graph-board monitor-graph-board"
-            @wheel.prevent="handleGraphWheel"
-            @pointerdown="startGraphPan"
-            @pointermove="moveGraphPan"
-            @pointerup="endGraphPan"
-            @pointerleave="endGraphPan"
-          >
-            <div class="graph-tools">
-              <span>{{ Math.round(graphZoom * 100) }}%</span>
-              <button type="button" @click="fitMonitorGraph">适配</button>
-              <button type="button" @click="zoomGraph(0.15)">放大</button>
-              <button type="button" @click="zoomGraph(-0.15)">缩小</button>
-              <button type="button" @click="resetGraphView">重置</button>
-            </div>
-            <svg class="graph-svg" :viewBox="graphViewBox" preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <marker id="monitorArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
-                  <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
-                </marker>
-              </defs>
-              <g :transform="graphTransform">
-                <path
-                  v-for="edge in edgePositions"
-                  :key="`${edge.from}-${edge.to}-${edge.label}`"
-                  :d="edge.path"
-                  class="graph-edge"
-                  marker-end="url(#monitorArrow)"
-                />
-                <text v-for="edge in edgePositions" :key="`${edge.from}-${edge.to}-label`" :x="edge.mx" :y="edge.my" class="edge-label">
-                  {{ edge.label || edge.type || edge.count }}
-                </text>
-                <g
-                  v-for="node in nodePositions"
-                  :key="node.id"
-                  class="graph-node"
-                  :class="[`node-${node.state || 'normal'}`, { active: selectedNodeId === node.id }]"
-                  @click.stop="selectNode(node.id)"
-                >
-                  <title>{{ graphNodeTooltip(node) }}</title>
-                  <rect :x="node.x" :y="node.y" rx="16" ry="16" :width="graphNodeWidth" :height="graphNodeHeight" />
-                  <circle :cx="node.x + 34" :cy="node.y + 34" r="18" class="node-icon-ring" />
-                  <text :x="node.x + 34" :y="node.y + 41" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
-                  <text :x="node.x + 64" :y="node.y + 30" class="node-title">{{ compactGraphText(node.title || node.id, 20) }}</text>
-                  <text :x="node.x + 64" :y="node.y + 54" class="node-subtitle">{{ compactGraphText(node.subTitle || '-', 24) }}</text>
-                  <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactGraphText(node.tips || node.type || 'unknown', 30) }}</text>
-                </g>
-              </g>
-            </svg>
-          </div>
+          <div class="graph-detail-layout" :class="{ 'detail-mode': activeGraphTab === 'detail' }">
+            <div class="graph-tabs-container">
+              <div class="graph-tabs-header">
+                <button class="graph-tab" :class="{ active: activeGraphTab === 'detail' }" type="button" @click="activeGraphTab = 'detail'">
+                  节点详情
+                </button>
+                <button class="graph-tab" :class="{ active: activeGraphTab === 'snapshot' }" type="button" @click="activeGraphTab = 'snapshot'">
+                  保存状态
+                </button>
+              </div>
 
-          <div class="node-detail-grid">
-            <section class="monitor-detail-panel">
-              <div class="card-title">
-                <h2>节点详情</h2>
+              <div class="graph-tabs-content">
+                <div v-show="activeGraphTab === 'detail'" class="graph-tab-panel">
+                  <div v-if="nodeDetailLoading" class="status-card">正在加载节点详情...</div>
+                  <div v-else-if="nodeDetailError" class="status-card error">{{ nodeDetailError }}</div>
+                  <GraphNodeDetailCard v-else :detail="selectedNodeDetail" empty-text="点击图中节点查看详情" />
+                </div>
+
+                <div v-show="activeGraphTab === 'snapshot'" class="graph-tab-panel">
+                  <p v-if="snapshotNotice" class="snapshot-notice-text notice-success">{{ snapshotNotice }}</p>
+                  <p v-else class="snapshot-notice-text">可将当前 trace 自动保存为系统快照，重复保存会由后端去重。</p>
+                  <div class="snapshot-panel-actions">
+                    <button class="ghost-button small-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog('my')">保存我的快照</button>
+                    <button class="ghost-button small-button" type="button" :disabled="!selectedTraceId || savingSnapshot" @click="openSnapshotDialog('system')">保存系统快照</button>
+                  </div>
+                </div>
               </div>
-              <div v-if="nodeDetailLoading" class="status-card">正在加载节点详情...</div>
-              <div v-else-if="nodeDetailError" class="status-card error">{{ nodeDetailError }}</div>
-              <GraphNodeDetailCard v-else :detail="selectedNodeDetail" empty-text="点击图中节点查看详情" />
-            </section>
-            <section class="monitor-detail-panel snapshot-status-panel">
-              <div class="card-title">
-                <h2>保存状态</h2>
+            </div>
+
+            <div
+              v-show="activeGraphTab !== 'detail'"
+              class="graph-board monitor-graph-board"
+              @wheel.prevent="handleGraphWheel"
+              @pointerdown="startGraphPan"
+              @pointermove="moveGraphPan"
+              @pointerup="endGraphPan"
+              @pointerleave="endGraphPan"
+            >
+              <div class="graph-tools">
+                <span>{{ Math.round(graphZoom * 100) }}%</span>
+                <button type="button" @click="fitMonitorGraph">适配</button>
+                <button type="button" @click="zoomGraph(0.15)">放大</button>
+                <button type="button" @click="zoomGraph(-0.15)">缩小</button>
+                <button type="button" @click="resetGraphView">重置</button>
               </div>
-              <p class="snapshot-notice-text">{{ snapshotNotice || '可将当前 trace 自动保存为系统快照，重复保存会由后端去重。' }}</p>
-            </section>
+              <svg class="graph-svg" :viewBox="graphViewBox" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <marker id="monitorArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                    <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8" />
+                  </marker>
+                </defs>
+                <g :transform="graphTransform">
+                  <path
+                    v-for="edge in edgePositions"
+                    :key="`${edge.from}-${edge.to}-${edge.label}`"
+                    :d="edge.path"
+                    class="graph-edge"
+                    marker-end="url(#monitorArrow)"
+                  />
+                  <text v-for="edge in edgePositions" :key="`${edge.from}-${edge.to}-label`" :x="edge.mx" :y="edge.my" class="edge-label">
+                    {{ edge.label || edge.type || edge.count }}
+                  </text>
+                  <g
+                    v-for="node in nodePositions"
+                    :key="node.id"
+                    class="graph-node"
+                    :class="[`node-${node.state || 'normal'}`, { active: selectedNodeId === node.id }]"
+                    @click.stop="selectNode(node.id)"
+                  >
+                    <title>{{ graphNodeTooltip(node) }}</title>
+                    <rect :x="node.x" :y="node.y" rx="16" ry="16" :width="graphNodeWidth" :height="graphNodeHeight" />
+                    <circle :cx="node.x + 34" :cy="node.y + 34" r="18" class="node-icon-ring" />
+                    <text :x="node.x + 34" :y="node.y + 41" class="node-icon">{{ iconGlyph(node.icon || node.type) }}</text>
+                    <text :x="node.x + 64" :y="node.y + 30" class="node-title">{{ compactGraphText(node.title || node.id, 20) }}</text>
+                    <text :x="node.x + 64" :y="node.y + 54" class="node-subtitle">{{ compactGraphText(node.subTitle || '-', 24) }}</text>
+                    <text :x="node.x + 16" :y="node.y + 82" class="node-type">{{ compactGraphText(node.tips || node.type || 'unknown', 30) }}</text>
+                  </g>
+                </g>
+              </svg>
+            </div>
           </div>
         </template>
       </section>
@@ -439,7 +461,8 @@ const autoSaveMySnapshot = ref(false)
 const autoSaveSystemSnapshot = ref(false)
 const refreshSeconds = ref(5)
 const scopeMode = ref<'aggregate' | 'single' | 'lanes'>('aggregate')
-const monitorListWidth = ref(340)
+const activeGraphTab = ref<'detail' | 'snapshot'>('detail')
+const monitorListWidth = ref(280)
 const tracePage = ref(1)
 const tracePageSize = ref(50)
 const probesExpanded = ref(false)
@@ -1789,11 +1812,15 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 0;
   align-items: stretch;
-  min-height: max(660px, calc(100vh - 320px));
+  height: calc(100vh - 380px);
+  min-height: 600px;
 }
 
 .monitor-grid > .panel {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .monitor-resizer {
@@ -1825,11 +1852,20 @@ onBeforeUnmount(() => {
 
 .trace-panel,
 .graph-panel {
-  min-height: max(620px, calc(100vh - 360px));
+  overflow: hidden;
+}
+
+.trace-panel-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .toolbar {
-  margin: 12px 0;
+  margin: 8px 0;
+  flex-shrink: 0;
 }
 
 .trace-panel .toolbar {
@@ -1846,6 +1882,13 @@ onBeforeUnmount(() => {
 .trace-panel .toolbar .ghost-button {
   min-width: 96px;
   white-space: nowrap;
+}
+
+.panel-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 360px;
 }
 
 .trace-head {
@@ -1895,8 +1938,11 @@ onBeforeUnmount(() => {
 
 .trace-list {
   display: grid;
-  gap: 8px;
-  max-height: max(420px, calc(100vh - 520px));
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-width: thin;
@@ -1905,63 +1951,113 @@ onBeforeUnmount(() => {
 
 .trace-item {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   width: 100%;
-  padding: 12px 16px;
-  border-radius: 16px;
+  padding: 10px 14px;
+  border-radius: 14px;
   text-align: left;
   cursor: pointer;
+  white-space: normal;
+  min-height: 118px;
   box-shadow: none;
   transition: all 150ms ease;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .96));
 }
 
 .trace-item:hover {
   box-shadow: 0 4px 12px rgba(15, 23, 42, .08);
   transform: translateX(2px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 1), rgba(241, 245, 249, .98));
 }
 
-.trace-item strong {
+.trace-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.trace-title {
+  display: -webkit-box;
   overflow-wrap: anywhere;
-  line-height: 1.4;
-  font-size: 14px;
+  word-break: break-word;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.45;
+  font-size: 13px;
   font-weight: 600;
   color: #0f172a;
+  flex: 1;
+  min-width: 0;
 }
 
-.trace-item span,
-.trace-item small {
+.trace-item-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.trace-item-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(241, 245, 249, .75);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
 }
 
-.trace-item small {
-  color: #94a3b8;
-  font-family: 'SF Mono', 'Fira Code', monospace;
-  font-size: 11px;
+.trace-item-id {
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, .9);
+  border: 1px solid rgba(226, 232, 240, .8);
+  color: #64748b;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .trace-time {
   color: #0f766e;
-  font-size: 12px;
-  font-weight: 600;
-  background: rgba(15, 118, 110, .06);
-  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(15, 118, 110, .1);
+  padding: 3px 7px;
   border-radius: 8px;
-  width: fit-content;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: -.01em;
 }
 
 .trace-item.active {
   border-color: #0f766e;
-  background: linear-gradient(135deg, rgba(236, 253, 245, .9), rgba(240, 253, 250, .9));
-  box-shadow: 0 0 0 1px #0f766e, 0 4px 12px rgba(15, 23, 42, .08);
+  background: linear-gradient(135deg, rgba(236, 253, 245, .95), rgba(240, 253, 250, .92));
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, .2), 0 4px 12px rgba(15, 23, 42, .08);
   transform: translateX(2px);
 }
 
 .oscilloscope-card {
-  display: grid;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .oscilloscope-header,
@@ -1994,10 +2090,11 @@ onBeforeUnmount(() => {
 
 .wave-board {
   position: relative;
-  height: clamp(360px, 44vh, 520px);
+  flex: 1;
+  min-height: 280px;
   overflow: hidden;
   border: 1px solid rgba(15, 23, 42, .1);
-  border-radius: 20px;
+  border-radius: 16px;
   background:
     linear-gradient(rgba(20, 184, 166, .08) 1px, transparent 1px),
     linear-gradient(90deg, rgba(20, 184, 166, .08) 1px, transparent 1px),
@@ -2122,8 +2219,10 @@ onBeforeUnmount(() => {
 
 .graph-board {
   position: relative;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  border-radius: 22px;
+  border-radius: 16px;
   background:
     radial-gradient(circle at 24px 24px, rgba(15, 118, 110, .08) 1.5px, transparent 1.5px),
     linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
@@ -2141,13 +2240,13 @@ onBeforeUnmount(() => {
 
 .graph-tools {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px;
+  gap: 5px;
+  padding: 6px;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
@@ -2156,12 +2255,12 @@ onBeforeUnmount(() => {
 }
 
 .graph-tools span {
-  min-width: 44px;
+  min-width: 42px;
   border-radius: 999px;
-  padding: 6px 8px;
+  padding: 5px 7px;
   background: #0f172a;
   color: #fff;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   text-align: center;
   white-space: nowrap;
@@ -2170,10 +2269,10 @@ onBeforeUnmount(() => {
 .graph-tools button {
   border: none;
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 5px 9px;
   background: #eef7f7;
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   cursor: pointer;
   transition: transform .12s ease, background .12s ease, color .12s ease, box-shadow .12s ease;
@@ -2193,13 +2292,15 @@ onBeforeUnmount(() => {
 
 .graph-svg {
   width: 100%;
-  min-height: min(640px, calc(100vh - 260px));
-  height: min(640px, calc(100vh - 260px));
+  height: 100%;
   display: block;
 }
 
 .monitor-graph-board {
-  min-height: min(640px, calc(100vh - 260px));
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 360px;
 }
 
 .graph-edge {
@@ -2275,48 +2376,115 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 
-.node-detail-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, .4fr);
-  gap: 20px;
-  margin-top: 16px;
-}
-
-.monitor-detail-panel {
-  min-width: 0;
-  padding: 16px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, .08);
-}
-
-.card-title {
+.graph-detail-layout {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 10px;
 }
 
-.card-title h2 {
-  margin: 0;
-  font-size: 16px;
+.graph-detail-layout.detail-mode {
+  gap: 0;
+}
+
+.graph-tabs-container {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, .06);
+  overflow: hidden;
+  max-height: 55%;
+  overflow-y: auto;
+}
+
+.graph-detail-layout.detail-mode .graph-tabs-container {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.graph-tabs-header {
+  display: flex;
+  gap: 2px;
+  padding: 6px 6px 0;
+  border-bottom: 1px solid rgba(15, 23, 42, .07);
+  background: rgba(248, 250, 252, .8);
+}
+
+.graph-tab {
+  position: relative;
+  border: none;
+  border-radius: 10px 10px 0 0;
+  padding: 8px 18px;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+  white-space: nowrap;
 }
 
-.snapshot-status-panel {
-  display: grid;
-  gap: 8px;
-  align-content: start;
+.graph-tab:hover {
+  color: #0f766e;
+  background: rgba(15, 118, 110, .06);
+}
+
+.graph-tab.active {
+  color: #0f766e;
+  background: #ffffff;
+  box-shadow: 0 -1px 0 0 #ffffff, inset 0 0 0 1px rgba(15, 118, 110, .18);
+}
+
+.graph-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #0f766e;
+  border-radius: 2px 2px 0 0;
+}
+
+.graph-tabs-content {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.graph-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
 }
 
 .snapshot-notice-text {
   margin: 0;
   color: #64748b;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.6;
+}
+
+.notice-success {
+  color: #0f766e;
+  font-weight: 500;
+  background: rgba(15, 118, 110, .06);
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.snapshot-panel-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .modal-backdrop {
@@ -2494,10 +2662,14 @@ onBeforeUnmount(() => {
 @media (max-width: 980px) {
   .overview-grid,
   .probe-dashboard-card,
-  .monitor-grid,
-  .node-detail-grid,
   .snapshot-form-grid {
     grid-template-columns: 1fr !important;
+  }
+
+  .monitor-grid {
+    grid-template-columns: 1fr !important;
+    height: auto;
+    min-height: unset;
   }
 
   .monitor-resizer {
@@ -2521,16 +2693,33 @@ onBeforeUnmount(() => {
     flex-direction: column;
   }
   
-  .monitor-compact-header {
-    padding: 12px 16px;
-  }
-  
   .overview-card {
     padding: 8px 12px;
   }
   
-  .trace-item {
-    padding: 8px 12px;
+  .trace-panel,
+  .graph-panel {
+    height: auto;
+    min-height: 400px;
+  }
+
+  .trace-list {
+    max-height: 360px;
+  }
+
+  .graph-detail-layout {
+    flex-direction: column;
+  }
+
+  .graph-side-col {
+    width: 100%;
+  }
+
+  .monitor-graph-board,
+  .graph-board {
+    min-height: 320px;
+    height: 320px;
+    flex: none;
   }
 }
 

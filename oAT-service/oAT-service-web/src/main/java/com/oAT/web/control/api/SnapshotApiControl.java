@@ -1289,7 +1289,6 @@ public class SnapshotApiControl {
             applicationNode.getRedisNodes().forEach(node -> payload.getRedisCommands().add(toRedisCommandSummary(node)));
             applicationNode.getErrors().forEach(error -> payload.getErrors().add(toErrorSummary(error)));
             if (StringUtils.hasText(applicationNode.getLog())) {
-                payload.setLogPreview(limitText(applicationNode.getLog(), 800));
                 GraphNodeDetailSection log = new GraphNodeDetailSection("系统日志");
                 log.setKind("log");
                 log.setContent(limitText(applicationNode.getLog(), 10000));
