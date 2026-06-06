@@ -809,6 +809,7 @@ onMounted(() => {
 .cell-name-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
@@ -819,6 +820,8 @@ onMounted(() => {
   white-space: nowrap;
   flex: 1;
   min-width: 0;
+  direction: rtl;
+  text-align: left;
 }
 
 .cell-name-row .change-badge {
@@ -827,6 +830,8 @@ onMounted(() => {
 
 .class-name {
   vertical-align: middle;
+  direction: ltr;
+  unicode-bidi: embed;
 }
 
 .tree-table td {
