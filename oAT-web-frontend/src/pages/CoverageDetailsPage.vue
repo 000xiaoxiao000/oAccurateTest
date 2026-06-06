@@ -109,8 +109,8 @@
                   <span
                     v-if="item.hasCodeChanges"
                     class="change-badge"
-                    title="该类在本版本多个 Commit 间覆盖率结果不完全一致。当前报告已汇总所有 Commit，源码展示使用最新 Commit，建议优先复核。"
-                  >覆盖有差异</span>
+                    title="该类在不同 Commit 间覆盖率数据有变化。当前报告汇总了所有 Commit 数据，源码着色使用最新 Commit，建议重点关注此类。"
+                  >跨 Commit 差异</span>
                 </td>
                 <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
                 <td class="coverage-rate" :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
@@ -178,8 +178,8 @@
                   <span
                     v-if="row.type === 'class' && row.hasCodeChanges"
                     class="change-badge"
-                    title="该类在本版本多个 Commit 间覆盖率结果不完全一致。当前报告已汇总所有 Commit，源码展示使用最新 Commit，建议优先复核。"
-                  >覆盖有差异</span>
+                    title="该类在不同 Commit 间覆盖率数据有变化。当前报告汇总了所有 Commit 数据，源码着色使用最新 Commit，建议重点关注此类。"
+                  >跨 Commit 差异</span>
                   <RouterLink v-if="row.type === 'class'" class="code-link" :to="buildCodeRoute(row.fullName || row.name)">代码</RouterLink>
                 </td>
                 <td>{{ row.coveredMethods }} / {{ row.totalMethods }}</td>

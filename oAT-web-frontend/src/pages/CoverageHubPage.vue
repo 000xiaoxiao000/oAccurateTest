@@ -35,8 +35,8 @@
           </div>
           <div class="panel-actions">
             <span class="count-badge">{{ filteredVersions.length }} / {{ visibleVersions.length }}</span>
-            <button class="ghost-button small-button" type="button" :disabled="refreshingReports || !selectedAppId" @click="refreshReports">
-              {{ refreshingReports ? '刷新中...' : '刷新报告' }}
+            <button class="ghost-button small-button" type="button" :disabled="refreshingVersions || !selectedAppId" @click="refreshVersionsList">
+              {{ refreshingVersions ? '刷新中...' : '刷新版本' }}
             </button>
           </div>
         </div>
@@ -316,6 +316,7 @@ const reportPage = ref(1)
 const reportPageSize = ref(6)
 const deletingReportId = ref('')
 const refreshingReports = ref(false)
+const refreshingVersions = ref(false)
 const generatingVersionKey = ref('')
 const generationNotice = ref('')
 const generationFailed = ref(false)
@@ -640,6 +641,19 @@ async function refreshCenter(appId: string) {
   centers.value = {
     ...centers.value,
     [appId]: await fetchVersionCenter(projectId.value, appId),
+  }
+}
+
+async function refreshVersionsList() {
+  if (!selectedAppId.value) return
+  refreshingVersions.value = true
+  error.value = ''
+  try {
+    await refreshCenter(selectedAppId.value)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '刷新版本列表失败'
+  } finally {
+    refreshingVersions.value = false
   }
 }
 

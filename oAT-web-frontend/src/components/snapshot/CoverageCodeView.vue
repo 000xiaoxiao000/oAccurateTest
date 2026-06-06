@@ -63,8 +63,8 @@
                       <span
                         v-if="item.method.hasCodeChanges"
                         class="method-change-badge"
-                        title="该方法在本版本多个 Commit 间覆盖率结果不完全一致。当前方法覆盖率已汇总所有 Commit，源码展示使用最新 Commit。"
-                      >覆盖有差异</span>
+                        title="该方法在不同 Commit 间覆盖率数据有变化。当前报告汇总了所有 Commit 数据，源码着色使用最新 Commit，建议重点关注此方法。"
+                      >跨 Commit 差异</span>
                       <span class="complexity-chip">复杂度 {{ item.method.complexity }}</span>
                     </div>
                     <div class="method-subline">

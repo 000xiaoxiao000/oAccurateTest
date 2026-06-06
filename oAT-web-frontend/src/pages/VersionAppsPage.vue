@@ -24,7 +24,7 @@
           </div>
           <div class="action-row">
             <RouterLink class="table-link" :to="`/p/${projectId}/apps/${app.id}/versions`">版本列表</RouterLink>
-            <RouterLink class="table-link" :to="`/p/${projectId}/apps/${app.id}/compare`">比对与报告</RouterLink>
+            <RouterLink class="table-link" :to="`/p/${projectId}/version/apps`">比对与报告</RouterLink>
           </div>
         </div>
       </article>

@@ -31,7 +31,7 @@
     <div v-if="backfillResult" class="status-card success">{{ backfillResult }}</div>
     <section class="panel">
       <div class="panel-head">
-        <h2>版本条目</h2>
+        <h2>版本列表</h2>
         <span>{{ filteredVersions.length }} / {{ payload.versions.length }}</span>
       </div>
       <div class="list-toolbar" aria-label="版本筛选">
@@ -77,12 +77,47 @@
               </td>
               <td>
                 <div class="commit-block">
-                  <span class="branch-name">{{ item.repoBranch || '-' }}</span>
-                  <span class="commit-id">{{ item.repoCommitId || '-' }}</span>
+                  <div v-if="item.repoBranch" class="copyable-item">
+                    <span class="branch-name">{{ item.repoBranch }}</span>
+                    <button
+                      class="copy-text-btn"
+                      type="button"
+                      :aria-label="`复制分支名 ${item.repoBranch}`"
+                      @click="copyText(item.repoBranch, item.id + '-branch')"
+                    >
+                      {{ copiedKey === item.id + '-branch' ? '已复制' : '复制' }}
+                    </button>
+                  </div>
+                  <span v-else class="branch-name muted">-</span>
+                  <div v-if="item.repoCommitId" class="copyable-item">
+                    <code class="commit-id">{{ item.repoCommitId }}</code>
+                    <button
+                      class="copy-text-btn"
+                      type="button"
+                      :aria-label="`复制 Commit ID ${item.repoCommitId}`"
+                      @click="copyText(item.repoCommitId, item.id + '-commit')"
+                    >
+                      {{ copiedKey === item.id + '-commit' ? '已复制' : '复制' }}
+                    </button>
+                  </div>
+                  <span v-else class="commit-placeholder">-</span>
                 </div>
               </td>
               <td>
-                <span class="file-name">{{ item.programName || item.programFile || '-' }}</span>
+                <div class="file-block">
+                  <div v-if="item.programFile" class="copyable-item">
+                    <code class="file-name">{{ item.programName || item.programFile }}</code>
+                    <button
+                      class="copy-text-btn"
+                      type="button"
+                      :aria-label="`复制文件名 ${item.programFile}`"
+                      @click="copyText(item.programFile, item.id + '-file')"
+                    >
+                      {{ copiedKey === item.id + '-file' ? '已复制' : '复制' }}
+                    </button>
+                  </div>
+                  <span v-else class="file-placeholder">-</span>
+                </div>
               </td>
               <td>{{ item.createTimeRelativeText || item.createTimeText || '-' }}</td>
               <td>
@@ -143,6 +178,14 @@ const keyword = ref('')
 const statusFilter = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
+const copiedKey = ref('')
+
+async function copyText(text: string | undefined, key = '') {
+  if (!text) return
+  await navigator.clipboard.writeText(text)
+  copiedKey.value = key
+  setTimeout(() => { copiedKey.value = '' }, 1500)
+}
 
 const filteredVersions = computed(() => {
   const versions = payload.value?.versions || []
@@ -412,11 +455,11 @@ onMounted(load)
 }
 
 .commit-col {
-  width: 34%;
+  width: 28%;
 }
 
 .file-col {
-  width: 30%;
+  width: 26%;
 }
 
 .time-col {
@@ -460,26 +503,111 @@ onMounted(load)
 
 .commit-block {
   display: grid;
-  gap: 6px;
-  min-width: 0;
+  gap: 8px;
+}
+
+.copyable-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copyable-item .copy-text-btn {
+  opacity: 0;
+  transition: opacity .14s ease;
+}
+
+.copyable-item:hover .copy-text-btn {
+  opacity: 1;
+}
+
+.copy-text-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 6px;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .14s ease, color .14s ease, border-color .14s ease;
+}
+
+.copy-text-btn:hover {
+  background: rgba(15, 118, 110, 0.06);
+  border-color: rgba(15, 118, 110, 0.22);
+  color: #0f766e;
+}
+
+.copy-text-btn:active {
+  background: rgba(15, 118, 110, 0.12);
 }
 
 .branch-name {
+  flex: 1;
+  min-width: 0;
   font-weight: 700;
   color: #334155;
+  word-break: break-all;
+  line-height: 1.6;
 }
 
-.commit-id,
-.file-name {
-  display: block;
-  color: #1e293b;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
+.branch-name.muted {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 400;
 }
 
 .commit-id {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  color: #1e293b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   font-size: 13px;
+  line-height: 1.6;
+  word-break: break-all;
+  white-space: normal;
+  background: rgba(241, 245, 249, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.commit-placeholder {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.file-block {
+  display: block;
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  color: #1e293b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-all;
+  white-space: normal;
+  background: rgba(241, 245, 249, 0.8);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.file-placeholder {
+  color: #94a3b8;
+  font-style: italic;
 }
 
 .source-pill {
