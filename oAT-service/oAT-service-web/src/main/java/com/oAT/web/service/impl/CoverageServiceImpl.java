@@ -25,11 +25,10 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -48,15 +47,6 @@ import java.util.zip.ZipFile;
 
 import com.oAT.web.service.ResourceService;
 import com.oAT.web.esDao.entity.MethodCoverageExportVo;
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.NativeSearchQuery;
-import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
-import org.springframework.data.elasticsearch.core.query.SourceFilter;
-import org.springframework.data.elasticsearch.core.query.FetchSourceFilter;
 
 @Service
 public class CoverageServiceImpl implements CoverageService, InitializingBean, StandardDate {
@@ -88,9 +78,6 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
     @Autowired
     private SnapshotCommitMappingRepository snapshotCommitMappingRepository;
-
-    @Autowired
-    private ElasticsearchOperations elasticsearchOperations;
 
     private final Set<String> sourceClassIndexEnsuredReports = ConcurrentHashMap.newKeySet();
     private final Set<String> runningReportGenerationKeys = ConcurrentHashMap.newKeySet();
@@ -2955,42 +2942,9 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         if (reportId == null || reportId.isEmpty()) {
             return new org.springframework.data.domain.PageImpl<>(java.util.Collections.emptyList(), pageable, 0);
         }
-
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery()
-                .must(QueryBuilders.termQuery("reportId", reportId));
-
-        if (className != null && !className.isEmpty()) {
-            boolQuery.must(QueryBuilders.wildcardQuery("className", "*" + className + "*"));
-        }
-
-        if (methodName != null && !methodName.isEmpty()) {
-            boolQuery.must(QueryBuilders.wildcardQuery("methods.methodName", "*" + methodName + "*"));
-        }
-
-        addRangeQuery(boolQuery, "lineRate", minLineRate, maxLineRate);
-        addRangeQuery(boolQuery, "branchRate", minBranchRate, maxBranchRate);
-        addRangeQuery(boolQuery, "methodRate", minMethodRate, maxMethodRate);
-        addRangeQuery(boolQuery, "totalComplexity", minComplexity, maxComplexity);
-
-        NativeSearchQuery query = new NativeSearchQueryBuilder()
-                .withQuery(boolQuery)
-                .withPageable(pageable)
-                .build();
-
-        SearchHits<ClassCoverageIndex> searchHits = elasticsearchOperations.search(query, ClassCoverageIndex.class);
-        List<ClassCoverageIndex> content = searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
-                .collect(Collectors.toList());
-        return new org.springframework.data.domain.PageImpl<>(content, pageable, searchHits.getTotalHits());
-    }
-
-    private void addRangeQuery(BoolQueryBuilder boolQuery, String field, Number min, Number max) {
-        if (min != null || max != null) {
-            org.elasticsearch.index.query.RangeQueryBuilder rangeQuery = QueryBuilders.rangeQuery(field);
-            if (min != null) rangeQuery.gte(min);
-            if (max != null) rangeQuery.lte(max);
-            boolQuery.filter(rangeQuery);
-        }
+        return classCoverageRepository.findByReportIdFiltered(reportId, className, methodName,
+                minLineRate, maxLineRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate,
+                minComplexity, maxComplexity, pageable);
     }
 
     @Override
@@ -3003,132 +2957,72 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             return java.util.Collections.emptyList();
         }
 
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery()
-                .must(QueryBuilders.termQuery("reportId", reportId));
-
-        if (classNameSearch != null && !classNameSearch.isEmpty()) {
-            boolQuery.must(QueryBuilders.wildcardQuery("className", "*" + classNameSearch + "*"));
-        }
-
-        if (methodNameSearch != null && !methodNameSearch.isEmpty()) {
-            boolQuery.must(QueryBuilders.wildcardQuery("methods.methodName", "*" + methodNameSearch + "*"));
-        }
-
-        addRangeQuery(boolQuery, "lineRate", minRate, maxRate);
-        addRangeQuery(boolQuery, "branchRate", minBranchRate, maxBranchRate);
-        addRangeQuery(boolQuery, "methodRate", minMethodRate, maxMethodRate);
-        addRangeQuery(boolQuery, "totalComplexity", minComplexity, maxComplexity);
-
         String normalizedParent = StringUtils.hasText(parentPackage) ? parentPackage.trim() : "";
         String prefix = normalizedParent.isEmpty() ? "" : normalizedParent + ".";
-        if (!prefix.isEmpty()) {
-            // 按层级前缀过滤，只扫描当前包的后代类，避免每次懒加载都扫全量报告。
-            boolQuery.filter(QueryBuilders.prefixQuery("className", prefix));
+        List<ClassCoverageIndex> classes = classCoverageRepository.findTreeCandidates(reportId, classNameSearch, methodNameSearch,
+                minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate,
+                minComplexity, maxComplexity, prefix);
+
+        Map<String, CoverageTreeNode> nodesMap = new HashMap<>();
+        Set<String> exactClassNames = classes.stream()
+                .map(ClassCoverageIndex::getClassName)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        for (ClassCoverageIndex cc : classes) {
+            String classFullName = cc.getClassName();
+            if (!StringUtils.hasText(classFullName) || !classFullName.startsWith(prefix)) {
+                continue;
+            }
+
+            String remaining = classFullName.substring(prefix.length());
+            TreeNodeIdentity identity = resolveImmediateTreeNode(prefix, remaining, classFullName, exactClassNames);
+
+            CoverageTreeNode node = nodesMap.get(identity.fullName);
+            if (node == null) {
+                node = new CoverageTreeNode();
+                node.setFullName(identity.fullName);
+                node.setName(identity.nodeName);
+                node.setType(identity.type);
+                node.setParentId(normalizedParent);
+                node.setId(reportId + ":" + identity.fullName);
+                nodesMap.put(identity.fullName, node);
+            }
+
+            boolean hasChildren = classFullName.startsWith(identity.fullName + ".");
+            if (hasChildren) {
+                node.setHasChildren(true);
+            }
+
+            boolean aggregateStats = "package".equals(identity.type)
+                    || classFullName.equals(identity.fullName)
+                    || !exactClassNames.contains(identity.fullName);
+            if (aggregateStats) {
+                node.setTotalMethods(node.getTotalMethods() + cc.getTotalMethods());
+                node.setCoveredMethods(node.getCoveredMethods() + cc.getCoveredMethods());
+                node.setTotalBranches(node.getTotalBranches() + cc.getTotalBranches());
+                node.setCoveredBranches(node.getCoveredBranches() + cc.getCoveredBranches());
+                node.setTotalBranchTargets(node.getTotalBranchTargets() + cc.getTotalBranchTargets());
+                node.setCoveredBranchTargets(node.getCoveredBranchTargets() + cc.getCoveredBranchTargets());
+                node.setTotalLines(node.getTotalLines() + cc.getTotalLines());
+                node.setCoveredLines(node.getCoveredLines() + cc.getCoveredLines());
+                node.setTotalComplexity(node.getTotalComplexity() + cc.getTotalComplexity());
+            }
         }
 
-        SourceFilter sourceFilter = new FetchSourceFilter(null, new String[]{"methods"});
-        Map<String, CoverageTreeNode> nodesMap = new HashMap<>();
-        Set<String> exactClassNames = new HashSet<>();
+        List<CoverageTreeNode> nodes = new ArrayList<>(nodesMap.values());
+        for (CoverageTreeNode node : nodes) {
+            node.setLineRate(rate(node.getCoveredLines(), node.getTotalLines()));
+            node.setBranchRate(rate(node.getCoveredBranchTargets(), node.getTotalBranchTargets()));
+            node.setMethodRate(rate(node.getCoveredMethods(), node.getTotalMethods()));
+        }
+        nodes.sort(Comparator.comparing(CoverageTreeNode::getType)
+                .thenComparing(CoverageTreeNode::getFullName, Comparator.nullsLast(String::compareTo)));
+        return nodes;
+    }
 
-        int page = 0;
-        Page<ClassCoverageIndex> classPage;
-        do {
-            NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
-                    .withQuery(boolQuery)
-                    .withSourceFilter(sourceFilter)
-                    .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE, Sort.by(new Sort.Order(Sort.Direction.ASC, "className"))));
-
-            SearchHits<ClassCoverageIndex> searchHits = elasticsearchOperations.search(queryBuilder.build(), ClassCoverageIndex.class);
-            List<ClassCoverageIndex> content = searchHits.getSearchHits().stream()
-                    .map(SearchHit::getContent)
-                    .collect(Collectors.toList());
-            classPage = new org.springframework.data.domain.PageImpl<>(content, PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE), searchHits.getTotalHits());
-            for (ClassCoverageIndex cc : classPage.getContent()) {
-                String classFullName = cc.getClassName();
-                if (!classFullName.startsWith(prefix)) {
-                    continue;
-                }
-                exactClassNames.add(classFullName);
-            }
-            page++;
-        } while (classPage.hasNext());
-
-        page = 0;
-        do {
-            NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
-                    .withQuery(boolQuery)
-                    .withSourceFilter(sourceFilter)
-                    .withPageable(PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE, Sort.by(new Sort.Order(Sort.Direction.ASC, "className"))));
-
-            SearchHits<ClassCoverageIndex> searchHits2 = elasticsearchOperations.search(queryBuilder.build(), ClassCoverageIndex.class);
-            List<ClassCoverageIndex> content2 = searchHits2.getSearchHits().stream()
-                    .map(SearchHit::getContent)
-                    .collect(Collectors.toList());
-            classPage = new org.springframework.data.domain.PageImpl<>(content2, PageRequest.of(page, TREE_NODE_SCAN_PAGE_SIZE), searchHits2.getTotalHits());
-            for (ClassCoverageIndex cc : classPage.getContent()) {
-                String classFullName = cc.getClassName();
-                if (!classFullName.startsWith(prefix)) {
-                    continue;
-                }
-
-                String remaining = classFullName.substring(prefix.length());
-                TreeNodeIdentity identity = resolveImmediateTreeNode(prefix, remaining, classFullName, exactClassNames);
-
-                CoverageTreeNode node = nodesMap.get(identity.fullName);
-                if (node == null) {
-                    node = new CoverageTreeNode();
-                    node.setFullName(identity.fullName);
-                    node.setName(identity.nodeName);
-                    node.setType(identity.type);
-                    node.setParentId(normalizedParent);
-                    node.setId(reportId + ":" + identity.fullName);
-                    nodesMap.put(identity.fullName, node);
-                }
-
-                boolean hasChildren = classFullName.startsWith(identity.fullName + ".");
-                if (hasChildren) {
-                    node.setHasChildren(true);
-                }
-
-                boolean aggregateStats = "package".equals(identity.type)
-                        || classFullName.equals(identity.fullName)
-                        || !exactClassNames.contains(identity.fullName);
-                if (aggregateStats) {
-                    node.setTotalMethods(node.getTotalMethods() + cc.getTotalMethods());
-                    node.setCoveredMethods(node.getCoveredMethods() + cc.getCoveredMethods());
-                    node.setTotalBranches(node.getTotalBranches() + cc.getTotalBranches());
-                    node.setCoveredBranches(node.getCoveredBranches() + cc.getCoveredBranches());
-                    node.setTotalBranchTargets(node.getTotalBranchTargets() + cc.getTotalBranchTargets());
-                    node.setCoveredBranchTargets(node.getCoveredBranchTargets() + cc.getCoveredBranchTargets());
-                    node.setTotalLines(node.getTotalLines() + cc.getTotalLines());
-                    node.setCoveredLines(node.getCoveredLines() + cc.getCoveredLines());
-                    node.setTotalComplexity(node.getTotalComplexity() + cc.getTotalComplexity());
-                    if (Boolean.TRUE.equals(cc.getHasCodeChanges())) {
-                        node.setHasCodeChanges(true);
-                    }
-                }
-            }
-            page++;
-        } while (classPage.hasNext());
-
-        nodesMap.values().forEach(node -> {
-            if (node.getTotalLines() > 0) node.setLineRate((double) node.getCoveredLines() / node.getTotalLines() * 100);
-            else node.setLineRate(0.0);
-
-            if (node.getTotalBranchTargets() > 0) node.setBranchRate((double) node.getCoveredBranchTargets() / node.getTotalBranchTargets() * 100);
-            else node.setBranchRate(0.0);
-
-            if (node.getTotalMethods() > 0) node.setMethodRate((double) node.getCoveredMethods() / node.getTotalMethods() * 100);
-            else node.setMethodRate(0.0);
-        });
-
-        List<CoverageTreeNode> result = new ArrayList<>(nodesMap.values());
-        result.sort((a, b) -> {
-            if (!a.getType().equals(b.getType())) return "package".equals(a.getType()) ? -1 : 1;
-            return a.getName().compareTo(b.getName());
-        });
-
-        return result;
+    private double rate(long covered, long total) {
+        return total <= 0 ? 0D : (double) covered / total * 100;
     }
 
     private TreeNodeIdentity resolveImmediateTreeNode(String prefix, String remaining, String classFullName, Set<String> exactClassNames) {
@@ -3137,25 +3031,15 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             return new TreeNodeIdentity(classFullName, classFullName, "class");
         }
 
-        int firstTypeSegment = CoverageSourceClassUtil.findFirstTypeSegmentIndex(segments);
-        
-        // 当 remaining 只有一个段时，需要判断该节点是类还是包
-        // 判断标准：该 fullName 是否在 exactClassNames 中精确存在
         if (segments.length == 1) {
             String fullName = prefix + segments[0];
-            
-            // 如果该 fullName 在 ES 中精确存在为类，则是类节点
             if (exactClassNames.contains(fullName)) {
                 String nodeName = CoverageSourceClassUtil.toTreeDisplayName(segments[0], "class");
                 return new TreeNodeIdentity(nodeName, fullName, "class");
-            } else {
-                // 否则是包节点（可能是子目录，如 Workflow）
-                String nodeName = segments[0];
-                return new TreeNodeIdentity(nodeName, fullName, "package");
             }
+            return new TreeNodeIdentity(segments[0], fullName, "package");
         }
 
-        // 多段路径：始终展示第一段为包节点，由下一层懒加载继续展开
         String nodeName = segments[0];
         String fullName = prefix + nodeName;
         return new TreeNodeIdentity(nodeName, fullName, "package");
@@ -3185,11 +3069,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         }
         logger.info("Deleting coverage report: {}", reportId);
 
-        NativeSearchQuery deleteQuery = new NativeSearchQueryBuilder()
-                .withQuery(QueryBuilders.termQuery("reportId", reportId))
-                .build();
-        elasticsearchOperations.delete(deleteQuery, ClassCoverageIndex.class);
-
+        classCoverageRepository.deleteByReportId(reportId);
         coverageReportRepository.deleteById(reportId);
         logger.info("Coverage report and its details deleted successfully: {}", reportId);
     }

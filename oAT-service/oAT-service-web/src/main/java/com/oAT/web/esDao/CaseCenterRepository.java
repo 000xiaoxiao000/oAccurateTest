@@ -1,27 +1,197 @@
 package com.oAT.web.esDao;
 
+import com.oAT.web.common.UtilJson;
 import com.oAT.web.esDao.entity.CaseCenterIndex;
+import com.oAT.web.esDao.entity.Snapshot;
+import com.oAT.web.esDao.entity.Usecase;
+import com.oAT.web.esDao.entity.UsecaseDirectory;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.elasticsearch.repository.ElasticsearchRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
-import java.util.List;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.*;
+import java.util.stream.StreamSupport;
 
-public interface CaseCenterRepository extends ElasticsearchRepository<CaseCenterIndex, String> {
-    /**
-     * 基于项目 ID 与 创建用户ID 查找快照
-     * @param projectId
-     * @param userId
-     * @return
-     */
-    List<CaseCenterIndex> findBySnapshot_ProjectIdAndSnapshot_CreateUser(String projectId, String userId, Pageable pageable);
-    List<CaseCenterIndex> findBySnapshot_AppId(String appId);
-    List<CaseCenterIndex> findBySnapshot_ProjectIdAndSnapshot_CreateUserAndSnapshot_TraceId(String projectId, String userId, String traceId, Pageable pageable);
-    List<CaseCenterIndex> findByUsecase_ProjectIdAndAndUsecase_Directory(String projectId, String directory, Pageable pageable);
-    List<CaseCenterIndex> findByUsecase_ProjectId(String projectId);
-    List<CaseCenterIndex> findByUsecaseIsNotNull();
-    List<CaseCenterIndex> findByUsecase_SnapshotsContaining(String snapshotId);
-    List<CaseCenterIndex> findByUsecase_SystemSnapshotsContaining(String systemSnapshotId);
-    List<CaseCenterIndex> findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(String projectId, String systemSnapshotId);
-    List<CaseCenterIndex> findByDirectory_ProjectIdAndDirectory_ParentId(String projectId, String parentId);
-    List<CaseCenterIndex> findByDirectory_ProjectId(String projectId);
+@Repository
+public class CaseCenterRepository {
+    private final JdbcTemplate jdbcTemplate;
+    private final RowMapper<CaseCenterIndex> rowMapper = this::mapRow;
+
+    public CaseCenterRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    public Optional<CaseCenterIndex> findById(String id) {
+        return queryUnion("id = ?", id).stream().findFirst();
+    }
+
+    public List<CaseCenterIndex> findAllById(Iterable<String> ids) {
+        List<String> idList = StreamSupport.stream(ids.spliterator(), false).filter(StringUtils::hasText).toList();
+        if (idList.isEmpty()) return Collections.emptyList();
+        String placeholders = String.join(",", Collections.nCopies(idList.size(), "?"));
+        return queryUnion("id IN (" + placeholders + ")", idList.toArray());
+    }
+
+    public List<CaseCenterIndex> findBySnapshot_ProjectIdAndSnapshot_CreateUser(String projectId, String userId, Pageable pageable) {
+        return queryPage("snapshot", "project_id = ? AND create_user = ?", pageable, projectId, userId);
+    }
+
+    public List<CaseCenterIndex> findBySnapshot_AppId(String appId) {
+        return query("SELECT 'snapshot' type, id, payload_json, create_time, update_time FROM oat_snapshot WHERE app_id = ? ORDER BY create_time DESC", appId);
+    }
+
+    public List<CaseCenterIndex> findBySnapshot_ProjectIdAndSnapshot_CreateUserAndSnapshot_TraceId(String projectId, String userId, String traceId, Pageable pageable) {
+        return queryPage("snapshot", "project_id = ? AND create_user = ? AND trace_id = ?", pageable, projectId, userId, traceId);
+    }
+
+    public List<CaseCenterIndex> findByUsecase_ProjectIdAndAndUsecase_Directory(String projectId, String directory, Pageable pageable) {
+        return queryPage("usecase", "project_id = ? AND directory_id = ?", pageable, projectId, directory);
+    }
+
+    public List<CaseCenterIndex> findByUsecase_ProjectId(String projectId) {
+        return query("SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE project_id = ? ORDER BY create_time DESC", projectId);
+    }
+
+    public List<CaseCenterIndex> findByUsecaseIsNotNull() {
+        return query("SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase ORDER BY create_time DESC");
+    }
+
+    public List<CaseCenterIndex> findByUsecase_SnapshotsContaining(String snapshotId) {
+        return query("SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE snapshots_json IS NOT NULL AND JSON_CONTAINS(snapshots_json, JSON_QUOTE(?)) ORDER BY create_time DESC", snapshotId);
+    }
+
+    public List<CaseCenterIndex> findByUsecase_SystemSnapshotsContaining(String systemSnapshotId) {
+        return query("SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE system_snapshots_json IS NOT NULL AND JSON_CONTAINS(system_snapshots_json, JSON_QUOTE(?)) ORDER BY create_time DESC", systemSnapshotId);
+    }
+
+    public List<CaseCenterIndex> findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(String projectId, String systemSnapshotId) {
+        return query("SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE project_id = ? AND system_snapshots_json IS NOT NULL AND JSON_CONTAINS(system_snapshots_json, JSON_QUOTE(?)) ORDER BY create_time DESC", projectId, systemSnapshotId);
+    }
+
+    public List<CaseCenterIndex> findByDirectory_ProjectIdAndDirectory_ParentId(String projectId, String parentId) {
+        return query("SELECT 'directory' type, id, payload_json, create_time, update_time FROM oat_usecase_directory WHERE project_id = ? AND parent_id = ? ORDER BY create_time DESC", projectId, parentId);
+    }
+
+    public List<CaseCenterIndex> findByDirectory_ProjectId(String projectId) {
+        return query("SELECT 'directory' type, id, payload_json, create_time, update_time FROM oat_usecase_directory WHERE project_id = ? ORDER BY create_time DESC", projectId);
+    }
+
+    @Transactional
+    public CaseCenterIndex save(CaseCenterIndex index) {
+        normalize(index);
+        switch (index.getType()) {
+            case "snapshot" -> saveSnapshot(index);
+            case "usecase" -> saveUsecase(index);
+            case "directory" -> saveDirectory(index);
+            default -> throw new IllegalArgumentException("unsupported case center type: " + index.getType());
+        }
+        return index;
+    }
+
+    @Transactional
+    public void deleteById(String id) {
+        jdbcTemplate.update("DELETE FROM oat_snapshot WHERE id = ?", id);
+        jdbcTemplate.update("DELETE FROM oat_usecase WHERE id = ?", id);
+        jdbcTemplate.update("DELETE FROM oat_usecase_directory WHERE id = ?", id);
+    }
+
+    private void saveSnapshot(CaseCenterIndex index) {
+        Snapshot s = index.getSnapshot();
+        jdbcTemplate.update("""
+                        INSERT INTO oat_snapshot (id, project_id, app_id, trace_id, snapshot_name, create_user, snapshot_describe, share_flag, labels_json, payload_json, create_time, update_time)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), ?, ?)
+                        ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), app_id=VALUES(app_id), trace_id=VALUES(trace_id), snapshot_name=VALUES(snapshot_name), create_user=VALUES(create_user), snapshot_describe=VALUES(snapshot_describe), share_flag=VALUES(share_flag), labels_json=VALUES(labels_json), payload_json=VALUES(payload_json), create_time=VALUES(create_time), update_time=VALUES(update_time)
+                        """, index.getId(), s == null ? null : s.getProjectId(), s == null ? null : s.getAppId(), s == null ? null : s.getTraceId(), s == null ? null : s.getName(), s == null ? null : s.getCreateUser(), s == null ? null : s.getDescribe(), s == null ? null : s.getShare(), s == null ? null : UtilJson.writeValueAsString(s.getLabels()), json(index), ts(index.getCreateTime()), ts(index.getUpdateTime()));
+    }
+
+    private void saveUsecase(CaseCenterIndex index) {
+        Usecase u = index.getUsecase();
+        jdbcTemplate.update("""
+                        INSERT INTO oat_usecase (id, project_id, directory_id, title, content, head_image, snapshots_json, system_snapshots_json, defects_json, prd_requirements_json, labels_json, authors_json, payload_json, create_time, update_time)
+                        VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), ?, ?)
+                        ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), directory_id=VALUES(directory_id), title=VALUES(title), content=VALUES(content), head_image=VALUES(head_image), snapshots_json=VALUES(snapshots_json), system_snapshots_json=VALUES(system_snapshots_json), defects_json=VALUES(defects_json), prd_requirements_json=VALUES(prd_requirements_json), labels_json=VALUES(labels_json), authors_json=VALUES(authors_json), payload_json=VALUES(payload_json), create_time=VALUES(create_time), update_time=VALUES(update_time)
+                        """, index.getId(), u == null ? null : u.getProjectId(), u == null ? null : u.getDirectory(), u == null ? null : u.getTitle(), u == null ? null : u.getContent(), u == null ? null : u.getHeadImage(), u == null ? null : UtilJson.writeValueAsString(u.getSnapshots()), u == null ? null : UtilJson.writeValueAsString(u.getSystemSnapshots()), u == null ? null : UtilJson.writeValueAsString(u.getDefects()), u == null ? null : UtilJson.writeValueAsString(u.getPrdRequirements()), u == null ? null : UtilJson.writeValueAsString(u.getLabels()), u == null ? null : UtilJson.writeValueAsString(u.getAuthors()), json(index), ts(index.getCreateTime()), ts(index.getUpdateTime()));
+    }
+
+    private void saveDirectory(CaseCenterIndex index) {
+        UsecaseDirectory d = index.getDirectory();
+        jdbcTemplate.update("""
+                        INSERT INTO oat_usecase_directory (id, project_id, parent_id, directory_name, payload_json, create_time, update_time)
+                        VALUES (?, ?, ?, ?, CAST(? AS JSON), ?, ?)
+                        ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), parent_id=VALUES(parent_id), directory_name=VALUES(directory_name), payload_json=VALUES(payload_json), create_time=VALUES(create_time), update_time=VALUES(update_time)
+                        """, index.getId(), d == null ? null : d.getProjectId(), d == null ? null : d.getParentId(), d == null ? null : d.getName(), json(index), ts(index.getCreateTime()), ts(index.getUpdateTime()));
+    }
+
+    private List<CaseCenterIndex> queryPage(String type, String where, Pageable pageable, Object... args) {
+        Table table = table(type);
+        String sql = "SELECT '" + type + "' type, id, payload_json, create_time, update_time FROM " + table.name + " WHERE " + where + " ORDER BY create_time DESC";
+        List<Object> params = new ArrayList<>(Arrays.asList(args));
+        if (pageable != null && pageable.isPaged()) {
+            sql += " LIMIT ? OFFSET ?";
+            params.add(pageable.getPageSize());
+            params.add(pageable.getOffset());
+        }
+        return query(sql, params.toArray());
+    }
+
+    private List<CaseCenterIndex> queryUnion(String where, Object... args) {
+        Object[] params = repeat(args, 3);
+        return query("""
+                        SELECT * FROM (
+                          SELECT 'snapshot' type, id, payload_json, create_time, update_time FROM oat_snapshot WHERE %s
+                          UNION ALL
+                          SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE %s
+                          UNION ALL
+                          SELECT 'directory' type, id, payload_json, create_time, update_time FROM oat_usecase_directory WHERE %s
+                        ) t ORDER BY create_time DESC
+                        """.formatted(where, where, where), params);
+    }
+
+    private Object[] repeat(Object[] args, int times) {
+        List<Object> params = new ArrayList<>();
+        for (int i = 0; i < times; i++) params.addAll(Arrays.asList(args));
+        return params.toArray();
+    }
+
+    private List<CaseCenterIndex> query(String sql, Object... args) {
+        return jdbcTemplate.query(sql, rowMapper, args);
+    }
+
+    private void normalize(CaseCenterIndex index) {
+        if (!StringUtils.hasText(index.getId())) index.setId(UUID.randomUUID().toString());
+        if (!StringUtils.hasText(index.getType())) throw new IllegalArgumentException("case center type must not be empty");
+        Date now = new Date();
+        if (index.getCreateTime() == null) index.setCreateTime(now);
+        if (index.getUpdateTime() == null) index.setUpdateTime(now);
+    }
+
+    private CaseCenterIndex mapRow(ResultSet rs, int rowNum) throws SQLException {
+        CaseCenterIndex index = UtilJson.convertValue(rs.getString("payload_json"), CaseCenterIndex.class);
+        if (index == null) index = new CaseCenterIndex();
+        index.setId(rs.getString("id"));
+        index.setType(rs.getString("type"));
+        index.setCreateTime(toDate(rs.getTimestamp("create_time")));
+        index.setUpdateTime(toDate(rs.getTimestamp("update_time")));
+        return index;
+    }
+
+    private Table table(String type) {
+        return switch (type) {
+            case "snapshot" -> new Table("oat_snapshot");
+            case "usecase" -> new Table("oat_usecase");
+            case "directory" -> new Table("oat_usecase_directory");
+            default -> throw new IllegalArgumentException("unsupported case center type: " + type);
+        };
+    }
+
+    private String json(Object value) { return UtilJson.writeValueAsString(value); }
+    private Timestamp ts(Date date) { return date == null ? null : new Timestamp(date.getTime()); }
+    private Date toDate(Timestamp timestamp) { return timestamp == null ? null : new Date(timestamp.getTime()); }
+    private record Table(String name) {}
 }

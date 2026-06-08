@@ -16,6 +16,9 @@ public class SnapshotVo extends Snapshot implements Serializable {
     private Integer apiCoveredCount;
     private Integer apiTotalCount;
     private String apiCoverageText;
+    private String versionNumber;
+    private String repoBranch;
+    private String repoCommitId;
 
     public SnapshotVo() {
     }
@@ -102,5 +105,29 @@ public class SnapshotVo extends Snapshot implements Serializable {
 
     public void setApiCoverageText(String apiCoverageText) {
         this.apiCoverageText = apiCoverageText;
+    }
+
+    public String getVersionNumber() {
+        return versionNumber;
+    }
+
+    public void setVersionNumber(String versionNumber) {
+        this.versionNumber = versionNumber;
+    }
+
+    public String getRepoBranch() {
+        return repoBranch;
+    }
+
+    public void setRepoBranch(String repoBranch) {
+        this.repoBranch = repoBranch;
+    }
+
+    public String getRepoCommitId() {
+        return repoCommitId;
+    }
+
+    public void setRepoCommitId(String repoCommitId) {
+        this.repoCommitId = repoCommitId;
     }
 }

@@ -1,19 +1,13 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Date;
 
 public class Comment implements Serializable, StandardDate {
-    @Field(type = FieldType.Keyword)
     private String userId;
-    @Field(type = FieldType.Keyword)
     private Date time;
-    @Field(type = FieldType.Keyword)
     private String content;
-    @Field(type = FieldType.Object)
     private Replie replies[];
 
     // ============ getter/setter ============
@@ -52,11 +46,8 @@ public class Comment implements Serializable, StandardDate {
 
 
     public static class Replie implements Serializable, StandardDate {
-        @Field(type = FieldType.Keyword)
         private String userId;
-        @Field(type = FieldType.Keyword)
         private String time;
-        @Field(type = FieldType.Keyword)
         private String content;
 
         public String getUserId() {

@@ -67,6 +67,7 @@ import {
   updateSystemSnapshotBasic,
   updateProjectMemberRole,
   upsertProjectLabel,
+  saveMySnapshotAsSystemSnapshot,
 } from '@/api/bootstrap'
 import type {
   AIInteractivePagePayload,
@@ -630,6 +631,14 @@ export const useProjectStore = defineStore('project', () => {
     return deleteMySnapshot(projectId, snapshotId)
   }
 
+  async function persistMySnapshotAsSystemSnapshot(
+    projectId: string,
+    snapshotId: string,
+    payload: Parameters<typeof saveMySnapshotAsSystemSnapshot>[2],
+  ) {
+    return saveMySnapshotAsSystemSnapshot(projectId, snapshotId, payload)
+  }
+
   return {
     projects,
     contextByProjectId,
@@ -722,5 +731,6 @@ export const useProjectStore = defineStore('project', () => {
     updateMySnapshotUsecases,
     batchUpdateMySnapshotUsecases,
     removeMySnapshot,
+    persistMySnapshotAsSystemSnapshot,
   }
 })

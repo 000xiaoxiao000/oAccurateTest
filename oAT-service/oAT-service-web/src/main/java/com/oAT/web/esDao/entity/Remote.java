@@ -1,7 +1,5 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
@@ -9,13 +7,9 @@ import java.io.Serializable;
  * 远程调用
  */
 public class Remote implements Serializable {
-    @Field(type = FieldType.Keyword)
     private String type; //类别
-    @Field(type = FieldType.Keyword)
     private String appId; // 远程应用id
-    @Field(type = FieldType.Text)
     private String url;   // 远程应用地址
-    @Field(type = FieldType.Keyword)
     private String invokerInterface; //远程应用接口与方法
 
     public String getType() {

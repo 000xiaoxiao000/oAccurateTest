@@ -1,7 +1,5 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
@@ -10,46 +8,36 @@ public class Usecase implements Serializable, StandardDate{
     /**
     标题
      */
-//    @Field(type = FieldType.Text)
     private String title;
     /**
     主题图片
      */
-    @Field(type = FieldType.Keyword, index = false)
     private String headImage;
     /**
      内容
     */
-    @Field(type = FieldType.Text)
     private String content;
-    @Field(type = FieldType.Keyword)
     private String projectId;
     /**
      * 目录 ID
      */
-    @Field(type = FieldType.Keyword)
     private String directory;
     /**
      * 绑定的快照id
      */
-    @Field(type = FieldType.Keyword)
     private String snapshots[];
     /**
      * 绑定的系统快照id
      */
-    @Field(type = FieldType.Keyword)
     private String systemSnapshots[];
     /**
      * 绑定的测试缺陷id
      */
-    @Field(type = FieldType.Keyword)
     private String defects[];
     /**
      * 绑定的PRD需求id
      */
-    @Field(type = FieldType.Keyword)
     private String prdRequirements[];
-    @Field(type = FieldType.Keyword)
     /**
     标签
      */
@@ -57,17 +45,14 @@ public class Usecase implements Serializable, StandardDate{
     /**
      作者
      */
-    @Field(type = FieldType.Keyword)
     private String authors[];
     /**
      最后修改人
      */
-    @Field(type = FieldType.Keyword)
     private String lastUpdateAuthor;
     /**
      * 是否开放共享访问
      */
-    @Field(type = FieldType.Boolean)
     private Boolean share;
 
     // 该字段值有可能为超出256 keyword 的限制

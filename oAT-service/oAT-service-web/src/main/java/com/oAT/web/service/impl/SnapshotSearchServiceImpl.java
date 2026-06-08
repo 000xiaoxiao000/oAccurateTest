@@ -1,20 +1,13 @@
 package com.oAT.web.service.impl;
 
+import com.oAT.web.esDao.SystemSnapshotRepository;
+import com.oAT.web.esDao.entity.Remote;
+import com.oAT.web.esDao.entity.Sql;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.SnapshotSearchService;
 import com.oAT.web.service.entity.SearchPage;
 import com.oAT.web.service.entity.SnapshotSearchResult;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.lucene.search.join.ScoreMode;
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.NestedQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -24,50 +17,27 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
 public class SnapshotSearchServiceImpl implements SnapshotSearchService {
 
     @Autowired
-    private ElasticsearchOperations elasticsearchOperations;
+    private SystemSnapshotRepository systemSnapshotRepository;
 
     @Override
     public SearchPage<SnapshotSearchResult> doSearch(String projectId, String keyWords) {
-        NativeSearchQueryBuilder searchBuilder = new NativeSearchQueryBuilder();
-        searchBuilder.withFilter(QueryBuilders.termQuery("projectId", projectId));
-
-        String[] searchFields = new String[]{
-                "title",
-                "subTitle",
-                "describe",
-                "codes",
-        };
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
-        boolQuery.should(QueryBuilders.multiMatchQuery(keyWords, searchFields));
-        NestedQueryBuilder sqlQuery = QueryBuilders.nestedQuery(
-                "sqls",
-                QueryBuilders.matchQuery("sqls.content", keyWords),
-                ScoreMode.Avg
-        );
-        boolQuery.should(sqlQuery);
-        NestedQueryBuilder remotesQuery = QueryBuilders.nestedQuery(
-                "remotes",
-                QueryBuilders.matchQuery("remotes.invokerInterface", keyWords),
-                ScoreMode.Avg
-        );
-        boolQuery.should(remotesQuery);
-        searchBuilder.withQuery(boolQuery);
-
-        SearchHits<SystemSnapshot> searchHits = elasticsearchOperations.search(searchBuilder.build(), SystemSnapshot.class);
-        List<SnapshotSearchResult> results = searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+        String keyword = normalize(keyWords);
+        List<SnapshotSearchResult> results = systemSnapshotRepository.findByProjectId(projectId).stream()
+                .filter(this::isEnabled)
+                .filter(snapshot -> !StringUtils.hasText(keyword) || matchesSnapshot(snapshot, keyword))
                 .map(this::toSearchResult)
                 .collect(Collectors.toList());
-
         SearchPage<SnapshotSearchResult> searchPage = new SearchPage<>();
         searchPage.setContents(results);
-        searchPage.setTotal(searchHits.getTotalHits());
+        searchPage.setTotal(results.size());
         return searchPage;
     }
 
@@ -75,38 +45,25 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
         SnapshotSearchResult result = new SnapshotSearchResult();
         result.setId(snapshot.getId());
         result.setProjectId(snapshot.getProjectId());
-        result.setTitle(snapshot.getTitle());
-        result.setDirectoryId(snapshot.getDirectory());
         result.setAppId(snapshot.getAppId());
-        result.setHeadImage(snapshot.getTopicImage());
+        result.setTitle(snapshot.getTitle());
         result.setSubTitle(snapshot.getSubTitle());
-        if (snapshot.getVersionLastUpdate() != null) {
-            result.setUpdateTime(snapshot.getVersionLastUpdate());
-        }
+        result.setDirectoryId(snapshot.getDirectory());
+        result.setHeadImage(snapshot.getTopicImage());
+        result.setUpdateTime(snapshot.getUpdateTime());
         return result;
     }
 
     @Override
     public List<SystemSnapshot> searchByTable(String projectId, String databaseName, String tableName) {
-        Assert.hasText(databaseName, "参数databaseName 不能为空");
-        Assert.hasText(tableName, "参数tableName 不能为空");
-
-        BoolQueryBuilder masterQuery = QueryBuilders.boolQuery();
-        masterQuery.must(QueryBuilders.termQuery("projectId", projectId));
-        masterQuery.must(QueryBuilders.termQuery("disable", false));
-
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
-        boolQuery.must(QueryBuilders.termQuery("sqls.DataBase", databaseName));
-        boolQuery.must(QueryBuilders.termQuery("sqls.actions.table", tableName));
-
-        masterQuery.must(QueryBuilders.nestedQuery("sqls", boolQuery, ScoreMode.Avg));
-
-        NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
-        builder.withFilter(masterQuery);
-
-        SearchHits<SystemSnapshot> searchHits = elasticsearchOperations.search(builder.build(), SystemSnapshot.class);
-        return searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+        Assert.hasText(projectId, "projectId 不能为空");
+        Assert.hasText(databaseName, "databaseName 不能为空");
+        Assert.hasText(tableName, "tableName 不能为空");
+        String normalizedDatabase = normalize(databaseName);
+        String normalizedTable = normalize(tableName);
+        return systemSnapshotRepository.findByProjectId(projectId).stream()
+                .filter(this::isEnabled)
+                .filter(snapshot -> hasSqlTable(snapshot, normalizedDatabase, normalizedTable))
                 .collect(Collectors.toList());
     }
 
@@ -117,90 +74,177 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
 
     @Override
     public List<SystemSnapshot> searchByCode(String projectId, String appId, String className, String... methodName) {
-        Assert.hasText(projectId, "参数'projectId'不能为空");
-        Assert.hasText(className, "参数'className'不能为空");
-
-        List<String> normalizedMethods = normalizeMethodNames(methodName);
-        boolean probeOnly = normalizedMethods.size() == 1 && "__oat_probe__".equals(normalizedMethods.get(0));
-        List<String> queryCandidates = probeOnly ? Collections.emptyList() : buildCodeQueryCandidates(className, normalizedMethods);
-        List<String> queryPatterns = probeOnly ? Collections.emptyList() : buildCodeQueryPatterns(className, normalizedMethods);
-
-        BoolQueryBuilder masterQuery = QueryBuilders.boolQuery();
-        masterQuery.must(QueryBuilders.termQuery("projectId", projectId));
-        masterQuery.must(QueryBuilders.termQuery("disable", false));
-        if (StringUtils.hasText(appId)) {
-            masterQuery.must(QueryBuilders.termQuery("appId", appId));
-        }
-        if (probeOnly) {
-            // 仅用于统计当前应用下快照数量，不附加 codes 条件
-        } else if (!queryCandidates.isEmpty()) {
-            BoolQueryBuilder codeQuery = QueryBuilders.boolQuery();
-            for (String candidate : queryCandidates) {
-                codeQuery.should(QueryBuilders.termQuery("codes.keyword", candidate));
-                codeQuery.should(QueryBuilders.prefixQuery("codes.keyword", candidate + " "));
-                codeQuery.should(QueryBuilders.prefixQuery("codes.keyword", candidate + "("));
-            }
-            for (String pattern : queryPatterns) {
-                if (StringUtils.hasText(pattern)) {
-                    codeQuery.should(QueryBuilders.wildcardQuery("codes.keyword", pattern));
-                }
-            }
-            codeQuery.minimumShouldMatch(1);
-            masterQuery.must(codeQuery);
-        } else {
-            BoolQueryBuilder classQuery = QueryBuilders.boolQuery();
-            String classPrefix = buildClassPrefix(className);
-            String classWildcard = buildClassWildcardPattern(className);
-            if (StringUtils.hasText(classPrefix)) {
-                classQuery.should(QueryBuilders.prefixQuery("codes.keyword", classPrefix));
-            }
-            if (StringUtils.hasText(classWildcard)) {
-                classQuery.should(QueryBuilders.wildcardQuery("codes.keyword", classWildcard));
-            }
-            classQuery.minimumShouldMatch(1);
-            masterQuery.must(classQuery);
-        }
-
-        NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
-        builder.withFilter(masterQuery);
-
-        SearchHits<SystemSnapshot> searchHits = elasticsearchOperations.search(builder.build(), SystemSnapshot.class);
-        return searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
-                .collect(Collectors.toList());
-    }
-
-    private List<String> normalizeMethodNames(String... methodName) {
-        if (ArrayUtils.isEmpty(methodName)) {
-            return Collections.emptyList();
-        }
-        return Arrays.stream(methodName)
-                .filter(StringUtils::hasText)
-                .map(String::trim)
-                .filter(name -> !name.isEmpty())
-                .distinct()
+        Assert.hasText(projectId, "projectId 不能为空");
+        Assert.hasText(className, "className 不能为空");
+        List<String> candidates = buildCodeQueryCandidates(className, normalizeMethods(methodName));
+        List<String> patterns = buildCodeQueryPatterns(className, normalizeMethods(methodName));
+        String classKeyword = normalize(buildClassPrefix(className));
+        return systemSnapshotRepository.findByProjectId(projectId).stream()
+                .filter(this::isEnabled)
+                .filter(snapshot -> !StringUtils.hasText(appId) || appId.equals(snapshot.getAppId()))
+                .filter(snapshot -> matchesCode(snapshot, classKeyword, candidates, patterns))
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<String> buildCodeSearchCandidates(String className, String... methodName) {
-        if (!StringUtils.hasText(className)) {
-            return Collections.emptyList();
-        }
-        List<String> normalizedMethods = normalizeMethodNames(methodName);
-        if (normalizedMethods.isEmpty()) {
-            return Collections.singletonList(buildClassPrefix(className));
-        }
-        return buildCodeQueryCandidates(className, normalizedMethods);
+        return buildCodeQueryCandidates(className, normalizeMethods(methodName));
     }
 
     @Override
     public List<String> buildCodeSearchPatterns(String className, String... methodName) {
-        if (!StringUtils.hasText(className)) {
+        return buildCodeQueryPatterns(className, normalizeMethods(methodName));
+    }
+
+    @Override
+    public List<SystemSnapshot> searchByDubbo(String projectId, String interfaceName, String... methodName) {
+        Assert.hasText(projectId, "projectId 不能为空");
+        Assert.hasText(interfaceName, "interfaceName 不能为空");
+        List<String> methods = methodName == null ? Collections.emptyList() : Arrays.stream(methodName)
+                .filter(StringUtils::hasText)
+                .map(method -> normalize(interfaceName + "#" + method))
+                .collect(Collectors.toList());
+        String interfacePrefix = normalize(interfaceName);
+        return systemSnapshotRepository.findByProjectId(projectId).stream()
+                .filter(this::isEnabled)
+                .filter(snapshot -> hasRemote(snapshot, interfacePrefix, methods))
+                .collect(Collectors.toList());
+    }
+
+    private boolean matchesSnapshot(SystemSnapshot snapshot, String keyword) {
+        return contains(snapshot.getTitle(), keyword)
+                || contains(snapshot.getSubTitle(), keyword)
+                || contains(snapshot.getDescribe(), keyword)
+                || containsAny(snapshot.getCodes(), keyword)
+                || hasSqlContent(snapshot, keyword)
+                || hasRemoteKeyword(snapshot, keyword);
+    }
+
+    private boolean hasSqlTable(SystemSnapshot snapshot, String databaseName, String tableName) {
+        if (snapshot.getSqls() == null) {
+            return false;
+        }
+        for (Sql sql : snapshot.getSqls()) {
+            if (sql == null || !Objects.equals(normalize(sql.getDatabase()), databaseName) || sql.getActions() == null) {
+                continue;
+            }
+            for (Sql.Action action : sql.getActions()) {
+                if (action != null && Objects.equals(normalize(action.getTable()), tableName)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesCode(SystemSnapshot snapshot, String classKeyword, List<String> candidates, List<String> patterns) {
+        if (snapshot.getCodes() == null) {
+            return false;
+        }
+        for (String code : snapshot.getCodes()) {
+            String normalizedCode = normalize(code);
+            if (StringUtils.hasText(classKeyword) && normalizedCode.contains(classKeyword)) {
+                if (candidates.isEmpty() && patterns.isEmpty()) {
+                    return true;
+                }
+                if (containsCandidate(normalizedCode, candidates) || containsPattern(normalizedCode, patterns)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hasRemote(SystemSnapshot snapshot, String interfacePrefix, List<String> methods) {
+        if (snapshot.getRemotes() == null) {
+            return false;
+        }
+        for (Remote remote : snapshot.getRemotes()) {
+            if (remote == null || !StringUtils.hasText(remote.getInvokerInterface())) {
+                continue;
+            }
+            String invoker = normalize(remote.getInvokerInterface());
+            if (methods.isEmpty()) {
+                if (invoker.startsWith(interfacePrefix)) {
+                    return true;
+                }
+            } else if (methods.contains(invoker)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasSqlContent(SystemSnapshot snapshot, String keyword) {
+        if (snapshot.getSqls() == null) {
+            return false;
+        }
+        for (Sql sql : snapshot.getSqls()) {
+            if (sql != null && contains(sql.getContent(), keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasRemoteKeyword(SystemSnapshot snapshot, String keyword) {
+        if (snapshot.getRemotes() == null) {
+            return false;
+        }
+        for (Remote remote : snapshot.getRemotes()) {
+            if (remote != null && (contains(remote.getInvokerInterface(), keyword) || contains(remote.getUrl(), keyword))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsCandidate(String normalizedCode, List<String> candidates) {
+        for (String candidate : candidates) {
+            if (normalizedCode.contains(normalize(candidate))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsPattern(String normalizedCode, List<String> patterns) {
+        for (String pattern : patterns) {
+            String normalizedPattern = normalize(pattern).replace("*", "");
+            if (StringUtils.hasText(normalizedPattern) && normalizedCode.contains(normalizedPattern)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsAny(String[] values, String keyword) {
+        if (values == null) {
+            return false;
+        }
+        for (String value : values) {
+            if (contains(value, keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean contains(String value, String keyword) {
+        return StringUtils.hasText(value) && StringUtils.hasText(keyword) && normalize(value).contains(keyword);
+    }
+
+    private boolean isEnabled(SystemSnapshot snapshot) {
+        return snapshot != null;
+    }
+
+    private List<String> normalizeMethods(String... methodName) {
+        if (methodName == null) {
             return Collections.emptyList();
         }
-        List<String> normalizedMethods = normalizeMethodNames(methodName);
-        return buildCodeQueryPatterns(className, normalizedMethods);
+        return Arrays.stream(methodName)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toList());
     }
 
     private List<String> buildCodeQueryPatterns(String className, List<String> methodNames) {
@@ -303,32 +347,7 @@ public class SnapshotSearchServiceImpl implements SnapshotSearchService {
         return methodName;
     }
 
-    @Override
-    public List<SystemSnapshot> searchByDubbo(String projectId, String interfaceName, String... methodName) {
-        Assert.hasText(projectId, "projectId 不能为空");
-        Assert.hasText(interfaceName, "interfaceName 不能为空");
-
-        BoolQueryBuilder masterQuery = QueryBuilders.boolQuery();
-        masterQuery.must(QueryBuilders.termQuery("projectId", projectId));
-        masterQuery.must(QueryBuilders.termQuery("disable", false));
-
-        QueryBuilder termsQueryBuilder;
-        if (ArrayUtils.isNotEmpty(methodName)) {
-            List<String> methods = Arrays.stream(methodName)
-                    .map(m -> interfaceName + "#" + m)
-                    .collect(Collectors.toList());
-            termsQueryBuilder = QueryBuilders.termsQuery("remotes.invokerInterface", methods);
-        } else {
-            termsQueryBuilder = QueryBuilders.prefixQuery("remotes.invokerInterface", interfaceName);
-        }
-        masterQuery.must(QueryBuilders.nestedQuery("remotes", termsQueryBuilder, ScoreMode.Avg));
-
-        NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
-        builder.withFilter(masterQuery);
-
-        SearchHits<SystemSnapshot> searchHits = elasticsearchOperations.search(builder.build(), SystemSnapshot.class);
-        return searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
-                .collect(Collectors.toList());
+    private String normalize(String value) {
+        return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
     }
 }

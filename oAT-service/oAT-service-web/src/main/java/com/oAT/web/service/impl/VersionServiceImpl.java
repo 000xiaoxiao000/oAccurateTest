@@ -47,11 +47,6 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.elasticsearch.core.IndexOperations;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.FileSystemUtils;
@@ -95,9 +90,6 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Autowired
     private com.oAT.web.service.GitService gitService;
-
-    @Autowired
-    private ElasticsearchOperations elasticsearchOperations;
 
     private ExecutorService compareJobExecutors;
     private List<Job<CompareJobVo>> jobs;
@@ -756,8 +748,6 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         index.setId(job.getId());
         try {
             index = versionCenterRepository.save(index);
-            IndexOperations indexOperations = elasticsearchOperations.indexOps(VersionCenterIndex.class);
-            indexOperations.refresh();
             boolean saved = versionCenterRepository.findById(index.getId()).isPresent();
             Assert.isTrue(saved, "比对报告保存失败，id=" + index.getId());
             job.getLogger().info("比对报告保存成功 id=" + index.getId());
@@ -1017,21 +1007,11 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Override
     public Page<VersionCompareReportVo> getCompareReportList(String projectId, String appId, Pageable pageable) {
-        NativeSearchQueryBuilder queryBuilder = new NativeSearchQueryBuilder()
-                .withFilter(org.elasticsearch.index.query.QueryBuilders.boolQuery()
-                        .must(org.elasticsearch.index.query.QueryBuilders.termQuery("type", "compareReport"))
-                        .must(StringUtils.hasText(projectId)
-                                ? org.elasticsearch.index.query.QueryBuilders.termQuery("compareReport.projectId", projectId)
-                                : org.elasticsearch.index.query.QueryBuilders.matchAllQuery())
-                        .must(org.elasticsearch.index.query.QueryBuilders.termQuery("compareReport.appId", appId)))
-                .withSort(Sort.by(Sort.Direction.DESC, "createTime"))
-                .withPageable(pageable);
-        SearchHits<VersionCenterIndex> searchHits = elasticsearchOperations.search(queryBuilder.build(), VersionCenterIndex.class);
-        List<VersionCompareReportVo> result = searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+        Page<VersionCenterIndex> page = versionCenterRepository.findCompareReportPage(projectId, appId, pageable);
+        List<VersionCompareReportVo> result = page.getContent().stream()
                 .map(this::convertCompareReport)
                 .collect(Collectors.toList());
-        return new PageImpl<>(result, pageable, searchHits.getTotalHits());
+        return new PageImpl<>(result, pageable, page.getTotalElements());
     }
 
     private VersionCompareReportVo convertCompareReport(VersionCenterIndex index) {

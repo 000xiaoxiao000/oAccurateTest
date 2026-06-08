@@ -1,7 +1,5 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
@@ -11,40 +9,32 @@ public class ClientSession implements Serializable {
     /**
      * 节点上传地址
     */
-    @Field(type = FieldType.Text)
     private String[] uploadUrls;
 
     /**
      * 属性配置
      */
-    @Field(type = FieldType.Text)
     private String configs;
 
     /**
      * 登录时间 (格式化的字符串)
     */
-    @Field(type = FieldType.Keyword)
     private String loginTime;
 
     /**
      * 客户端基本信息
      */
-    @Field(type = FieldType.Object)
     private ClientInfo clientInfo;
 
     /**
      * 会话状态 Status.active, Status.disable
      */
-    @Field(type = FieldType.Keyword)
     private String status;
 
-    @Field(type = FieldType.Long)
     private Long lastHeartbeatTime;
 
-    @Field(type = FieldType.Text)
     private String agentLogs;
 
-    @Field(type = FieldType.Text)
     private String packageVerifyData;
 
     public String[] getUploadUrls() {

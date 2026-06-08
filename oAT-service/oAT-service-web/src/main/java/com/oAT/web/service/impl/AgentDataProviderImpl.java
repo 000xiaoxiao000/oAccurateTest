@@ -6,12 +6,14 @@ import com.oAT.web.common.Job;
 import com.oAT.ai.agent.cache.ToolCallCache;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
+import com.oAT.web.esDao.TraceSummaryRepository;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.StaticSourceClassInfo;
 import com.oAT.web.esDao.entity.StaticSourceInfo;
 import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import com.oAT.web.esDao.entity.TraceNodeIndex;
+import com.oAT.web.esDao.entity.TraceSummaryIndex;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
@@ -57,6 +59,9 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     @Autowired
     private TraceNodeRepository traceNodeRepository;
+
+    @Autowired
+    private TraceSummaryRepository traceSummaryRepository;
 
     @Autowired
     private GitService gitService;
@@ -282,61 +287,73 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                 limit = 20;
             }
 
-            List<TraceNodeIndex> nodes = new ArrayList<>();
             if (appId != null && !appId.trim().isEmpty()) {
-                nodes.addAll(traceNodeRepository.findByAppId(appId));
+                result.addAll(getTraceListForApp(appId, limit));
             } else {
                 List<AppVo> apps = appService.getAppList(projectId);
-                if (apps != null) {
+                if (apps != null && !apps.isEmpty()) {
+                    int perApp = Math.max(1, limit / apps.size());
                     for (AppVo app : apps) {
-                        nodes.addAll(traceNodeRepository.findByAppId(app.getId()));
+                        result.addAll(getTraceListForApp(app.getId(), perApp));
+                        if (result.size() >= limit) {
+                            break;
+                        }
                     }
                 }
             }
 
-            if (nodes.isEmpty()) {
-                return result;
-            }
-
-            nodes.sort((left, right) -> {
-                Date leftTime = left.getCreateTime();
-                Date rightTime = right.getCreateTime();
-                if (leftTime == null && rightTime == null) return 0;
-                if (leftTime == null) return 1;
-                if (rightTime == null) return -1;
-                return rightTime.compareTo(leftTime);
+            result.sort((a, b) -> {
+                Object timeA = a.get("createTime");
+                Object timeB = b.get("createTime");
+                if (timeA == null && timeB == null) return 0;
+                if (timeA == null) return 1;
+                if (timeB == null) return -1;
+                if (timeA instanceof Date && timeB instanceof Date) {
+                    return ((Date) timeB).compareTo((Date) timeA);
+                }
+                return timeB.toString().compareTo(timeA.toString());
             });
 
-            Set<String> seenTraceIds = new HashSet<>();
-            for (TraceNodeIndex node : nodes) {
-                if (node == null || !StringUtils.hasText(node.getTraceId())) {
-                    continue;
-                }
-                if (!seenTraceIds.add(node.getTraceId())) {
-                    continue;
-                }
-                Map<String, Object> trace = new HashMap<>();
-                trace.put("traceId", node.getTraceId());
-                trace.put("appId", node.getAppId());
-                trace.put("createTime", node.getCreateTime());
-                trace.put("type", node.getType());
-                Object traceNode = node.toTraceNode();
-                if (traceNode instanceof HttpTraceNode httpNode) {
-                    trace.put("url", httpNode.getRequestUrl());
-                    trace.put("appName", httpNode.getApp() != null ? httpNode.getApp().getAppName() : "");
-                    trace.put("clientIp", httpNode.getClientIp());
-                    trace.put("serverIp", httpNode.getServerIp());
-                    trace.put("nodes", httpNode.getCodeNodes());
-                    trace.put("method", httpNode.getRequestMethod());
-                    trace.put("error", httpNode.getError() != null);
-                }
-                result.add(trace);
-                if (result.size() >= limit) {
-                    break;
-                }
+            if (result.size() > limit) {
+                return result.subList(0, limit);
             }
         } catch (Exception e) {
             logger.error("Get trace list failed: projectId={}, appId={}", projectId, appId, e);
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> getTraceListForApp(String appId, int limit) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        try {
+            Page<TraceSummaryIndex> page = traceSummaryRepository.findByAppId(
+                    appId, PageRequest.of(0, limit));
+
+            for (TraceSummaryIndex summary : page.getContent()) {
+                if (summary == null || !StringUtils.hasText(summary.getTraceId())) {
+                    continue;
+                }
+                Map<String, Object> trace = new HashMap<>();
+                trace.put("traceId", summary.getTraceId());
+                trace.put("appId", summary.getAppId());
+                trace.put("appName", summary.getAppName() != null ? summary.getAppName() : "");
+                trace.put("createTime", summary.getCreateTime());
+                trace.put("type", "http");
+                trace.put("hasError", Boolean.TRUE.equals(summary.getHasError()));
+                trace.put("useTime", summary.getUseTime());
+                trace.put("url", summary.getHttpUrl());
+                trace.put("method", summary.getHttpMethod());
+                trace.put("clientIp", summary.getHttpClientIp());
+                trace.put("serverIp", summary.getHttpServerIp());
+                trace.put("responseCode", summary.getHttpResponseCode());
+                trace.put("error", Boolean.TRUE.equals(summary.getHasError()));
+                trace.put("nodeCount", summary.getNodeCount());
+                trace.put("sqlCount", summary.getSqlCount());
+                trace.put("remoteCount", summary.getRemoteCount());
+                result.add(trace);
+            }
+        } catch (Exception e) {
+            logger.error("Get trace list for app failed: appId={}", appId, e);
         }
         return result;
     }

@@ -26,6 +26,7 @@ import com.oAT.web.control.entity.RedisGraphNode;
 import com.oAT.web.control.entity.SqlTraceGroup;
 import com.oAT.web.domain.RemoteCallResolver;
 import com.oAT.web.esDao.ApiEndpointRepository;
+import com.oAT.web.esDao.SnapshotCommitMappingRepository;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
@@ -33,6 +34,7 @@ import com.oAT.web.esDao.entity.ChangeLog;
 import com.oAT.web.esDao.entity.Comment;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.LabelGroup;
+import com.oAT.web.esDao.entity.SnapshotCommitMapping;
 import com.oAT.web.esDao.entity.SnapshotDirectory;
 import com.oAT.web.esDao.entity.StaticSourceInfo;
 import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
@@ -84,7 +86,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import javax.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpSession;
 
 @RestController
 @RequestMapping("/api/projects/{projectId}")
@@ -102,6 +104,7 @@ public class SnapshotApiControl {
     private final CoverageService coverageService;
     private final ApiEndpointAnalysisService apiEndpointAnalysisService;
     private final ApiEndpointRepository apiEndpointRepository;
+    private final SnapshotCommitMappingRepository snapshotCommitMappingRepository;
     private final ClientSessionService clientSessionService;
 
     public SnapshotApiControl(SnapshotService snapshotService,
@@ -114,6 +117,7 @@ public class SnapshotApiControl {
                               CoverageService coverageService,
                               ApiEndpointAnalysisService apiEndpointAnalysisService,
                               ApiEndpointRepository apiEndpointRepository,
+                              SnapshotCommitMappingRepository snapshotCommitMappingRepository,
                               ClientSessionService clientSessionService) {
         this.snapshotService = snapshotService;
         this.systemSnapshotService = systemSnapshotService;
@@ -125,6 +129,7 @@ public class SnapshotApiControl {
         this.coverageService = coverageService;
         this.apiEndpointAnalysisService = apiEndpointAnalysisService;
         this.apiEndpointRepository = apiEndpointRepository;
+        this.snapshotCommitMappingRepository = snapshotCommitMappingRepository;
         this.clientSessionService = clientSessionService;
     }
 
@@ -205,7 +210,9 @@ public class SnapshotApiControl {
         payload.setKeyword(keyword);
         payload.setDirectories(dirs.stream().map(this::toSnapshotDirectorySummary).collect(Collectors.toList()));
         payload.setDirectoryTiers(toSnapshotDirectorySummaries(appService.getDirectoryTiers(appId, currentDirectory)));
-        payload.setSnapshots(snapshots.stream().map(this::toSystemSnapshotSummary).collect(Collectors.toList()));
+        Map<String, SnapshotCommitMapping> commitMappings = findLatestCommitMappingMap(
+                snapshots.stream().map(SystemSnapshot::getId).collect(Collectors.toList()));
+        payload.setSnapshots(snapshots.stream().map(snapshot -> toSystemSnapshotSummary(snapshot, commitMappings.get(snapshot.getId()))).collect(Collectors.toList()));
         payload.setMembers(projectService.getProjectMembers(projectId));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         payload.setAllUsecases(collectAllProjectUsecases(projectId));
@@ -469,6 +476,7 @@ public class SnapshotApiControl {
                     .filter(snapshot -> containsAllLabels(snapshot.getLabels(), labelFilters))
                     .collect(Collectors.toList());
         }
+        enrichSnapshotCommitInfo(snapshots);
         MySnapshotListPayload payload = new MySnapshotListPayload();
         payload.setSnapshots(snapshots);
         payload.setAllUsecases(collectAllProjectUsecases(projectId));
@@ -485,6 +493,7 @@ public class SnapshotApiControl {
         ensureProjectAccess(projectId, user);
         SnapshotVo snapshot = snapshotService.get(snapshotId);
         Assert.notNull(snapshot, "我的快照不存在");
+        enrichSnapshotCommitInfo(Collections.singletonList(snapshot));
         
         // 检查快照的 projectId，如果为 null 或不匹配则记录详细信息
         String snapshotProjectId = snapshot.getProjectId();
@@ -496,9 +505,8 @@ public class SnapshotApiControl {
         MySnapshotDetailPayload payload = new MySnapshotDetailPayload();
         payload.setSnapshot(snapshot);
         payload.setCreateUser(toUserSummary(userService.getUser(snapshot.getCreateUser())));
-        payload.setLabels(ArrayUtils.isNotEmpty(snapshot.getLabels())
-                ? projectService.getLables(projectId, LableType.snapshot, snapshot.getLabels())
-                : new ArrayList<>());
+        payload.setLabels(mergeSnapshotLabels(projectId, Collections.singletonList(snapshot)));
+        payload.setSelectedLabelNames(optionalArray(snapshot.getLabels()));
         payload.setUsecases(usecaseService.getUsecasesBySnapshot(projectId, snapshotId));
         payload.setAllUsecases(collectAllProjectUsecases(projectId));
         payload.setShareUrl("/share/snapshot/" + snapshotId);
@@ -673,6 +681,68 @@ public class SnapshotApiControl {
         return new ResultNotified<>(true, "快照删除成功", snapshotId);
     }
 
+    @PostMapping("/snapshots/my/{snapshotId}/save-as-system-snapshot")
+    public ResultNotified<String> saveMySnapshotAsSystemSnapshot(@PathVariable String projectId,
+                                                                  @PathVariable String snapshotId,
+                                                                  @SessionAttribute UserVo user,
+                                                                  HttpSession session,
+                                                                  @RequestBody SaveAsSystemSnapshotRequest request) {
+        ensureProjectAccess(projectId, user);
+        try {
+            SnapshotVo mySnapshot = snapshotService.get(snapshotId);
+            SystemSnapshot sourceSystemSnapshot = null;
+            if (mySnapshot == null) {
+                sourceSystemSnapshot = systemSnapshotService.getById(snapshotId);
+                Assert.notNull(sourceSystemSnapshot, "找不到快照 id=" + snapshotId);
+                Assert.isTrue(sourceSystemSnapshot.getProjectId() == null || projectId.equals(sourceSystemSnapshot.getProjectId()), "快照不属于当前项目");
+            } else {
+                Assert.isTrue(mySnapshot.getProjectId() == null || projectId.equals(mySnapshot.getProjectId()), "快照不属于当前项目");
+            }
+
+            String traceId = mySnapshot != null ? mySnapshot.getTraceId() : sourceSystemSnapshot.getTraceId();
+            Assert.hasText(traceId, "快照缺少 traceId");
+            
+            Map<String, TraceNode> nodes = getTraceNodesForSave(traceId, session);
+            if (nodes.isEmpty()) {
+                java.util.Collection<TraceNode> persistedNodes = snapshotService.getTraceNodes(traceId);
+                if (persistedNodes != null) {
+                    for (TraceNode node : persistedNodes) {
+                        if (node != null && StringUtils.hasText(node.getTraceNodeId())) {
+                            nodes.put(node.getTraceNodeId(), node);
+                        }
+                    }
+                }
+            }
+            Assert.isTrue(!nodes.isEmpty(), "找不到对应链路数据，请确认快照数据完整");
+            
+            TraceNode rootNode = resolveRootTraceNode(nodes);
+            Assert.notNull(rootNode, "找不到主调用节点");
+            
+            SystemSnapshot systemSnapshot = new SystemSnapshot();
+            systemSnapshot.setTraceId(traceId);
+            systemSnapshot.setAppId(resolveSaveAsSystemAppId(request, mySnapshot, sourceSystemSnapshot));
+            systemSnapshot.setDirectory(resolveSaveAsSystemDirectory(request, sourceSystemSnapshot));
+            systemSnapshot.setTitle(resolveSaveAsSystemTitle(request, mySnapshot, sourceSystemSnapshot));
+            systemSnapshot.setDescribe(resolveSaveAsSystemDescribe(request, mySnapshot, sourceSystemSnapshot));
+            systemSnapshot.setTopicImage(resolveSaveAsSystemTopicImage(request, sourceSystemSnapshot));
+            systemSnapshot.setVersionCycle(resolveSaveAsSystemVersionCycle(request, sourceSystemSnapshot));
+            systemSnapshot.setLabels(resolveSaveAsSystemLabels(request, mySnapshot, sourceSystemSnapshot));
+            systemSnapshot.setPrincipals(resolveSaveAsSystemPrincipals(request, sourceSystemSnapshot));
+            systemSnapshot.setSubTitle(sourceSystemSnapshot == null ? null : sourceSystemSnapshot.getSubTitle());
+            
+            if (rootNode instanceof HttpTraceNode && !StringUtils.hasText(systemSnapshot.getSubTitle())) {
+                systemSnapshot.setSubTitle(((HttpTraceNode) rootNode).getRequestUrl());
+            }
+            
+            SystemSnapshot saved = systemSnapshotService.create(projectId, user.getId(), systemSnapshot, nodes.values());
+            return new ResultNotified<>(true, "系统快照已保存", saved.getId());
+        } catch (Exception e) {
+            ResultNotified<String> result = new ResultNotified<>(false, "保存系统快照失败");
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
+    }
+
 
     private Map<String, TraceNode> getTraceNodesForSave(String traceId, HttpSession session) {
         Map<String, TraceNode> nodes = new LinkedHashMap<>();
@@ -702,6 +772,17 @@ public class SnapshotApiControl {
             }
         }
         return nodes;
+    }
+
+    private TraceNode resolveRootTraceNode(Map<String, TraceNode> nodes) {
+        if (nodes == null || nodes.isEmpty()) {
+            return null;
+        }
+        TraceNode rootNode = nodes.get("0");
+        if (rootNode != null) {
+            return rootNode;
+        }
+        return nodes.values().stream().filter(Objects::nonNull).findFirst().orElse(null);
     }
 
     private ProjectVo ensureProjectAccess(String projectId, UserVo user) {
@@ -784,6 +865,11 @@ public class SnapshotApiControl {
     }
 
     private SystemSnapshotSummary toSystemSnapshotSummary(SystemSnapshot snapshot) {
+        List<SnapshotCommitMapping> mappings = snapshotCommitMappingRepository.findBySnapshotId(snapshot.getId());
+        return toSystemSnapshotSummary(snapshot, mappings.isEmpty() ? null : mappings.get(0));
+    }
+
+    private SystemSnapshotSummary toSystemSnapshotSummary(SystemSnapshot snapshot, SnapshotCommitMapping commitMapping) {
         SystemSnapshotSummary summary = new SystemSnapshotSummary();
         summary.setId(snapshot.getId());
         summary.setProjectId(snapshot.getProjectId());
@@ -802,9 +888,51 @@ public class SnapshotApiControl {
         summary.setLabels(optionalArray(snapshot.getLabels()));
         summary.setPrincipals(optionalArray(snapshot.getPrincipals()));
         summary.setReportStatus(snapshot.getReportStatus());
+        if (commitMapping != null) {
+            summary.setVersionNumber(commitMapping.getVersionNumber());
+            summary.setRepoBranch(commitMapping.getRepoBranch());
+            summary.setRepoCommitId(commitMapping.getRepoCommitId());
+        }
         summary.setCreateTime(snapshot.getCreateTime());
         summary.setUpdateTime(snapshot.getUpdateTime());
         return summary;
+    }
+
+    private void enrichSnapshotCommitInfo(List<SnapshotVo> snapshots) {
+        Map<String, SnapshotCommitMapping> commitMappings = findLatestCommitMappingMap(
+                snapshots.stream().map(SnapshotVo::getId).collect(Collectors.toList()));
+        Map<String, AppVo> appMap = new HashMap<>();
+        snapshots.forEach(snapshot -> {
+            SnapshotCommitMapping mapping = commitMappings.get(snapshot.getId());
+            if (mapping != null) {
+                snapshot.setVersionNumber(mapping.getVersionNumber());
+                snapshot.setRepoBranch(mapping.getRepoBranch());
+                snapshot.setRepoCommitId(mapping.getRepoCommitId());
+                return;
+            }
+            if (!StringUtils.hasText(snapshot.getAppId())) {
+                return;
+            }
+            AppVo app = appMap.computeIfAbsent(snapshot.getAppId(), appService::getApp);
+            if (app != null) {
+                snapshot.setVersionNumber(app.getCurrentVersion());
+                snapshot.setRepoBranch(app.getCurrentBranch());
+                snapshot.setRepoCommitId(app.getCurrentCommitId());
+            }
+        });
+    }
+
+    private Map<String, SnapshotCommitMapping> findLatestCommitMappingMap(List<String> snapshotIds) {
+        if (snapshotIds == null || snapshotIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, SnapshotCommitMapping> result = new LinkedHashMap<>();
+        snapshotCommitMappingRepository.findBySnapshotIds(snapshotIds).forEach(mapping -> {
+            if (StringUtils.hasText(mapping.getSnapshotId())) {
+                result.putIfAbsent(mapping.getSnapshotId(), mapping);
+            }
+        });
+        return result;
     }
 
     private List<DynamicItemSummary> buildDynamics(SystemSnapshot snapshot) {
@@ -1149,6 +1277,80 @@ public class SnapshotApiControl {
             }
         }
         return nodeMap;
+    }
+
+    private String resolveSaveAsSystemAppId(SaveAsSystemSnapshotRequest request, SnapshotVo sourceSnapshot, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && StringUtils.hasText(request.getAppId())) {
+            return request.getAppId();
+        }
+        if (sourceSnapshot != null && StringUtils.hasText(sourceSnapshot.getAppId())) {
+            return sourceSnapshot.getAppId();
+        }
+        return sourceSystemSnapshot == null ? null : sourceSystemSnapshot.getAppId();
+    }
+
+    private String resolveSaveAsSystemDirectory(SaveAsSystemSnapshotRequest request, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && StringUtils.hasText(request.getDirectory())) {
+            return request.getDirectory();
+        }
+        if (sourceSystemSnapshot != null && StringUtils.hasText(sourceSystemSnapshot.getDirectory())) {
+            return sourceSystemSnapshot.getDirectory();
+        }
+        return "root";
+    }
+
+    private String resolveSaveAsSystemTitle(SaveAsSystemSnapshotRequest request, SnapshotVo sourceSnapshot, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && StringUtils.hasText(request.getTitle())) {
+            return request.getTitle();
+        }
+        if (sourceSnapshot != null && StringUtils.hasText(sourceSnapshot.getName())) {
+            return sourceSnapshot.getName();
+        }
+        return sourceSystemSnapshot == null ? null : sourceSystemSnapshot.getTitle();
+    }
+
+    private String resolveSaveAsSystemDescribe(SaveAsSystemSnapshotRequest request, SnapshotVo sourceSnapshot, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && StringUtils.hasText(request.getDescribe())) {
+            return request.getDescribe();
+        }
+        if (sourceSnapshot != null && StringUtils.hasText(sourceSnapshot.getDescribe())) {
+            return sourceSnapshot.getDescribe();
+        }
+        return sourceSystemSnapshot == null ? null : sourceSystemSnapshot.getDescribe();
+    }
+
+    private String resolveSaveAsSystemTopicImage(SaveAsSystemSnapshotRequest request, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && StringUtils.hasText(request.getTopicImage())) {
+            return request.getTopicImage();
+        }
+        return sourceSystemSnapshot == null ? null : sourceSystemSnapshot.getTopicImage();
+    }
+
+    private Integer resolveSaveAsSystemVersionCycle(SaveAsSystemSnapshotRequest request, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && request.getVersionCycle() != null) {
+            return request.getVersionCycle();
+        }
+        if (sourceSystemSnapshot != null && sourceSystemSnapshot.getVersionCycle() != null) {
+            return sourceSystemSnapshot.getVersionCycle();
+        }
+        return 30;
+    }
+
+    private String[] resolveSaveAsSystemLabels(SaveAsSystemSnapshotRequest request, SnapshotVo sourceSnapshot, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && request.getLabels() != null) {
+            return normalizeArray(request.getLabels());
+        }
+        if (sourceSnapshot != null) {
+            return sourceSnapshot.getLabels();
+        }
+        return sourceSystemSnapshot == null ? null : sourceSystemSnapshot.getLabels();
+    }
+
+    private String[] resolveSaveAsSystemPrincipals(SaveAsSystemSnapshotRequest request, SystemSnapshot sourceSystemSnapshot) {
+        if (request != null && request.getPrincipals() != null) {
+            return normalizeArray(request.getPrincipals());
+        }
+        return sourceSystemSnapshot == null ? null : sourceSystemSnapshot.getPrincipals();
     }
 
     private boolean containsAllLabels(String[] source, String[] filters) {
@@ -3276,6 +3478,7 @@ public class SnapshotApiControl {
         private SnapshotVo snapshot;
         private FrontendContextApiControl.UserSummary createUser;
         private List<LabelGroup.Label> labels;
+        private List<String> selectedLabelNames;
         private List<UsecaseVo> usecases;
         private List<UsecaseVo> allUsecases;
         private String shareUrl;
@@ -3287,6 +3490,8 @@ public class SnapshotApiControl {
         public void setCreateUser(FrontendContextApiControl.UserSummary createUser) { this.createUser = createUser; }
         public List<LabelGroup.Label> getLabels() { return labels; }
         public void setLabels(List<LabelGroup.Label> labels) { this.labels = labels; }
+        public List<String> getSelectedLabelNames() { return selectedLabelNames; }
+        public void setSelectedLabelNames(List<String> selectedLabelNames) { this.selectedLabelNames = selectedLabelNames; }
         public List<UsecaseVo> getUsecases() { return usecases; }
         public void setUsecases(List<UsecaseVo> usecases) { this.usecases = usecases; }
         public List<UsecaseVo> getAllUsecases() { return allUsecases; }
@@ -3325,6 +3530,9 @@ public class SnapshotApiControl {
         private Date versionLastUpdate;
         private String versionLastUpdateText;
         private String versionLastUpdateRelativeText;
+        private String versionNumber;
+        private String repoBranch;
+        private String repoCommitId;
         private List<String> labels;
         private List<String> principals;
         private Integer reportStatus;
@@ -3359,6 +3567,12 @@ public class SnapshotApiControl {
         public void setVersionLastUpdateText(String versionLastUpdateText) { this.versionLastUpdateText = versionLastUpdateText; }
         public String getVersionLastUpdateRelativeText() { return versionLastUpdateRelativeText; }
         public void setVersionLastUpdateRelativeText(String versionLastUpdateRelativeText) { this.versionLastUpdateRelativeText = versionLastUpdateRelativeText; }
+        public String getVersionNumber() { return versionNumber; }
+        public void setVersionNumber(String versionNumber) { this.versionNumber = versionNumber; }
+        public String getRepoBranch() { return repoBranch; }
+        public void setRepoBranch(String repoBranch) { this.repoBranch = repoBranch; }
+        public String getRepoCommitId() { return repoCommitId; }
+        public void setRepoCommitId(String repoCommitId) { this.repoCommitId = repoCommitId; }
         public List<String> getLabels() { return labels; }
         public void setLabels(List<String> labels) { this.labels = labels; }
         public List<String> getPrincipals() { return principals; }
@@ -3434,6 +3648,34 @@ public class SnapshotApiControl {
         public void setDescribe(String describe) { this.describe = describe; }
         public String getVersion() { return version; }
         public void setVersion(String version) { this.version = version; }
+        public Integer getVersionCycle() { return versionCycle; }
+        public void setVersionCycle(Integer versionCycle) { this.versionCycle = versionCycle; }
+        public List<String> getLabels() { return labels; }
+        public void setLabels(List<String> labels) { this.labels = labels; }
+        public List<String> getPrincipals() { return principals; }
+        public void setPrincipals(List<String> principals) { this.principals = principals; }
+    }
+
+    public static class SaveAsSystemSnapshotRequest {
+        private String appId;
+        private String directory;
+        private String title;
+        private String describe;
+        private String topicImage;
+        private Integer versionCycle;
+        private List<String> labels;
+        private List<String> principals;
+
+        public String getAppId() { return appId; }
+        public void setAppId(String appId) { this.appId = appId; }
+        public String getDirectory() { return directory; }
+        public void setDirectory(String directory) { this.directory = directory; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getDescribe() { return describe; }
+        public void setDescribe(String describe) { this.describe = describe; }
+        public String getTopicImage() { return topicImage; }
+        public void setTopicImage(String topicImage) { this.topicImage = topicImage; }
         public Integer getVersionCycle() { return versionCycle; }
         public void setVersionCycle(Integer versionCycle) { this.versionCycle = versionCycle; }
         public List<String> getLabels() { return labels; }

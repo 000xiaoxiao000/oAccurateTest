@@ -50,7 +50,6 @@
           <button class="submit-button compact" type="button" @click="batchBindUsecases">批量关联用例</button>
           <button class="mini-button" type="button" @click="selectAll">全选</button>
           <button class="mini-button" type="button" @click="clearSelection">清空选择</button>
-          <span class="selected-badge coverage" title="当前列表快照覆盖接口并集 / 应用总接口数">接口覆盖 {{ payload.apiCoverageSummaryText || '0 / 0' }}</span>
           <span :class="['selected-badge', { active: selectedSnapshotIds.length > 0 }]">已选 {{ selectedSnapshotIds.length }} 项</span>
         </div>
       </section>
@@ -66,6 +65,67 @@
       />
 
       <Teleport to="body">
+        <div v-if="saveAsSystemOpen" class="modal-backdrop" @click.self="closeSaveAsSystemDialog">
+          <form class="modal-card save-system-modal" @submit.prevent="submitSaveAsSystem">
+            <div class="modal-head">
+              <div>
+                <div class="eyebrow">System Snapshot</div>
+                <h2>保存为系统快照</h2>
+                <p>将当前我的快照复制到系统快照，便于团队统一管理和覆盖率分析。</p>
+              </div>
+              <button class="modal-close" type="button" aria-label="关闭" @click="closeSaveAsSystemDialog">×</button>
+            </div>
+            <div class="form-grid save-system-grid">
+              <label class="field">
+                <span>应用</span>
+                <select v-model="saveAsSystemForm.appId" class="select" required>
+                  <option value="" disabled>请选择应用</option>
+                  <option v-for="app in availableApps" :key="app.id" :value="app.id">{{ app.name || app.srcName || app.id }}</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>目录</span>
+                <input v-model.trim="saveAsSystemForm.directory" class="text-input" type="text" placeholder="root" />
+              </label>
+              <label class="field field-wide">
+                <span>标题</span>
+                <input v-model.trim="saveAsSystemForm.title" class="text-input" type="text" required />
+              </label>
+              <label class="field field-wide">
+                <span>描述</span>
+                <textarea v-model.trim="saveAsSystemForm.describe" class="text-area" rows="3"></textarea>
+              </label>
+              <label class="field compact-field">
+                <span>版本周期（天）</span>
+                <input v-model.number="saveAsSystemForm.versionCycle" class="text-input" type="number" min="1" />
+              </label>
+              <div class="field label-picker">
+                <span>标签</span>
+                <div class="label-chip-list">
+                  <button
+                    v-for="label in availableSaveAsSystemLabels"
+                    :key="label.name"
+                    :class="['label-chip', { active: saveAsSystemForm.labels.includes(label.name) }]"
+                    type="button"
+                    @click="toggleSaveAsSystemLabel(label.name)"
+                  >
+                    {{ label.name }}
+                  </button>
+                  <span v-if="!availableSaveAsSystemLabels.length" class="label-empty">暂无可选标签</span>
+                </div>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="ghost-button" type="button" @click="closeSaveAsSystemDialog">取消</button>
+              <button class="submit-button" type="submit" :disabled="savingSystemSnapshot">
+                {{ savingSystemSnapshot ? '保存中...' : '保存为系统快照' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </Teleport>
+
+      <Teleport to="body">
         <div v-if="activeRowMenuSnapshot" class="row-menu-dismiss" @click="closeRowMenu"></div>
         <div
           v-if="activeRowMenuSnapshot"
@@ -76,6 +136,7 @@
         >
           <RouterLink :to="`/p/${projectId}/my-snapshots/${activeRowMenuSnapshot.id}/report`" role="menuitem" @click="closeRowMenu">覆盖率报告</RouterLink>
           <RouterLink :to="`/p/${projectId}/my-snapshots/${activeRowMenuSnapshot.id}/graph`" role="menuitem" @click="closeRowMenu">链路图</RouterLink>
+          <button type="button" role="menuitem" @click="runRowMenuAction(() => openSaveAsSystemDialog(activeRowMenuSnapshot!))">保存为系统快照</button>
           <button type="button" role="menuitem" @click="runRowMenuAction(() => openSingleUsecasePicker(activeRowMenuSnapshot!.id))">关联用例</button>
           <button type="button" role="menuitem" @click="runRowMenuAction(() => startEdit(activeRowMenuSnapshot!))">编辑</button>
           <button type="button" role="menuitem" @click="runRowMenuAction(() => toggleShare(activeRowMenuSnapshot!))">{{ activeRowMenuSnapshot.share ? '关闭共享' : '开启共享' }}</button>
@@ -96,7 +157,6 @@
             <colgroup>
               <col class="select-col" />
               <col />
-              <col class="coverage-col" />
               <col class="time-col" />
               <col class="action-col" />
             </colgroup>
@@ -113,14 +173,14 @@
                     </RouterLink>
                     <div class="snapshot-meta-row">
                       <span v-if="snapshot.describe" class="snapshot-desc" :title="snapshot.describe">{{ snapshot.describe }}</span>
-                      <span 
-                        v-if="snapshot.labels?.length" 
-                        class="label-summary"
-                        :title="`标签：${snapshot.labels.join('、')}`"
-                      >标签 {{ snapshot.labels.length }}</span>
+                    </div>
+                    <div v-if="snapshot.versionNumber || snapshot.repoBranch || snapshot.repoCommitId || snapshot.labels?.length" class="snapshot-meta-line">
+                      <span class="meta-pill" :title="snapshot.versionNumber">版本 {{ snapshot.versionNumber }}</span>
+                      <span v-if="snapshot.repoBranch" class="meta-pill branch" :title="snapshot.repoBranch">分支 {{ snapshot.repoBranch }}</span>
+                      <span v-if="snapshot.repoCommitId" class="meta-pill commit" :title="snapshot.repoCommitId">Commit {{ abbreviateCommit(snapshot.repoCommitId) }}</span>
+                      <span v-if="snapshot.labels?.length" class="meta-pill" :title="`标签：${snapshot.labels.join('、')}`">标签 {{ snapshot.labels.length }}</span>
                     </div>
                   </td>
-                  <td class="coverage-cell">{{ snapshot.apiCoverageText || '-' }}</td>
                   <td class="time-cell">
                     <span :title="snapshot.updateTimeText || '-'">{{ snapshot.updateTimeRelativeText || snapshot.updateTimeText || '-' }}</span>
                   </td>
@@ -139,7 +199,7 @@
                 </tr>
                 <tr v-if="editingId === snapshot.id" class="edit-row">
                   <td></td>
-                  <td colspan="4">
+                  <td colspan="3">
                     <form class="edit-form" @submit.prevent="submitEdit(snapshot.id)">
                       <label class="field">
                         <span>快照名称</span>
@@ -182,7 +242,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
-import type { SnapshotOption } from '@/api/types'
+import type { AppSummary, SnapshotOption } from '@/api/types'
 import AppPagination from '@/components/AppPagination.vue'
 import UsecasePicker from '@/components/usecase/UsecasePicker.vue'
 import { useDialog } from '@/composables/useDialog'
@@ -207,6 +267,17 @@ const usecasePickerOpen = ref(false)
 const usecasePickerMode = ref<'single' | 'batch'>('single')
 const usecasePickerSnapshotId = ref('')
 const usecasePickerSelectedIds = ref<string[]>([])
+const saveAsSystemOpen = ref(false)
+const savingSystemSnapshot = ref(false)
+const saveAsSystemSnapshotId = ref('')
+const saveAsSystemForm = reactive({
+  appId: '',
+  directory: 'root',
+  title: '',
+  describe: '',
+  versionCycle: 30,
+  labels: [] as string[],
+})
 const activeRowMenuId = ref('')
 const rowMenuStyle = ref<Record<string, string>>({})
 const availableLabels = computed(() => {
@@ -228,6 +299,16 @@ const availableLabels = computed(() => {
   })
   
   return merged
+})
+const availableSaveAsSystemLabels = computed(() => {
+  const labelMap = new Map<string, { name: string; color?: string }>()
+  availableLabels.value.forEach((label) => labelMap.set(label.name, label))
+  saveAsSystemForm.labels.forEach((name) => {
+    if (name && !labelMap.has(name)) {
+      labelMap.set(name, { name, color: '' })
+    }
+  })
+  return [...labelMap.values()]
 })
 const labelFilterText = computed(() => (labelDrafts.value.length ? `标签过滤 ${labelDrafts.value.length}` : '标签过滤'))
 const hasActiveFilters = computed(
@@ -254,6 +335,12 @@ const activeRowMenuSnapshot = computed(() => {
   return (payload.value?.snapshots || []).find((snapshot) => snapshot.id === activeRowMenuId.value) || null
 })
 
+const availableApps = computed<AppSummary[]>(() => projectStore.contextByProjectId[projectId.value]?.apps || [])
+
+function abbreviateCommit(commitId?: string) {
+  if (!commitId) return ''
+  return commitId.length > 12 ? commitId.slice(0, 12) : commitId
+}
 
 async function load() {
   if (!projectId.value) {
@@ -263,6 +350,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
+    await projectStore.loadProjectContext(projectId.value)
     await projectStore.loadMySnapshotList(projectId.value, {
       sort: String(route.query.sort || 'updateTime'),
       keyword: String(route.query.keyword || ''),
@@ -450,6 +538,67 @@ async function submitUsecaseBinding(usecaseIds: string[]) {
     error.value = err instanceof Error ? err.message : '关联我的快照用例失败'
   } finally {
     loading.value = false
+  }
+}
+
+function openSaveAsSystemDialog(snapshot: SnapshotOption) {
+  saveAsSystemSnapshotId.value = snapshot.id
+  saveAsSystemForm.appId = snapshot.appId || availableApps.value[0]?.id || ''
+  saveAsSystemForm.directory = 'root'
+  saveAsSystemForm.title = snapshot.name || snapshot.title || ''
+  saveAsSystemForm.describe = snapshot.describe || ''
+  saveAsSystemForm.versionCycle = 30
+  saveAsSystemForm.labels = [...(snapshot.labels || [])]
+  saveAsSystemOpen.value = true
+}
+
+function toggleSaveAsSystemLabel(labelName: string) {
+  const index = saveAsSystemForm.labels.indexOf(labelName)
+  if (index >= 0) {
+    saveAsSystemForm.labels.splice(index, 1)
+  } else {
+    saveAsSystemForm.labels.push(labelName)
+  }
+}
+
+function closeSaveAsSystemDialog() {
+  if (savingSystemSnapshot.value) return
+  saveAsSystemOpen.value = false
+  saveAsSystemSnapshotId.value = ''
+}
+
+async function submitSaveAsSystem() {
+  if (!saveAsSystemSnapshotId.value) return
+  if (!saveAsSystemForm.appId) {
+    error.value = '请选择系统快照所属应用'
+    return
+  }
+  if (!saveAsSystemForm.title.trim()) {
+    error.value = '系统快照标题不能为空'
+    return
+  }
+  savingSystemSnapshot.value = true
+  error.value = ''
+  try {
+    const systemSnapshotId = await projectStore.persistMySnapshotAsSystemSnapshot(projectId.value, saveAsSystemSnapshotId.value, {
+      appId: saveAsSystemForm.appId,
+      directory: saveAsSystemForm.directory.trim() || 'root',
+      title: saveAsSystemForm.title.trim(),
+      describe: saveAsSystemForm.describe.trim(),
+      versionCycle: saveAsSystemForm.versionCycle || 30,
+      labels: saveAsSystemForm.labels,
+      principals: [],
+    })
+    const appId = saveAsSystemForm.appId
+    savingSystemSnapshot.value = false
+    closeSaveAsSystemDialog()
+    if (appId && systemSnapshotId) {
+      await router.push(`/p/${projectId.value}/apps/${appId}/snapshots/${systemSnapshotId}`)
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '保存系统快照失败'
+  } finally {
+    savingSystemSnapshot.value = false
   }
 }
 
@@ -744,8 +893,7 @@ onMounted(load)
   font-weight: 800;
 }
 
-.selected-badge.active,
-.selected-badge.coverage {
+.selected-badge.active {
   border-color: rgba(15, 118, 110, .2);
   background: rgba(15, 118, 110, .09);
   color: #0f766e;
@@ -804,10 +952,6 @@ onMounted(load)
 
 .select-col {
   width: 34px;
-}
-
-.coverage-col {
-  width: 92px;
 }
 
 .time-col {
@@ -881,30 +1025,47 @@ onMounted(load)
   white-space: nowrap;
 }
 
-.label-summary,
-.coverage-cell {
-  color: #0f766e;
+.snapshot-meta-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
-.label-summary {
-  flex: 0 0 auto;
+.snapshot-meta-line .meta-pill {
+  flex: 0 1 auto;
+}
+
+.meta-pill {
+  min-width: 0;
+  max-width: min(240px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 2px 7px;
   border-radius: 999px;
   background: rgba(15, 118, 110, .08);
+  color: #0f766e;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.coverage-cell,
+.meta-pill.branch {
+  flex: 0 1 auto;
+}
+
+.meta-pill.commit {
+  flex: 0 1 auto;
+}
+
 .time-cell {
   color: #64748b;
   font-size: 13px;
   text-align: right;
   white-space: nowrap;
-}
-
-.coverage-cell {
-  color: #0f766e;
-  font-weight: 800;
 }
 
 .snapshot-action-cell {
@@ -1044,4 +1205,208 @@ onMounted(load)
     grid-template-columns: 1fr;
   }
 }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: var(--oat-space-6, 24px);
+  background: rgba(15, 23, 42, .44);
+  backdrop-filter: blur(8px);
+}
+
+.modal-card {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  display: grid;
+  gap: 18px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: var(--oat-radius-xl, 24px);
+  background: rgba(255, 255, 255, .98);
+  box-shadow: var(--oat-shadow-lg, 0 28px 72px rgba(15, 23, 42, .16));
+  padding: var(--oat-space-6, 24px);
+}
+
+.save-system-modal {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(15, 118, 110, .10), transparent 34%),
+    rgba(255, 255, 255, .98);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(15, 23, 42, .08);
+}
+
+.modal-head h2 {
+  margin: 4px 0 6px;
+  color: var(--oat-text, #172033);
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
+.modal-head p {
+  margin: 0;
+  color: var(--oat-text-muted, #64748b);
+  line-height: 1.6;
+}
+
+.modal-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .06);
+  color: #334155;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  background: rgba(15, 118, 110, .10);
+  color: var(--oat-primary, #0f766e);
+}
+
+.save-system-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+  padding: 2px 0;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  color: var(--oat-text-secondary, #475569);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field > span {
+  min-height: 18px;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+.compact-field .text-input {
+  min-height: var(--oat-min-target, 44px);
+}
+
+.text-input,
+.select {
+  width: 100%;
+  min-height: var(--oat-min-target, 44px);
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: var(--oat-radius-md, 14px);
+  background: rgba(255, 255, 255, .94);
+  color: var(--oat-text, #172033);
+  font: inherit;
+  padding: 10px 13px;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
+}
+
+.text-input:focus,
+.select:focus {
+  border-color: rgba(15, 118, 110, .65);
+  box-shadow: var(--oat-focus-ring, 0 0 0 4px rgba(15, 118, 110, .18));
+  outline: none;
+}
+
+.label-picker {
+  align-self: stretch;
+}
+
+.label-chip-list {
+  min-height: 102px;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, .10);
+  border-radius: var(--oat-radius-lg, 18px);
+  background: rgba(248, 250, 252, .72);
+}
+
+.label-chip {
+  border: 1px solid rgba(15, 118, 110, .16);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(15, 118, 110, .06);
+  color: #0f766e;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, transform .16s ease, box-shadow .16s ease;
+}
+
+.label-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(15, 118, 110, .12);
+}
+
+.label-chip.active {
+  background: #0f9488;
+  color: #fff;
+  border-color: #0f9488;
+}
+
+.label-empty {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(15, 23, 42, .08);
+}
+
+@media (max-width: 720px) {
+  .modal-backdrop {
+    padding: 14px;
+    align-items: start;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: calc(100vh - 28px);
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .modal-head,
+  .modal-actions {
+    gap: 12px;
+  }
+
+  .save-system-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .modal-actions > button {
+    width: 100%;
+  }
+}
+
 </style>

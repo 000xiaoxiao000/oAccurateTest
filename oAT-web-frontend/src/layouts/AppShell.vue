@@ -84,6 +84,7 @@
         <small>顶部</small>
       </button>
     </Transition>
+    <AppToastHost />
   </div>
 </template>
 
@@ -95,6 +96,7 @@ import { useRoute, useRouter, RouterLink, RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
 import AppBreadcrumbs from '@/components/AppBreadcrumbs.vue'
+import AppToastHost from '@/components/AppToastHost.vue'
 import type { AppSummary } from '@/api/types'
 
 const route = useRoute()

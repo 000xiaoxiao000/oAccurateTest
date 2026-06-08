@@ -1,7 +1,5 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
@@ -10,97 +8,77 @@ public class App implements Serializable {
     /**
      * 名称
      */
-    @Field(type = FieldType.Keyword)
     private String name;
 
     /**
      * 范围
      */
-    @Field(type = FieldType.Keyword)
     private String range;
 
     /**
      * 源码工程名称
      */
-    @Field(type = FieldType.Keyword)
     private String srcName;
 
     /**
      * 创建用户ID
      */
-    @Field(type = FieldType.Keyword)
     private String createUserId;
 
     /**
      * 创建项目
      */
-    @Field(type = FieldType.Keyword)
     private String createProjectId;
 
     /**
      * 描述
      */
-    @Field(type = FieldType.Text)
     private String describe;
 
     /**
      * 属性配置
      */
-    @Field(type = FieldType.Text)
     private String properties;
 
     /**
      * 当前版本号
      */
-    @Field(type = FieldType.Keyword)
     private String currentVersion;
 
     /**
      * 当前分支
      */
-    @Field(type = FieldType.Keyword)
     private String currentBranch;
 
     /**
      * 当前CommitId
      */
-    @Field(type = FieldType.Keyword)
     private String currentCommitId;
 
 
     /**
      * 代码仓库配置
      */
-    @Field(type = FieldType.Keyword)
     private String repoAddress;
 
-    @Field(type = FieldType.Keyword)
     private String repoUserName;
 
-    @Field(type = FieldType.Keyword)
     private String repoPassword;
 
 
     /**
      * 快照目录
      */
-    @Field(type = FieldType.Object)
     private SnapshotDirectory[] snapshotDirs;
 
     /**
      * 探针实例上下线告警配置
      */
-    @Field(type = FieldType.Boolean)
     private Boolean probeAlertEnabled;
-    @Field(type = FieldType.Integer)
     private Integer probeOfflineThresholdSeconds;
-    @Field(type = FieldType.Keyword)
     private String probeWebhookUrl;
-    @Field(type = FieldType.Boolean)
     private Boolean probeAlertOnOnline;
-    @Field(type = FieldType.Boolean)
     private Boolean probeAlertOnOffline;
-    @Field(type = FieldType.Boolean)
     private Boolean probeAlertOnRecovered;
 
     // ============ getter/setter ============

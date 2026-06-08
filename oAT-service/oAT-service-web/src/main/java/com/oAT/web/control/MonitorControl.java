@@ -216,19 +216,22 @@ public class MonitorControl {
     @ResponseBody
     public ResultNotified<SystemSnapshotContextPayload> getSystemSnapshotContext(@PathVariable String projectId,
                                                                                  @SessionAttribute UserVo user,
-                                                                                 @RequestParam String traceId) {
+                                                                                 @RequestParam String traceId,
+                                                                                 @RequestParam(required = false) String appId) {
         Map<String, TraceNode> nodes = getTraceNode(traceId);
         TraceNode rootNode = nodes.get("0");
         Assert.notNull(rootNode, "找不到主调用节点");
         Application app = rootNode.getApp();
-        Assert.notNull(app, "找不到应用信息");
+        String snapshotAppId = StringUtils.hasText(appId) ? appId : (app == null ? null : app.getAppId());
+        Assert.hasText(snapshotAppId, "找不到应用信息");
+        AppVo appVo = appService.getApp(snapshotAppId);
 
         SystemSnapshotContextPayload payload = new SystemSnapshotContextPayload();
         payload.setTraceId(traceId);
-        payload.setAppId(app.getAppId());
-        payload.setAppName(app.getAppName());
-        payload.setProjectSrcName(app.getProjectSrcName());
-        payload.setDirectories(appService.getAppSnapshotDirs(app.getAppId()));
+        payload.setAppId(snapshotAppId);
+        payload.setAppName(appVo != null ? appVo.getName() : (app == null ? snapshotAppId : app.getAppName()));
+        payload.setProjectSrcName(appVo != null ? appVo.getSrcName() : (app == null ? "" : app.getProjectSrcName()));
+        payload.setDirectories(appService.getAppSnapshotDirs(snapshotAppId));
         payload.setLabels(projectService.getLables(projectId, LableType.snapshot));
         payload.setMembers(projectService.getProjectMembers(projectId));
         payload.setCurrentUserId(user.getId());
@@ -243,13 +246,19 @@ public class MonitorControl {
                                                        @SessionAttribute UserVo user,
                                                        String traceId) {
         try {
-            Map<String, TraceNode> nodes = getTraceNode(traceId);
+            String resolvedTraceId = StringUtils.hasText(traceId) ? traceId : snapshot.getTraceId();
+            Assert.hasText(resolvedTraceId, "traceId 不能为空");
+            Map<String, TraceNode> nodes = getTraceNode(resolvedTraceId);
             TraceNode rootNode = nodes.get("0");
             Assert.notNull(rootNode, "找不到主调用节点");
+            Application app = rootNode.getApp();
+            if (!StringUtils.hasText(snapshot.getAppId()) && app != null) {
+                snapshot.setAppId(app.getAppId());
+            }
             if (rootNode instanceof HttpTraceNode) {
                 snapshot.setSubTitle(((HttpTraceNode) rootNode).getRequestUrl());
             } else if (!StringUtils.hasText(snapshot.getSubTitle())) {
-                snapshot.setSubTitle(traceId);
+                snapshot.setSubTitle(resolvedTraceId);
             }
             systemSnapshotService.create(projectId, user.getId(), snapshot, nodes.values());
             return new ResultNotified<>(true, "保存成功");
@@ -265,15 +274,17 @@ public class MonitorControl {
     public ResultNotified<String> autoSaveSystemSnapshot(@PathVariable String projectId,
                                                          @SessionAttribute UserVo user,
                                                          @RequestParam String traceId,
+                                                         @RequestParam(required = false) String appId,
                                                          @RequestParam(required = false) String title) {
         try {
             Map<String, TraceNode> nodes = getTraceNode(traceId);
             TraceNode rootNode = nodes.get("0");
             Assert.notNull(rootNode, "找不到主调用节点");
             Application app = rootNode.getApp();
-            Assert.notNull(app, "找不到应用信息");
+            String snapshotAppId = StringUtils.hasText(appId) ? appId : (app == null ? null : app.getAppId());
+            Assert.hasText(snapshotAppId, "找不到应用信息");
 
-            List<SystemSnapshot> existingSnapshots = systemSnapshotService.findAll(projectId, app.getAppId());
+            List<SystemSnapshot> existingSnapshots = systemSnapshotService.findAll(projectId, snapshotAppId);
             boolean exists = existingSnapshots.stream().anyMatch(item -> traceId.equals(item.getTraceId()));
             if (exists) {
                 return new ResultNotified<>(true, "系统快照已自动保存过");
@@ -281,7 +292,7 @@ public class MonitorControl {
 
             SystemSnapshot snapshot = new SystemSnapshot();
             snapshot.setTraceId(traceId);
-            snapshot.setAppId(app.getAppId());
+            snapshot.setAppId(snapshotAppId);
             snapshot.setDirectory("root");
             snapshot.setTitle(StringUtils.hasText(title) ? title : "自动系统快照");
             snapshot.setDescribe("由实时监控自动生成");

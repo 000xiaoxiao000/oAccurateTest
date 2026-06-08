@@ -1,18 +1,12 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
 public class File implements Serializable {
-    @Field(type = FieldType.Text)
     private String name;
-    @Field(type = FieldType.Keyword)
     private String type;
-    @Field(type = FieldType.Keyword)
     private String key;
-    @Field(type = FieldType.Keyword, index = false)
     private String path;
     private long length;
 

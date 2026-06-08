@@ -315,7 +315,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
                 clientRepository.save(clientIndex);
             });
         } catch (Exception e) {
-            logger.warn("[heartbeat]同步 client 心跳到 ES 失败, sessionId={}", sessionId, e);
+            logger.warn("[heartbeat]同步 client 心跳到 MySQL 失败, sessionId={}", sessionId, e);
         }
     }
 
@@ -431,7 +431,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         });
     }
 
-    // 将包验证信息存储到ES
+    // 将包验证信息存储到 MySQL
     @Override
     public void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage) {
         if (!StringUtils.hasText(sessionId)) {

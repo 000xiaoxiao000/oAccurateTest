@@ -64,15 +64,16 @@ public class MonitorApiControl {
     @GetMapping("/system-snapshot-context")
     public ResultNotified<MonitorControl.SystemSnapshotContextPayload> systemSnapshotContext(@PathVariable String projectId,
                                                                                             @SessionAttribute UserVo user,
-                                                                                            @RequestParam String traceId) {
-        return monitorControl.getSystemSnapshotContext(projectId, user, traceId);
+                                                                                            @RequestParam String traceId,
+                                                                                            @RequestParam(required = false) String appId) {
+        return monitorControl.getSystemSnapshotContext(projectId, user, traceId, appId);
     }
 
     @PostMapping("/system-snapshots")
     public ResultNotified<String> saveSystemSnapshot(SystemSnapshot snapshot,
                                                      @PathVariable String projectId,
                                                      @SessionAttribute UserVo user,
-                                                     String traceId) {
+                                                     @RequestParam String traceId) {
         return monitorControl.doSaveSystemSnapshot(snapshot, projectId, user, traceId);
     }
 
@@ -80,7 +81,8 @@ public class MonitorApiControl {
     public ResultNotified<String> autoSaveSystemSnapshot(@PathVariable String projectId,
                                                          @SessionAttribute UserVo user,
                                                          @RequestParam String traceId,
+                                                         @RequestParam(required = false) String appId,
                                                          @RequestParam(required = false) String title) {
-        return monitorControl.autoSaveSystemSnapshot(projectId, user, traceId, title);
+        return monitorControl.autoSaveSystemSnapshot(projectId, user, traceId, appId, title);
     }
 }

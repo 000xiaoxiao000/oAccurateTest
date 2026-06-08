@@ -3,26 +3,19 @@ package com.oAT.web.esDao.entity;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.alibaba.excel.annotation.ExcelProperty;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 
-@Document(indexName = "class_coverage", shards = 2)
 public class ClassCoverageIndex implements Serializable {
     @Id
     @ExcelIgnore
     private String id;
-    @Field(type = FieldType.Keyword)
     @ExcelIgnore
     private String reportId;
-    @Field(type = FieldType.Keyword)
     @ExcelIgnore
     private String appId;
-    @Field(type = FieldType.Keyword)
     @ExcelProperty("类名")
     private String className;
 
@@ -45,20 +38,15 @@ public class ClassCoverageIndex implements Serializable {
     @ExcelProperty("圈复杂度")
     private int totalComplexity;
 
-    @Field(type = FieldType.Double)
     private Double lineRate;
 
-    @Field(type = FieldType.Double)
     private Double branchRate;
 
-    @Field(type = FieldType.Double)
     private Double methodRate;
 
-    @Field(type = FieldType.Object)
     @ExcelIgnore
     private List<MethodCoverageDetail> methods;
 
-    @Field(type = FieldType.Boolean)
     @ExcelIgnore
     private Boolean hasCodeChanges;
 

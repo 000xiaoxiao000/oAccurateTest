@@ -339,6 +339,9 @@ export interface SnapshotOption {
   updateTimeText?: string
   updateTimeRelativeText?: string
   apiCoverageText?: string
+  versionNumber?: string
+  repoBranch?: string
+  repoCommitId?: string
 }
 
 export interface UsecaseListPayload {
@@ -509,6 +512,9 @@ export interface SystemSnapshotSummary {
   versionLastUpdate?: string
   versionLastUpdateText?: string
   versionLastUpdateRelativeText?: string
+  versionNumber?: string
+  repoBranch?: string
+  repoCommitId?: string
   labels?: string[]
   principals?: string[]
   reportStatus?: number
@@ -568,6 +574,7 @@ export interface MySnapshotDetailPayload {
   snapshot: SnapshotOption
   createUser?: UserSummary
   labels: LabelSummary[]
+  selectedLabelNames?: string[]
   usecases: UsecaseSummary[]
   allUsecases: UsecaseSummary[]
   shareUrl?: string

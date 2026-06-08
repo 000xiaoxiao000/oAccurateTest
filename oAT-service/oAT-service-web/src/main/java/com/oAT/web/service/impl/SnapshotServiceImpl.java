@@ -1,14 +1,18 @@
 package com.oAT.web.service.impl;
 
-import com.oAT.agent.model.TraceNode;
+import com.oAT.agent.model.*;
 import com.oAT.web.esDao.CaseCenterRepository;
 import com.oAT.web.esDao.TraceNodeRepository;
+import com.oAT.web.esDao.TraceSummaryRepository;
 import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.esDao.entity.Snapshot;
 import com.oAT.web.esDao.entity.TraceNodeIndex;
+import com.oAT.web.esDao.entity.TraceSummaryIndex;
 import com.oAT.web.service.SnapshotService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.entity.SnapshotVo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -23,12 +27,15 @@ import java.util.*;
 @Service
 public class SnapshotServiceImpl implements SnapshotService{
 
+    private static final Logger logger = LoggerFactory.getLogger(SnapshotServiceImpl.class);
     private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
 
     @Autowired
     CaseCenterRepository centerRepository;
     @Autowired
     TraceNodeRepository traceNodeRepository;
+    @Autowired
+    TraceSummaryRepository traceSummaryRepository;
     @Autowired
     private UsecaseService usecaseService;
     @Autowired
@@ -42,7 +49,7 @@ public class SnapshotServiceImpl implements SnapshotService{
             list.add(new TraceNodeIndex(node));
         }
 
-        // 批量保存 TraceNode。对同一个 traceId_nodeId 执行覆盖保存，避免旧节点缺失请求参数等字段。
+        // 批量保存 TraceNode
         if (!list.isEmpty()) {
             traceNodeRepository.saveAll(list);
         }
@@ -57,10 +64,92 @@ public class SnapshotServiceImpl implements SnapshotService{
             }
         }
 
+        // 生成并保存 TraceSummary
+        if (!nodes.isEmpty()) {
+            try {
+                TraceSummaryIndex summary = buildTraceSummary(nodes, snapshot.getProjectId());
+                traceSummaryRepository.save(summary);
+            } catch (Exception e) {
+                logger.error("Failed to save trace summary for traceId: {}", snapshot.getTraceId(), e);
+            }
+        }
+
         // 保存快照
         CaseCenterIndex index = new CaseCenterIndex(snapshot);
         index = centerRepository.save(index);
         return convert(index);
+    }
+
+    private TraceSummaryIndex buildTraceSummary(Collection<TraceNode> nodes, String projectId) {
+        TraceSummaryIndex summary = new TraceSummaryIndex();
+        
+        HttpTraceNode rootHttp = null;
+        int sqlCount = 0;
+        int remoteCount = 0;
+        int redisCount = 0;
+        int mqCount = 0;
+        int errorCount = 0;
+        
+        for (TraceNode node : nodes) {
+            if (node instanceof HttpTraceNode && "0".equals(node.getTraceNodeId())) {
+                rootHttp = (HttpTraceNode) node;
+            }
+            
+            if (node instanceof SqlTraceNode || node instanceof CKSqlTraceNode) {
+                sqlCount++;
+            } else if (node instanceof DubboTraceNode || node instanceof FeignTraceNode || 
+                       node instanceof HttpClientTraceNode || node instanceof SofaRpcTraceNode) {
+                remoteCount++;
+            } else if (node instanceof RedisTraceNode) {
+                redisCount++;
+            } else if (node instanceof RabbitMQTraceNode || node instanceof RocketMQProducerTraceNode || 
+                       node instanceof KafkaMQTraceNode) {
+                mqCount++;
+            }
+            
+            if (node instanceof StatementError && ((StatementError) node).getError() != null) {
+                errorCount++;
+            }
+        }
+        
+        if (rootHttp != null) {
+            summary.setTraceId(rootHttp.getTraceId());
+            summary.setProjectId(projectId);
+            summary.setSessionId(rootHttp.getSessionId());
+            summary.setStatus(rootHttp.getStatus());
+            summary.setHasError(errorCount > 0);
+            summary.setHttpMethod(rootHttp.getRequestMethod());
+            summary.setHttpUrl(rootHttp.getRequestUrl());
+            summary.setHttpResponseCode(rootHttp.getResponseCode());
+            summary.setHttpClientIp(rootHttp.getClientIp());
+            summary.setHttpServerIp(rootHttp.getServerIp());
+            summary.setHttpServerPort(rootHttp.getServerPort());
+            summary.setHttpAjax(rootHttp.getAjax());
+            summary.setBeginTime(rootHttp.getBeginTime());
+            summary.setEndTime(rootHttp.getEndTime());
+            summary.setUseTime(rootHttp.getUseTime());
+            summary.setCreateTime(new Date());
+            
+            if (rootHttp.getApp() != null) {
+                summary.setAppId(rootHttp.getApp().getAppId());
+                summary.setAppName(rootHttp.getApp().getAppName());
+            }
+            
+            if (rootHttp.getRequestUrl() != null) {
+                String url = rootHttp.getRequestUrl();
+                int queryIndex = url.indexOf('?');
+                summary.setHttpUrlPath(queryIndex > 0 ? url.substring(0, queryIndex) : url);
+            }
+        }
+        
+        summary.setNodeCount(nodes.size());
+        summary.setSqlCount(sqlCount);
+        summary.setRemoteCount(remoteCount);
+        summary.setRedisCount(redisCount);
+        summary.setMqCount(mqCount);
+        summary.setErrorCount(errorCount);
+        
+        return summary;
     }
 
     public boolean existsByProjectUserAndTraceId(String projectId, String userId, String traceId) {

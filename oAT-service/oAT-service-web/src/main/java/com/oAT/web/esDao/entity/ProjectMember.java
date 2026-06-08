@@ -1,21 +1,15 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
 public class ProjectMember implements Serializable {
-    @Field(type = FieldType.Keyword)
     private String projectId;
 
-    @Field(type = FieldType.Keyword)
     private String memberId; // 用户ID
 
-    @Field(type = FieldType.Keyword)
     private String role;// 权限角色
 
-    @Field(type = FieldType.Boolean)
     private Boolean star;//是否为该用户收藏项目
 
     public String getMemberId() {

@@ -1,55 +1,32 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Date;
 
-@Document(indexName = "probe-instance-status", shards = 2)
 public class ProbeInstanceStatus implements Serializable {
     @Id
     private String id;
 
-    @Field(type = FieldType.Keyword)
     private String probeKey;
-    @Field(type = FieldType.Keyword)
     private String projectId;
-    @Field(type = FieldType.Keyword)
     private String appId;
-    @Field(type = FieldType.Keyword)
     private String appName;
-    @Field(type = FieldType.Keyword)
     private String sessionId;
-    @Field(type = FieldType.Keyword)
     private String addressIp;
-    @Field(type = FieldType.Keyword)
     private String pid;
-    @Field(type = FieldType.Keyword)
     private String systemDir;
-    @Field(type = FieldType.Keyword)
     private String agentVersion;
-    @Field(type = FieldType.Keyword)
     private String status;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date loginTime;
-    @Field(type = FieldType.Long)
     private Long lastHeartbeatTime;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date lastStatusChangeTime;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date offlineSince;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date onlineSince;
-    @Field(type = FieldType.Keyword)
     private String lastAlertEventType;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date lastAlertTime;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
 
     public enum Status {

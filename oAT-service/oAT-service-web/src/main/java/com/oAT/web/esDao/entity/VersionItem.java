@@ -1,33 +1,21 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
 public class VersionItem implements Serializable {
-    @Field(type = FieldType.Keyword)
     private String appId;
-    @Field(type = FieldType.Keyword)
     private String projectId;
-    @Field(type = FieldType.Keyword)
     private String versionNumber;
-    @Field(type = FieldType.Text)
     private String describe;
-    @Field(type = FieldType.Keyword)
     private String programFile;
-    @Field(type = FieldType.Keyword)
     private String[] configFile;
-    @Field(type = FieldType.Keyword)
     private String[] databaseFile;
 
-    @Field(type = FieldType.Keyword)
     private String sourceType;
 
-    @Field(type = FieldType.Keyword)
     private String repoBranch;
 
-    @Field(type = FieldType.Keyword)
     private String repoCommitId;
 
     public String getAppId() {

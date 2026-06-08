@@ -1,7 +1,5 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
@@ -11,20 +9,13 @@ public class Snapshot implements Serializable {
     名称不能为空
      */
     private String name;
-    @Field(type = FieldType.Keyword)
     private String projectId;
-    @Field(type = FieldType.Keyword)
     private String appId;
 
-    @Field(type = FieldType.Keyword)
     private String traceId;
-    @Field(type = FieldType.Keyword)
     private String[] labels;
-    @Field(type = FieldType.Keyword)
     private String createUser;
-    @Field(type = FieldType.Text)
     private String describe;
-    @Field(type = FieldType.Keyword)
     private Boolean share;
 
 

@@ -3,7 +3,7 @@ package com.oAT.web.service;
 import com.oAT.web.service.entity.UsecaseImportResult;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 public interface UsecaseFileService {

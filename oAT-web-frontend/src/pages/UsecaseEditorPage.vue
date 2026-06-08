@@ -40,32 +40,44 @@
             <input v-model="form.directory" class="text-input" type="text" required />
           </label>
 
-          <label class="field">
+          <div class="field">
             <span>标签</span>
-            <select v-model="form.labels" class="select" multiple>
-              <option v-for="label in payload.labels" :key="label.name" :value="label.name">
-                {{ label.name }}
-              </option>
-            </select>
-          </label>
+            <div class="checkbox-list">
+              <label v-for="label in payload.labels" :key="label.name" class="checkbox-item">
+                <input type="checkbox" :value="label.name" v-model="form.labels" />
+                <span class="checkbox-label" :title="label.name">{{ label.name }}</span>
+              </label>
+              <div v-if="!payload.labels?.length" class="empty-hint">暂无可选标签</div>
+            </div>
+          </div>
 
-          <label class="field">
+          <div class="field">
             <span>关联快照</span>
-            <select v-model="form.snapshots" class="select tall" multiple>
-              <option v-for="snapshot in payload.snapshots" :key="snapshot.id" :value="snapshot.id">
-                {{ snapshot.title || snapshot.id }}
-              </option>
-            </select>
-          </label>
+            <div class="checkbox-list tall">
+              <label v-for="snapshot in payload.snapshots" :key="snapshot.id" class="checkbox-item">
+                <input type="checkbox" :value="snapshot.id" v-model="form.snapshots" />
+                <span class="checkbox-label" :title="getSnapshotTooltip(snapshot)">
+                  <span class="item-title">{{ getSnapshotDisplayName(snapshot) }}</span>
+                  <span v-if="snapshot.createTimeText" class="item-meta">{{ snapshot.createTimeText }}</span>
+                </span>
+              </label>
+              <div v-if="!payload.snapshots?.length" class="empty-hint">暂无可选快照</div>
+            </div>
+          </div>
 
-          <label class="field">
+          <div class="field">
             <span>系统快照</span>
-            <select v-model="form.systemSnapshots" class="select tall" multiple>
-              <option v-for="item in payload.systemSnapshots" :key="item.id" :value="item.id">
-                {{ item.name }}
-              </option>
-            </select>
-          </label>
+            <div class="checkbox-list tall">
+              <label v-for="item in payload.systemSnapshots" :key="item.id" class="checkbox-item">
+                <input type="checkbox" :value="item.id" v-model="form.systemSnapshots" />
+                <span class="checkbox-label" :title="item.name">
+                  <span class="item-title">{{ item.name }}</span>
+                  <span v-if="item.url" class="item-meta">{{ item.url }}</span>
+                </span>
+              </label>
+              <div v-if="!payload.systemSnapshots?.length" class="empty-hint">暂无可选系统快照</div>
+            </div>
+          </div>
 
           <label class="field">
             <span>缺陷</span>
@@ -129,6 +141,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
+import type { SnapshotOption } from '@/api/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,6 +169,20 @@ const form = reactive({
 })
 
 const previewHtml = computed(() => renderMarkdown(form.content))
+
+function getSnapshotDisplayName(snapshot: SnapshotOption) {
+  return snapshot.title || snapshot.name || snapshot.traceId || snapshot.id
+}
+
+function getSnapshotTooltip(snapshot: SnapshotOption) {
+  const parts = [
+    snapshot.title || snapshot.name,
+    snapshot.traceId,
+    snapshot.describe,
+    snapshot.createTimeText,
+  ].filter(Boolean)
+  return parts.join(' | ')
+}
 
 function escapeHtml(value: string) {
   return value
@@ -478,12 +505,73 @@ onMounted(load)
   font: inherit;
 }
 
-.select[multiple] {
-  min-height: 120px;
+.checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+  max-height: 160px;
+  overflow-y: auto;
 }
 
-.select.tall {
-  min-height: 160px;
+.checkbox-list.tall {
+  max-height: 220px;
+}
+
+.checkbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.checkbox-item:hover {
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.checkbox-item input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: #0f766e;
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.checkbox-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.item-title {
+  color: #1e293b;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.item-meta {
+  color: #94a3b8;
+  font-size: 11px;
+  word-break: break-all;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.empty-hint {
+  padding: 8px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: center;
 }
 
 .markdown-input {

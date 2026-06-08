@@ -1,9 +1,7 @@
 package com.oAT.web.esDao.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -13,7 +11,6 @@ import java.util.stream.Stream;
 /**
  * 系统快照
  */
-@Document(indexName = "system_snapshot", shards = 2)
 public class SystemSnapshot implements Serializable, StandardDate {
     public static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss,SSS";
     /**
@@ -22,110 +19,88 @@ public class SystemSnapshot implements Serializable, StandardDate {
     @Id
     private String id;
 
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
-    @Field(type = FieldType.Keyword)
     private String projectId;
 
     /**
      * 追踪ID
      */
-    @Field(type = FieldType.Keyword)
     private String traceId;
     /**
      * 标题
      */
-    @Field(type = FieldType.Text)
     private String title;
     /**
      * 子标题
      */
-    @Field(type = FieldType.Text)
     private String subTitle;
     /**
      * 主题图片
      */
-    @Field(type = FieldType.Keyword)
     private String topicImage;
     /**
      * 描述
      */
-    @Field(type = FieldType.Text)
     private String describe;
     /**
      * 所属应用ID
      */
-    @Field(type = FieldType.Keyword)
     private String appId;
     /**
      * 所属目录ID
      */
-    @Field(type = FieldType.Keyword)
     private String directory;
     /**
      * 版本
      */
-    @Field(type = FieldType.Keyword)
     private String version;
     /**
      * 版本有效周期
      */
-    @Field(type = FieldType.Keyword)
     private Integer versionCycle;
     /**
      * 版本最后变更时间
      */
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date versionLastUpdate;
     /**
      * 标签组
      */
-    @Field(type = FieldType.Keyword)
     private String labels[];
     /**
      * 负责人
      */
-    @Field(type = FieldType.Keyword)
     private String principals[];
     /**
      * 评论
      */
-    @Field(type = FieldType.Nested)
     private Comment comments[];
     /**
      * 变更日志
      */
-    @Field(type = FieldType.Nested)
     private ChangeLog changeLogs[];
 
     /**
      * 执行源码
      */
-    @Field(type = FieldType.Keyword)
     private String codes[];
     /**
      * 执行SQL
      */
-    @Field(type = FieldType.Nested)
     private Sql sqls[];
     /**
      * 远程执行
      */
-    @Field(type = FieldType.Nested)
     private Remote remotes[];
 
     /**
      * 覆盖率报告状态：0-未生成，1-生成中，2-已完成，3-失败
      */
-    @Field(type = FieldType.Integer)
     private Integer reportStatus = 0;
 
     /**
      * 覆盖率报告聚合数据
      */
-    @Field(type = FieldType.Object)
     private CoverageReportIndex coverageReport;
 
     public String getId() {
@@ -276,6 +251,7 @@ public class SystemSnapshot implements Serializable, StandardDate {
         return codes;
     }
 
+    @JsonIgnore
     public Stream<String> getCodeToClass() {
         if (codes == null) {
             return Stream.of();

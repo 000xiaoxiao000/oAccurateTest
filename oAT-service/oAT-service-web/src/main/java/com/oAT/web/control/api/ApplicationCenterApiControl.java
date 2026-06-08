@@ -3,7 +3,6 @@ package com.oAT.web.control.api;
 import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.ResultNotified;
-import com.oAT.web.esDao.entity.SystemIndex;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
 import com.oAT.web.service.GitService;
@@ -14,9 +13,6 @@ import com.oAT.web.service.entity.ProbeAlertDashboardVo;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,26 +35,21 @@ import java.util.Map;
 @RequestMapping("/api/projects/{projectId}")
 public class ApplicationCenterApiControl {
 
-    private static final Logger logger = LoggerFactory.getLogger(ApplicationCenterApiControl.class);
-
     private final AppService appService;
     private final ProjectService projectService;
     private final ClientSessionService clientSessionService;
     private final GitService gitService;
-    private final ElasticsearchOperations elasticsearchOperations;
     private final ProbeAlertDashboardService probeAlertDashboardService;
 
     public ApplicationCenterApiControl(AppService appService,
                                        ProjectService projectService,
                                        ClientSessionService clientSessionService,
                                        GitService gitService,
-                                       ElasticsearchOperations elasticsearchOperations,
                                        ProbeAlertDashboardService probeAlertDashboardService) {
         this.appService = appService;
         this.projectService = projectService;
         this.clientSessionService = clientSessionService;
         this.gitService = gitService;
-        this.elasticsearchOperations = elasticsearchOperations;
         this.probeAlertDashboardService = probeAlertDashboardService;
     }
 
@@ -188,11 +179,6 @@ public class ApplicationCenterApiControl {
         existingApp.setRepoUserName(request.getRepoUserName());
         existingApp.setRepoPassword(request.getRepoPassword());
         appService.updateApp(projectId, existingApp);
-        try {
-            elasticsearchOperations.indexOps(SystemIndex.class).refresh();
-        } catch (Exception e) {
-            logger.warn("刷新应用索引失败，不影响仓库配置保存: appId={}", appId, e);
-        }
         return repository(projectId, appId, user);
     }
 

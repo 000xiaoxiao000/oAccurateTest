@@ -10,7 +10,12 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import java.io.Serializable;
 import java.util.Date;
 
-@Document(indexName = "trace_node", shards = 2)
+/**
+ * TraceNode index entity - stores trace node data in monthly rolling indices.
+ * Large payload fields (requestBody, responseContent, codeNodes, etc.) are controlled
+ * by the index template to avoid indexing overhead while preserving storage for detail views.
+ */
+@Document(indexName = "trace_node")
 public class TraceNodeIndex implements StandardDate, Serializable {
     @Id
     private String id;
@@ -24,6 +29,80 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     private Date createTime;
     @Field(type = FieldType.Keyword)
     private String type;
+
+    // ===== auxiliary flattened fields =====
+    @Field(type = FieldType.Boolean)
+    private Boolean root;
+    @Field(type = FieldType.Boolean)
+    private Boolean hasError;
+    @Field(type = FieldType.Keyword)
+    private String sessionId;
+    @Field(type = FieldType.Keyword)
+    private String status;
+    @Field(type = FieldType.Keyword)
+    private String addressIp;
+    @Field(type = FieldType.Long)
+    private Long beginTime;
+    @Field(type = FieldType.Long)
+    private Long endTime;
+    @Field(type = FieldType.Long)
+    private Long useTime;
+    @Field(type = FieldType.Keyword)
+    private String appName;
+
+    // ===== HTTP flattened fields =====
+    @Field(type = FieldType.Keyword)
+    private String httpClientIp;
+    @Field(type = FieldType.Keyword)
+    private String httpServerIp;
+    @Field(type = FieldType.Keyword)
+    private String httpServerPort;
+    @Field(type = FieldType.Keyword)
+    private String httpMethod;
+    @Field(type = FieldType.Keyword)
+    private String httpUrl;
+    @Field(type = FieldType.Keyword)
+    private String httpResponseCode;
+    @Field(type = FieldType.Boolean)
+    private Boolean httpAjax;
+
+    // ===== SQL flattened fields =====
+    @Field(type = FieldType.Keyword)
+    private String sqlDatabaseName;
+    @Field(type = FieldType.Keyword)
+    private String sqlDatabaseIp;
+    @Field(type = FieldType.Keyword)
+    private String sqlDatabaseType;
+    @Field(type = FieldType.Keyword)
+    private String[] sqlOperations;
+
+    // ===== Remote call flattened fields (Dubbo / Feign / HttpClient / Sofa / MQ) =====
+    @Field(type = FieldType.Keyword)
+    private String remoteKind;
+    @Field(type = FieldType.Keyword)
+    private String remoteIp;
+    @Field(type = FieldType.Keyword)
+    private String remoteUrl;
+    @Field(type = FieldType.Keyword)
+    private String remoteAppId;
+    @Field(type = FieldType.Keyword)
+    private String remoteAppName;
+    @Field(type = FieldType.Keyword)
+    private String remoteInterface;
+    @Field(type = FieldType.Keyword)
+    private String remoteMethod;
+    @Field(type = FieldType.Keyword)
+    private String mqTopic;
+
+    // ===== Redis flattened fields =====
+    @Field(type = FieldType.Keyword)
+    private String redisHost;
+    @Field(type = FieldType.Keyword)
+    private String redisPort;
+    @Field(type = FieldType.Keyword)
+    private String redisCommand;
+
+    // ===== original nested node objects =====
     @Field(type = FieldType.Object)
     private DubboTraceNode dubboNode;
     @Field(type = FieldType.Object)
@@ -104,6 +183,7 @@ public class TraceNodeIndex implements StandardDate, Serializable {
             throw new RuntimeException("unknown " + node.getClass().getName());
         }
         init(node);
+        extractFlattenedFields(node);
     }
 
     public TraceNode toTraceNode() {
@@ -148,37 +228,43 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     public TraceNodeIndex(DubboTraceNode dubboNode) {
         this.dubboNode = dubboNode;
         init(dubboNode);
+        extractFlattenedFields(dubboNode);
     }
-
 
     public TraceNodeIndex(DubboRemoteTraceNode dubboRemoteNode) {
         this.dubboRemoteNode = dubboRemoteNode;
         init(dubboRemoteNode);
+        extractFlattenedFields(dubboRemoteNode);
     }
 
     public TraceNodeIndex(SqlTraceNode sqlNode) {
         this.sqlNode = sqlNode;
         init(sqlNode);
+        extractFlattenedFields(sqlNode);
     }
 
     public TraceNodeIndex(CKSqlTraceNode cksqlNode) {
         this.cksqlNode = cksqlNode;
         init(cksqlNode);
+        extractFlattenedFields(cksqlNode);
     }
 
     public TraceNodeIndex(HttpTraceNode httpNode) {
         this.httpNode = httpNode;
         init(httpNode);
+        extractFlattenedFields(httpNode);
     }
 
     public TraceNodeIndex(FeignTraceNode feignNode) {
         this.feignNode = feignNode;
         init(feignNode);
+        extractFlattenedFields(feignNode);
     }
 
     public TraceNodeIndex(RedisTraceNode redisNode) {
         this.redisNode = redisNode;
         init(redisNode);
+        extractFlattenedFields(redisNode);
     }
 
     private void init(TraceNode node) {
@@ -188,8 +274,108 @@ public class TraceNodeIndex implements StandardDate, Serializable {
         traceNodeId = node.getTraceNodeId();
         if (node.getApp() != null) {
             appId = node.getApp().getAppId();
+            appName = node.getApp().getAppName();
         }
         id = traceId + "_" + traceNodeId;
+        root = "0".equals(node.getTraceNodeId());
+        sessionId = node.getSessionId();
+        status = node.getStatus();
+        addressIp = node.getAddressIp();
+        beginTime = node.getBeginTime();
+        endTime = node.getEndTime();
+        useTime = node.getUseTime();
+        hasError = (node instanceof StatementError) && ((StatementError) node).getError() != null;
+    }
+
+    private void extractFlattenedFields(TraceNode node) {
+        if (node instanceof HttpTraceNode) {
+            HttpTraceNode http = (HttpTraceNode) node;
+            httpClientIp = http.getClientIp();
+            httpServerIp = http.getServerIp();
+            httpServerPort = http.getServerPort();
+            httpMethod = http.getRequestMethod();
+            httpUrl = http.getRequestUrl();
+            httpResponseCode = http.getResponseCode();
+            httpAjax = http.getAjax();
+        } else if (node instanceof SqlTraceNode) {
+            SqlTraceNode sql = (SqlTraceNode) node;
+            if (sql.getDatabase() != null) {
+                sqlDatabaseName = sql.getDatabase().getName();
+                sqlDatabaseIp = sql.getDatabase().getAddressIp();
+                sqlDatabaseType = sql.getDatabase().getType();
+            }
+            sqlOperations = sql.getExecutes();
+        } else if (node instanceof CKSqlTraceNode) {
+            CKSqlTraceNode ck = (CKSqlTraceNode) node;
+            if (ck.getDatabase() != null) {
+                sqlDatabaseName = ck.getDatabase().getName();
+                sqlDatabaseIp = ck.getDatabase().getAddressIp();
+                sqlDatabaseType = ck.getDatabase().getType();
+            }
+            sqlOperations = ck.getExecutes();
+        } else if (node instanceof DubboTraceNode) {
+            DubboTraceNode dubbo = (DubboTraceNode) node;
+            remoteKind = "dubbo";
+            remoteIp = dubbo.getRemoteIp();
+            remoteUrl = dubbo.getRemoteUrl();
+            remoteInterface = dubbo.getServiceInterface();
+            remoteMethod = dubbo.getServiceMethodName();
+            if (dubbo.getRemoteApp() != null) {
+                remoteAppId = dubbo.getRemoteApp().getAppId();
+                remoteAppName = dubbo.getRemoteApp().getAppName();
+            }
+        } else if (node instanceof FeignTraceNode) {
+            FeignTraceNode feign = (FeignTraceNode) node;
+            remoteKind = "feign";
+            remoteUrl = feign.getServiceURL();
+            remoteMethod = feign.getServiceMethod();
+            if (feign.getRemoteApp() != null) {
+                remoteAppId = feign.getRemoteApp().getAppId();
+                remoteAppName = feign.getRemoteApp().getAppName();
+            }
+        } else if (node instanceof HttpClientTraceNode) {
+            HttpClientTraceNode hc = (HttpClientTraceNode) node;
+            remoteKind = "httpClient";
+            remoteUrl = hc.getServiceURL();
+            remoteMethod = hc.getServiceMethod();
+        } else if (node instanceof SofaRpcTraceNode) {
+            SofaRpcTraceNode sofa = (SofaRpcTraceNode) node;
+            remoteKind = "sofa";
+            remoteInterface = sofa.getInterfaceName();
+            remoteMethod = sofa.getMethodName();
+            if (sofa.getRemoteApp() != null) {
+                remoteAppId = sofa.getRemoteApp().getAppId();
+                remoteAppName = sofa.getRemoteApp().getAppName();
+            }
+        } else if (node instanceof RabbitMQTraceNode) {
+            RabbitMQTraceNode rabbit = (RabbitMQTraceNode) node;
+            remoteKind = "rabbitMQ";
+            mqTopic = rabbit.getExchange();
+            if (rabbit.getRemoteApp() != null) {
+                remoteAppId = rabbit.getRemoteApp().getAppId();
+                remoteAppName = rabbit.getRemoteApp().getAppName();
+            }
+        } else if (node instanceof RocketMQProducerTraceNode) {
+            RocketMQProducerTraceNode rocket = (RocketMQProducerTraceNode) node;
+            remoteKind = "rocketMQ";
+            mqTopic = rocket.getProducer();
+            if (rocket.getRemoteApp() != null) {
+                remoteAppId = rocket.getRemoteApp().getAppId();
+                remoteAppName = rocket.getRemoteApp().getAppName();
+            }
+        } else if (node instanceof KafkaMQTraceNode) {
+            KafkaMQTraceNode kafka = (KafkaMQTraceNode) node;
+            remoteKind = "kafkaMQ";
+            if (kafka.getRemoteApp() != null) {
+                remoteAppId = kafka.getRemoteApp().getAppId();
+                remoteAppName = kafka.getRemoteApp().getAppName();
+            }
+        } else if (node instanceof RedisTraceNode) {
+            RedisTraceNode redis = (RedisTraceNode) node;
+            redisHost = redis.getHost();
+            redisPort = redis.getPort();
+            redisCommand = redis.getType();
+        }
     }
 
     public String getId() {
@@ -231,6 +417,99 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     public void setType(String type) {
         this.type = type;
     }
+
+    public Boolean getRoot() { return root; }
+    public void setRoot(Boolean root) { this.root = root; }
+
+    public Boolean getHasError() { return hasError; }
+    public void setHasError(Boolean hasError) { this.hasError = hasError; }
+
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getAddressIp() { return addressIp; }
+    public void setAddressIp(String addressIp) { this.addressIp = addressIp; }
+
+    public Long getBeginTime() { return beginTime; }
+    public void setBeginTime(Long beginTime) { this.beginTime = beginTime; }
+
+    public Long getEndTime() { return endTime; }
+    public void setEndTime(Long endTime) { this.endTime = endTime; }
+
+    public Long getUseTime() { return useTime; }
+    public void setUseTime(Long useTime) { this.useTime = useTime; }
+
+    public String getAppName() { return appName; }
+    public void setAppName(String appName) { this.appName = appName; }
+
+    public String getHttpClientIp() { return httpClientIp; }
+    public void setHttpClientIp(String httpClientIp) { this.httpClientIp = httpClientIp; }
+
+    public String getHttpServerIp() { return httpServerIp; }
+    public void setHttpServerIp(String httpServerIp) { this.httpServerIp = httpServerIp; }
+
+    public String getHttpServerPort() { return httpServerPort; }
+    public void setHttpServerPort(String httpServerPort) { this.httpServerPort = httpServerPort; }
+
+    public String getHttpMethod() { return httpMethod; }
+    public void setHttpMethod(String httpMethod) { this.httpMethod = httpMethod; }
+
+    public String getHttpUrl() { return httpUrl; }
+    public void setHttpUrl(String httpUrl) { this.httpUrl = httpUrl; }
+
+    public String getHttpResponseCode() { return httpResponseCode; }
+    public void setHttpResponseCode(String httpResponseCode) { this.httpResponseCode = httpResponseCode; }
+
+    public Boolean getHttpAjax() { return httpAjax; }
+    public void setHttpAjax(Boolean httpAjax) { this.httpAjax = httpAjax; }
+
+    public String getSqlDatabaseName() { return sqlDatabaseName; }
+    public void setSqlDatabaseName(String sqlDatabaseName) { this.sqlDatabaseName = sqlDatabaseName; }
+
+    public String getSqlDatabaseIp() { return sqlDatabaseIp; }
+    public void setSqlDatabaseIp(String sqlDatabaseIp) { this.sqlDatabaseIp = sqlDatabaseIp; }
+
+    public String getSqlDatabaseType() { return sqlDatabaseType; }
+    public void setSqlDatabaseType(String sqlDatabaseType) { this.sqlDatabaseType = sqlDatabaseType; }
+
+    public String[] getSqlOperations() { return sqlOperations; }
+    public void setSqlOperations(String[] sqlOperations) { this.sqlOperations = sqlOperations; }
+
+    public String getRemoteKind() { return remoteKind; }
+    public void setRemoteKind(String remoteKind) { this.remoteKind = remoteKind; }
+
+    public String getRemoteIp() { return remoteIp; }
+    public void setRemoteIp(String remoteIp) { this.remoteIp = remoteIp; }
+
+    public String getRemoteUrl() { return remoteUrl; }
+    public void setRemoteUrl(String remoteUrl) { this.remoteUrl = remoteUrl; }
+
+    public String getRemoteAppId() { return remoteAppId; }
+    public void setRemoteAppId(String remoteAppId) { this.remoteAppId = remoteAppId; }
+
+    public String getRemoteAppName() { return remoteAppName; }
+    public void setRemoteAppName(String remoteAppName) { this.remoteAppName = remoteAppName; }
+
+    public String getRemoteInterface() { return remoteInterface; }
+    public void setRemoteInterface(String remoteInterface) { this.remoteInterface = remoteInterface; }
+
+    public String getRemoteMethod() { return remoteMethod; }
+    public void setRemoteMethod(String remoteMethod) { this.remoteMethod = remoteMethod; }
+
+    public String getMqTopic() { return mqTopic; }
+    public void setMqTopic(String mqTopic) { this.mqTopic = mqTopic; }
+
+    public String getRedisHost() { return redisHost; }
+    public void setRedisHost(String redisHost) { this.redisHost = redisHost; }
+
+    public String getRedisPort() { return redisPort; }
+    public void setRedisPort(String redisPort) { this.redisPort = redisPort; }
+
+    public String getRedisCommand() { return redisCommand; }
+    public void setRedisCommand(String redisCommand) { this.redisCommand = redisCommand; }
 
     public DubboTraceNode getDubboNode() {
         return dubboNode;

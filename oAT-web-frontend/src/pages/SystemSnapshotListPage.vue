@@ -125,12 +125,13 @@
                   </td>
                   <td>
                     <div class="meta-group">
-                      <span class="meta-badge" :title="snapshot.labels?.length ? `标签：${snapshot.labels.join('、')}` : '暂无标签'">
-                        标签 {{ snapshot.labels?.length || 0 }}
-                      </span>
-                      <span class="meta-badge" :title="getPrincipalsTooltip(snapshot.principals)">
-                        负责人 {{ snapshot.principals?.length || 0 }}
-                      </span>
+                      <div class="meta-row">
+                        <span v-if="snapshot.versionNumber || snapshot.version" class="meta-badge version" :title="snapshot.versionNumber || snapshot.version">版本 {{ snapshot.versionNumber || snapshot.version }}</span>
+                        <span v-if="snapshot.repoBranch" class="meta-badge branch" :title="snapshot.repoBranch">分支 {{ snapshot.repoBranch }}</span>
+                        <span v-if="snapshot.repoCommitId" class="meta-badge commit" :title="snapshot.repoCommitId">Commit {{ abbreviateCommit(snapshot.repoCommitId) }}</span>
+                        <span class="meta-badge" :title="snapshot.labels?.length ? `标签：${snapshot.labels.join('、')}` : '暂无标签'">标签 {{ snapshot.labels?.length || 0 }}</span>
+                        <span class="meta-badge" :title="getPrincipalsTooltip(snapshot.principals)">负责人 {{ snapshot.principals?.length || 0 }}</span>
+                      </div>
                     </div>
                   </td>
                   <td>
@@ -260,6 +261,11 @@ function getPrincipalsTooltip(principalIds?: string[]) {
   }
   
   return `负责人：${principalNames.join('、')}`
+}
+
+function abbreviateCommit(commitId?: string) {
+  if (!commitId) return ''
+  return commitId.length > 12 ? commitId.slice(0, 12) : commitId
 }
 
 function directoryLink(directoryId: string) {
@@ -829,32 +835,33 @@ onMounted(load)
 
 .snapshot-table {
   width: 100%;
+  min-width: 1260px;
   border-collapse: collapse;
   table-layout: fixed;
 }
 
 .check-col {
-  width: 36px;
+  width: 42px;
 }
 
 .title-col {
-  width: 38%;
+  width: 30%;
 }
 
 .meta-col {
-  width: 14%;
+  width: 38%;
 }
 
 .time-col {
-  width: 10%;
+  width: 9%;
 }
 
 .status-col {
-  width: 10%;
+  width: 8%;
 }
 
 .actions-col {
-  width: 28%;
+  width: 15%;
 }
 
 .snapshot-table thead {
@@ -926,15 +933,27 @@ onMounted(load)
 }
 
 .meta-group {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 4px;
+  min-width: 0;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.meta-row .meta-badge {
+  flex: 0 0 auto;
 }
 
 .meta-badge {
   display: inline-flex;
   align-items: center;
-  width: fit-content;
+  min-width: 0;
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
@@ -942,6 +961,21 @@ onMounted(load)
   color: var(--oat-primary-dark);
   font-size: 11px;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta-badge.version {
+  max-width: 120px;
+}
+
+.meta-badge.branch {
+  max-width: 170px;
+}
+
+.meta-badge.commit {
+  max-width: 130px;
 }
 
 .tag {

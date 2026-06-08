@@ -4,10 +4,6 @@ package com.oAT.web.service.entity;
 
 import com.oAT.web.esDao.entity.ProjectMember;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-
-import org.springframework.data.elasticsearch.annotations.FieldType;
-
 
 
 import java.io.Serializable;

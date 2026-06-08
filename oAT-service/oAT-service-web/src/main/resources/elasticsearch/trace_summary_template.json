@@ -1,0 +1,99 @@
+{
+  "index_patterns": ["trace_summary-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 1,
+      "refresh_interval": "5s",
+      "index": {
+        "max_result_window": 10000
+      }
+    },
+    "mappings": {
+      "dynamic": "false",
+      "properties": {
+        "traceId": {
+          "type": "keyword"
+        },
+        "projectId": {
+          "type": "keyword"
+        },
+        "appId": {
+          "type": "keyword"
+        },
+        "appName": {
+          "type": "keyword"
+        },
+        "sessionId": {
+          "type": "keyword"
+        },
+        "createTime": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS"
+        },
+        "beginTime": {
+          "type": "long"
+        },
+        "endTime": {
+          "type": "long"
+        },
+        "useTime": {
+          "type": "long"
+        },
+        "status": {
+          "type": "keyword"
+        },
+        "hasError": {
+          "type": "boolean"
+        },
+        "httpMethod": {
+          "type": "keyword"
+        },
+        "httpUrl": {
+          "type": "keyword"
+        },
+        "httpUrlPath": {
+          "type": "keyword"
+        },
+        "httpResponseCode": {
+          "type": "keyword"
+        },
+        "httpClientIp": {
+          "type": "keyword"
+        },
+        "httpServerIp": {
+          "type": "keyword"
+        },
+        "httpServerPort": {
+          "type": "keyword"
+        },
+        "httpAjax": {
+          "type": "boolean"
+        },
+        "nodeCount": {
+          "type": "integer"
+        },
+        "sqlCount": {
+          "type": "integer"
+        },
+        "remoteCount": {
+          "type": "integer"
+        },
+        "redisCount": {
+          "type": "integer"
+        },
+        "mqCount": {
+          "type": "integer"
+        },
+        "errorCount": {
+          "type": "integer"
+        },
+        "slowNodeCount": {
+          "type": "integer"
+        }
+      }
+    }
+  },
+  "priority": 500,
+  "version": 1
+}

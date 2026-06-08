@@ -28,7 +28,10 @@
         <img v-if="payload.snapshot.topicImage" class="topic-image" :src="payload.snapshot.topicImage" alt="topic" />
         <div class="hero-main">
           <div class="hero-topline">
-            <div class="tag-row">
+            <div class="tag-row snapshot-meta-strip">
+              <span v-if="payload.snapshot.versionNumber || payload.snapshot.version" class="meta-pill" :title="payload.snapshot.versionNumber || payload.snapshot.version">版本 {{ payload.snapshot.versionNumber || payload.snapshot.version }}</span>
+              <span v-if="payload.snapshot.repoBranch" class="meta-pill branch" :title="payload.snapshot.repoBranch">分支 {{ payload.snapshot.repoBranch }}</span>
+              <span v-if="payload.snapshot.repoCommitId" class="meta-pill commit" :title="payload.snapshot.repoCommitId">Commit {{ abbreviateCommit(payload.snapshot.repoCommitId) }}</span>
               <span
                 v-for="label in payload.labels"
                 :key="label.name"
@@ -287,6 +290,11 @@ function reportStatusHint(status?: number) {
     default:
       return '当前还没有生成覆盖率报告，可进入报告页发起首次计算。'
   }
+}
+
+function abbreviateCommit(commitId?: string) {
+  if (!commitId) return ''
+  return commitId.length > 12 ? commitId.slice(0, 12) : commitId
 }
 
 async function load() {
@@ -635,6 +643,36 @@ onMounted(load)
   gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
+}
+
+.snapshot-meta-strip {
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.meta-pill {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: min(240px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.meta-pill.branch {
+  max-width: 280px;
+}
+
+.meta-pill.commit {
+  max-width: 150px;
 }
 
 .tag,

@@ -1,0 +1,37 @@
+{
+  "index_patterns": ["trace_node-*"],
+  "template": {
+    "settings": {
+      "index.refresh_interval": "30s",
+      "number_of_shards": 3,
+      "number_of_replicas": 1
+    },
+    "mappings": {
+      "properties": {
+        "id": { "type": "keyword" },
+        "traceId": { "type": "keyword" },
+        "traceNodeId": { "type": "keyword" },
+        "appId": { "type": "keyword" },
+        "type": { "type": "keyword" },
+        "createTime": { "type": "date" },
+        "dubboNode": { "type": "object", "enabled": false },
+        "dubboRemoteNode": { "type": "object", "enabled": false },
+        "sqlNode": { "type": "object", "enabled": false },
+        "cksqlNode": { "type": "object", "enabled": false },
+        "httpNode": { "type": "object", "enabled": false },
+        "httpClientNode": { "type": "object", "enabled": false },
+        "feignNode": { "type": "object", "enabled": false },
+        "redisNode": { "type": "object", "enabled": false },
+        "serviceNode": { "type": "object", "enabled": false },
+        "sofaRpcNode": { "type": "object", "enabled": false },
+        "sofaRpcRemoteNode": { "type": "object", "enabled": false },
+        "rabbitMQNode": { "type": "object", "enabled": false },
+        "rabbitMQRemoteNode": { "type": "object", "enabled": false },
+        "rocketMQProducerNode": { "type": "object", "enabled": false },
+        "rocketMQConsumerNode": { "type": "object", "enabled": false },
+        "kafkaMQNode": { "type": "object", "enabled": false },
+        "kafkaMQRemoteNode": { "type": "object", "enabled": false }
+      }
+    }
+  }
+}

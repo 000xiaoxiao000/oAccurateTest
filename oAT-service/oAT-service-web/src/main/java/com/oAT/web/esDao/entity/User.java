@@ -1,22 +1,13 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 public class User implements java.io.Serializable {
-    @Field(type = FieldType.Keyword)
     private String name;
-    @Field(type = FieldType.Keyword)
     private String nickName;
-    @Field(type = FieldType.Keyword)
     private String email;
-    @Field(type = FieldType.Keyword)
     private String password;
-    @Field(type = FieldType.Keyword)
     private String header;
-    @Field(type = FieldType.Keyword)
     private String phone;
-    @Field(type = FieldType.Text)
     private String readme;
 
     public String getEmail() {

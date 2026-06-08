@@ -1,22 +1,14 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
 public class SystemLog implements  Serializable {
-    @Field(type = FieldType.Keyword)
     private String projectId;
-    @Field(type = FieldType.Text)
     private String title;
-    @Field(type = FieldType.Text)
     private String message;
-    @Field(type = FieldType.Keyword)
     private String userName;
-    @Field(type = FieldType.Keyword)
     private String userId;
-    @Field(type = FieldType.Keyword)
     private String action;
 
     public String getProjectId() {

@@ -98,7 +98,7 @@ public class Job<T> {
 
         public JobLogger() {
             loggerOut = new StringBuilderWriter();
-            printStream = new PrintStream(new WriterOutputStream(loggerOut), true);
+            printStream = new PrintStream(new WriterOutputStream(loggerOut, java.nio.charset.StandardCharsets.UTF_8), true);
         }
 
         public JobLogger(PrintStream printStream) {

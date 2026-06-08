@@ -1,48 +1,35 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.util.Date;
 
-@Document(indexName = "system", shards = 2)
 public class SystemIndex implements java.io.Serializable, StandardDate {
     private static final String DATE_FORMAT = "yyyy-MM-dd HH:mm:ss,SSS";
     //基础属性 ========================================
     @Id
     private String id;
 
-    @Field(type = FieldType.Keyword)
     private String type;
 
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
 
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
 
     //实体对象=================================================================
-    @Field(type = FieldType.Object)
     private User user;
 
-    @Field(type = FieldType.Object)
     private Project project;
 
-    @Field(type = FieldType.Object)
     private App app;
 
-    @Field(type = FieldType.Object)
     private LabelGroup labelGroup;
 
     /*
      项目成员
      */
-    @Field(type = FieldType.Object)
     private ProjectMember projectMember;
 
-    @Field(type = FieldType.Object)
     private SystemLog systemLog;
 
     /**

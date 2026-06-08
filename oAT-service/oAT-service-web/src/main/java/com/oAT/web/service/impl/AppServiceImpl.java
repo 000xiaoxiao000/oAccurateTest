@@ -13,7 +13,6 @@ import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.Directory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -34,8 +33,6 @@ public class AppServiceImpl implements AppService, StandardDate {
     private UsecaseService usecaseService;
     @Autowired
     private SnapshotCommitMappingRepository snapshotCommitMappingRepository;
-    @Autowired
-    private ElasticsearchOperations elasticsearchOperations;
 
     /**
      * 创建新的应用
@@ -52,7 +49,6 @@ public class AppServiceImpl implements AppService, StandardDate {
         app.setProbeAlertOnOffline(app.getProbeAlertOnOffline() == null ? Boolean.TRUE : app.getProbeAlertOnOffline());
         app.setProbeAlertOnRecovered(app.getProbeAlertOnRecovered() == null ? Boolean.TRUE : app.getProbeAlertOnRecovered());
         SystemIndex systemIndex = systemRepository.save(new SystemIndex(app));
-        elasticsearchOperations.indexOps(SystemIndex.class).refresh();
         return convertApp(systemIndex);
     }
 

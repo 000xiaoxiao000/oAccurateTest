@@ -1,59 +1,34 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Date;
 
-@Document(indexName = "probe-alert-event", shards = 2)
 public class ProbeAlertEvent implements Serializable {
     @Id
     private String id;
 
-    @Field(type = FieldType.Keyword)
     private String projectId;
-    @Field(type = FieldType.Keyword)
     private String appId;
-    @Field(type = FieldType.Keyword)
     private String appName;
-    @Field(type = FieldType.Keyword)
     private String probeKey;
-    @Field(type = FieldType.Keyword)
     private String sessionId;
-    @Field(type = FieldType.Keyword)
     private String addressIp;
-    @Field(type = FieldType.Keyword)
     private String pid;
-    @Field(type = FieldType.Keyword)
     private String systemDir;
-    @Field(type = FieldType.Keyword)
     private String agentVersion;
-    @Field(type = FieldType.Keyword)
     private String eventType;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date eventTime;
-    @Field(type = FieldType.Long)
     private Long lastHeartbeatTime;
-    @Field(type = FieldType.Long)
     private Long offlineDurationMillis;
-    @Field(type = FieldType.Text)
     private String message;
-    @Field(type = FieldType.Boolean)
     private Boolean notifyEnabled;
-    @Field(type = FieldType.Keyword)
     private String notifyStatus;
-    @Field(type = FieldType.Keyword)
     private String notifyChannel;
-    @Field(type = FieldType.Text)
     private String notifyResponse;
-    @Field(type = FieldType.Text)
     private String notifyError;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
 
     public enum EventType {

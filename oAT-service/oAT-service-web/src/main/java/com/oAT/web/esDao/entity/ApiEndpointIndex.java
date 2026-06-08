@@ -1,77 +1,52 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.DateFormat;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Date;
 
-@Document(indexName = "api_endpoint_index", shards = 2)
 public class ApiEndpointIndex implements Serializable {
     @Id
     private String id;
 
-    @Field(type = FieldType.Keyword)
     private String appId;
 
-    @Field(type = FieldType.Keyword)
     private String sourceType;
 
-    @Field(type = FieldType.Keyword)
     private String sourceName;
 
-    @Field(type = FieldType.Keyword)
     private String sourceNames;
 
-    @Field(type = FieldType.Keyword)
     private String sourceTypeNames;
 
-    @Field(type = FieldType.Keyword)
     private String endpointType;
 
-    @Field(type = FieldType.Keyword)
     private String url;
 
-    @Field(type = FieldType.Keyword)
     private String httpMethod;
 
-    @Field(type = FieldType.Keyword)
     private String className;
 
-    @Field(type = FieldType.Keyword)
     private String classNames;
 
-    @Field(type = FieldType.Keyword)
     private String methodName;
 
-    @Field(type = FieldType.Keyword)
     private String methodNames;
 
-    @Field(type = FieldType.Keyword)
     private String methodDesc;
 
-    @Field(type = FieldType.Keyword)
     private String methodDescs;
 
-    @Field(type = FieldType.Keyword)
     private String coverageStatus;
 
-    @Field(type = FieldType.Boolean)
     private Boolean covered;
 
-    @Field(type = FieldType.Integer)
     private Integer hitCount;
 
-    @Field(type = FieldType.Integer)
     private Integer mergedSourceCount;
 
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
 
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date updateTime;
 
     public String getId() { return id; }

@@ -26,9 +26,7 @@
         <maven-project-info-reports-plugin.version>2.7</maven-project-info-reports-plugin.version>
         <maven-surefire-plugin.version>2.16</maven-surefire-plugin.version>
         <maven-javadoc-plugin.version>2.9.1</maven-javadoc-plugin.version>
-        <javax.servlet.version>3.1.0</javax.servlet.version>
 
-        <org.springframework.version>5.3.33</org.springframework.version>
         <slf4j-api.version>2.0.0-alpha7</slf4j-api.version>
         <log4j-jcl.version>2.17.2</log4j-jcl.version>
         <log4j-api.version>2.17.2</log4j-api.version>

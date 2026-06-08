@@ -1,30 +1,18 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
 public class ClientInfo implements Serializable {
-    @Field(type = FieldType.Keyword)
     private String appKey;           // 应用ID
-    @Field(type = FieldType.Keyword)
     private String agentVersion;    // 客户端版本
-    @Field(type = FieldType.Keyword )
     private String systemDir;   // 应用所在系统目录
-    @Field(type = FieldType.Keyword )
     private String pid;         // 进程id
-    @Field(type = FieldType.Keyword )
     private String jvmVersion;  // jvm 版本
-    @Field(type = FieldType.Text )
     private String jvmOption;   // jvm启动参数配置
-    @Field(type = FieldType.Keyword )
     private String osName;      // 操作系统名称
-    @Field(type = FieldType.Keyword )
     private String osVersion;   // 操作系统版本
-    @Field(type = FieldType.Ip )
     private String addressIp;   // 客户端ip地址
-    @Field(type = FieldType.Keyword)
     private String addressMac;  // 客户端mac地址
 
     // ============ getter/setter ============

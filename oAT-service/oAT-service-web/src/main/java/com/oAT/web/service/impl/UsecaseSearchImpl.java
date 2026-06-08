@@ -1,6 +1,8 @@
 package com.oAT.web.service.impl;
 
+import com.oAT.web.esDao.CaseCenterRepository;
 import com.oAT.web.esDao.entity.CaseCenterIndex;
+import com.oAT.web.esDao.entity.Usecase;
 import com.oAT.web.service.UsecaseSearchService;
 import com.oAT.web.service.entity.CaseSearchResult;
 import com.oAT.web.service.entity.SearchPage;
@@ -8,19 +10,15 @@ import com.oAT.web.service.entity.TableToUsecase;
 import com.oAT.web.service.entity.UsecaseVo;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
-import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
-import org.elasticsearch.index.query.BoolQueryBuilder;
-import org.elasticsearch.index.query.QueryBuilders;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -28,25 +26,21 @@ import java.util.stream.Collectors;
 public class UsecaseSearchImpl implements UsecaseSearchService {
 
     @Autowired
-    private ElasticsearchOperations elasticsearchOperations;
+    private CaseCenterRepository caseCenterRepository;
 
     @Override
     public SearchPage<CaseSearchResult> doSearch(String projectId, String keyWords) {
-        NativeSearchQueryBuilder searchBuilder = new NativeSearchQueryBuilder();
-        searchBuilder.withFilter(QueryBuilders.termQuery("usecase.projectId", projectId));
-        searchBuilder.withQuery(QueryBuilders.multiMatchQuery(keyWords,
-                "usecase.title", "usecase.content", "usecase.srcStack"));
-
-        SearchHits<CaseCenterIndex> searchHits = elasticsearchOperations.search(searchBuilder.build(), CaseCenterIndex.class);
-        List<CaseSearchResult> results = searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+        String normalizedKeyword = normalize(keyWords);
+        List<CaseSearchResult> results = caseCenterRepository.findByUsecase_ProjectId(projectId).stream()
+                .filter(index -> index != null && index.getUsecase() != null)
+                .filter(index -> !StringUtils.hasText(normalizedKeyword) || matchesKeyword(index.getUsecase(), normalizedKeyword))
                 .map(this::toCaseSearchResult)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
         SearchPage<CaseSearchResult> searchPage = new SearchPage<>();
         searchPage.setContents(results);
-        searchPage.setTotal(searchHits.getTotalHits());
+        searchPage.setTotal(results.size());
         return searchPage;
     }
 
@@ -77,21 +71,10 @@ public class UsecaseSearchImpl implements UsecaseSearchService {
         if (normalizedMethods.isEmpty()) {
             return new ArrayList<>();
         }
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
-        boolQuery.must(QueryBuilders.termQuery("usecase.projectId", projectId));
-        boolQuery.must(QueryBuilders.termQuery("type", "usecase"));
-
-        BoolQueryBuilder srcStackQuery = QueryBuilders.boolQuery();
-        srcStackQuery.should(QueryBuilders.termsQuery("usecase.srcStack.keyword", normalizedMethods));
-        srcStackQuery.should(QueryBuilders.termsQuery("usecase.srcStack", normalizedMethods));
-        for (String method : normalizedMethods) {
-            srcStackQuery.should(QueryBuilders.prefixQuery("usecase.srcStack.keyword", method + "("));
-            srcStackQuery.should(QueryBuilders.wildcardQuery("usecase.srcStack.keyword", method + "(*"));
-            srcStackQuery.should(QueryBuilders.wildcardQuery("usecase.srcStack.keyword", method + " *"));
-        }
-        srcStackQuery.minimumShouldMatch(1);
-        boolQuery.must(srcStackQuery);
-        return queryUsecases(boolQuery);
+        return queryUsecases(projectId).stream()
+                .filter(index -> containsAnySrcStack(index.getUsecase(), normalizedMethods))
+                .map(this::toUsecaseVo)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -99,18 +82,11 @@ public class UsecaseSearchImpl implements UsecaseSearchService {
         Assert.notNull(projectId, "参数projectId 不能为空");
         Assert.notNull(srcClass, "srcClass 不能为空");
         String normalizedSrcClass = srcClass.substring(srcClass.indexOf("/") + 1);
-
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery();
-        boolQuery.must(QueryBuilders.termQuery("usecase.projectId", projectId));
-        boolQuery.must(QueryBuilders.termQuery("type", "usecase"));
-
-        BoolQueryBuilder srcStackQuery = QueryBuilders.boolQuery();
-        srcStackQuery.should(QueryBuilders.matchPhraseQuery("usecase.srcStack", normalizedSrcClass));
-        srcStackQuery.should(QueryBuilders.wildcardQuery("usecase.srcStack.keyword", normalizedSrcClass + " *"));
-        srcStackQuery.should(QueryBuilders.prefixQuery("usecase.srcStack.keyword", normalizedSrcClass + " "));
-        srcStackQuery.minimumShouldMatch(1);
-        boolQuery.must(srcStackQuery);
-        return queryUsecases(boolQuery);
+        String keyword = normalize(normalizedSrcClass);
+        return queryUsecases(projectId).stream()
+                .filter(index -> containsSrcStackKeyword(index.getUsecase(), keyword))
+                .map(this::toUsecaseVo)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -118,15 +94,59 @@ public class UsecaseSearchImpl implements UsecaseSearchService {
         return new ArrayList<>();
     }
 
-    private List<UsecaseVo> queryUsecases(BoolQueryBuilder boolQuery) {
-        NativeSearchQueryBuilder builder = new NativeSearchQueryBuilder();
-        builder.withFilter(boolQuery);
-        SearchHits<CaseCenterIndex> searchHits = elasticsearchOperations.search(builder.build(), CaseCenterIndex.class);
-        return searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
+    private List<CaseCenterIndex> queryUsecases(String projectId) {
+        return caseCenterRepository.findByUsecase_ProjectId(projectId).stream()
                 .filter(index -> index != null && index.getUsecase() != null)
-                .map(this::toUsecaseVo)
                 .collect(Collectors.toList());
+    }
+
+    private boolean matchesKeyword(Usecase usecase, String keyword) {
+        return contains(usecase.getTitle(), keyword)
+                || contains(usecase.getContent(), keyword)
+                || containsAny(usecase.getSrcStack(), keyword);
+    }
+
+    private boolean containsAnySrcStack(Usecase usecase, LinkedHashSet<String> methods) {
+        if (usecase == null || usecase.getSrcStack() == null) {
+            return false;
+        }
+        for (String srcStack : usecase.getSrcStack()) {
+            String normalizedStack = normalize(srcStack);
+            for (String method : methods) {
+                String normalizedMethod = normalize(method);
+                if (normalizedStack.equals(normalizedMethod)
+                        || normalizedStack.startsWith(normalizedMethod + "(")
+                        || normalizedStack.startsWith(normalizedMethod + " ")
+                        || normalizedStack.contains(normalizedMethod + " ")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean containsSrcStackKeyword(Usecase usecase, String keyword) {
+        return containsAny(usecase == null ? null : usecase.getSrcStack(), keyword);
+    }
+
+    private boolean containsAny(String[] values, String keyword) {
+        if (values == null) {
+            return false;
+        }
+        for (String value : values) {
+            if (contains(value, keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean contains(String value, String keyword) {
+        return StringUtils.hasText(value) && StringUtils.hasText(keyword) && normalize(value).contains(keyword);
+    }
+
+    private String normalize(String value) {
+        return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private UsecaseVo toUsecaseVo(CaseCenterIndex caseCenterIndex) {

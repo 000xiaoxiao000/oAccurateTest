@@ -441,12 +441,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
-import { fetchMonitorSnapshotContext, saveMonitorMySnapshot, saveMonitorSystemSnapshot, uploadResource } from '@/api/bootstrap'
+import { autoSaveMonitorSystemSnapshot, fetchMonitorSnapshotContext, saveMonitorMySnapshot, saveMonitorSystemSnapshot, uploadResource } from '@/api/bootstrap'
 import { useProjectStore } from '@/stores/project'
 import { apiGet, apiGetRaw, apiPost } from '@/api/http'
 import type { AppSummary, GraphEdgeSummary, GraphNodeDetailPayload, GraphNodeSummary, GraphViewPayload, MonitorSnapshotContextPayload, OnlineSessionSummary, TraceItemSummary } from '@/api/types'
 import GraphNodeDetailCard from '@/components/snapshot/GraphNodeDetailCard.vue'
 import AppPagination from '@/components/AppPagination.vue'
+import { useToast } from '@/composables/useToast'
 
 type PositionedNode = GraphNodeSummary & { x: number; y: number; rank: number }
 type PositionedEdge = GraphEdgeSummary & { path: string; mx: number; my: number }
@@ -475,6 +476,7 @@ const graphNodeHeight = 92
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const toast = useToast()
 const projectId = computed(() => String(route.params.projectId || ''))
 const selectedAppId = computed(() => String(route.query.appId || ''))
 const projectContext = computed(() => projectId.value ? projectStore.contextByProjectId[projectId.value] : undefined)
@@ -1106,13 +1108,19 @@ async function autoSaveSnapshot() {
   savingSnapshot.value = true
   snapshotNotice.value = ''
   try {
-    const body = new URLSearchParams()
-    body.set('traceId', selectedTraceId.value)
-    body.set('title', graph.value?.title || '实时监控自动快照')
-    const result = await apiPost<string>(`/api/projects/${projectId.value}/monitor/autoSaveSystemSnapshot`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
-    snapshotNotice.value = result || '系统快照已保存'
+    const selectedTrace = traces.value.find((trace) => trace.traceId === selectedTraceId.value)
+    const result = await autoSaveMonitorSystemSnapshot(projectId.value, {
+      traceId: selectedTraceId.value,
+      appId: selectedTrace?.appId,
+      title: graph.value?.title || selectedTrace?.title || '实时监控自动快照',
+    })
+    const message = result || '系统快照已自动保存'
+    snapshotNotice.value = message
+    toast.success(message)
   } catch (err) {
-    snapshotNotice.value = err instanceof Error ? err.message : '保存系统快照失败'
+    const message = err instanceof Error ? err.message : '保存系统快照失败'
+    snapshotNotice.value = message
+    toast.error(message)
   } finally {
     savingSnapshot.value = false
   }
@@ -1138,9 +1146,13 @@ async function saveMySnapshot() {
     body.append('labels', '自动保存')
     body.append('labels', '实时监控')
     const result = await apiPost<unknown>(`/api/projects/${projectId.value}/snapshots/my/save`, body.toString(), 'application/x-www-form-urlencoded;charset=UTF-8')
-    snapshotNotice.value = extractResultMessage(result, '我的快照已保存')
+    const message = extractResultMessage(result, '我的快照已自动保存')
+    snapshotNotice.value = message
+    toast.success(message)
   } catch (err) {
-    snapshotNotice.value = err instanceof Error ? err.message : '保存我的快照失败'
+    const message = err instanceof Error ? err.message : '保存我的快照失败'
+    snapshotNotice.value = message
+    toast.error(message)
   } finally {
     savingSnapshot.value = false
   }
@@ -1191,7 +1203,8 @@ async function openSnapshotDialog(mode: SnapshotDialogMode = 'system') {
   snapshotContextLoading.value = true
   snapshotFormError.value = ''
   try {
-    const context = await fetchMonitorSnapshotContext(projectId.value, selectedTraceId.value)
+    const selectedTrace = traces.value.find((trace) => trace.traceId === selectedTraceId.value)
+    const context = await fetchMonitorSnapshotContext(projectId.value, selectedTraceId.value, selectedTrace?.appId)
     snapshotContext.value = context
     snapshotForm.value = {
       traceId: context.traceId,
@@ -1267,14 +1280,20 @@ async function submitSnapshotForm() {
         describe: form.describe,
         labels: form.labels,
       })
-      snapshotNotice.value = '我的快照已保存'
+      const message = '我的快照已保存'
+      snapshotNotice.value = message
+      toast.success(message)
     } else {
       const result = await saveMonitorSystemSnapshot(projectId.value, form)
-      snapshotNotice.value = result || '系统快照已保存'
+      const message = result || '系统快照已保存'
+      snapshotNotice.value = message
+      toast.success(message)
     }
     snapshotDialogOpen.value = false
   } catch (err) {
-    snapshotFormError.value = err instanceof Error ? err.message : `${snapshotDialogMode.value === 'my' ? '我的' : '系统'}快照保存失败`
+    const message = err instanceof Error ? err.message : `${snapshotDialogMode.value === 'my' ? '我的' : '系统'}快照保存失败`
+    snapshotFormError.value = message
+    toast.error(message)
   } finally {
     savingSnapshot.value = false
   }

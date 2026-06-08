@@ -1,4 +1,0 @@
-# Auto Configure - AI Module (requires JDK 17+)
-# Conditional loading via AIAutoConfiguration
-org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  com.oAT.ai.config.AIAutoConfiguration

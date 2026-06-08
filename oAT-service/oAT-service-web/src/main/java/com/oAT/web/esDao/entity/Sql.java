@@ -1,7 +1,5 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 
@@ -10,27 +8,22 @@ public class Sql implements Serializable {
     /**
      * 数据库
      */
-    @Field(type = FieldType.Keyword)
     private String database;
     /**
      * 数据库类型
      */
-    @Field(type = FieldType.Keyword)
     private String databaseType;
     /**
      * 语句内容
      */
-    @Field(type = FieldType.Text)
     private String content;
     /**
      * 操作集
      */
-    @Field(type = FieldType.Object)
     private Action actions[];
     /**
      * 执行次数
      */
-    @Field(type = FieldType.Keyword)
     private Integer count;
 
 
@@ -75,9 +68,7 @@ public class Sql implements Serializable {
     }
 
     public static class Action  implements Serializable{
-        @Field(type = FieldType.Keyword)
         private String type;
-        @Field(type = FieldType.Keyword)
         private String table;
 
         public Action() {

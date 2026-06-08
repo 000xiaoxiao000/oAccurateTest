@@ -1,59 +1,38 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Date;
 
 public class VersionCompareReport implements Serializable {
-    @Field(type = FieldType.Keyword)
     private String jobId;
-    @Field(type = FieldType.Keyword)
     private String projectId;
-    @Field(type = FieldType.Keyword)
     private String appId;
-    @Field(type = FieldType.Keyword)
     private String jobName;
-    @Field(type = FieldType.Text, index = false)
     private String jobLog;
-    @Field(type = FieldType.Keyword)
     private String sourceVersion;
-    @Field(type = FieldType.Keyword)
     private String targetVersion;
-    @Field(type = FieldType.Keyword)
     private String gitBranch;
-    @Field(type = FieldType.Keyword)
     private String gitOldCommit;
-    @Field(type = FieldType.Keyword)
     private String gitNewCommit;
-    @Field(type = FieldType.Object)
     /**
      有差异的项
      */
     private Difference[] differences;
-    @Field(type = FieldType.Object)
     /**
      影响的用例及关联项
      */
     private ImpactCase[] cases;
 
     // 统计字段：类/方法/影响用例计数
-    @Field(type = FieldType.Integer)
     private int addClassCount;
-    @Field(type = FieldType.Integer)
     private int updateClassCount;
-    @Field(type = FieldType.Integer)
     private int deleteClassCount;
 
-    @Field(type = FieldType.Integer)
     private int addMethodCount;
-    @Field(type = FieldType.Integer)
     private int updateMethodCount;
-    @Field(type = FieldType.Integer)
     private int deleteMethodCount;
 
-    @Field(type = FieldType.Integer)
     private int impactCaseCount;
 
     /**
@@ -222,11 +201,8 @@ public class VersionCompareReport implements Serializable {
     }
 
     public static class Difference {
-        @Field(type = FieldType.Keyword)
         String type;    //
-        @Field(type = FieldType.Keyword)
         String model;// add update delete
-        @Field(type = FieldType.Keyword)
         String value;
 
         public Difference() {
@@ -265,9 +241,7 @@ public class VersionCompareReport implements Serializable {
 
     // 影响用例
     public static class ImpactCase {
-        @Field(type = FieldType.Keyword)
         private String caseId;
-        @Field(type = FieldType.Keyword)
         private String[] differences;
 
         public ImpactCase(String caseId, String[] differences) {

@@ -1,21 +1,17 @@
 package com.oAT.web.config;
 
-import java.time.Duration;
-import org.elasticsearch.client.RestHighLevelClient;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.elasticsearch.client.ClientConfiguration;
-import org.springframework.data.elasticsearch.client.RestClients;
-import org.springframework.data.elasticsearch.config.AbstractElasticsearchConfiguration;
-import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchConfiguration;
+
+import java.time.Duration;
 
 /**
  * Elasticsearch 客户端配置
  */
 @Configuration
-@SuppressWarnings("deprecation")
-public class RestClientConfig extends AbstractElasticsearchConfiguration {
+public class RestClientConfig extends ElasticsearchConfiguration {
 
     @Value(value = "${elasticsearch.gatewayIpPorts}")
     private String gatewayIpPorts;
@@ -27,19 +23,20 @@ public class RestClientConfig extends AbstractElasticsearchConfiguration {
     private String password;
 
     @Override
-    @Bean
-    public RestHighLevelClient elasticsearchClient() {
-        ClientConfiguration clientConfiguration = ClientConfiguration.builder()
-                .connectedTo(gatewayIpPorts)
-                .withConnectTimeout(Duration.ofSeconds(10))
-                .withSocketTimeout(Duration.ofSeconds(30))
-                .withBasicAuth(username, password)
-                .build();
-        return RestClients.create(clientConfiguration).rest();
-    }
-
-    @Bean
-    public ElasticsearchRestTemplate restTemplate() {
-        return new ElasticsearchRestTemplate(elasticsearchClient());
+    public ClientConfiguration clientConfiguration() {
+        if (username != null && !username.isBlank()) {
+            return ClientConfiguration.builder()
+                    .connectedTo(gatewayIpPorts)
+                    .withConnectTimeout(Duration.ofSeconds(10))
+                    .withSocketTimeout(Duration.ofSeconds(30))
+                    .withBasicAuth(username, password)
+                    .build();
+        } else {
+            return ClientConfiguration.builder()
+                    .connectedTo(gatewayIpPorts)
+                    .withConnectTimeout(Duration.ofSeconds(10))
+                    .withSocketTimeout(Duration.ofSeconds(30))
+                    .build();
+        }
     }
 }

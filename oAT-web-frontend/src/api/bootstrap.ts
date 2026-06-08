@@ -608,9 +608,10 @@ export function uploadResource(file: File) {
   return apiPost<string>('/resource/upload', formData)
 }
 
-export function fetchMonitorSnapshotContext(projectId: string, traceId: string) {
+export function fetchMonitorSnapshotContext(projectId: string, traceId: string, appId?: string) {
   const query = new URLSearchParams()
   query.set('traceId', traceId)
+  if (appId) query.set('appId', appId)
   return apiGet<MonitorSnapshotContextPayload>(`/api/projects/${projectId}/monitor/system-snapshot-context?${query.toString()}`)
 }
 
@@ -640,6 +641,18 @@ export function saveMonitorSystemSnapshot(
   payload.principals.forEach((principal) => body.append('principals', principal))
   return apiPost<string>(
     `/api/projects/${projectId}/monitor/system-snapshots`,
+    body.toString(),
+    'application/x-www-form-urlencoded;charset=UTF-8',
+  )
+}
+
+export function autoSaveMonitorSystemSnapshot(projectId: string, payload: { traceId: string; appId?: string; title?: string }) {
+  const body = new URLSearchParams()
+  body.set('traceId', payload.traceId)
+  if (payload.appId) body.set('appId', payload.appId)
+  if (payload.title) body.set('title', payload.title)
+  return apiPost<string>(
+    `/api/projects/${projectId}/monitor/autoSaveSystemSnapshot`,
     body.toString(),
     'application/x-www-form-urlencoded;charset=UTF-8',
   )
@@ -1136,6 +1149,27 @@ export function deleteMySnapshot(projectId: string, snapshotId: string) {
   return apiPost<string>(
     `/api/projects/${projectId}/snapshots/my/${snapshotId}/delete`,
     '',
+    'application/json',
+  )
+}
+
+export function saveMySnapshotAsSystemSnapshot(
+  projectId: string,
+  snapshotId: string,
+  payload: {
+    appId: string
+    directory: string
+    title: string
+    describe?: string
+    topicImage?: string
+    versionCycle?: number
+    labels: string[]
+    principals: string[]
+  },
+) {
+  return apiPost<string>(
+    `/api/projects/${projectId}/snapshots/my/${snapshotId}/save-as-system-snapshot`,
+    JSON.stringify(payload),
     'application/json',
   )
 }

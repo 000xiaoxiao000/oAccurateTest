@@ -72,7 +72,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
 
         saveTraceNode(nodes);
-        if (snapshot.getDirectory() == null) {
+        if (!StringUtils.hasText(snapshot.getDirectory())) {
             snapshot.setDirectory("root");
         }
         snapshot.setUpdateTime(new Date());

@@ -1,29 +1,19 @@
 package com.oAT.web.esDao.entity;
 
 import org.springframework.data.annotation.Id;
-import org.springframework.data.elasticsearch.annotations.Document;
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Date;
 
-@Document(indexName = "coverage_report", shards = 2)
 public class CoverageReportIndex implements Serializable {
     @Id
     private String id;
-    @Field(type = FieldType.Keyword)
     private String appId;
-    @Field(type = FieldType.Keyword)
     private String versionNumber;
-    @Field(type = FieldType.Keyword)
     private String repoBranch;
-    @Field(type = FieldType.Keyword)
     private String repoCommitId;
-    @Field(type = FieldType.Date, format = {}, pattern = "yyyy-MM-dd HH:mm:ss,SSS")
     private Date createTime;
 
-    @Field(type = FieldType.Keyword)
     private String lastProcessedTime;
 
     private long totalClasses;
@@ -38,25 +28,18 @@ public class CoverageReportIndex implements Serializable {
     private long coveredLines;
     private int totalComplexity;
 
-    @Field(type = FieldType.Integer)
     private Integer reportType;
 
-    @Field(type = FieldType.Keyword)
     private String baseVersionNumber;
 
-    @Field(type = FieldType.Keyword)
     private String baseRepoCommitId;
 
-    @Field(type = FieldType.Keyword)
     private String snapshotFingerprint;
 
-    @Field(type = FieldType.Keyword)
     private String snapshotLastUpdateTime;
 
-    @Field(type = FieldType.Integer)
     private Integer snapshotCount;
 
-    @Field(type = FieldType.Text)
     private String snapshotIds;
 
     private long incTotalClasses;

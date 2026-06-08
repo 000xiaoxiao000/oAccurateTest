@@ -1,23 +1,17 @@
 package com.oAT.web.esDao.entity;
 
-import org.springframework.data.elasticsearch.annotations.Field;
-import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.io.Serializable;
 import java.util.Objects;
 
 public class LabelGroup implements Serializable {
-    @Field(type = FieldType.Object)
     private Label labels[];
-    @Field(type = FieldType.Keyword)
     private String groupName;
 
     /**
      * usecase, snapshot
      */
-    @Field(type = FieldType.Keyword)
     private String type;
-    @Field(type = FieldType.Keyword)
     private String projectid;
 
     public Label[] getLabels() {
@@ -53,9 +47,7 @@ public class LabelGroup implements Serializable {
     }
 
     public static class Label implements Serializable {
-        @Field(type = FieldType.Keyword)
         private String name;
-        @Field(type = FieldType.Keyword)
         private String color;
 
         public Label() {
