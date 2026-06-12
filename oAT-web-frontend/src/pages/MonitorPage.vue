@@ -749,6 +749,10 @@ watch([traceKeyword, tracePageSize, selectedAppIds, selectedClientIps], () => {
   tracePage.value = 1
 })
 
+watch(upToTime, () => {
+  loadTraces()
+})
+
 async function refreshAll() {
   await Promise.all([loadProbes(), loadTraces()])
   if (!selectedTraceId.value && traces.value[0]) {

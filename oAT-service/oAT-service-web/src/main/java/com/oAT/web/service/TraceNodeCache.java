@@ -173,9 +173,7 @@ public class TraceNodeCache {
                         break;
                     }
                 } else {
-                    // Item expired in String but still in List - remove it from list to cleanup
                     redisTemplate.opsForList().remove(TRACE_ITEMS_LIST_KEY, 0, tid);
-                    break;
                 }
             }
         }
