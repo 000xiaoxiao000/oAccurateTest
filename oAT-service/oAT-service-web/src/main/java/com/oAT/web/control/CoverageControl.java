@@ -35,8 +35,6 @@ public class CoverageControl {
     FrontendProperties frontendProperties;
 
 
-    private static final Logger logger = LoggerFactory.getLogger(CoverageControl.class);
-
     @Autowired
     private CoverageService coverageService;
 
