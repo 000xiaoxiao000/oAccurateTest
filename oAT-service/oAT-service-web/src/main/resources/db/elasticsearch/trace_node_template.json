@@ -2,36 +2,252 @@
   "index_patterns": ["trace_node-*"],
   "template": {
     "settings": {
-      "index.refresh_interval": "30s",
       "number_of_shards": 3,
-      "number_of_replicas": 1
+      "number_of_replicas": 1,
+      "refresh_interval": "10s",
+      "index": {
+        "max_result_window": 10000
+      }
     },
     "mappings": {
+      "dynamic": "false",
       "properties": {
-        "id": { "type": "keyword" },
-        "traceId": { "type": "keyword" },
-        "traceNodeId": { "type": "keyword" },
-        "appId": { "type": "keyword" },
-        "type": { "type": "keyword" },
-        "createTime": { "type": "date" },
-        "dubboNode": { "type": "object", "enabled": false },
-        "dubboRemoteNode": { "type": "object", "enabled": false },
-        "sqlNode": { "type": "object", "enabled": false },
-        "cksqlNode": { "type": "object", "enabled": false },
-        "httpNode": { "type": "object", "enabled": false },
-        "httpClientNode": { "type": "object", "enabled": false },
-        "feignNode": { "type": "object", "enabled": false },
-        "redisNode": { "type": "object", "enabled": false },
-        "serviceNode": { "type": "object", "enabled": false },
-        "sofaRpcNode": { "type": "object", "enabled": false },
-        "sofaRpcRemoteNode": { "type": "object", "enabled": false },
-        "rabbitMQNode": { "type": "object", "enabled": false },
-        "rabbitMQRemoteNode": { "type": "object", "enabled": false },
-        "rocketMQProducerNode": { "type": "object", "enabled": false },
-        "rocketMQConsumerNode": { "type": "object", "enabled": false },
-        "kafkaMQNode": { "type": "object", "enabled": false },
-        "kafkaMQRemoteNode": { "type": "object", "enabled": false }
+        "id": {
+          "type": "keyword"
+        },
+        "traceId": {
+          "type": "keyword"
+        },
+        "traceNodeId": {
+          "type": "keyword"
+        },
+        "appId": {
+          "type": "keyword"
+        },
+        "type": {
+          "type": "keyword"
+        },
+        "createTime": {
+          "type": "date",
+          "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS"
+        },
+        "root": {
+          "type": "boolean"
+        },
+        "hasError": {
+          "type": "boolean"
+        },
+        "sessionId": {
+          "type": "keyword"
+        },
+        "status": {
+          "type": "keyword"
+        },
+        "addressIp": {
+          "type": "keyword"
+        },
+        "beginTime": {
+          "type": "long"
+        },
+        "endTime": {
+          "type": "long"
+        },
+        "useTime": {
+          "type": "long"
+        },
+        "appName": {
+          "type": "keyword"
+        },
+        "httpClientIp": {
+          "type": "keyword"
+        },
+        "httpServerIp": {
+          "type": "keyword"
+        },
+        "httpServerPort": {
+          "type": "keyword"
+        },
+        "httpMethod": {
+          "type": "keyword"
+        },
+        "httpUrl": {
+          "type": "keyword"
+        },
+        "httpResponseCode": {
+          "type": "keyword"
+        },
+        "httpAjax": {
+          "type": "boolean"
+        },
+        "sqlDatabaseName": {
+          "type": "keyword"
+        },
+        "sqlDatabaseIp": {
+          "type": "keyword"
+        },
+        "sqlDatabaseType": {
+          "type": "keyword"
+        },
+        "sqlOperations": {
+          "type": "keyword"
+        },
+        "remoteKind": {
+          "type": "keyword"
+        },
+        "remoteIp": {
+          "type": "keyword"
+        },
+        "remoteUrl": {
+          "type": "keyword"
+        },
+        "remoteAppId": {
+          "type": "keyword"
+        },
+        "remoteAppName": {
+          "type": "keyword"
+        },
+        "remoteInterface": {
+          "type": "keyword"
+        },
+        "remoteMethod": {
+          "type": "keyword"
+        },
+        "mqTopic": {
+          "type": "keyword"
+        },
+        "redisHost": {
+          "type": "keyword"
+        },
+        "redisPort": {
+          "type": "keyword"
+        },
+        "redisCommand": {
+          "type": "keyword"
+        },
+        "dubboNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "dubboRemoteNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "sqlNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "cksqlNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "httpNode": {
+          "type": "object",
+          "properties": {
+            "clientIp": {
+              "type": "keyword"
+            },
+            "serverIp": {
+              "type": "keyword"
+            },
+            "serverPort": {
+              "type": "keyword"
+            },
+            "requestMethod": {
+              "type": "keyword"
+            },
+            "requestUrl": {
+              "type": "keyword"
+            },
+            "responseCode": {
+              "type": "keyword"
+            },
+            "responseType": {
+              "type": "keyword"
+            },
+            "ajax": {
+              "type": "boolean"
+            },
+            "requestBody": {
+              "type": "text",
+              "index": false
+            },
+            "responseContent": {
+              "type": "text",
+              "index": false
+            },
+            "log": {
+              "type": "text",
+              "index": false
+            },
+            "requestParamNames": {
+              "type": "keyword",
+              "index": false
+            },
+            "requestParamValues": {
+              "type": "keyword",
+              "index": false
+            },
+            "codeNodes": {
+              "type": "object",
+              "enabled": false
+            },
+            "requestHeader": {
+              "type": "object",
+              "enabled": false
+            }
+          }
+        },
+        "httpClientNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "feignNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "redisNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "serviceNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "sofaRpcNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "sofaRpcRemoteNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "rabbitMQNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "rabbitMQRemoteNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "rocketMQProducerNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "rocketMQConsumerNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "kafkaMQNode": {
+          "type": "object",
+          "enabled": false
+        },
+        "kafkaMQRemoteNode": {
+          "type": "object",
+          "enabled": false
+        }
       }
     }
-  }
+  },
+  "priority": 500,
+  "version": 2
 }

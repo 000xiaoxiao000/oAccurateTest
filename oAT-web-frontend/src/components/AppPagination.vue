@@ -92,7 +92,6 @@ function setPage(page: number) {
 function changePageSize(event: Event) {
   const value = Number((event.target as HTMLSelectElement).value)
   emit('update:pageSize', value > 0 ? value : props.pageSize)
-  emit('update:page', 1)
 }
 </script>
 

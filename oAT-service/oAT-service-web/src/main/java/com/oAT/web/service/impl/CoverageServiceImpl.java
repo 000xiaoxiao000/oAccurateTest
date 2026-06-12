@@ -926,6 +926,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
     private void mergeSnapshotTraceCoverage(String traceId, Map<String, ClassCoverageIndex> coverageMap) {
         if (!StringUtils.hasText(traceId)) {
+            logger.debug("跳过覆盖率合并：traceId 为空");
             return;
         }
 
@@ -944,20 +945,54 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         }
 
         if (!(rootNode instanceof HttpTraceNode)) {
+            String nodeType = rootNode != null ? rootNode.getClass().getSimpleName() : "null";
+            logger.debug("跳过覆盖率合并：traceId={} 不是 HTTP 请求（节点类型: {}），仅 HTTP 请求包含代码覆盖率数据", traceId, nodeType);
             return;
         }
 
         HttpTraceNode httpNode = (HttpTraceNode) rootNode;
         StackNodeVo[] codeNodes = httpNode.getCodeNodes();
-        if (codeNodes == null) {
+        if (codeNodes == null || codeNodes.length == 0) {
+            logger.warn("跳过覆盖率合并：traceId={} 的 codeNodes 为空，可能是 Java Agent 未正确采集覆盖率数据", traceId);
             return;
         }
 
+        logger.info("开始合并覆盖率数据：traceId={}, codeNodes 数量={}, coverageMap 大小={}", 
+                traceId, codeNodes.length, coverageMap.size());
+        
+        int matchedCount = 0;
+        int unmatchedCount = 0;
         for (StackNodeVo sn : codeNodes) {
-            ClassCoverageIndex classCov = coverageMap.get(resolveCoverageOwnerClassName(sn.getClassName()));
+            String originalClassName = sn.getClassName();
+            String resolvedClassName = resolveCoverageOwnerClassName(originalClassName);
+            ClassCoverageIndex classCov = coverageMap.get(resolvedClassName);
+            
+            // 如果直接匹配失败，尝试智能匹配（处理包名前缀缺失等情况）
+            if (classCov == null) {
+                classCov = findClassCoverageByFuzzyMatch(coverageMap, resolvedClassName);
+            }
+            
             if (classCov != null) {
                 mergeStackNode(classCov, sn);
+                matchedCount++;
+            } else {
+                unmatchedCount++;
+                if (unmatchedCount <= 5) {
+                    logger.warn("未匹配到类覆盖率数据：原始类名={}, 解析后={}, 可用类名示例={}", 
+                            originalClassName, resolvedClassName, 
+                            coverageMap.keySet().stream().limit(5).collect(Collectors.joining(", ")));
+                }
             }
+        }
+        
+        logger.info("覆盖率合并完成：traceId={}, 匹配成功={}, 未匹配={}", traceId, matchedCount, unmatchedCount);
+        
+        if (matchedCount == 0 && unmatchedCount > 0) {
+            logger.error("严重警告：所有 codeNodes 都未能匹配到静态源码数据！请检查类名格式是否一致。");
+            logger.error("codeNodes 中的类名示例：{}", 
+                    Arrays.stream(codeNodes).limit(3).map(StackNodeVo::getClassName).collect(Collectors.joining(", ")));
+            logger.error("coverageMap 中的类名示例：{}", 
+                    coverageMap.keySet().stream().limit(10).collect(Collectors.joining(", ")));
         }
     }
 
@@ -2869,6 +2904,60 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
 
     private String resolveCoverageOwnerClassName(String className) {
         return CoverageSourceClassUtil.resolveSourceOwnerClassName(className);
+    }
+
+    /**
+     * 智能匹配类覆盖率数据，处理类名格式不一致的情况。
+     * 
+     * 常见问题：
+     * 1. codeNodes 中的类名可能缺少包前缀（如 "web3Server.config.MultipartConfig"）
+     * 2. 静态源码中的类名是完整的（如 "com.web3Server.config.MultipartConfig"）
+     * 
+     * 匹配策略：
+     * 1. 优先精确匹配
+     * 2. 如果精确匹配失败，尝试后缀匹配（coverageMap 中的类名以 codeNodes 类名结尾）
+     * 3. 返回最短匹配（最可能是正确的完整类名）
+     */
+    private ClassCoverageIndex findClassCoverageByFuzzyMatch(Map<String, ClassCoverageIndex> coverageMap, String targetClassName) {
+        if (!StringUtils.hasText(targetClassName)) {
+            return null;
+        }
+        
+        // 策略1：精确匹配（已经在调用方尝试过，这里再试一次以防万一）
+        ClassCoverageIndex exactMatch = coverageMap.get(targetClassName);
+        if (exactMatch != null) {
+            return exactMatch;
+        }
+        
+        // 策略2：后缀匹配（处理包名前缀缺失）
+        List<Map.Entry<String, ClassCoverageIndex>> suffixMatches = new ArrayList<>();
+        for (Map.Entry<String, ClassCoverageIndex> entry : coverageMap.entrySet()) {
+            String candidateName = entry.getKey();
+            // 检查是否以 targetClassName 结尾，且前一个字符是点号（确保是完整的包路径）
+            if (candidateName.endsWith(targetClassName)) {
+                int endIndex = candidateName.length() - targetClassName.length();
+                if (endIndex == 0 || candidateName.charAt(endIndex - 1) == '.') {
+                    suffixMatches.add(entry);
+                }
+            }
+        }
+        
+        if (suffixMatches.isEmpty()) {
+            return null;
+        }
+        
+        // 如果有多个匹配，选择最短的（最可能是正确的完整类名）
+        suffixMatches.sort(Comparator.comparingInt(e -> e.getKey().length()));
+        ClassCoverageIndex bestMatch = suffixMatches.get(0).getValue();
+        
+        if (suffixMatches.size() > 1) {
+            logger.info("类名模糊匹配：目标={}, 找到 {} 个后缀匹配，选择最短的: {}", 
+                    targetClassName, suffixMatches.size(), suffixMatches.get(0).getKey());
+        } else {
+            logger.info("类名模糊匹配成功：目标={}, 匹配到={}", targetClassName, suffixMatches.get(0).getKey());
+        }
+        
+        return bestMatch;
     }
 
     private byte[] readAllBytes(InputStream is) throws IOException {

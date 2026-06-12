@@ -10,11 +10,7 @@ import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
-import com.oAT.agent.model.DubboTraceNode;
-import com.oAT.agent.model.FeignTraceNode;
-import com.oAT.agent.model.HttpClientTraceNode;
-import com.oAT.agent.model.HttpTraceNode;
-import com.oAT.agent.model.TraceNode;
+
 import com.oAT.web.esDao.ApiEndpointRepository;
 import com.oAT.web.esDao.CaseCenterRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
@@ -431,31 +427,25 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
     private Map<String, Integer> buildCoverageMap(Map<String, TraceNodeIndex> traceMap) {
         Map<String, Integer> hitMap = new HashMap<>();
         for (TraceNodeIndex item : traceMap.values()) {
-            TraceNode node;
-            try {
-                node = item.toTraceNode();
-            } catch (Exception ignored) {
+            if (item == null || item.getType() == null) {
                 continue;
             }
-            if (node instanceof HttpTraceNode) {
-                HttpTraceNode n = (HttpTraceNode) node;
-                addHit(hitMap, "HTTP", n.getRequestMethod(), n.getRequestUrl());
-            } else if (node instanceof HttpClientTraceNode) {
-                HttpClientTraceNode n = (HttpClientTraceNode) node;
-                addHit(hitMap, "HTTP_CLIENT", n.getServiceMethod(), n.getServiceURL());
-            } else if (node instanceof FeignTraceNode) {
-                FeignTraceNode n = (FeignTraceNode) node;
-                addHit(hitMap, "FEIGN", n.getServiceMethod(), firstText(n.getServiceURL(), n.getRemoteUrl()));
-            } else if (node instanceof DubboTraceNode) {
-                DubboTraceNode n = (DubboTraceNode) node;
-                addHit(hitMap, "RPC", "INVOKE", n.getServiceInterface() + "#" + n.getServiceMethodName());
+            String type = item.getType();
+            if ("http".equals(type)) {
+                addHit(hitMap, "HTTP", item.getHttpMethod(), item.getHttpUrl());
+            } else if ("httpClient".equals(type)) {
+                addHit(hitMap, "HTTP_CLIENT", item.getRemoteMethod(), item.getRemoteUrl());
+            } else if ("feign".equals(type)) {
+                addHit(hitMap, "FEIGN", item.getRemoteMethod(), firstText(item.getRemoteUrl()));
+            } else if ("dubbo".equals(type)) {
+                String rpcTarget = item.getRemoteInterface();
+                if (StringUtils.hasText(rpcTarget) && StringUtils.hasText(item.getRemoteMethod())) {
+                    rpcTarget = rpcTarget + "#" + item.getRemoteMethod();
+                }
+                addHit(hitMap, "RPC", "INVOKE", rpcTarget);
             }
         }
         return hitMap;
-    }
-
-    private void addTraceIndexes(Map<String, TraceNodeIndex> traceMap, List<TraceNodeIndex> traces) {
-        addTraceIndexes(traceMap, traces, null);
     }
 
     private void addTraceIndexes(Map<String, TraceNodeIndex> traceMap, List<TraceNodeIndex> traces, String appId) {
@@ -512,10 +502,6 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
             }
         }
         return "";
-    }
-
-    private ApiEndpointViewVo toViewVo(ApiEndpointIndex index) {
-        return toViewVo(index, Collections.emptyMap());
     }
 
     private ApiEndpointViewVo toViewVo(ApiEndpointIndex index, Map<String, List<ApiEndpointViewVo.UsecaseLinkVo>> usecaseLinks) {
@@ -599,40 +585,33 @@ public class ApiEndpointAnalysisServiceImpl implements ApiEndpointAnalysisServic
     }
 
     private String coverageKey(TraceNodeIndex item) {
-        TraceNode node;
-        try {
-            node = item.toTraceNode();
-        } catch (Exception ignored) {
+        if (item == null || item.getType() == null) {
             return null;
         }
-        if (node instanceof HttpTraceNode) {
-            HttpTraceNode n = (HttpTraceNode) node;
-            if (!StringUtils.hasText(n.getRequestUrl())) {
+        String type = item.getType();
+        if ("http".equals(type)) {
+            if (!StringUtils.hasText(item.getHttpUrl())) {
                 return null;
             }
-            return coverageKey("HTTP", n.getRequestMethod(), n.getRequestUrl());
+            return coverageKey("HTTP", item.getHttpMethod(), item.getHttpUrl());
         }
-        if (node instanceof HttpClientTraceNode) {
-            HttpClientTraceNode n = (HttpClientTraceNode) node;
-            if (!StringUtils.hasText(n.getServiceURL())) {
+        if ("httpClient".equals(type)) {
+            if (!StringUtils.hasText(item.getRemoteUrl())) {
                 return null;
             }
-            return coverageKey("HTTP_CLIENT", n.getServiceMethod(), n.getServiceURL());
+            return coverageKey("HTTP_CLIENT", item.getRemoteMethod(), item.getRemoteUrl());
         }
-        if (node instanceof FeignTraceNode) {
-            FeignTraceNode n = (FeignTraceNode) node;
-            String target = firstText(n.getServiceURL(), n.getRemoteUrl());
-            if (!StringUtils.hasText(target)) {
+        if ("feign".equals(type)) {
+            if (!StringUtils.hasText(item.getRemoteUrl())) {
                 return null;
             }
-            return coverageKey("FEIGN", n.getServiceMethod(), target);
+            return coverageKey("FEIGN", item.getRemoteMethod(), item.getRemoteUrl());
         }
-        if (node instanceof DubboTraceNode) {
-            DubboTraceNode n = (DubboTraceNode) node;
-            if (!StringUtils.hasText(n.getServiceInterface()) || !StringUtils.hasText(n.getServiceMethodName())) {
+        if ("dubbo".equals(type)) {
+            if (!StringUtils.hasText(item.getRemoteInterface()) || !StringUtils.hasText(item.getRemoteMethod())) {
                 return null;
             }
-            return coverageKey("RPC", "INVOKE", n.getServiceInterface() + "#" + n.getServiceMethodName());
+            return coverageKey("RPC", "INVOKE", item.getRemoteInterface() + "#" + item.getRemoteMethod());
         }
         return null;
     }

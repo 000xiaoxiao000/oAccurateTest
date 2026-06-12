@@ -1,25 +1,27 @@
 package com.oAT.web.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch.indices.PutIndexTemplateRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 
 @Component
 public class ElasticsearchTemplateInitializer {
 
     private static final Logger logger = LoggerFactory.getLogger(ElasticsearchTemplateInitializer.class);
+    private static final String TRACE_NODE_TEMPLATE_NAME = "trace_node_template";
 
-    @Autowired
-    private ElasticsearchOperations elasticsearchOperations;
+    private final ElasticsearchClient elasticsearchClient;
+
+    public ElasticsearchTemplateInitializer(ElasticsearchClient elasticsearchClient) {
+        this.elasticsearchClient = elasticsearchClient;
+    }
 
     @EventListener(ApplicationReadyEvent.class)
     public void initializeTemplates() {
@@ -40,11 +42,11 @@ public class ElasticsearchTemplateInitializer {
             }
 
             try (InputStream is = resource.getInputStream()) {
-                String templateJson = new String(is.readAllBytes(), StandardCharsets.UTF_8);
-                ObjectMapper mapper = new ObjectMapper();
-                mapper.readTree(templateJson);
-
-                logger.info("trace_node index template loaded, ensuring it exists in Elasticsearch");
+                PutIndexTemplateRequest request = PutIndexTemplateRequest.of(builder -> builder
+                        .name(TRACE_NODE_TEMPLATE_NAME)
+                        .withJson(is));
+                elasticsearchClient.indices().putIndexTemplate(request);
+                logger.info("trace_node index template ensured in Elasticsearch: {}", TRACE_NODE_TEMPLATE_NAME);
             }
         } catch (Exception e) {
             logger.error("Failed to create trace_node template", e);

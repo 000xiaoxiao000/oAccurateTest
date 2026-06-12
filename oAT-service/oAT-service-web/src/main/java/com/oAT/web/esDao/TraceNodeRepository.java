@@ -38,8 +38,7 @@ public class TraceNodeRepository {
 
     private static final Logger logger = LoggerFactory.getLogger(TraceNodeRepository.class);
 
-    private static final String INDEX_ALIAS = "trace_node";
-    private static final String INDEX_PATTERN = "trace_node*";
+    private static final String MONTHLY_INDEX_PATTERN = "trace_node-*";
     private static final DateTimeFormatter INDEX_SUFFIX = DateTimeFormatter.ofPattern("yyyy.MM");
 
     // Minimal fields for trace list view - uses flat fields, avoids all nested payloads
@@ -64,10 +63,7 @@ public class TraceNodeRepository {
     public Optional<TraceNodeIndex> findById(String id) {
         Query query = IdsQuery.of(q -> q.values(id))._toQuery();
         NativeQuery searchQuery = NativeQuery.builder().withQuery(query).build();
-        SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery,
-                TraceNodeIndex.class,
-                IndexCoordinates.of(INDEX_PATTERN));
-        return hits.getSearchHits().stream().findFirst().map(SearchHit::getContent);
+        return findFirst(searchQuery, monthlyIndices(), "trace node", id);
     }
 
     /**
@@ -78,18 +74,17 @@ public class TraceNodeRepository {
         Query query = TermQuery.of(q -> q.field("traceId").value(traceId))._toQuery();
         NativeQuery searchQuery = NativeQuery.builder()
                 .withQuery(query)
-                .withSort(Sort.by(Sort.Direction.ASC, "createTime"))
                 .withPageable(pageable)
                 .build();
-        SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery,
-                TraceNodeIndex.class,
-                IndexCoordinates.of(INDEX_PATTERN));
-        return toContent(hits);
+
+        List<TraceNodeIndex> nodes = searchTraceNodes(searchQuery, monthlyIndices(), traceId);
+        nodes.sort(this::compareTraceNodes);
+        return nodes;
     }
 
     /**
      * Returns recent root HTTP nodes for an appId using flat fields.
-     * Capped at 200 results - prefer {@link #findRootHttpNodesByAppId} with explicit paging for large datasets.
+     * Capped at 200 results - prefer with explicit paging for large datasets.
      */
     public List<TraceNodeIndex> findByAppId(String appId) {
         Query query = BoolQuery.of(b -> b
@@ -102,35 +97,8 @@ public class TraceNodeRepository {
                 .withSourceFilter(new FetchSourceFilter(LIST_INCLUDE_FIELDS, null))
                 .withPageable(org.springframework.data.domain.PageRequest.of(0, 200))
                 .build();
-        SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery,
-                TraceNodeIndex.class,
-                IndexCoordinates.of(INDEX_PATTERN));
-        return toContent(hits);
-    }
 
-    /**
-     * ES-side sorted and paginated query for the trace list view.
-     * Only fetches root HTTP entry nodes (traceNodeId=0) with minimal fields.
-     */
-    public Page<TraceNodeIndex> findRootHttpNodesByAppId(String appId, Pageable pageable) {
-        Query query = BoolQuery.of(b -> b
-                .must(TermQuery.of(t -> t.field("appId").value(appId))._toQuery())
-                .must(TermQuery.of(t -> t.field("type").value("http"))._toQuery())
-                .must(TermQuery.of(t -> t.field("traceNodeId").value("0"))._toQuery())
-        )._toQuery();
-
-        NativeQuery searchQuery = NativeQuery.builder()
-                .withQuery(query)
-                .withSort(Sort.by(Sort.Direction.DESC, "createTime"))
-                .withPageable(pageable)
-                .withSourceFilter(new FetchSourceFilter(LIST_INCLUDE_FIELDS, null))
-                .withTrackTotalHits(true)
-                .build();
-
-        SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery,
-                TraceNodeIndex.class,
-                IndexCoordinates.of(INDEX_PATTERN));
-        return new PageImpl<>(toContent(hits), pageable, hits.getTotalHits());
+        return searchTraceNodes(searchQuery, monthlyIndices(), appId);
     }
 
     /**
@@ -154,12 +122,8 @@ public class TraceNodeRepository {
                 .withTrackTotalHits(false)
                 .build();
 
-        SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery,
-                TraceNodeIndex.class,
-                IndexCoordinates.of(INDEX_PATTERN));
-        return new PageImpl<>(toContent(hits), pageable, hits.getTotalHits());
+        return searchTraceNodePage(searchQuery, monthlyIndices(), appId, createTime, pageable);
     }
-
     public TraceNodeIndex save(TraceNodeIndex node) {
         return elasticsearchOperations.save(node, indexFor(node));
     }
@@ -168,14 +132,13 @@ public class TraceNodeRepository {
      * Bulk-saves a batch of nodes into the correct monthly index.
      * Groups nodes by target index first so each bulk call targets a single index.
      */
-    public List<TraceNodeIndex> saveAll(Iterable<TraceNodeIndex> nodes) {
+    public void saveAll(Iterable<TraceNodeIndex> nodes) {
         Map<String, List<TraceNodeIndex>> byIndex = new HashMap<>();
         for (TraceNodeIndex node : nodes) {
             String indexName = indexFor(node).getIndexName();
             byIndex.computeIfAbsent(indexName, k -> new ArrayList<>()).add(node);
         }
 
-        List<TraceNodeIndex> saved = new ArrayList<>();
         for (Map.Entry<String, List<TraceNodeIndex>> entry : byIndex.entrySet()) {
             String indexName = entry.getKey();
             List<TraceNodeIndex> batch = entry.getValue();
@@ -189,12 +152,11 @@ public class TraceNodeRepository {
             try {
                 elasticsearchOperations.bulkIndex(queries, BulkOptions.defaultOptions(),
                         IndexCoordinates.of(indexName));
-                saved.addAll(batch);
             } catch (Exception e) {
                 logger.error("Bulk index failed for index {}, falling back to single save: {}", indexName, e.getMessage());
                 for (TraceNodeIndex node : batch) {
                     try {
-                        saved.add(elasticsearchOperations.save(node, IndexCoordinates.of(indexName)));
+                        elasticsearchOperations.save(node, IndexCoordinates.of(indexName));
                     } catch (Exception ex) {
                         logger.error("Single save also failed for traceId={} nodeId={}: {}",
                                 node.getTraceId(), node.getTraceNodeId(), ex.getMessage());
@@ -202,7 +164,6 @@ public class TraceNodeRepository {
                 }
             }
         }
-        return saved;
     }
 
     private List<TraceNodeIndex> toContent(SearchHits<TraceNodeIndex> hits) {
@@ -213,9 +174,63 @@ public class TraceNodeRepository {
         return content;
     }
 
+    private Optional<TraceNodeIndex> findFirst(NativeQuery searchQuery, IndexCoordinates index, String indexLabel, String id) {
+        try {
+            SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery, TraceNodeIndex.class, index);
+            return hits.getSearchHits().stream().findFirst().map(SearchHit::getContent);
+        } catch (Exception e) {
+            logger.warn("Failed to find {} by id={}: {}", indexLabel, id, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private List<TraceNodeIndex> searchTraceNodes(NativeQuery searchQuery, IndexCoordinates index, String key) {
+        try {
+            SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery, TraceNodeIndex.class, index);
+            return toContent(hits);
+        } catch (Exception e) {
+            logger.warn("Failed to search trace nodes for key={}: {}", key, e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    private Page<TraceNodeIndex> searchTraceNodePage(NativeQuery searchQuery, IndexCoordinates index, String appId,
+                                                     Date createTime, Pageable pageable) {
+        try {
+            SearchHits<TraceNodeIndex> hits = elasticsearchOperations.search(searchQuery, TraceNodeIndex.class, index);
+            return new PageImpl<>(toContent(hits), pageable, hits.getTotalHits());
+        } catch (Exception e) {
+            logger.warn("Failed to search trace nodes for appId={} after createTime={}: {}", appId, createTime, e.getMessage());
+            return new PageImpl<>(new ArrayList<>(), pageable, 0);
+        }
+    }
+
+    private int compareTraceNodes(TraceNodeIndex left, TraceNodeIndex right) {
+        Date leftTime = left == null ? null : left.getCreateTime();
+        Date rightTime = right == null ? null : right.getCreateTime();
+        if (leftTime != null && rightTime != null) {
+            int timeCompare = leftTime.compareTo(rightTime);
+            if (timeCompare != 0) {
+                return timeCompare;
+            }
+        } else if (leftTime != null) {
+            return -1;
+        } else if (rightTime != null) {
+            return 1;
+        }
+
+        String leftNodeId = left == null || left.getTraceNodeId() == null ? "" : left.getTraceNodeId();
+        String rightNodeId = right == null || right.getTraceNodeId() == null ? "" : right.getTraceNodeId();
+        return leftNodeId.compareTo(rightNodeId);
+    }
+
+    private IndexCoordinates monthlyIndices() {
+        return IndexCoordinates.of(MONTHLY_INDEX_PATTERN);
+    }
+
     private IndexCoordinates indexFor(TraceNodeIndex node) {
         Date createTime = node.getCreateTime() == null ? new Date() : node.getCreateTime();
         String suffix = createTime.toInstant().atZone(ZoneId.systemDefault()).format(INDEX_SUFFIX);
-        return IndexCoordinates.of(INDEX_ALIAS + "-" + suffix);
+        return IndexCoordinates.of("trace_node-" + suffix);
     }
 }
