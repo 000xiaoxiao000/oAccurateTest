@@ -27,9 +27,10 @@ oAccurateTest/
        │ HTTP 上报链路 / 快照数据
        ▼
   oAT-service-web（Spring Boot）
-       ├─ Elasticsearch  ← 快照、链路、覆盖率、静态源码
+       ├─ Elasticsearch  ← 快照、链路、静态源码
        ├─ MySQL          ← 项目、应用、版本、用例等结构化数据
        ├─ Redis          ← 会话、缓存
+       ├─ MinIO          ← 覆盖率 codeNodes 对象存储
        ├─ Git 仓库       ← Commit、Diff、源码下载
        └─ oAT-ai        ← AI 工具编排与 LLM 集成
             │
@@ -49,6 +50,7 @@ oAccurateTest/
 | AI 框架 | LangChain4j | 1.12.2 |
 | 存储 - 文档 | Elasticsearch | 7.x / 8.x |
 | 存储 - 关系型 | MySQL | 5.7+ / 8.x |
+| 存储 - 对象 | MinIO | — |
 | 存储 - 缓存 | Redis + Redisson | — |
 | 代码分析 | JGit、ASM、JavaParser | — |
 | 报表导出 | EasyExcel | 3.1.1 |
@@ -127,21 +129,49 @@ npm run build
 1. 启动 Elasticsearch
 2. 启动 MySQL
 3. 启动 Redis
-4. 启动 `oAT-service-web`
-5. 启动挂载了 Agent 的目标应用
+4. 启动 MinIO（启用覆盖率对象存储时需要）
+5. 启动 `oAT-service-web`
+6. 启动挂载了 Agent 的目标应用
 
 详细配置和启动参数见各模块 README。
 
 ---
 
+## 覆盖率数据存储
+
+本次优化引入了基于 MinIO 的覆盖率 codeNodes 对象存储，将链路上报时的代码执行栈数据从 Elasticsearch 中剥离，写入 MinIO 以降低 ES 存储压力。
+
+**工作机制**
+
+- 写入（异步）：Agent 上报 TraceNode 时，服务端提取 `codeNodes` → 序列化为 MessagePack → 异步写入 MinIO。内置有界队列（最多积压 500 个任务），队列满时自动降级为同步写，不丢失数据。
+- 读取（同步）：生成覆盖率报告时按 `traceId` 从 MinIO 加载 codeNodes → 反序列化 → 用于覆盖率合并。
+- 降级（Fallback）：MinIO 不可用或对象不存在时，自动回退到旧的 ES 链路数据兜底，保证已有数据可用。
+
+**配置项**（`application.properties`）
+
+```properties
+# 是否启用 MinIO 对象存储（默认 true，设为 false 则完全使用旧 ES 模式）
+coverage.storage.enabled=true
+coverage.storage.type=minIO
+coverage.storage.endpoint=http://localhost:9000
+coverage.storage.bucket=oat-coverage
+coverage.storage.access-key=<your-access-key>
+coverage.storage.secret-key=<your-secret-key>
+```
+
+MinIO 的 Bucket 会在服务启动时自动创建，无需手动初始化。如不需要 MinIO，将 `coverage.storage.enabled` 设为 `false` 即可保持原有行为。
+
+---
+
 ## 环境要求
 
-| 组件 | 版本 |
-|---|---|
-| JDK（Agent） | 8+ |
-| JDK（Service） | 17+ |
-| Maven | 3.8+ |
-| Node.js | 18+（前端开发/构建） |
-| Elasticsearch | 7.x / 8.x |
-| MySQL | 5.7+ / 8.x |
-| Redis | 5.x+ |
+| 组件 | 版本 | 说明 |
+|---|---|---|
+| JDK（Agent） | 8+ | — |
+| JDK（Service） | 17+ | — |
+| Maven | 3.8+ | — |
+| Node.js | 18+ | 前端开发/构建 |
+| Elasticsearch | 7.x / 8.x | — |
+| MySQL | 5.7+ / 8.x | — |
+| Redis | 5.x+ | — |
+| MinIO | RELEASE.2023+ | 用于覆盖率 codeNodes 对象存储 |

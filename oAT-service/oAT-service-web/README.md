@@ -132,6 +132,30 @@ traceNode.cache.capacity=5000
 traceNode.cache.validityTime=300
 ```
 
+### 覆盖率数据存储（MinIO）
+
+```properties
+# 是否启用 MinIO 对象存储（默认 true）
+coverage.storage.enabled=true
+coverage.storage.type=minIO
+coverage.storage.endpoint=http://localhost:9000
+coverage.storage.bucket=oat-coverage
+coverage.storage.access-key=root
+coverage.storage.secret-key=12345678
+```
+
+MinIO 用于存储覆盖率 codeNodes 数据（从链路节点中剥离的代码执行栈），以 MessagePack 格式序列化后异步写入对象存储，减轻 Elasticsearch 存储压力。
+
+**工作机制**：
+- 写入：Agent 上报 TraceNode 时异步提取 codeNodes → 序列化为 MessagePack → 写入 MinIO
+- 读取：生成覆盖率报告时按 traceId 从 MinIO 加载 → 反序列化为 StackNodeVo[]
+- 降级：MinIO 不可用或对象不存在时，自动回退到 ES 中的旧数据（兼容模式）
+
+**注意事项**：
+- 服务启动时会自动创建 Bucket，无需手动初始化
+- 设置 `coverage.storage.enabled=false` 可完全禁用 MinIO，回退到纯 ES 模式
+- 内置有界队列（最多积压 500 个任务），队列满时降级为同步写，保证不丢数据
+
 ### 用例关联链接模板
 
 ```properties
@@ -191,7 +215,7 @@ nohup java -jar target/oAT-service-web-1.0.0-SNAPSHOT.war > oat.log 2>&1 &
 3. `CoverageService` 读取应用配置、静态源码结构、版本信息
 4. 增量报告：通过 `GitService` 获取两个 Commit 之间的 Diff
 5. 查询该版本下的系统快照列表
-6. 遍历每个快照的 `traceId`，从 ES 加载链路节点
+6. 遍历每个快照的 `traceId`，优先从 MinIO 加载 codeNodes，MinIO 无数据时降级从 ES 链路节点中提取
 7. 聚合类 / 方法 / 行 / 分支覆盖率，合并到 `ClassCoverageIndex`
 8. 保存覆盖率报告头（`CoverageReportIndex`）和类明细
 9. 前端可查看概览、详情、树形结构、源码着色，导出 Excel
