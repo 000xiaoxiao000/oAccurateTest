@@ -399,17 +399,7 @@ async function goPage(page: number) {
 async function changePageSize(size: number) {
   await router.replace({
     query: {
-      ...route.query,
-      className: filters.className || undefined,
-      methodName: filters.methodName || undefined,
-      minRate: filters.minRate,
-      maxRate: filters.maxRate,
-      minBranchRate: filters.minBranchRate,
-      maxBranchRate: filters.maxBranchRate,
-      minMethodRate: filters.minMethodRate,
-      maxMethodRate: filters.maxMethodRate,
-      minComplexity: filters.minComplexity,
-      maxComplexity: filters.maxComplexity,
+      ...buildFilterQuery(0),
       page: undefined,
       size: size !== 20 ? String(size) : undefined,
     },
