@@ -11,6 +11,7 @@
         :seed="item.seed"
         :mood="error ? 'error' : 'happy'"
         :interactive="true"
+        :look-away="passwordFocused"
       />
     </div>
     <div class="login-card" :class="{ 'shake-animation': Boolean(error), 'auth-submitting': submitting }">
@@ -41,6 +42,8 @@
               :type="showLoginPassword ? 'text' : 'password'"
               autocomplete="current-password"
               placeholder="请输入密码"
+              @focus="passwordFocused = true"
+              @blur="passwordFocused = false"
             />
             <button
               class="password-toggle auth-password-toggle"
@@ -143,6 +146,7 @@ const error = ref('')
 const showLoginPassword = ref(false)
 const showRegisterPassword = ref(false)
 const showRegisterConfirmPassword = ref(false)
+const passwordFocused = ref(false)
 const loginForm = reactive({
   nameOrEmail: '',
   password: '',

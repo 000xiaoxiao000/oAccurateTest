@@ -399,7 +399,17 @@ async function goPage(page: number) {
 async function changePageSize(size: number) {
   await router.replace({
     query: {
-      ...buildFilterQuery(0),
+      ...route.query,
+      className: filters.className || undefined,
+      methodName: filters.methodName || undefined,
+      minRate: filters.minRate,
+      maxRate: filters.maxRate,
+      minBranchRate: filters.minBranchRate,
+      maxBranchRate: filters.maxBranchRate,
+      minMethodRate: filters.minMethodRate,
+      maxMethodRate: filters.maxMethodRate,
+      minComplexity: filters.minComplexity,
+      maxComplexity: filters.maxComplexity,
       page: undefined,
       size: size !== 20 ? String(size) : undefined,
     },
@@ -434,12 +444,31 @@ async function load() {
       minComplexity: filters.minComplexity,
       maxComplexity: filters.maxComplexity,
     })
+    
+    if (payload.value.classPage?.content) {
+      payload.value.classPage.content = sortClassesByCoverage(payload.value.classPage.content)
+    }
+    
     treeRows.value = viewType.value === 'tree' ? (payload.value.treeNodes || []).map((node) => toTreeRow(node, 0)) : []
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载覆盖率明细失败'
   } finally {
     loading.value = false
   }
+}
+
+function sortClassesByCoverage(classes: any[]) {
+  return [...classes].sort((a, b) => {
+    const aHasCoverage = (a.lineRate || 0) > 0 || (a.branchRate || 0) > 0 || (a.methodRate || 0) > 0
+    const bHasCoverage = (b.lineRate || 0) > 0 || (b.branchRate || 0) > 0 || (b.methodRate || 0) > 0
+    
+    if (aHasCoverage && !bHasCoverage) return -1
+    if (!aHasCoverage && bHasCoverage) return 1
+    
+    if (a.lineRate !== b.lineRate) return (b.lineRate || 0) - (a.lineRate || 0)
+    if (a.branchRate !== b.branchRate) return (b.branchRate || 0) - (a.branchRate || 0)
+    return (b.methodRate || 0) - (a.methodRate || 0)
+  })
 }
 
 watch(

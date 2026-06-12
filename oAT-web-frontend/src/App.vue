@@ -1,6 +1,6 @@
 <template>
   <RouterView />
-  <AiFloatingAssistant v-if="route.name !== 'project-ai'" />
+  <AiFloatingAssistant v-if="route.name !== 'project-ai' && route.name !== 'login' && route.name !== 'register'" />
   <GlobalProbeAlertToasts />
   <AppDialogHost />
 </template>

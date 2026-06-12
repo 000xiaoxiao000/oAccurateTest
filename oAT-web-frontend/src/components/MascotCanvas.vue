@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
   mood?: 'happy' | 'error' | 'thinking'
   interactive?: boolean
   float?: boolean
+  lookAway?: boolean
 }>(), {
   size: 88,
   color: '#0f766e',
@@ -19,15 +20,19 @@ const props = withDefaults(defineProps<{
   mood: 'happy',
   interactive: true,
   float: true,
+  lookAway: false,
 })
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
-let animationId = 0
-let mouseX = 0
-let mouseY = 0
-let pupilX = 0
-let pupilY = 0
-let bodyAngle = 0
+
+const state = {
+  animationId: 0,
+  mouseX: 0,
+  mouseY: 0,
+  pupilX: 0,
+  pupilY: 0,
+  bodyAngle: 0,
+}
 
 function hash(value: string) {
   let h = 2166136261
@@ -60,6 +65,22 @@ function hexToRgb(hex: string) {
   }
 }
 
+function getLookVector(canvas: HTMLCanvasElement) {
+  if (!props.interactive) {
+    return { dx: 24, dy: 10 }
+  }
+
+  const rect = canvas.getBoundingClientRect()
+  const dx = state.mouseX - (rect.left + rect.width / 2)
+  const dy = state.mouseY - (rect.top + rect.height / 2)
+  
+  if (props.lookAway) {
+    return { dx: -dx, dy: -dy }
+  }
+  
+  return { dx, dy }
+}
+
 function draw() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
@@ -83,19 +104,15 @@ function draw() {
   const centerX = cssSize / 2
   const centerY = cssSize / 2 + (props.float ? Math.sin(Date.now() / 720) * 3 : 0)
   const rgb = hexToRgb(props.color)
-  const rect = canvas.getBoundingClientRect()
-  const worldCenterX = props.interactive ? rect.left + centerX : centerX
-  const worldCenterY = props.interactive ? rect.top + centerY : centerY
-  const dx = props.interactive ? mouseX - worldCenterX : 24
-  const dy = props.interactive ? mouseY - worldCenterY : 10
+  const { dx, dy } = getLookVector(canvas)
   const localDistance = Math.hypot(dx, dy) || 1
   const eyeSizeForTarget = radius * 0.25
   const pupilMaxDist = eyeSizeForTarget * 0.48
   const targetX = (dx / localDistance) * pupilMaxDist
   const targetY = (dy / localDistance) * pupilMaxDist
-  pupilX += (targetX - pupilX) * 0.18
-  pupilY += (targetY - pupilY) * 0.18
-  bodyAngle += (0 - bodyAngle) * 0.08
+  state.pupilX += (targetX - state.pupilX) * 0.18
+  state.pupilY += (targetY - state.pupilY) * 0.18
+  state.bodyAngle += (0 - state.bodyAngle) * 0.08
 
   ctx.save()
   ctx.translate(centerX, centerY)
@@ -133,14 +150,14 @@ function draw() {
   ctx.fillStyle = '#0f172a'
   const pupilSize = props.mood === 'error' ? eyeSize * 0.24 : eyeSize * 0.42
   ctx.beginPath()
-  ctx.arc(-eyeOffsetX + pupilX, eyeOffsetY + pupilY, pupilSize, 0, Math.PI * 2)
-  ctx.arc(eyeOffsetX + pupilX, eyeOffsetY + pupilY, pupilSize, 0, Math.PI * 2)
+  ctx.arc(-eyeOffsetX + state.pupilX, eyeOffsetY + state.pupilY, pupilSize, 0, Math.PI * 2)
+  ctx.arc(eyeOffsetX + state.pupilX, eyeOffsetY + state.pupilY, pupilSize, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.fillStyle = 'rgba(255, 255, 255, 0.82)'
   ctx.beginPath()
-  ctx.arc(-eyeOffsetX + pupilX - pupilSize * 0.25, eyeOffsetY + pupilY - pupilSize * 0.25, pupilSize * 0.18, 0, Math.PI * 2)
-  ctx.arc(eyeOffsetX + pupilX - pupilSize * 0.25, eyeOffsetY + pupilY - pupilSize * 0.25, pupilSize * 0.18, 0, Math.PI * 2)
+  ctx.arc(-eyeOffsetX + state.pupilX - pupilSize * 0.25, eyeOffsetY + state.pupilY - pupilSize * 0.25, pupilSize * 0.18, 0, Math.PI * 2)
+  ctx.arc(eyeOffsetX + state.pupilX - pupilSize * 0.25, eyeOffsetY + state.pupilY - pupilSize * 0.25, pupilSize * 0.18, 0, Math.PI * 2)
   ctx.fill()
 
   ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)'
@@ -159,7 +176,7 @@ function draw() {
   ctx.stroke()
   ctx.restore()
 
-  animationId = window.requestAnimationFrame(draw)
+  state.animationId = window.requestAnimationFrame(draw)
 }
 
 function drawAccessory(ctx: CanvasRenderingContext2D, kind: number, radius: number) {
@@ -201,34 +218,29 @@ function drawAccessory(ctx: CanvasRenderingContext2D, kind: number, radius: numb
 }
 
 function handleMouse(event: MouseEvent) {
-  if (props.interactive) {
-    mouseX = event.clientX
-    mouseY = event.clientY
-    return
-  }
-  const rect = canvasRef.value?.getBoundingClientRect()
-  if (!rect) return
-  mouseX = event.clientX - rect.left
-  mouseY = event.clientY - rect.top
+  state.mouseX = event.clientX
+  state.mouseY = event.clientY
 }
 
 onMounted(() => {
   const rect = canvasRef.value?.getBoundingClientRect()
-  mouseX = props.interactive && rect ? rect.left + props.size / 2 + 28 : props.size / 2 + 16
-  mouseY = props.interactive && rect ? rect.top + props.size / 2 + 8 : props.size / 2 + 8
-  const eventTarget = props.interactive ? window : canvasRef.value
-  eventTarget?.addEventListener('mousemove', handleMouse as EventListener)
+  state.mouseX = rect ? rect.left + rect.width / 2 : props.size / 2
+  state.mouseY = rect ? rect.top + rect.height / 2 : props.size / 2
+  if (props.interactive) {
+    window.addEventListener('mousemove', handleMouse)
+  }
   draw()
 })
 
 onBeforeUnmount(() => {
-  if (animationId) window.cancelAnimationFrame(animationId)
-  const eventTarget = props.interactive ? window : canvasRef.value
-  eventTarget?.removeEventListener('mousemove', handleMouse as EventListener)
+  if (state.animationId) window.cancelAnimationFrame(state.animationId)
+  if (props.interactive) {
+    window.removeEventListener('mousemove', handleMouse)
+  }
 })
 
 watch(() => [props.color, props.seed, props.mood, props.size], () => {
-  if (!animationId) draw()
+  if (!state.animationId) draw()
 })
 </script>
 
