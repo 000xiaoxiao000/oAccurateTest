@@ -19,7 +19,13 @@
           "set_priority": {
             "priority": 50
           },
-          "readonly": {}
+          "readonly": {},
+          "forcemerge": {
+            "max_num_segments": 1
+          },
+          "shrink": {
+            "number_of_shards": 1
+          }
         }
       },
       "cold": {
@@ -27,6 +33,11 @@
         "actions": {
           "set_priority": {
             "priority": 0
+          },
+          "allocate": {
+            "require": {
+              "_tier_preference": "data_cold,data_warm,data_hot"
+            }
           }
         }
       },

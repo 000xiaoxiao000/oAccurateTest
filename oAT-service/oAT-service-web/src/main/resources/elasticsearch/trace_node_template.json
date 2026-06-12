@@ -6,7 +6,11 @@
       "number_of_replicas": 1,
       "refresh_interval": "10s",
       "index": {
-        "max_result_window": 10000
+        "max_result_window": 10000,
+        "lifecycle": {
+          "name": "trace_node_ilm_policy",
+          "rollover_alias": "trace_node_write"
+        }
       }
     },
     "mappings": {
