@@ -187,10 +187,6 @@
               "type": "keyword",
               "index": false
             },
-            "codeNodes": {
-              "type": "object",
-              "enabled": false
-            },
             "requestHeader": {
               "type": "object",
               "enabled": false

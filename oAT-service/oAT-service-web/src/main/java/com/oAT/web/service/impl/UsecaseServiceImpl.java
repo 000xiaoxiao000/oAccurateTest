@@ -40,6 +40,8 @@ public class UsecaseServiceImpl implements UsecaseService {
     TraceNodeRepository traceNodeRepository;
     @Autowired
     SystemSnapshotRepository systemSnapshotRepository;
+    @Autowired
+    com.oAT.web.coverage.CoverageStorage coverageStorage;
 
     @Override
     public UsecaseVo doAdd(String author, UsecaseVo usecaseParam) {
@@ -160,6 +162,14 @@ public class UsecaseServiceImpl implements UsecaseService {
 
     private void collectTraceNodes(String traceId,
                                    List<StackNodeVo> codeNodes) {
+        // 优先从对象存储加载，有数据则直接返回
+        List<StackNodeVo> stored = coverageStorage.load(traceId);
+        if (!stored.isEmpty()) {
+            codeNodes.addAll(stored);
+            return;
+        }
+
+        // fallback：从 ES 的旧 codeNodes 字段读取（兼容历史数据）
         List<TraceNodeIndex> nodeIndexs = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
         if (CollectionUtils.isEmpty(nodeIndexs)) {
             throw new DirtyDataException("找不到Trace Node traceId=" + traceId);

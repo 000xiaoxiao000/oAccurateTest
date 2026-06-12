@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.*;
+import java.util.Arrays;
 
 /**
  * Agent 数据提供者实现
@@ -59,6 +60,9 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     @Autowired
     private TraceNodeRepository traceNodeRepository;
+
+    @Autowired
+    private com.oAT.web.coverage.CoverageStorage coverageStorage;
 
     @Autowired
     private TraceSummaryRepository traceSummaryRepository;
@@ -395,26 +399,31 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                 result.put("appName", httpNode.getApp() != null ? httpNode.getApp().getAppName() : "");
                 result.put("error", httpNode.getError() != null);
 
-                List<Map<String, Object>> codeNodes = new ArrayList<>();
-                if (httpNode.getCodeNodes() != null) {
-                    for (com.oAT.agent.model.StackNodeVo node : httpNode.getCodeNodes()) {
-                        if (node == null) {
-                            continue;
-                        }
-                        Map<String, Object> codeNode = new HashMap<>();
-                        codeNode.put("id", node.getId());
-                        codeNode.put("name", node.getClassName() + "." + node.getMethodName());
-                        codeNode.put("className", node.getClassName());
-                        codeNode.put("methodName", node.getMethodName());
-                        codeNode.put("type", "method");
-                        codeNode.put("duration", node.getUseTime());
-                        codeNode.put("error", false);
-                        codeNode.put("done", node.isDone());
-                        codeNode.put("complexity", node.getExecCyclo());
-                        codeNodes.add(codeNode);
+                List<Map<String, Object>> codeNodesList = new ArrayList<>();
+                
+                // 优先从对象存储读取
+                List<com.oAT.agent.model.StackNodeVo> storedNodes = coverageStorage.load(traceId);
+                List<com.oAT.agent.model.StackNodeVo> codeNodesSource = storedNodes.isEmpty() 
+                    ? (httpNode.getCodeNodes() != null ? Arrays.asList(httpNode.getCodeNodes()) : Collections.emptyList())
+                    : storedNodes;
+                
+                for (com.oAT.agent.model.StackNodeVo node : codeNodesSource) {
+                    if (node == null) {
+                        continue;
                     }
+                    Map<String, Object> codeNode = new HashMap<>();
+                    codeNode.put("id", node.getId());
+                    codeNode.put("name", node.getClassName() + "." + node.getMethodName());
+                    codeNode.put("className", node.getClassName());
+                    codeNode.put("methodName", node.getMethodName());
+                    codeNode.put("type", "method");
+                    codeNode.put("duration", node.getUseTime());
+                    codeNode.put("error", false);
+                    codeNode.put("done", node.isDone());
+                    codeNode.put("complexity", node.getExecCyclo());
+                    codeNodesList.add(codeNode);
                 }
-                result.put("nodes", codeNodes);
+                result.put("nodes", codeNodesList);
             }
         } catch (Exception e) {
             logger.error("Get trace detail failed: {}", traceId, e);

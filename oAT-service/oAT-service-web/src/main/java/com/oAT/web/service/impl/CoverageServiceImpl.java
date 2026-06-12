@@ -58,6 +58,8 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     private final Map<String, Map<String, List<Integer>>> diffCache = new ConcurrentHashMap<>();
 
     @Autowired
+    private com.oAT.web.coverage.CoverageStorage coverageStorage;
+    @Autowired
     private StaticInfoRepository staticInfoRepository;
     @Autowired
     private TraceNodeRepository traceNodeRepository;
@@ -930,35 +932,43 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             return;
         }
 
-        Optional<TraceNodeIndex> rootOptional = traceNodeRepository.findById(traceId + "_0");
-        TraceNode rootNode = rootOptional.map(TraceNodeIndex::toTraceNode).orElse(null);
+        List<StackNodeVo> codeNodes = coverageStorage.load(traceId);
+        
+        if (codeNodes.isEmpty()) {
+            Optional<TraceNodeIndex> rootOptional = traceNodeRepository.findById(traceId + "_0");
+            TraceNode rootNode = rootOptional.map(TraceNodeIndex::toTraceNode).orElse(null);
 
-        if (!(rootNode instanceof HttpTraceNode)) {
-            List<TraceNodeIndex> traceNodes = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
-            for (TraceNodeIndex traceNodeIndex : traceNodes) {
-                TraceNode node = traceNodeIndex.toTraceNode();
-                if (node instanceof HttpTraceNode) {
-                    rootNode = node;
-                    break;
+            if (!(rootNode instanceof HttpTraceNode)) {
+                List<TraceNodeIndex> traceNodes = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
+                for (TraceNodeIndex traceNodeIndex : traceNodes) {
+                    TraceNode node = traceNodeIndex.toTraceNode();
+                    if (node instanceof HttpTraceNode) {
+                        rootNode = node;
+                        break;
+                    }
                 }
+            }
+
+            if (!(rootNode instanceof HttpTraceNode)) {
+                String nodeType = rootNode != null ? rootNode.getClass().getSimpleName() : "null";
+                logger.debug("跳过覆盖率合并：traceId={} 不是 HTTP 请求（节点类型: {}），仅 HTTP 请求包含代码覆盖率数据", traceId, nodeType);
+                return;
+            }
+
+            HttpTraceNode httpNode = (HttpTraceNode) rootNode;
+            StackNodeVo[] legacyCodeNodes = httpNode.getCodeNodes();
+            if (legacyCodeNodes != null && legacyCodeNodes.length > 0) {
+                codeNodes = Arrays.asList(legacyCodeNodes);
             }
         }
 
-        if (!(rootNode instanceof HttpTraceNode)) {
-            String nodeType = rootNode != null ? rootNode.getClass().getSimpleName() : "null";
-            logger.debug("跳过覆盖率合并：traceId={} 不是 HTTP 请求（节点类型: {}），仅 HTTP 请求包含代码覆盖率数据", traceId, nodeType);
-            return;
-        }
-
-        HttpTraceNode httpNode = (HttpTraceNode) rootNode;
-        StackNodeVo[] codeNodes = httpNode.getCodeNodes();
-        if (codeNodes == null || codeNodes.length == 0) {
+        if (codeNodes.isEmpty()) {
             logger.warn("跳过覆盖率合并：traceId={} 的 codeNodes 为空，可能是 Java Agent 未正确采集覆盖率数据", traceId);
             return;
         }
 
         logger.info("开始合并覆盖率数据：traceId={}, codeNodes 数量={}, coverageMap 大小={}", 
-                traceId, codeNodes.length, coverageMap.size());
+                traceId, codeNodes.size(), coverageMap.size());
         
         int matchedCount = 0;
         int unmatchedCount = 0;
@@ -990,7 +1000,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         if (matchedCount == 0 && unmatchedCount > 0) {
             logger.error("严重警告：所有 codeNodes 都未能匹配到静态源码数据！请检查类名格式是否一致。");
             logger.error("codeNodes 中的类名示例：{}", 
-                    Arrays.stream(codeNodes).limit(3).map(StackNodeVo::getClassName).collect(Collectors.joining(", ")));
+                    codeNodes.stream().limit(3).map(StackNodeVo::getClassName).collect(Collectors.joining(", ")));
             logger.error("coverageMap 中的类名示例：{}", 
                     coverageMap.keySet().stream().limit(10).collect(Collectors.joining(", ")));
         }

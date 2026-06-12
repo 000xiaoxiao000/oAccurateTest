@@ -54,6 +54,9 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     @Autowired
     SnapshotCommitMappingRepository snapshotCommitMappingRepository;
 
+    @Autowired
+    com.oAT.web.coverage.CoverageStorage coverageStorage;
+
     @Override
     public SystemSnapshot getById(String id) {
         if (!StringUtils.hasText(id)) {
@@ -70,8 +73,6 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         Assert.hasText(snapshot.getTraceId(), "参数'snapshot.traceId'不能为空");
         Assert.notEmpty(nodes, "参数'nodes'内容不能为空");
 
-
-        saveTraceNode(nodes);
         if (!StringUtils.hasText(snapshot.getDirectory())) {
             snapshot.setDirectory("root");
         }
@@ -124,11 +125,11 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
         // 解析封装 执行源码
         String[] codes = nodes.stream()
-                .filter(a -> a instanceof CodeNodeBean)// 过滤
-                .flatMap(a -> Arrays.stream(((CodeNodeBean) a).getCodeNodes())) // 转换
-                .map(a -> buildSrc(a))// 转换
-                .distinct()//去重
-                .collect(Collectors.toList()) // 采集
+                .filter(a -> a instanceof CodeNodeBean && ((CodeNodeBean) a).getCodeNodes() != null)
+                .flatMap(a -> Arrays.stream(((CodeNodeBean) a).getCodeNodes()))
+                .map(a -> buildSrc(a))
+                .distinct()
+                .collect(Collectors.toList())
                 .toArray(new String[0]);
         snapshot.setCodes(codes);
 
@@ -140,6 +141,9 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
                 .collect(Collectors.toList())
                 .toArray(new Remote[0]); // 过滤
         snapshot.setRemotes(remotes);
+
+        // 所有 nodes 数据已提取完毕，此时再写 ES + 对象存储，避免 codeNodes 提前清空
+        saveTraceNode(nodes);
 
         SystemSnapshot saved = repository.save(snapshot);
         tryCreateCommitMapping(saved, "auto");
@@ -368,6 +372,19 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     }
 
     private void saveTraceNode(Collection<TraceNode> nodes) {
+        // 在写入 ES 前，将所有 CodeNodeBean 的 codeNodes 提取到对象存储，
+        // 然后清空字段，避免大数组写入 ES 导致存储膨胀
+        for (TraceNode node : nodes) {
+            if (node instanceof CodeNodeBean) {
+                CodeNodeBean codeNodeBean = (CodeNodeBean) node;
+                StackNodeVo[] codeNodes = codeNodeBean.getCodeNodes();
+                if (codeNodes != null && codeNodes.length > 0) {
+                    coverageStorage.asyncStore(node.getTraceId(), codeNodes);
+                    codeNodeBean.setCodeNodes(null);
+                }
+            }
+        }
+
         List<TraceNodeIndex> list = new ArrayList<>();
         for (TraceNode node : nodes) {
             list.add(new TraceNodeIndex(node));
