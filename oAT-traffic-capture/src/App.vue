@@ -14,10 +14,18 @@ const showMqInput = ref(false)
 const selectedRecord = ref<TrafficRecord | null>(null)
 const proxyInfoVisible = ref(false)
 const selectedRecordIds = ref<string[]>([])
+const isFloatingMode = new URLSearchParams(window.location.search).get('floating') === '1'
+let floatingClickTimer: number | null = null
 
 onMounted(() => {
   window.electronAPI?.onTrafficCaptured((record: TrafficRecord) => {
     store.addRecord(record)
+  })
+  window.electronAPI?.onCaptureStateChanged((state) => {
+    store.syncCaptureState(state)
+  })
+  window.electronAPI?.getCaptureState().then((state) => {
+    if (state) store.syncCaptureState(state)
   })
 })
 
@@ -92,10 +100,55 @@ function handleLoadSession(records: TrafficRecord[]) {
 function toggleStatusFilter(filter: 'success' | 'failed') {
   store.setStatusFilter(store.statusFilter === filter ? 'all' : filter)
 }
+
+async function showFloatingWindow() {
+  await window.electronAPI?.showFloatingWindow()
+}
+
+async function restoreMainWindow() {
+  if (floatingClickTimer) {
+    window.clearTimeout(floatingClickTimer)
+    floatingClickTimer = null
+  }
+  await window.electronAPI?.restoreMainWindow()
+}
+
+function handleFloatingClick() {
+  if (floatingClickTimer) return
+  floatingClickTimer = window.setTimeout(() => {
+    floatingClickTimer = null
+    toggleCapture()
+  }, 220)
+}
 </script>
 
 <template>
-  <div class="app">
+  <div v-if="isFloatingMode" class="floating-capture">
+    <input
+      v-model="store.currentCaseName"
+      class="floating-case-input"
+      type="text"
+      placeholder="用例名称 / 流量描述"
+      :disabled="store.isCapturing"
+      @dblclick.stop
+    />
+    <button
+      class="floating-capture-button"
+      :class="{ active: store.isCapturing }"
+      type="button"
+      title="单击开始/停止，双击恢复主窗口"
+      @click.stop="handleFloatingClick"
+      @dblclick.stop="restoreMainWindow"
+    >
+      <span class="floating-dot"></span>
+      {{ store.isCapturing ? '停止捕获' : '开始捕获' }}
+    </button>
+    <button class="floating-restore-button" type="button" @click="restoreMainWindow">
+      恢复
+    </button>
+  </div>
+
+  <div v-else class="app">
     <header class="app-header">
       <div class="header-content">
         <div>
@@ -125,6 +178,9 @@ function toggleStatusFilter(filter: 'success' | 'failed') {
             @click="toggleCapture"
           >
             {{ store.isCapturing ? '⏹ 停止捕获' : '▶ 开始捕获' }}
+          </button>
+          <button class="btn btn-outline" @click="showFloatingWindow">
+            悬浮最小化
           </button>
           <button class="btn btn-outline" @click="showMqInput = true">
             + 手动录入 MQ
@@ -219,6 +275,99 @@ function toggleStatusFilter(filter: 'success' | 'failed') {
 </template>
 
 <style scoped>
+.floating-capture {
+  width: 100vw;
+  height: 100vh;
+  padding: 12px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #d9d9d9;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.floating-case-input {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid #d9d9d9;
+  border-radius: 5px;
+  padding: 0 10px;
+  font-size: 13px;
+  color: #262626;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
+.floating-case-input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.14);
+}
+
+.floating-case-input:disabled {
+  background: #f5f5f5;
+  color: #8c8c8c;
+}
+
+.floating-capture-button {
+  width: 100%;
+  height: 50px;
+  border: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #52c41a;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+.floating-capture-button.active {
+  background: #ff4d4f;
+}
+
+.floating-capture-button:hover {
+  filter: brightness(0.96);
+}
+
+.floating-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.95;
+}
+
+.floating-capture-button.active .floating-dot {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.floating-restore-button {
+  width: 100%;
+  height: 26px;
+  border: 1px solid #d9d9d9;
+  border-radius: 5px;
+  background: #ffffff;
+  color: #595959;
+  font-size: 12px;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.floating-restore-button:hover {
+  background: #f5f5f5;
+}
+
 .app {
   min-height: 100vh;
   background: #f0f2f5;

@@ -4,6 +4,9 @@ import type { TrafficRecord } from './types.js'
 contextBridge.exposeInMainWorld('electronAPI', {
   startCapture: (caseName: string) => ipcRenderer.invoke('start-capture', caseName),
   stopCapture: () => ipcRenderer.invoke('stop-capture'),
+  getCaptureState: () => ipcRenderer.invoke('get-capture-state'),
+  showFloatingWindow: () => ipcRenderer.invoke('show-floating-window'),
+  restoreMainWindow: () => ipcRenderer.invoke('restore-main-window'),
   getTrafficRecords: () => ipcRenderer.invoke('get-traffic-records'),
   clearTrafficRecords: () => ipcRenderer.invoke('clear-traffic-records'),
   deleteTrafficRecord: (id: string) => ipcRenderer.invoke('delete-traffic-record', id),
@@ -11,6 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('export-records', format, records),
   onTrafficCaptured: (callback: (record: TrafficRecord) => void) => {
     ipcRenderer.on('traffic-captured', (_event, record) => callback(record))
+  },
+  onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number }) => void) => {
+    ipcRenderer.on('capture-state-changed', (_event, state) => callback(state))
   },
   getProxyStatus: () => ipcRenderer.invoke('get-proxy-status'),
   enableSystemProxy: (port: number) => ipcRenderer.invoke('enable-system-proxy', port),

@@ -3,12 +3,18 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('electronAPI', {
   startCapture: (caseName) => ipcRenderer.invoke('start-capture', caseName),
   stopCapture: () => ipcRenderer.invoke('stop-capture'),
+  getCaptureState: () => ipcRenderer.invoke('get-capture-state'),
+  showFloatingWindow: () => ipcRenderer.invoke('show-floating-window'),
+  restoreMainWindow: () => ipcRenderer.invoke('restore-main-window'),
   getTrafficRecords: () => ipcRenderer.invoke('get-traffic-records'),
   clearTrafficRecords: () => ipcRenderer.invoke('clear-traffic-records'),
   deleteTrafficRecord: (id) => ipcRenderer.invoke('delete-traffic-record', id),
   exportRecords: (format, records) => ipcRenderer.invoke('export-records', format, records),
   onTrafficCaptured: (callback) => {
     ipcRenderer.on('traffic-captured', (_event, record) => callback(record))
+  },
+  onCaptureStateChanged: (callback) => {
+    ipcRenderer.on('capture-state-changed', (_event, state) => callback(state))
   },
   getProxyStatus: () => ipcRenderer.invoke('get-proxy-status'),
   enableSystemProxy: (port) => ipcRenderer.invoke('enable-system-proxy', port),

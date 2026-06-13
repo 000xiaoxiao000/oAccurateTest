@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { TrafficRecord } from '../types/traffic'
 
 interface SessionItem {
@@ -14,11 +14,24 @@ const emit = defineEmits<{ load: [records: TrafficRecord[]] }>()
 
 const sessions = ref<SessionItem[]>([])
 const loadingId = ref('')
+const currentPage = ref(1)
+const pageSize = 5
+
+const totalPages = computed(() => Math.max(1, Math.ceil(sessions.value.length / pageSize)))
+const pageStart = computed(() => (currentPage.value - 1) * pageSize)
+const pagedSessions = computed(() => sessions.value.slice(pageStart.value, pageStart.value + pageSize))
+const pageRangeText = computed(() => {
+  if (sessions.value.length === 0) return '0-0'
+  const start = pageStart.value + 1
+  const end = Math.min(pageStart.value + pageSize, sessions.value.length)
+  return `${start}-${end}`
+})
 
 onMounted(loadSessions)
 
 async function loadSessions() {
   sessions.value = (await window.electronAPI?.listSessions()) ?? []
+  normalizePage()
 }
 
 async function loadSession(id: string) {
@@ -37,7 +50,21 @@ async function removeSession(id: string) {
   const result = await window.electronAPI?.deleteSession(id)
   if (result?.success) {
     sessions.value = sessions.value.filter((session) => session.id !== id)
+    normalizePage()
   }
+}
+
+function normalizePage() {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value
+  }
+  if (currentPage.value < 1) {
+    currentPage.value = 1
+  }
+}
+
+function goPage(page: number) {
+  currentPage.value = Math.min(Math.max(page, 1), totalPages.value)
 }
 
 function formatDate(timestamp: number) {
@@ -52,7 +79,7 @@ function formatDate(timestamp: number) {
       <button class="refresh-btn" @click="loadSessions">刷新</button>
     </div>
     <div v-if="sessions.length === 0" class="empty">暂无历史记录</div>
-    <div v-for="session in sessions" :key="session.id" class="session-item">
+    <div v-for="session in pagedSessions" :key="session.id" class="session-item">
       <div class="session-info">
         <span class="case-name">{{ session.case_name }}</span>
         <span class="meta">{{ formatDate(session.start_time) }} · {{ session.record_count }} 条</span>
@@ -62,6 +89,14 @@ function formatDate(timestamp: number) {
           {{ loadingId === session.id ? '加载中' : '加载' }}
         </button>
         <button class="danger" @click="removeSession(session.id)">删除</button>
+      </div>
+    </div>
+    <div v-if="sessions.length > pageSize" class="pagination">
+      <span class="page-summary">共 {{ sessions.length }} 条，{{ pageRangeText }}</span>
+      <div class="page-actions">
+        <button :disabled="currentPage === 1" @click="goPage(currentPage - 1)">上一页</button>
+        <span class="page-current">{{ currentPage }} / {{ totalPages }}</span>
+        <button :disabled="currentPage === totalPages" @click="goPage(currentPage + 1)">下一页</button>
       </div>
     </div>
   </section>
@@ -165,5 +200,47 @@ function formatDate(timestamp: number) {
 .actions button.danger:hover {
   border-color: #ff4d4f;
   color: #ff4d4f;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0 0;
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-actions button {
+  padding: 3px 10px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: white;
+  color: #595959;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.page-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-actions button:hover:not(:disabled) {
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.page-current {
+  min-width: 42px;
+  text-align: center;
+  color: #595959;
 }
 </style>

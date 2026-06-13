@@ -76,6 +76,14 @@ export const useTrafficStore = defineStore('traffic', () => {
     isCapturing.value = false
   }
 
+  function syncCaptureState(state: { isCapturing: boolean; caseName: string; port: number }) {
+    isCapturing.value = state.isCapturing
+    proxyPort.value = state.port
+    if (state.caseName) {
+      currentCaseName.value = state.caseName
+    }
+  }
+
   return {
     records,
     isCapturing,
@@ -91,6 +99,7 @@ export const useTrafficStore = defineStore('traffic', () => {
     replaceRecords,
     setStatusFilter,
     startCapture,
-    stopCapture
+    stopCapture,
+    syncCaptureState
   }
 })

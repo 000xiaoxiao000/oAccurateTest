@@ -22,12 +22,27 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 let mainWindow: BrowserWindow | null = null
+let floatingWindow: BrowserWindow | null = null
 let proxyServer: any = null
 let captureEnabled = false
 let currentCaseName = ''
 let currentSessionId = ''
 const trafficRecords: TrafficRecord[] = []
 const PROXY_PORT = 8888
+
+function getCaptureState() {
+  return {
+    isCapturing: captureEnabled,
+    caseName: currentCaseName,
+    port: proxyServer?.httpPort ?? PROXY_PORT
+  }
+}
+
+function broadcastCaptureState() {
+  const state = getCaptureState()
+  mainWindow?.webContents.send('capture-state-changed', state)
+  floatingWindow?.webContents.send('capture-state-changed', state)
+}
 
 function startProxyServer(server: any, port: number): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -54,16 +69,61 @@ function createWindow() {
     }
   })
 
-  if (process.env.NODE_ENV === 'development') {
-    mainWindow.loadURL('http://localhost:5173')
-    mainWindow.webContents.openDevTools()
-  } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
-  }
+  loadAppWindow(mainWindow)
 
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+function loadAppWindow(window: BrowserWindow, query = '') {
+  if (process.env.NODE_ENV === 'development') {
+    window.loadURL(`http://localhost:5173${query}`)
+  } else {
+    window.loadFile(path.join(__dirname, '../dist/index.html'), query ? { query: { floating: '1' } } : undefined)
+  }
+}
+
+function createFloatingWindow() {
+  if (floatingWindow) {
+    floatingWindow.show()
+    floatingWindow.focus()
+    return
+  }
+
+  floatingWindow = new BrowserWindow({
+    width: 260,
+    height: 142,
+    minWidth: 260,
+    minHeight: 142,
+    maxWidth: 260,
+    maxHeight: 142,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  })
+
+  floatingWindow.setAlwaysOnTop(true, 'floating')
+  loadAppWindow(floatingWindow, '?floating=1')
+
+  floatingWindow.on('closed', () => {
+    floatingWindow = null
+  })
+}
+
+function restoreMainWindow() {
+  if (!mainWindow) {
+    createWindow()
+  }
+  mainWindow?.show()
+  mainWindow?.focus()
+  floatingWindow?.close()
 }
 
 app.whenReady().then(() => {
@@ -106,11 +166,13 @@ ipcMain.handle('start-capture', async (_event, caseName: string) => {
     captureEnabled = true
     currentSessionId = `session-${Date.now()}`
     saveSession({ id: currentSessionId, caseName, startTime: Date.now() })
+    broadcastCaptureState()
 
     return { success: true, port: proxyServer.httpPort ?? PROXY_PORT }
   } catch (error: any) {
     captureEnabled = false
     proxyServer = null
+    broadcastCaptureState()
     return { success: false, error: error?.message ?? String(error) }
   }
 })
@@ -120,6 +182,20 @@ ipcMain.handle('stop-capture', async () => {
   if (currentSessionId) {
     updateSessionEndTime(currentSessionId, Date.now())
   }
+  broadcastCaptureState()
+  return { success: true }
+})
+
+ipcMain.handle('get-capture-state', async () => getCaptureState())
+
+ipcMain.handle('show-floating-window', async () => {
+  createFloatingWindow()
+  mainWindow?.hide()
+  return { success: true }
+})
+
+ipcMain.handle('restore-main-window', async () => {
+  restoreMainWindow()
   return { success: true }
 })
 
