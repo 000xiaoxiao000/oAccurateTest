@@ -13,6 +13,7 @@ const showDetail = ref(false)
 const showMqInput = ref(false)
 const selectedRecord = ref<TrafficRecord | null>(null)
 const proxyInfoVisible = ref(false)
+const selectedRecordIds = ref<string[]>([])
 
 onMounted(() => {
   window.electronAPI?.onTrafficCaptured((record: TrafficRecord) => {
@@ -57,7 +58,11 @@ function handleClear() {
 }
 
 async function exportData(format: 'excel' | 'csv' | 'json') {
-  const records = store.filteredRecords
+  const selectedIds = new Set(selectedRecordIds.value)
+  const records = selectedIds.size > 0
+    ? store.filteredRecords.filter(record => selectedIds.has(record.id))
+    : store.filteredRecords
+
   if (records.length === 0) {
     alert('没有可导出的记录')
     return
@@ -67,7 +72,7 @@ async function exportData(format: 'excel' | 'csv' | 'json') {
     const exportRecords = JSON.parse(JSON.stringify(records)) as TrafficRecord[]
     const result = await window.electronAPI?.exportRecords(format, exportRecords)
     if (result?.success) {
-      alert(`导出成功：${result.filePath}`)
+      alert(`成功导出 ${exportRecords.length} 条数据：${result.filePath}`)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -173,6 +178,7 @@ function handleLoadSession(records: TrafficRecord[]) {
 
     <TrafficTable
       :records="store.filteredRecords"
+      v-model:selected-ids="selectedRecordIds"
       @delete="handleDelete"
       @view-detail="handleViewDetail"
     />

@@ -4,14 +4,15 @@ import type { TrafficRecord } from '../types/traffic'
 
 const props = defineProps<{
   records: TrafficRecord[]
+  selectedIds: string[]
 }>()
 
 const emit = defineEmits<{
+  'update:selectedIds': [ids: string[]]
   delete: [id: string]
   viewDetail: [record: TrafficRecord]
 }>()
 
-const selectedIds = ref<Set<string>>(new Set())
 const currentPage = ref(1)
 const pageSize = ref(10)
 const pageSizeOptions = [10, 20, 50]
@@ -22,13 +23,15 @@ const pageEnd = computed(() => Math.min(pageStart.value + pageSize.value, props.
 const pagedRecords = computed(() => props.records.slice(pageStart.value, pageEnd.value))
 
 const allSelected = computed({
-  get: () => pagedRecords.value.length > 0 && pagedRecords.value.every(r => selectedIds.value.has(r.id)),
+  get: () => pagedRecords.value.length > 0 && pagedRecords.value.every(r => props.selectedIds.includes(r.id)),
   set: (val: boolean) => {
+    const selectedSet = new Set(props.selectedIds)
     if (val) {
-      pagedRecords.value.forEach(r => selectedIds.value.add(r.id))
+      pagedRecords.value.forEach(r => selectedSet.add(r.id))
     } else {
-      pagedRecords.value.forEach(r => selectedIds.value.delete(r.id))
+      pagedRecords.value.forEach(r => selectedSet.delete(r.id))
     }
+    emit('update:selectedIds', [...selectedSet])
   }
 })
 
@@ -43,15 +46,29 @@ const visiblePages = computed(() => {
 })
 
 watch(
-  () => [props.records.length, pageSize.value],
+  () => [props.records.map(record => record.id).join('\u0000'), pageSize.value],
   () => {
     if (currentPage.value > totalPages.value) {
       currentPage.value = totalPages.value
     }
-    selectedIds.value = new Set([...selectedIds.value].filter(id => props.records.some(record => record.id === id)))
+    const validIds = new Set(props.records.map(record => record.id))
+    const nextSelectedIds = props.selectedIds.filter(id => validIds.has(id))
+    if (nextSelectedIds.length !== props.selectedIds.length) {
+      emit('update:selectedIds', nextSelectedIds)
+    }
   },
   { flush: 'sync' }
 )
+
+function toggleRecordSelection(recordId: string, checked: boolean) {
+  const selectedSet = new Set(props.selectedIds)
+  if (checked) {
+    selectedSet.add(recordId)
+  } else {
+    selectedSet.delete(recordId)
+  }
+  emit('update:selectedIds', [...selectedSet])
+}
 
 function goToPage(page: number) {
   currentPage.value = Math.min(Math.max(page, 1), totalPages.value)
@@ -121,7 +138,11 @@ function formatTime(timestamp: number): string {
         </tr>
         <tr v-for="record in pagedRecords" :key="record.id">
           <td>
-            <input type="checkbox" :value="record.id" v-model="selectedIds" />
+            <input
+              type="checkbox"
+              :checked="selectedIds.includes(record.id)"
+              @change="toggleRecordSelection(record.id, ($event.target as HTMLInputElement).checked)"
+            />
           </td>
           <td>
             <span class="case-tag">{{ record.caseName || '未命名' }}</span>
