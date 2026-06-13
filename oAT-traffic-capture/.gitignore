@@ -7,3 +7,4 @@ release
 .vscode
 .idea
 *.local
+/.http-mitm-proxy/
