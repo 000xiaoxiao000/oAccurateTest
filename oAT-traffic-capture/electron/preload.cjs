@@ -34,8 +34,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCertInfo: () => ipcRenderer.invoke('get-cert-info'),
   generateCert: () => ipcRenderer.invoke('generate-cert'),
   installCert: () => ipcRenderer.invoke('install-cert'),
+  uninstallCert: () => ipcRenderer.invoke('uninstall-cert'),
   openCertFolder: () => ipcRenderer.invoke('open-cert-folder'),
   listPlugins: () => ipcRenderer.invoke('list-plugins'),
   reloadPlugins: () => ipcRenderer.invoke('reload-plugins'),
-  getPluginsPath: () => ipcRenderer.invoke('get-plugins-path')
+  getPluginsPath: () => ipcRenderer.invoke('get-plugins-path'),
+  openPluginsFolder: () => ipcRenderer.invoke('open-plugins-folder'),
+  installBuiltinPlugin: () => ipcRenderer.invoke('install-builtin-plugin'),
+  uninstallBuiltinPlugin: () => ipcRenderer.invoke('uninstall-builtin-plugin')
 })

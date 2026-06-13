@@ -4,11 +4,20 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { createProxyServer } from './proxy.js'
 import { disableSystemProxy, enableSystemProxy, getSystemProxyStatus } from './systemProxy.js'
-import { generateRootCert, getCertInfo, installCertMacOS, openCertFolder } from './certificate.js'
+import { generateRootCert, getCertInfo, installCertMacOS, openCertFolder, uninstallCertMacOS } from './certificate.js'
 import { connectMqtt, disconnectAllMqtt, disconnectMqtt } from './protocols/mqtt.js'
 import { applyCaptureRules } from './filterRules.js'
 import { replayRecord } from './replay.js'
-import { getPluginsPath, listPlugins, loadPlugins, runBeforeSaveHooks, runRecordCapturedHooks } from './plugins/pluginManager.js'
+import {
+  getPluginsPath,
+  installBuiltinPlugin,
+  listPlugins,
+  loadPlugins,
+  openPluginsFolder,
+  runBeforeSaveHooks,
+  runRecordCapturedHooks,
+  uninstallBuiltinPlugin
+} from './plugins/pluginManager.js'
 import {
   deleteSession,
   initDatabase,
@@ -97,15 +106,19 @@ async function ensureProxyServer(): Promise<number> {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1000,
-    minHeight: 600,
+    width: 920,
+    height: 620,
+    minWidth: 780,
+    minHeight: 500,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true
     }
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow?.webContents.setZoomFactor(0.82)
   })
 
   loadAppWindow(mainWindow)
@@ -448,6 +461,8 @@ ipcMain.handle('install-cert', async () => {
   return await installCertMacOS(info.certPath)
 })
 
+ipcMain.handle('uninstall-cert', async () => uninstallCertMacOS())
+
 ipcMain.handle('open-cert-folder', async () => {
   const info = getCertInfo()
   if (info.certPath) openCertFolder(info.certPath)
@@ -458,3 +473,12 @@ ipcMain.handle('list-plugins', async () => listPlugins())
 ipcMain.handle('reload-plugins', async () => loadPlugins())
 
 ipcMain.handle('get-plugins-path', async () => getPluginsPath())
+
+ipcMain.handle('open-plugins-folder', async () => {
+  openPluginsFolder()
+  return { success: true }
+})
+
+ipcMain.handle('install-builtin-plugin', async () => installBuiltinPlugin())
+
+ipcMain.handle('uninstall-builtin-plugin', async () => uninstallBuiltinPlugin())

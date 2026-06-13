@@ -42,10 +42,14 @@ declare global {
       getCertInfo: () => Promise<{ exists: boolean; certPath?: string; expiresAt?: string }>
       generateCert: () => Promise<{ success: boolean; certPath?: string; keyPath?: string; error?: string }>
       installCert: () => Promise<{ success: boolean; error?: string }>
+      uninstallCert: () => Promise<{ success: boolean; error?: string }>
       openCertFolder: () => Promise<void>
       listPlugins: () => Promise<PluginInfo[]>
       reloadPlugins: () => Promise<PluginInfo[]>
       getPluginsPath: () => Promise<string>
+      openPluginsFolder: () => Promise<{ success: boolean }>
+      installBuiltinPlugin: () => Promise<PluginInfo[]>
+      uninstallBuiltinPlugin: () => Promise<PluginInfo[]>
     }
   }
 }

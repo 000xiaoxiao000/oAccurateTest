@@ -134,6 +134,10 @@ function togglePanel(panel: 'stats' | 'rules' | 'plugins') {
   activePanel.value = activePanel.value === panel ? 'none' : panel
 }
 
+async function openPluginsFolder() {
+  await window.electronAPI?.openPluginsFolder()
+}
+
 async function showFloatingWindow() {
   await window.electronAPI?.showFloatingWindow()
 }
@@ -301,6 +305,9 @@ function handleFloatingClick() {
       :plugins="store.plugins"
       :plugins-path="pluginsPath"
       @reload="store.reloadPlugins"
+      @open-folder="openPluginsFolder"
+      @install-builtin="store.installBuiltinPlugin"
+      @uninstall-builtin="store.uninstallBuiltinPlugin"
     />
 
     <TrafficTable
@@ -468,7 +475,7 @@ function handleFloatingClick() {
 .app-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 24px 30px;
+  padding: 12px 18px;
 }
 
 .header-content {
@@ -477,13 +484,13 @@ function handleFloatingClick() {
 }
 
 .header-title {
-  font-size: 24px;
+  font-size: 19px;
   font-weight: 600;
   margin: 0 0 4px;
 }
 
 .header-subtitle {
-  font-size: 13px;
+  font-size: 12px;
   opacity: 0.85;
   margin: 0;
 }
@@ -491,12 +498,12 @@ function handleFloatingClick() {
 .control-panel {
   background: #fafafa;
   border-bottom: 1px solid #e8e8e8;
-  padding: 18px 30px;
+  padding: 8px 18px;
 }
 
 .control-row {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: flex-end;
   flex-wrap: wrap;
 }
@@ -508,18 +515,19 @@ function handleFloatingClick() {
 
 .input-group label {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   font-weight: 500;
   color: #262626;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .input-group input {
   width: 100%;
-  padding: 9px 12px;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   transition: border-color 0.2s;
 }
 
@@ -536,15 +544,16 @@ function handleFloatingClick() {
 
 .btn-group {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .btn {
-  padding: 9px 18px;
+  height: 28px;
+  padding: 0 10px;
   border: none;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   cursor: pointer;
   font-weight: 500;
   transition: opacity 0.2s;
@@ -565,8 +574,8 @@ function handleFloatingClick() {
 }
 
 .proxy-tip {
-  margin-top: 12px;
-  padding: 8px 14px;
+  margin-top: 8px;
+  padding: 6px 12px;
   background: #e6f7ff;
   border: 1px solid #91d5ff;
   border-radius: 4px;
@@ -579,7 +588,7 @@ function handleFloatingClick() {
 }
 
 .stats-bar {
-  padding: 12px 30px;
+  padding: 6px 18px;
   background: #f9f9f9;
   border-bottom: 1px solid #e8e8e8;
   display: flex;
@@ -589,7 +598,7 @@ function handleFloatingClick() {
 
 .stats {
   display: flex;
-  gap: 28px;
+  gap: 20px;
 }
 
 .stat-item {
@@ -618,13 +627,13 @@ button.stat-item:hover {
 
 .stat-label {
   color: #8c8c8c;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .stat-value {
   font-weight: 600;
   color: #262626;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .stat-value.success { color: #52c41a; }
@@ -656,7 +665,7 @@ button.stat-item:hover {
 }
 
 .toolbar {
-  padding: 12px 30px;
+  padding: 7px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -666,11 +675,12 @@ button.stat-item:hover {
 }
 
 .search-box input {
-  padding: 8px 12px;
+  height: 28px;
+  padding: 0 10px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
-  font-size: 14px;
-  width: 280px;
+  font-size: 13px;
+  width: 220px;
   transition: border-color 0.2s;
 }
 

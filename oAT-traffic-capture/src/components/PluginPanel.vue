@@ -8,6 +8,9 @@ defineProps<{
 
 const emit = defineEmits<{
   reload: []
+  openFolder: []
+  installBuiltin: []
+  uninstallBuiltin: []
 }>()
 </script>
 
@@ -17,8 +20,18 @@ const emit = defineEmits<{
       <div>
         <h2>插件扩展</h2>
         <p>{{ pluginsPath || '加载中...' }}</p>
+        <p class="explain">这里的插件是 oAT 应用内部插件，不是浏览器插件。插件只处理本工具捕获到的流量记录。</p>
       </div>
-      <button class="small-btn primary" type="button" @click="emit('reload')">重新加载</button>
+      <div class="actions">
+        <button class="small-btn secondary" type="button" @click="emit('openFolder')">打开目录</button>
+        <button class="small-btn secondary" type="button" @click="emit('installBuiltin')">安装内置插件</button>
+        <button class="small-btn secondary danger" type="button" @click="emit('uninstallBuiltin')">卸载内置插件</button>
+        <button class="small-btn primary" type="button" @click="emit('reload')">重新加载</button>
+      </div>
+    </div>
+    <div class="builtin-info">
+      <strong>内置插件：流量清洗插件</strong>
+      <span>过滤 OPTIONS 预检和静态资源，自动标记 API、错误、慢请求。</span>
     </div>
     <div v-if="plugins.length === 0" class="empty-line">插件目录中暂无插件</div>
     <div v-for="plugin in plugins" :key="plugin.id" class="plugin-row">
@@ -73,6 +86,23 @@ p {
   cursor: pointer;
 }
 
+.small-btn.secondary {
+  background: #fff;
+  color: #595959;
+  border-color: #d9d9d9;
+}
+
+.small-btn.danger {
+  color: #ff4d4f;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .plugin-row {
   border: 1px solid #f0f0f0;
   border-radius: 6px;
@@ -113,5 +143,27 @@ p {
 .empty-line {
   color: #8c8c8c;
   font-size: 13px;
+}
+
+.explain {
+  color: #595959;
+}
+
+.builtin-info {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid #e6f7ff;
+  border-radius: 4px;
+  background: #f0f8ff;
+  color: #595959;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.builtin-info strong {
+  color: #262626;
 }
 </style>

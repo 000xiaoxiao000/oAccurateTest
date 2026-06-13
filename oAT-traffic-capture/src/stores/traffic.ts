@@ -134,6 +134,14 @@ export const useTrafficStore = defineStore('traffic', () => {
     plugins.value = await window.electronAPI?.reloadPlugins() ?? []
   }
 
+  async function installBuiltinPlugin() {
+    plugins.value = await window.electronAPI?.installBuiltinPlugin() ?? []
+  }
+
+  async function uninstallBuiltinPlugin() {
+    plugins.value = await window.electronAPI?.uninstallBuiltinPlugin() ?? []
+  }
+
   async function startCapture(caseName: string) {
     currentCaseName.value = caseName
     const result = await window.electronAPI?.startCapture(caseName)
@@ -184,6 +192,8 @@ export const useTrafficStore = defineStore('traffic', () => {
     replayMany,
     loadPlugins,
     reloadPlugins,
+    installBuiltinPlugin,
+    uninstallBuiltinPlugin,
     startCapture,
     stopCapture,
     syncCaptureState

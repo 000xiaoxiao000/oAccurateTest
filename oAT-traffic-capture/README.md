@@ -1,61 +1,47 @@
-# oAT 流量采集器 (oAT Traffic Capture)
+# oAT 流量采集器
 
-一个基于 Electron + Vue3 的桌面应用，用于捕获和管理 HTTP/HTTPS、MQ 等协议的网络流量。
+`oAT-traffic-capture` 是一个基于 Electron + Vue 3 的桌面流量采集工具，用于测试过程中捕获、查看、过滤、重放和导出接口流量。
 
-## 功能特性
+## 功能
 
-- ✅ **HTTP/HTTPS 流量捕获**：通过内置代理服务器自动拦截 HTTP/HTTPS 请求
-- ✅ **用例管理**：为不同的测试场景添加用例名称标签
-- ✅ **实时展示**：显示请求方法、URL、状态码、耗时等关键信息
-- ✅ **详情查看**：查看完整的请求头、请求体、响应头、响应体
-- ✅ **MQ 手动录入**：支持手动录入 AMQP、MQTT、Kafka 等 MQ 消息
-- ✅ **数据导出**：导出为 Excel、CSV、JSON 格式
-- ✅ **搜索过滤**：实时搜索和过滤流量记录
+- HTTP/HTTPS 流量捕获：通过本地代理记录请求、响应、状态码、耗时、请求头和响应头。
+- WebSocket 流量捕获：记录 WS/WSS 连接及 send/receive 消息。
+- MQTT 接入与 MQ 手动录入：支持 MQTT 连接采集，也支持手动补录 AMQP、MQTT、Kafka 等消息。
+- 流量重放：支持单条和批量重放 HTTP/HTTPS 记录；WebSocket 可按已捕获的发送消息重放。
+- 自定义过滤规则：支持按 URL、方法、协议、状态码、Header、Body 做 include、exclude、mark。
+- 统计图表：展示协议分布、状态分布、Top Host、分钟趋势和基础统计。
+- 历史会话：使用 SQLite 保存采集会话和记录，可加载或删除历史会话。
+- 数据导出：支持 Excel、CSV、JSON。
+- 插件扩展：支持本地插件在捕获后、保存前处理流量记录。
+- 悬浮窗口：采集过程中可切换为小窗，减少桌面占用。
 
 ## 技术栈
 
-- **前端框架**: Vue 3 + TypeScript
-- **桌面框架**: Electron
-- **状态管理**: Pinia
-- **构建工具**: Vite
-- **代理服务器**: http-mitm-proxy
-- **Excel 导出**: ExcelJS
+- Electron 30
+- Vue 3 + TypeScript
+- Pinia
+- Vite
+- http-mitm-proxy
+- better-sqlite3
+- ws
+- mqtt
+- ExcelJS
 
-## 安装依赖
-
-**注意**：由于当前系统使用的 npm 镜像源 (`registry.npmmirror.com`) 返回 403 错误，你需要先切换到官方源或其他可用镜像源。
-
-### 方法 1: 使用官方 npm 源（推荐）
+## 安装
 
 ```bash
-# 切换到官方源
+cd oAT-traffic-capture
+npm install
+```
+
+如果当前 npm 源不可用，可以切换到官方源：
+
+```bash
 npm config set registry https://registry.npmjs.org/
-
-# 安装依赖
 npm install
 ```
 
-### 方法 2: 使用淘宝新镜像源
-
-```bash
-# 切换到淘宝新源
-npm config set registry https://registry.npmmirror.com/
-
-# 如果还是失败，尝试旧源
-npm config set registry https://registry.npm.taobao.org/
-
-# 安装依赖
-npm install
-```
-
-### 方法 3: 临时指定源
-
-```bash
-# 临时使用官方源安装
-npm install --registry=https://registry.npmjs.org/
-```
-
-### 检查当前源
+查看当前 npm 源：
 
 ```bash
 npm config get registry
@@ -64,181 +50,237 @@ npm config get registry
 ## 开发运行
 
 ```bash
-# 启动开发服务器
 npm run dev
-
-# 或分别启动
-npm run dev:vite    # 启动 Vite 开发服务器
-npm run dev:electron # 启动 Electron
 ```
 
-## 使用说明
-
-### 1. 启动流量捕获
-
-1. 在"用例名称"输入框中填写测试场景名称（如"用户登录流程"）
-2. 点击"开始捕获"按钮
-3. 应用会启动本地代理服务器（默认端口 8888）
-
-### 2. 配置系统代理
-
-启动捕获后，需要将系统或浏览器的 HTTP 代理设置为：
-
-```
-代理地址: 127.0.0.1
-端口: 8888
-```
-
-#### macOS 系统代理设置
-
-1. 打开"系统设置" > "网络"
-2. 选择当前网络 > "详细信息" > "代理"
-3. 勾选"网页代理(HTTP)" 和 "安全网页代理(HTTPS)"
-4. 服务器填写 `127.0.0.1`，端口填写 `8888`
-
-#### Chrome 浏览器代理设置
-
-可使用 SwitchyOmega 等代理管理扩展，或使用命令行启动：
+也可以分开启动：
 
 ```bash
-# macOS
-open -a "Google Chrome" --args --proxy-server="127.0.0.1:8888"
-
-# Windows
-chrome.exe --proxy-server="127.0.0.1:8888"
+npm run dev:vite
+npm run dev:electron
 ```
 
-### 3. 手动录入 MQ 流量
-
-对于非 HTTP 协议（如 AMQP、MQTT、Kafka），点击"手动录入 MQ"按钮，填写：
-- 协议类型（AMQP、MQTT、Kafka 等）
-- 操作方法（SEND、RECEIVE 等）
-- Topic/Queue 地址
-- 消息内容
-
-### 4. 导出数据
-
-点击工具栏的导出按钮，选择格式：
-- **Excel (.xlsx)**: 包含所有字段的完整数据，带格式化表头
-- **CSV (.csv)**: 基础字段的 CSV 文件，方便在 Excel 中打开
-- **JSON (.json)**: 完整的 JSON 格式，包含所有请求/响应数据
-
-## 项目结构
-
-```
-oAT-traffic-capture/
-├── electron/               # Electron 主进程
-│   ├── main.ts            # 主进程入口（窗口管理、IPC）
-│   ├── preload.ts         # 预加载脚本（安全桥接）
-│   └── proxy.ts           # HTTP 代理服务器
-├── src/                   # Vue 渲染进程
-│   ├── components/        # Vue 组件
-│   │   ├── TrafficTable.vue      # 流量列表表格
-│   │   ├── DetailModal.vue       # 详情弹窗
-│   │   └── MqInputModal.vue      # MQ 录入弹窗
-│   ├── stores/           # Pinia 状态管理
-│   │   └── traffic.ts    # 流量数据 store
-│   ├── types/            # TypeScript 类型定义
-│   │   ├── traffic.ts    # 流量记录类型
-│   │   └── electron.d.ts # Electron API 类型
-│   ├── App.vue           # 主应用组件
-│   ├── main.ts           # Vue 入口
-│   └── style.css         # 全局样式
-├── public/               # 静态资源
-├── dist/                 # Vite 构建输出
-├── dist-electron/        # Electron 编译输出
-├── package.json          # 项目配置
-├── vite.config.ts        # Vite 配置
-├── tsconfig.json         # TypeScript 配置（渲染进程）
-└── tsconfig.electron.json # TypeScript 配置（主进程）
-```
-
-## 构建打包
+## 构建
 
 ```bash
-# 构建应用
 npm run build
-
-# 打包为可执行文件
-npm run start
 ```
 
-使用 electron-builder 打包：
+打包目录构建：
 
 ```bash
-# macOS
-npm run build && npx electron-builder --mac
-
-# Windows
-npm run build && npx electron-builder --win
-
-# Linux
-npm run build && npx electron-builder --linux
+npm run pack
 ```
 
-## 注意事项
+生成安装包：
 
-### HTTPS 流量捕获
-
-捕获 HTTPS 流量需要安装和信任代理证书：
-
-1. 首次运行时，代理会在 `~/.http-mitm-proxy/` 目录生成证书
-2. 将 `ca.pem` 证书添加到系统信任列表
-3. macOS: 打开"钥匙串访问" > 导入证书 > 设置为"始终信任"
-
-### 端口冲突
-
-如果 8888 端口被占用，可以修改 `electron/main.ts` 中的端口号：
-
-```typescript
-await proxyServer.listen(8888)  // 改为其他端口
+```bash
+npm run dist
 ```
 
-### 性能考虑
+## 使用方式
 
-- 大量流量会占用内存，建议定期清空记录
-- 响应体过大时会影响导出性能，可考虑截断
+### 启动捕获
 
-## 常见问题
+1. 填写“用例名称 / 流量描述”。
+2. 点击“开始捕获”。
+3. 将系统或浏览器 HTTP/HTTPS 代理设置为 `127.0.0.1:8888`。
+4. 通过被测系统发起请求，流量会实时显示在列表中。
 
-### Q: 为什么无法捕获流量？
+应用也提供“系统代理”开关；启用后，系统 HTTP/HTTPS 流量会经过本地代理。
 
-A: 请确认：
-1. 已点击"开始捕获"
-2. 系统/浏览器代理已正确配置为 `127.0.0.1:8888`
-3. 访问的是 HTTP 站点，或已安装并信任 HTTPS 证书
+### HTTPS 和 WSS
 
-### Q: 如何捕获移动设备流量？
+HTTPS/WSS 捕获依赖 MITM 证书。首次使用需要生成并信任证书：
 
-A: 
-1. 确保移动设备和电脑在同一局域网
-2. 在移动设备的 Wi-Fi 设置中，配置 HTTP 代理为电脑的局域网 IP（如 `192.168.1.100:8888`）
-3. 安装并信任证书（HTTPS）
+1. 在顶部“HTTPS 证书”区域点击“生成证书”。
+2. 点击“安装信任”。macOS 会要求输入管理员密码，用于把证书加入系统钥匙串。
+3. 如果自动安装失败，点击“打开目录”，手动导入 `ca.pem` 到钥匙串，并设置为“始终信任”。
+4. 重启浏览器或被测客户端。
 
-### Q: 导出的 Excel 文件无法打开？
+未信任证书时，HTTP/WS 可以正常捕获，HTTPS/WSS 可能无法解密。
 
-A: 确保使用最新版 Microsoft Excel 或 WPS，或使用 LibreOffice 打开 .xlsx 文件。
+### 重放
 
-## 开发计划
+- 点击列表单条记录的“重放”，可重放该记录。
+- 勾选多条记录后点击“重放选中”，可批量重放。
+- HTTP/HTTPS 会按原始 method、url、headers、body 发起请求。
+- WebSocket 会重新连接并重发已捕获的发送方向消息。
+- 不支持自动重放的协议会生成失败记录，并展示原因。
 
-- [x] 支持 WebSocket 流量捕获
-- [x] 添加流量重放功能
-- [x] 支持自定义过滤规则
-- [x] 添加流量统计图表
-- [x] 支持插件扩展
+### 过滤规则
+
+点击“过滤规则”打开规则面板。
+
+规则字段：
+
+- `target`：`url`、`method`、`protocol`、`statusCode`、`header`、`body`
+- `operator`：`contains`、`equals`、`regex`、`startsWith`、`endsWith`
+- `action`：`include`、`exclude`、`mark`
+
+行为说明：
+
+- `exclude`：匹配后丢弃该记录。
+- `include`：存在启用的 include 规则时，只保留匹配记录。
+- `mark`：匹配后给记录加标签。
+
+规则会保存到本地 SQLite 数据库。
+
+### 统计图表
+
+点击“统计图表”查看：
+
+- 协议分布
+- 状态分布
+- Top Host
+- 分钟趋势
+- 总请求数、成功数、失败数、平均耗时
+
+### 历史会话
+
+每次开始捕获会创建一个会话。历史会话列表支持：
+
+- 加载历史记录
+- 删除历史会话
+- 查看会话名称、时间和记录数
+
+### 导出
+
+支持三种格式：
+
+- Excel：完整字段，适合人工查看。
+- CSV：基础字段，适合表格工具处理。
+- JSON：完整结构，适合程序处理或归档。
 
 ## 插件扩展
 
-插件目录位于应用数据目录下的 `plugins` 文件夹。每个插件使用独立子目录，并提供 `plugin.json`：
+插件是 oAT 应用内部的流量处理插件，不是 Chrome、Safari 或其他浏览器插件。插件只处理本工具捕获到的流量记录。
+
+插件目录位于应用数据目录下的 `plugins` 文件夹。可在“插件扩展”面板中查看实际路径，也可以在界面中打开目录。
+
+点击“安装内置插件”会安装一个真实可用的流量清洗插件：
+
+- 过滤 OPTIONS 预检请求。
+- 过滤图片、CSS、JS、字体、source map 等静态资源。
+- 给 `/api/` 请求打 `API` 标签。
+- 给 4xx/5xx 响应打 `错误` 标签。
+- 给耗时超过 1000ms 的请求打 `慢请求` 标签。
+
+点击“卸载内置插件”会删除 `traffic-cleanup-plugin` 目录并重新加载插件列表。
+
+每个插件一个子目录：
+
+```text
+plugins/
+  traffic-cleanup-plugin/
+    package.json
+    plugin.json
+    index.js
+```
+
+`plugin.json`：
 
 ```json
 {
-  "id": "sample-plugin",
-  "name": "示例插件",
+  "id": "traffic-cleanup-plugin",
+  "name": "流量清洗插件",
   "version": "1.0.0",
   "main": "index.js",
-  "enabled": true
+  "enabled": true,
+  "description": "过滤静态资源和 OPTIONS 预检请求，并标记 API、错误、慢请求"
 }
 ```
 
-插件入口可导出 `onRecordCaptured(record)` 和 `beforeSave(record)`，返回修改后的记录；返回 `null` 时会丢弃该记录。
+插件入口可导出 hook：
+
+```js
+export function onRecordCaptured(record) {
+  const tags = new Set(record.tags || [])
+  if (/\/api(\/|$)/i.test(record.url || '')) {
+    tags.add('API')
+  }
+  return { ...record, tags: Array.from(tags) }
+}
+
+export function beforeSave(record) {
+  if ((record.method || '').toUpperCase() === 'OPTIONS') {
+    return null
+  }
+  return record
+}
+```
+
+支持的 hook：
+
+- `onRecordCaptured(record)`：捕获到记录后执行。
+- `beforeSave(record)`：写入数据库前执行。
+
+hook 返回修改后的记录会继续处理；返回 `null` 会丢弃记录。
+
+## 项目结构
+
+```text
+oAT-traffic-capture/
+├── electron/
+│   ├── main.ts                 # Electron 主进程、IPC、窗口管理
+│   ├── preload.ts              # 渲染进程安全桥接
+│   ├── preload.cjs             # Electron 实际加载的 preload
+│   ├── proxy.ts                # HTTP/HTTPS/WS/WSS 代理捕获
+│   ├── replay.ts               # 流量重放
+│   ├── filterRules.ts          # 捕获规则匹配
+│   ├── database.ts             # SQLite 会话、记录、规则存储
+│   ├── certificate.ts          # 证书生成与安装辅助
+│   ├── systemProxy.ts          # 系统代理开关
+│   ├── plugins/
+│   │   └── pluginManager.ts    # 插件加载和 hook 调用
+│   └── protocols/
+│       └── mqtt.ts             # MQTT 连接采集
+├── src/
+│   ├── components/
+│   │   ├── TrafficTable.vue
+│   │   ├── DetailModal.vue
+│   │   ├── FilterRulesPanel.vue
+│   │   ├── TrafficStatsPanel.vue
+│   │   ├── PluginPanel.vue
+│   │   ├── ProxyControl.vue
+│   │   ├── SessionHistory.vue
+│   │   └── MqInputModal.vue
+│   ├── stores/
+│   │   └── traffic.ts
+│   ├── types/
+│   │   ├── traffic.ts
+│   │   └── electron.d.ts
+│   ├── App.vue
+│   └── main.ts
+├── package.json
+├── vite.config.ts
+├── tsconfig.json
+└── tsconfig.electron.json
+```
+
+## 常见问题
+
+### 无法捕获 HTTP/HTTPS 流量
+
+检查：
+
+1. 是否已经点击“开始捕获”。
+2. 系统或浏览器代理是否指向 `127.0.0.1:8888`。
+3. HTTPS 证书是否已安装并信任。
+4. 被测客户端是否绕过了系统代理。
+
+### 重放失败：Failed to parse URL
+
+旧记录可能只保存了相对路径。当前版本会尝试使用 `Host` 请求头补全 URL；如果记录缺少 Host，则无法重放，需要重新捕获完整记录。
+
+### WSS 捕获失败
+
+WSS 依赖 HTTPS 证书信任。确认证书已安装，并重启浏览器或被测客户端。
+
+### 端口 8888 被占用
+
+当前代理端口在 `electron/main.ts` 的 `PROXY_PORT` 中定义，可修改后重新构建。
+
+### 大量流量导致界面变慢
+
+建议按用例分批采集，定期清空当前列表或加载历史会话查看。

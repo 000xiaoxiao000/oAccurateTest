@@ -104,7 +104,7 @@ function formatDate(timestamp: number) {
 
 <style scoped>
 .session-history {
-  padding: 0 30px 18px;
+  padding: 0 18px 10px;
   background: #f0f2f5;
 }
 
@@ -112,10 +112,10 @@ function formatDate(timestamp: number) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #262626;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .refresh-btn {
@@ -141,7 +141,7 @@ function formatDate(timestamp: number) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 9px 12px;
+  padding: 6px 9px;
   border: 1px solid #f0f0f0;
   border-radius: 4px;
   margin-bottom: 6px;
@@ -157,7 +157,7 @@ function formatDate(timestamp: number) {
 }
 
 .case-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: #262626;
   overflow: hidden;

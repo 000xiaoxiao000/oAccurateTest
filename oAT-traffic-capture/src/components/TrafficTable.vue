@@ -200,14 +200,14 @@ function formatTime(timestamp: number): string {
 
 <style scoped>
 .table-wrap {
-  padding: 0 30px 30px;
+  padding: 0 18px 14px;
   overflow-x: auto;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 16px;
+  margin-top: 10px;
 }
 
 thead {
@@ -215,18 +215,18 @@ thead {
 }
 
 th {
-  padding: 11px 12px;
+  padding: 7px 8px;
   text-align: left;
   font-weight: 600;
   color: #262626;
-  font-size: 13px;
+  font-size: 12px;
   border-bottom: 2px solid #f0f0f0;
 }
 
 td {
-  padding: 14px 12px;
+  padding: 7px 8px;
   border-bottom: 1px solid #f0f0f0;
-  font-size: 13px;
+  font-size: 12px;
   color: #595959;
 }
 
@@ -236,12 +236,12 @@ tbody tr:hover {
 
 .badge {
   display: inline-block;
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   text-align: center;
-  min-width: 56px;
+  min-width: 50px;
 }
 
 .m-get { background: #e6f7ff; color: #1890ff; }
@@ -286,10 +286,10 @@ tbody tr:hover {
 
 .case-tag {
   display: inline-block;
-  padding: 3px 7px;
+  padding: 2px 6px;
   background: #f0f0f0;
   border-radius: 3px;
-  font-size: 12px;
+  font-size: 11px;
   color: #595959;
 }
 
@@ -298,8 +298,8 @@ tbody tr:hover {
   border: none;
   color: #1890ff;
   cursor: pointer;
-  padding: 3px 6px;
-  font-size: 13px;
+  padding: 2px 5px;
+  font-size: 12px;
 }
 
 .action-btn:hover {
@@ -312,13 +312,13 @@ tbody tr:hover {
 
 .empty-state {
   text-align: center;
-  padding: 60px 20px;
+  padding: 28px 20px;
   color: #8c8c8c;
 }
 
 .empty-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
+  font-size: 36px;
+  margin-bottom: 8px;
   opacity: 0.4;
 }
 
@@ -333,8 +333,8 @@ tbody tr:hover {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 0 0;
-  font-size: 13px;
+  padding: 8px 0 0;
+  font-size: 12px;
   color: #8c8c8c;
 }
 
@@ -346,12 +346,12 @@ tbody tr:hover {
 
 .page-controls select,
 .page-controls button {
-  height: 30px;
+  height: 28px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
   background: white;
   color: #595959;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .page-controls select {

@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
 import { app } from 'electron'
+import { shell } from 'electron'
 import type { PluginInfo, PluginManifest, TrafficRecord } from '../types.js'
 
 type PluginModule = {
@@ -26,6 +27,12 @@ function readManifest(pluginDir: string): PluginManifest | null {
   return JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as PluginManifest
 }
 
+function ensureModulePackage(pluginDir: string): void {
+  const packagePath = path.join(pluginDir, 'package.json')
+  if (fs.existsSync(packagePath)) return
+  fs.writeFileSync(packagePath, JSON.stringify({ type: 'module' }, null, 2), 'utf-8')
+}
+
 export async function loadPlugins(): Promise<PluginInfo[]> {
   loadedPlugins.clear()
   const root = pluginsRoot()
@@ -44,6 +51,9 @@ export async function loadPlugins(): Promise<PluginInfo[]> {
       }
       if (info.enabled) {
         const modulePath = path.join(pluginDir, manifest.main)
+        if (path.extname(modulePath) === '.js') {
+          ensureModulePackage(pluginDir)
+        }
         const moduleUrl = `${pathToFileURL(modulePath).href}?t=${Date.now()}`
         const module = await import(moduleUrl) as PluginModule
         loadedPlugins.set(info.id, { info, module })
@@ -75,6 +85,77 @@ export function getPluginsPath(): string {
   const root = pluginsRoot()
   fs.mkdirSync(root, { recursive: true })
   return root
+}
+
+export function openPluginsFolder(): void {
+  shell.openPath(getPluginsPath())
+}
+
+export async function installBuiltinPlugin(): Promise<PluginInfo[]> {
+  const pluginDir = path.join(getPluginsPath(), 'traffic-cleanup-plugin')
+  fs.mkdirSync(pluginDir, { recursive: true })
+  const manifestPath = path.join(pluginDir, 'plugin.json')
+  const entryPath = path.join(pluginDir, 'index.js')
+
+  if (!fs.existsSync(manifestPath)) {
+    fs.writeFileSync(manifestPath, JSON.stringify({
+      id: 'traffic-cleanup-plugin',
+      name: '流量清洗插件',
+      version: '1.0.0',
+      main: 'index.js',
+      enabled: true,
+      description: '过滤静态资源和 OPTIONS 预检请求，并标记 API、错误、慢请求'
+    }, null, 2), 'utf-8')
+  }
+
+  if (!fs.existsSync(entryPath)) {
+    fs.writeFileSync(entryPath, `export function onRecordCaptured(record) {
+  const tags = new Set(record.tags || [])
+  const url = record.url || ''
+  const status = Number(record.statusCode)
+  const duration = Number(record.duration) || 0
+
+  if (/\\/api(\\/|$)/i.test(url)) {
+    tags.add('API')
+  }
+  if (!Number.isNaN(status) && status >= 400) {
+    tags.add('错误')
+  }
+  if (duration >= 1000) {
+    tags.add('慢请求')
+  }
+
+  return {
+    ...record,
+    tags: Array.from(tags)
+  }
+}
+
+export function beforeSave(record) {
+  const url = record.url || ''
+  const method = (record.method || '').toUpperCase()
+  if (method === 'OPTIONS') {
+    return null
+  }
+  if (/\\.(png|jpe?g|gif|svg|ico|css|js|map|woff2?|ttf)(\\?|$)/i.test(url)) {
+    return null
+  }
+  return record
+}
+`, 'utf-8')
+  }
+
+  ensureModulePackage(pluginDir)
+
+  return await loadPlugins()
+}
+
+export async function uninstallBuiltinPlugin(): Promise<PluginInfo[]> {
+  const pluginDir = path.join(getPluginsPath(), 'traffic-cleanup-plugin')
+  if (fs.existsSync(pluginDir)) {
+    fs.rmSync(pluginDir, { recursive: true, force: true })
+  }
+  return await loadPlugins()
 }
 
 export async function runRecordCapturedHooks(record: TrafficRecord): Promise<TrafficRecord | null> {
