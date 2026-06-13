@@ -34,7 +34,8 @@ function getCaptureState() {
   return {
     isCapturing: captureEnabled,
     caseName: currentCaseName,
-    port: proxyServer?.httpPort ?? PROXY_PORT
+    port: proxyServer?.httpPort ?? PROXY_PORT,
+    recordCount: trafficRecords.length
   }
 }
 
@@ -54,6 +55,25 @@ function startProxyServer(server: any, port: number): Promise<number> {
       resolve(server.httpPort ?? port)
     })
   })
+}
+
+async function ensureProxyServer(): Promise<number> {
+  if (!proxyServer) {
+    proxyServer = createProxyServer((record: TrafficRecord) => {
+      if (captureEnabled) {
+        record.caseName = currentCaseName
+        trafficRecords.push(record)
+        saveRecord(record, currentSessionId)
+        mainWindow?.webContents.send('traffic-captured', record)
+        floatingWindow?.webContents.send('traffic-captured', record)
+        broadcastCaptureState()
+      }
+    })
+
+    await startProxyServer(proxyServer, PROXY_PORT)
+  }
+
+  return proxyServer.httpPort ?? PROXY_PORT
 }
 
 function createWindow() {
@@ -93,11 +113,11 @@ function createFloatingWindow() {
 
   floatingWindow = new BrowserWindow({
     width: 260,
-    height: 142,
+    height: 172,
     minWidth: 260,
-    minHeight: 142,
+    minHeight: 172,
     maxWidth: 260,
-    maxHeight: 142,
+    maxHeight: 172,
     frame: false,
     resizable: false,
     alwaysOnTop: true,
@@ -149,18 +169,7 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('start-capture', async (_event, caseName: string) => {
   try {
-    if (!proxyServer) {
-      proxyServer = createProxyServer((record: TrafficRecord) => {
-        if (captureEnabled) {
-          record.caseName = currentCaseName
-          trafficRecords.push(record)
-          saveRecord(record, currentSessionId)
-          mainWindow?.webContents.send('traffic-captured', record)
-        }
-      })
-
-      await startProxyServer(proxyServer, PROXY_PORT)
-    }
+    const port = await ensureProxyServer()
 
     currentCaseName = caseName
     captureEnabled = true
@@ -168,7 +177,7 @@ ipcMain.handle('start-capture', async (_event, caseName: string) => {
     saveSession({ id: currentSessionId, caseName, startTime: Date.now() })
     broadcastCaptureState()
 
-    return { success: true, port: proxyServer.httpPort ?? PROXY_PORT }
+    return { success: true, port }
   } catch (error: any) {
     captureEnabled = false
     proxyServer = null
@@ -205,6 +214,7 @@ ipcMain.handle('get-traffic-records', async () => {
 
 ipcMain.handle('clear-traffic-records', async () => {
   trafficRecords.length = 0
+  broadcastCaptureState()
   return { success: true }
 })
 
@@ -212,6 +222,7 @@ ipcMain.handle('delete-traffic-record', async (_event, id: string) => {
   const index = trafficRecords.findIndex(r => r.id === id)
   if (index !== -1) {
     trafficRecords.splice(index, 1)
+    broadcastCaptureState()
     return { success: true }
   }
   return { success: false }
@@ -307,7 +318,9 @@ ipcMain.handle('get-proxy-status', async () => {
 
 ipcMain.handle('enable-system-proxy', async (_event, port: number) => {
   try {
-    await enableSystemProxy({ port, bypass: ['localhost', '127.0.0.1', '*.local'] })
+    const proxyPort = await ensureProxyServer()
+    await enableSystemProxy({ port: proxyPort || port, bypass: ['localhost', '127.0.0.1', '*.local'] })
+    broadcastCaptureState()
     return { success: true }
   } catch (error: any) {
     return { success: false, error: error?.message ?? String(error) }
@@ -325,7 +338,13 @@ ipcMain.handle('disable-system-proxy', async () => {
 
 ipcMain.handle('list-sessions', async () => listSessions())
 
-ipcMain.handle('load-session', async (_event, sessionId: string) => loadSessionRecords(sessionId))
+ipcMain.handle('load-session', async (_event, sessionId: string) => {
+  const records = loadSessionRecords(sessionId)
+  trafficRecords.length = 0
+  trafficRecords.push(...records)
+  broadcastCaptureState()
+  return records
+})
 
 ipcMain.handle('delete-session', async (_event, sessionId: string) => {
   deleteSession(sessionId)
@@ -342,6 +361,8 @@ ipcMain.handle('connect-mqtt', async (_event, config) => {
           trafficRecords.push(record)
           saveRecord(record, currentSessionId)
           mainWindow?.webContents.send('traffic-captured', record)
+          floatingWindow?.webContents.send('traffic-captured', record)
+          broadcastCaptureState()
         }
       },
       (id, status, error) => {

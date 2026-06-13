@@ -5,7 +5,7 @@ declare global {
     electronAPI: {
       startCapture: (caseName: string) => Promise<{ success: boolean; port?: number; error?: string }>
       stopCapture: () => Promise<{ success: boolean }>
-      getCaptureState: () => Promise<{ isCapturing: boolean; caseName: string; port: number }>
+      getCaptureState: () => Promise<{ isCapturing: boolean; caseName: string; port: number; recordCount: number }>
       showFloatingWindow: () => Promise<{ success: boolean }>
       restoreMainWindow: () => Promise<{ success: boolean }>
       getTrafficRecords: () => Promise<TrafficRecord[]>
@@ -13,7 +13,7 @@ declare global {
       deleteTrafficRecord: (id: string) => Promise<{ success: boolean }>
       exportRecords: (format: string, records: TrafficRecord[]) => Promise<{ success: boolean; filePath?: string }>
       onTrafficCaptured: (callback: (record: TrafficRecord) => void) => void
-      onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number }) => void) => void
+      onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number; recordCount: number }) => void) => void
       getProxyStatus: () => Promise<{ enabled: boolean; port?: number }>
       enableSystemProxy: (port: number) => Promise<{ success: boolean; error?: string }>
       disableSystemProxy: () => Promise<{ success: boolean; error?: string }>

@@ -9,6 +9,7 @@ export const useTrafficStore = defineStore('traffic', () => {
   const searchQuery = ref('')
   const statusFilter = ref<'all' | 'success' | 'failed'>('all')
   const proxyPort = ref(8888)
+  const capturedCount = ref(0)
 
   function isSuccessRecord(record: TrafficRecord): boolean {
     const code = Number(record.statusCode)
@@ -40,21 +41,27 @@ export const useTrafficStore = defineStore('traffic', () => {
 
   function addRecord(record: TrafficRecord) {
     records.value.unshift(record)
+    capturedCount.value += 1
   }
 
   function deleteRecord(id: string) {
     const idx = records.value.findIndex(r => r.id === id)
-    if (idx !== -1) records.value.splice(idx, 1)
+    if (idx !== -1) {
+      records.value.splice(idx, 1)
+      capturedCount.value = Math.max(0, capturedCount.value - 1)
+    }
     window.electronAPI?.deleteTrafficRecord(id)
   }
 
   function clearRecords() {
     records.value = []
+    capturedCount.value = 0
     window.electronAPI?.clearTrafficRecords()
   }
 
   function replaceRecords(nextRecords: TrafficRecord[]) {
     records.value = nextRecords
+    capturedCount.value = nextRecords.length
   }
 
   function setStatusFilter(filter: 'all' | 'success' | 'failed') {
@@ -76,9 +83,12 @@ export const useTrafficStore = defineStore('traffic', () => {
     isCapturing.value = false
   }
 
-  function syncCaptureState(state: { isCapturing: boolean; caseName: string; port: number }) {
+  function syncCaptureState(state: { isCapturing: boolean; caseName: string; port: number; recordCount?: number }) {
     isCapturing.value = state.isCapturing
     proxyPort.value = state.port
+    if (typeof state.recordCount === 'number') {
+      capturedCount.value = state.recordCount
+    }
     if (state.caseName) {
       currentCaseName.value = state.caseName
     }
@@ -91,6 +101,7 @@ export const useTrafficStore = defineStore('traffic', () => {
     searchQuery,
     statusFilter,
     proxyPort,
+    capturedCount,
     filteredRecords,
     stats,
     addRecord,

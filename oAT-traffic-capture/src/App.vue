@@ -132,6 +132,12 @@ function handleFloatingClick() {
       :disabled="store.isCapturing"
       @dblclick.stop
     />
+    <div class="floating-stats" :class="{ active: store.isCapturing }">
+      <span class="floating-status-dot"></span>
+      <span>{{ store.isCapturing ? '捕获中' : '未捕获' }}</span>
+      <strong>{{ store.capturedCount }}</strong>
+      <span>条流量</span>
+    </div>
     <button
       class="floating-capture-button"
       :class="{ active: store.isCapturing }"
@@ -312,6 +318,43 @@ function handleFloatingClick() {
 .floating-case-input:disabled {
   background: #f5f5f5;
   color: #8c8c8c;
+}
+
+.floating-stats {
+  width: 100%;
+  height: 24px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 5px;
+  background: #f7f7f7;
+  color: #595959;
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.floating-stats.active {
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+.floating-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bfbfbf;
+}
+
+.floating-stats.active .floating-status-dot {
+  background: #ff4d4f;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.floating-stats strong {
+  color: #262626;
+  font-size: 13px;
 }
 
 .floating-capture-button {

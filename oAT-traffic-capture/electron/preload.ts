@@ -15,7 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTrafficCaptured: (callback: (record: TrafficRecord) => void) => {
     ipcRenderer.on('traffic-captured', (_event, record) => callback(record))
   },
-  onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number }) => void) => {
+  onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number; recordCount: number }) => void) => {
     ipcRenderer.on('capture-state-changed', (_event, state) => callback(state))
   },
   getProxyStatus: () => ipcRenderer.invoke('get-proxy-status'),
