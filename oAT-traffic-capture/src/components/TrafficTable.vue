@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { TrafficRecord } from '../types/traffic'
 
 const props = defineProps<{
@@ -12,16 +12,55 @@ const emit = defineEmits<{
 }>()
 
 const selectedIds = ref<Set<string>>(new Set())
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizeOptions = [10, 20, 50]
+
+const totalPages = computed(() => Math.max(1, Math.ceil(props.records.length / pageSize.value)))
+const pageStart = computed(() => (currentPage.value - 1) * pageSize.value)
+const pageEnd = computed(() => Math.min(pageStart.value + pageSize.value, props.records.length))
+const pagedRecords = computed(() => props.records.slice(pageStart.value, pageEnd.value))
+
 const allSelected = computed({
-  get: () => props.records.length > 0 && selectedIds.value.size === props.records.length,
+  get: () => pagedRecords.value.length > 0 && pagedRecords.value.every(r => selectedIds.value.has(r.id)),
   set: (val: boolean) => {
     if (val) {
-      props.records.forEach(r => selectedIds.value.add(r.id))
+      pagedRecords.value.forEach(r => selectedIds.value.add(r.id))
     } else {
-      selectedIds.value.clear()
+      pagedRecords.value.forEach(r => selectedIds.value.delete(r.id))
     }
   }
 })
+
+const visiblePages = computed(() => {
+  const pages: number[] = []
+  const start = Math.max(1, currentPage.value - 2)
+  const end = Math.min(totalPages.value, currentPage.value + 2)
+  for (let page = start; page <= end; page += 1) {
+    pages.push(page)
+  }
+  return pages
+})
+
+watch(
+  () => [props.records.length, pageSize.value],
+  () => {
+    if (currentPage.value > totalPages.value) {
+      currentPage.value = totalPages.value
+    }
+    selectedIds.value = new Set([...selectedIds.value].filter(id => props.records.some(record => record.id === id)))
+  },
+  { flush: 'sync' }
+)
+
+function goToPage(page: number) {
+  currentPage.value = Math.min(Math.max(page, 1), totalPages.value)
+}
+
+function changePageSize(event: Event) {
+  pageSize.value = Number((event.target as HTMLSelectElement).value)
+  currentPage.value = 1
+}
 
 function getMethodClass(method: string): string {
   const map: Record<string, string> = {
@@ -80,7 +119,7 @@ function formatTime(timestamp: number): string {
             <div class="empty-hint">点击"开始捕获"后，系统将自动记录经过代理的流量</div>
           </td>
         </tr>
-        <tr v-for="record in records" :key="record.id">
+        <tr v-for="record in pagedRecords" :key="record.id">
           <td>
             <input type="checkbox" :value="record.id" v-model="selectedIds" />
           </td>
@@ -110,6 +149,27 @@ function formatTime(timestamp: number): string {
         </tr>
       </tbody>
     </table>
+    <div v-if="records.length > 0" class="pagination">
+      <div class="page-summary">
+        共 {{ records.length }} 条，第 {{ pageStart + 1 }}-{{ pageEnd }} 条
+      </div>
+      <div class="page-controls">
+        <select :value="pageSize" @change="changePageSize" aria-label="每页条数">
+          <option v-for="size in pageSizeOptions" :key="size" :value="size">{{ size }} 条/页</option>
+        </select>
+        <button type="button" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">上一页</button>
+        <button
+          v-for="page in visiblePages"
+          :key="page"
+          type="button"
+          :class="{ active: page === currentPage }"
+          @click="goToPage(page)"
+        >
+          {{ page }}
+        </button>
+        <button type="button" :disabled="currentPage === totalPages" @click="goToPage(currentPage + 1)">下一页</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -231,5 +291,62 @@ tbody tr:hover {
   font-size: 12px;
   margin-top: 8px;
   color: #bfbfbf;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0 0;
+  font-size: 13px;
+  color: #8c8c8c;
+}
+
+.page-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-controls select,
+.page-controls button {
+  height: 30px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  background: white;
+  color: #595959;
+  font-size: 13px;
+}
+
+.page-controls select {
+  padding: 0 8px;
+}
+
+.page-controls button {
+  min-width: 30px;
+  padding: 0 10px;
+}
+
+.page-controls button.active {
+  border-color: #667eea;
+  background: #667eea;
+  color: white;
+}
+
+.page-controls button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .page-controls {
+    flex-wrap: wrap;
+  }
 }
 </style>
