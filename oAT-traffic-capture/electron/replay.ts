@@ -27,6 +27,19 @@ function cleanHeaders(headers?: Record<string, string>): Record<string, string> 
   return next
 }
 
+function resolveReplayUrl(record: TrafficRecord): string {
+  try {
+    return new URL(record.url).toString()
+  } catch {
+    const host = record.requestHeaders?.host || record.requestHeaders?.Host
+    if (!host) {
+      throw new Error(`无法重放相对 URL：${record.url}，记录缺少 Host 请求头`)
+    }
+    const protocol = record.protocol.toUpperCase() === 'HTTPS' ? 'https' : 'http'
+    return new URL(record.url, `${protocol}://${host}`).toString()
+  }
+}
+
 export async function replayRecord(record: TrafficRecord): Promise<ReplayResult> {
   const protocol = record.protocol.toUpperCase()
   if (protocol === 'HTTP' || protocol === 'HTTPS') {
@@ -53,7 +66,8 @@ export async function replayRecord(record: TrafficRecord): Promise<ReplayResult>
 async function replayHttpRecord(record: TrafficRecord): Promise<ReplayResult> {
   const start = Date.now()
   try {
-    const response = await fetch(record.url, {
+    const url = resolveReplayUrl(record)
+    const response = await fetch(url, {
       method: record.method,
       headers: cleanHeaders(record.requestHeaders),
       body: ['GET', 'HEAD'].includes(record.method.toUpperCase()) ? undefined : record.requestBody
@@ -72,6 +86,7 @@ async function replayHttpRecord(record: TrafficRecord): Promise<ReplayResult> {
         replayOf: record.id,
         replayStatus: response.ok ? 'success' : 'failed',
         replayTime: Date.now(),
+        url,
         statusCode: response.status,
         duration: Date.now() - start,
         responseHeaders,

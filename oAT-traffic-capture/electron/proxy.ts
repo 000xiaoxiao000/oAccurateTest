@@ -21,6 +21,15 @@ export function createProxyServer(onTraffic: (record: TrafficRecord) => void) {
     return `${ctx.isSSL ? 'wss' : 'ws'}://${host}${req.url ?? ''}`
   }
 
+  function getHttpUrl(ctx: any): string {
+    const requestUrl = ctx.clientToProxyRequest.url ?? ''
+    if (requestUrl && !requestUrl.startsWith('/')) {
+      return requestUrl
+    }
+    const host = ctx.clientToProxyRequest.headers.host ?? ''
+    return `${ctx.isSSL ? 'https' : 'http'}://${host}${requestUrl}`
+  }
+
   function messageData(message: any): Pick<WsMessage, 'type' | 'data'> {
     if (Buffer.isBuffer(message)) {
       return { type: 'binary', data: message.toString('base64') }
@@ -36,7 +45,7 @@ export function createProxyServer(onTraffic: (record: TrafficRecord) => void) {
       id: requestId,
       caseName: '',
       method: ctx.clientToProxyRequest.method,
-      url: ctx.clientToProxyRequest.url || `${ctx.isSSL ? 'https' : 'http'}://${ctx.clientToProxyRequest.headers.host}${ctx.clientToProxyRequest.url}`,
+      url: getHttpUrl(ctx),
       protocol: ctx.isSSL ? 'HTTPS' : 'HTTP',
       timestamp: Date.now(),
       requestHeaders: headerRecord(ctx.clientToProxyRequest.headers),
