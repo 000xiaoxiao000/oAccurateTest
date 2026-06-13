@@ -7,25 +7,30 @@ export const useTrafficStore = defineStore('traffic', () => {
   const isCapturing = ref(false)
   const currentCaseName = ref('')
   const searchQuery = ref('')
+  const statusFilter = ref<'all' | 'success' | 'failed'>('all')
   const proxyPort = ref(8888)
 
+  function isSuccessRecord(record: TrafficRecord): boolean {
+    const code = Number(record.statusCode)
+    return !isNaN(code) && code >= 200 && code < 400
+  }
+
   const filteredRecords = computed(() => {
-    if (!searchQuery.value) return records.value
     const q = searchQuery.value.toLowerCase()
-    return records.value.filter(r =>
-      r.url.toLowerCase().includes(q) ||
-      r.caseName.toLowerCase().includes(q) ||
-      r.method.toLowerCase().includes(q) ||
-      String(r.statusCode).includes(q)
-    )
+    return records.value.filter(r => {
+      if (statusFilter.value === 'success' && !isSuccessRecord(r)) return false
+      if (statusFilter.value === 'failed' && isSuccessRecord(r)) return false
+      if (!q) return true
+      return r.url.toLowerCase().includes(q) ||
+        r.caseName.toLowerCase().includes(q) ||
+        r.method.toLowerCase().includes(q) ||
+        String(r.statusCode).includes(q)
+    })
   })
 
   const stats = computed(() => {
     const total = records.value.length
-    const success = records.value.filter(r => {
-      const code = Number(r.statusCode)
-      return !isNaN(code) && code >= 200 && code < 400
-    }).length
+    const success = records.value.filter(isSuccessRecord).length
     const failed = total - success
     const avgDuration = total > 0
       ? Math.round(records.value.reduce((acc, r) => acc + r.duration, 0) / total)
@@ -52,6 +57,10 @@ export const useTrafficStore = defineStore('traffic', () => {
     records.value = nextRecords
   }
 
+  function setStatusFilter(filter: 'all' | 'success' | 'failed') {
+    statusFilter.value = filter
+  }
+
   async function startCapture(caseName: string) {
     currentCaseName.value = caseName
     const result = await window.electronAPI?.startCapture(caseName)
@@ -72,6 +81,7 @@ export const useTrafficStore = defineStore('traffic', () => {
     isCapturing,
     currentCaseName,
     searchQuery,
+    statusFilter,
     proxyPort,
     filteredRecords,
     stats,
@@ -79,6 +89,7 @@ export const useTrafficStore = defineStore('traffic', () => {
     deleteRecord,
     clearRecords,
     replaceRecords,
+    setStatusFilter,
     startCapture,
     stopCapture
   }

@@ -88,6 +88,10 @@ function addMqRecord(record: TrafficRecord) {
 function handleLoadSession(records: TrafficRecord[]) {
   store.replaceRecords([...records].reverse())
 }
+
+function toggleStatusFilter(filter: 'success' | 'failed') {
+  store.setStatusFilter(store.statusFilter === filter ? 'all' : filter)
+}
 </script>
 
 <template>
@@ -138,18 +142,33 @@ function handleLoadSession(records: TrafficRecord[]) {
 
     <div class="stats-bar">
       <div class="stats">
-        <div class="stat-item">
+        <button
+          type="button"
+          class="stat-item"
+          :class="{ active: store.statusFilter === 'all' }"
+          @click="store.setStatusFilter('all')"
+        >
           <span class="stat-label">总请求数</span>
           <span class="stat-value">{{ store.stats.total }}</span>
-        </div>
-        <div class="stat-item">
+        </button>
+        <button
+          type="button"
+          class="stat-item"
+          :class="{ active: store.statusFilter === 'success' }"
+          @click="toggleStatusFilter('success')"
+        >
           <span class="stat-label">成功</span>
           <span class="stat-value success">{{ store.stats.success }}</span>
-        </div>
-        <div class="stat-item">
+        </button>
+        <button
+          type="button"
+          class="stat-item"
+          :class="{ active: store.statusFilter === 'failed' }"
+          @click="toggleStatusFilter('failed')"
+        >
           <span class="stat-label">失败</span>
           <span class="stat-value danger">{{ store.stats.failed }}</span>
-        </div>
+        </button>
         <div class="stat-item">
           <span class="stat-label">平均耗时</span>
           <span class="stat-value">{{ store.stats.avgDuration }}ms</span>
@@ -338,6 +357,24 @@ function handleLoadSession(records: TrafficRecord[]) {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  font: inherit;
+}
+
+button.stat-item {
+  cursor: pointer;
+}
+
+button.stat-item:hover {
+  background: #f0f2ff;
+}
+
+.stat-item.active {
+  background: #eef2ff;
+  border-color: #aebcff;
 }
 
 .stat-label {
