@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTrafficRecords: () => ipcRenderer.invoke('get-traffic-records'),
   clearTrafficRecords: () => ipcRenderer.invoke('clear-traffic-records'),
   deleteTrafficRecord: (id) => ipcRenderer.invoke('delete-traffic-record', id),
+  listFilterRules: () => ipcRenderer.invoke('list-filter-rules'),
+  saveFilterRules: (rules) => ipcRenderer.invoke('save-filter-rules', rules),
+  replayRecord: (record) => ipcRenderer.invoke('replay-record', record),
+  replayRecords: (records) => ipcRenderer.invoke('replay-records', records),
   exportRecords: (format, records) => ipcRenderer.invoke('export-records', format, records),
   onTrafficCaptured: (callback) => {
     ipcRenderer.on('traffic-captured', (_event, record) => callback(record))
@@ -30,5 +34,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCertInfo: () => ipcRenderer.invoke('get-cert-info'),
   generateCert: () => ipcRenderer.invoke('generate-cert'),
   installCert: () => ipcRenderer.invoke('install-cert'),
-  openCertFolder: () => ipcRenderer.invoke('open-cert-folder')
+  openCertFolder: () => ipcRenderer.invoke('open-cert-folder'),
+  listPlugins: () => ipcRenderer.invoke('list-plugins'),
+  reloadPlugins: () => ipcRenderer.invoke('reload-plugins'),
+  getPluginsPath: () => ipcRenderer.invoke('get-plugins-path')
 })

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TrafficRecord } from './types.js'
+import type { TrafficFilterRule, TrafficRecord } from './types.js'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   startCapture: (caseName: string) => ipcRenderer.invoke('start-capture', caseName),
@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTrafficRecords: () => ipcRenderer.invoke('get-traffic-records'),
   clearTrafficRecords: () => ipcRenderer.invoke('clear-traffic-records'),
   deleteTrafficRecord: (id: string) => ipcRenderer.invoke('delete-traffic-record', id),
+  listFilterRules: () => ipcRenderer.invoke('list-filter-rules'),
+  saveFilterRules: (rules: TrafficFilterRule[]) => ipcRenderer.invoke('save-filter-rules', rules),
+  replayRecord: (record: TrafficRecord) => ipcRenderer.invoke('replay-record', record),
+  replayRecords: (records: TrafficRecord[]) => ipcRenderer.invoke('replay-records', records),
   exportRecords: (format: string, records: TrafficRecord[]) => 
     ipcRenderer.invoke('export-records', format, records),
   onTrafficCaptured: (callback: (record: TrafficRecord) => void) => {
@@ -32,5 +36,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCertInfo: () => ipcRenderer.invoke('get-cert-info'),
   generateCert: () => ipcRenderer.invoke('generate-cert'),
   installCert: () => ipcRenderer.invoke('install-cert'),
-  openCertFolder: () => ipcRenderer.invoke('open-cert-folder')
+  openCertFolder: () => ipcRenderer.invoke('open-cert-folder'),
+  listPlugins: () => ipcRenderer.invoke('list-plugins'),
+  reloadPlugins: () => ipcRenderer.invoke('reload-plugins'),
+  getPluginsPath: () => ipcRenderer.invoke('get-plugins-path')
 })

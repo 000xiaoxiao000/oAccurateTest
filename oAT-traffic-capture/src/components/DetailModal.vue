@@ -13,6 +13,7 @@ const emit = defineEmits<{
 
 const hasRequestBody = computed(() => props.record?.requestBody && props.record.requestBody.trim())
 const hasResponseBody = computed(() => props.record?.responseBody && props.record.responseBody.trim())
+const websocketMessages = computed(() => props.record?.websocketMessages ?? [])
 
 function formatHeaders(headers?: Record<string, string>): string {
   if (!headers) return ''
@@ -109,6 +110,17 @@ function getStatusClass(status: number | string): string {
         <div v-if="record.error" class="detail-section">
           <h4>错误信息</h4>
           <div class="code-block error">{{ record.error }}</div>
+        </div>
+
+        <div v-if="websocketMessages.length > 0" class="detail-section">
+          <h4>WebSocket 消息</h4>
+          <div class="ws-list">
+            <div v-for="message in websocketMessages" :key="message.id" class="ws-message" :class="message.direction">
+              <span>{{ message.direction === 'send' ? '发送' : '接收' }}</span>
+              <time>{{ new Date(message.timestamp).toLocaleTimeString('zh-CN') }}</time>
+              <code>{{ message.data }}</code>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -232,6 +244,39 @@ function getStatusClass(status: number | string): string {
   background: #fff1f0;
   border-color: #ffa39e;
   color: #cf1322;
+}
+
+.ws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ws-message {
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 44px 82px 1fr;
+  gap: 8px;
+  align-items: start;
+  font-size: 12px;
+}
+
+.ws-message.send {
+  border-color: #91d5ff;
+  background: #e6f7ff;
+}
+
+.ws-message.receive {
+  border-color: #b7eb8f;
+  background: #f6ffed;
+}
+
+.ws-message code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Monaco', 'Consolas', monospace;
 }
 
 .badge {

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { TrafficRecord } from '../types/traffic'
+import type { PluginInfo, TrafficFilterRule, TrafficRecord } from '../types/traffic'
 
 export const useTrafficStore = defineStore('traffic', () => {
   const records = ref<TrafficRecord[]>([])
@@ -10,6 +10,8 @@ export const useTrafficStore = defineStore('traffic', () => {
   const statusFilter = ref<'all' | 'success' | 'failed'>('all')
   const proxyPort = ref(8888)
   const capturedCount = ref(0)
+  const filterRules = ref<TrafficFilterRule[]>([])
+  const plugins = ref<PluginInfo[]>([])
 
   function isSuccessRecord(record: TrafficRecord): boolean {
     const code = Number(record.statusCode)
@@ -39,6 +41,43 @@ export const useTrafficStore = defineStore('traffic', () => {
     return { total, success, failed, avgDuration }
   })
 
+  const chartStats = computed(() => {
+    const protocolMap = new Map<string, number>()
+    const statusMap = new Map<string, number>()
+    const hostMap = new Map<string, number>()
+    const timeline = new Map<string, { label: string; count: number; avgDuration: number; totalDuration: number }>()
+
+    for (const record of records.value) {
+      protocolMap.set(record.protocol, (protocolMap.get(record.protocol) ?? 0) + 1)
+      const statusKey = String(record.statusCode).slice(0, 1) + 'xx'
+      statusMap.set(statusKey, (statusMap.get(statusKey) ?? 0) + 1)
+      try {
+        const host = new URL(record.url).host
+        hostMap.set(host, (hostMap.get(host) ?? 0) + 1)
+      } catch {
+        hostMap.set(record.protocol, (hostMap.get(record.protocol) ?? 0) + 1)
+      }
+
+      const time = new Date(record.timestamp)
+      const label = `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
+      const bucket = timeline.get(label) ?? { label, count: 0, avgDuration: 0, totalDuration: 0 }
+      bucket.count += 1
+      bucket.totalDuration += Number(record.duration) || 0
+      bucket.avgDuration = Math.round(bucket.totalDuration / bucket.count)
+      timeline.set(label, bucket)
+    }
+
+    return {
+      protocols: [...protocolMap.entries()].map(([label, value]) => ({ label, value })),
+      statuses: [...statusMap.entries()].map(([label, value]) => ({ label, value })),
+      hosts: [...hostMap.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 8)
+        .map(([label, value]) => ({ label, value })),
+      timeline: [...timeline.values()].slice(-30)
+    }
+  })
+
   function addRecord(record: TrafficRecord) {
     records.value.unshift(record)
     capturedCount.value += 1
@@ -66,6 +105,33 @@ export const useTrafficStore = defineStore('traffic', () => {
 
   function setStatusFilter(filter: 'all' | 'success' | 'failed') {
     statusFilter.value = filter
+  }
+
+  async function loadFilterRules() {
+    filterRules.value = await window.electronAPI?.listFilterRules() ?? []
+  }
+
+  async function saveRules(rules: TrafficFilterRule[]) {
+    filterRules.value = rules
+    await window.electronAPI?.saveFilterRules(rules)
+  }
+
+  async function replay(record: TrafficRecord) {
+    return await window.electronAPI?.replayRecord(JSON.parse(JSON.stringify(record)))
+  }
+
+  async function replayMany(recordIds: string[]) {
+    const idSet = new Set(recordIds)
+    const targets = filteredRecords.value.filter(record => idSet.has(record.id))
+    return await window.electronAPI?.replayRecords(JSON.parse(JSON.stringify(targets)))
+  }
+
+  async function loadPlugins() {
+    plugins.value = await window.electronAPI?.listPlugins() ?? []
+  }
+
+  async function reloadPlugins() {
+    plugins.value = await window.electronAPI?.reloadPlugins() ?? []
   }
 
   async function startCapture(caseName: string) {
@@ -102,13 +168,22 @@ export const useTrafficStore = defineStore('traffic', () => {
     statusFilter,
     proxyPort,
     capturedCount,
+    filterRules,
+    plugins,
     filteredRecords,
     stats,
+    chartStats,
     addRecord,
     deleteRecord,
     clearRecords,
     replaceRecords,
     setStatusFilter,
+    loadFilterRules,
+    saveRules,
+    replay,
+    replayMany,
+    loadPlugins,
+    reloadPlugins,
     startCapture,
     stopCapture,
     syncCaptureState

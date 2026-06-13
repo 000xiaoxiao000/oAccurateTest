@@ -3,9 +3,12 @@ import { ref, onMounted } from 'vue'
 import { useTrafficStore } from './stores/traffic'
 import TrafficTable from './components/TrafficTable.vue'
 import DetailModal from './components/DetailModal.vue'
+import FilterRulesPanel from './components/FilterRulesPanel.vue'
 import MqInputModal from './components/MqInputModal.vue'
+import PluginPanel from './components/PluginPanel.vue'
 import ProxyControl from './components/ProxyControl.vue'
 import SessionHistory from './components/SessionHistory.vue'
+import TrafficStatsPanel from './components/TrafficStatsPanel.vue'
 import type { TrafficRecord } from './types/traffic'
 
 const store = useTrafficStore()
@@ -14,6 +17,8 @@ const showMqInput = ref(false)
 const selectedRecord = ref<TrafficRecord | null>(null)
 const proxyInfoVisible = ref(false)
 const selectedRecordIds = ref<string[]>([])
+const activePanel = ref<'none' | 'stats' | 'rules' | 'plugins'>('none')
+const pluginsPath = ref('')
 const isFloatingMode = new URLSearchParams(window.location.search).get('floating') === '1'
 let floatingClickTimer: number | null = null
 
@@ -26,6 +31,11 @@ onMounted(() => {
   })
   window.electronAPI?.getCaptureState().then((state) => {
     if (state) store.syncCaptureState(state)
+  })
+  store.loadFilterRules()
+  store.loadPlugins()
+  window.electronAPI?.getPluginsPath().then((path) => {
+    pluginsPath.value = path ?? ''
   })
 })
 
@@ -99,6 +109,29 @@ function handleLoadSession(records: TrafficRecord[]) {
 
 function toggleStatusFilter(filter: 'success' | 'failed') {
   store.setStatusFilter(store.statusFilter === filter ? 'all' : filter)
+}
+
+async function replayRecord(record: TrafficRecord) {
+  const result = await store.replay(record)
+  if (!result?.success && result?.error) {
+    alert(`重放失败：${result.error}`)
+  }
+}
+
+async function replaySelected() {
+  if (selectedRecordIds.value.length === 0) {
+    alert('请先选择要重放的记录')
+    return
+  }
+  const results = await store.replayMany(selectedRecordIds.value)
+  const failed = results?.filter(result => !result.success).length ?? 0
+  if (failed > 0) {
+    alert(`重放完成，其中 ${failed} 条失败或不支持`)
+  }
+}
+
+function togglePanel(panel: 'stats' | 'rules' | 'plugins') {
+  activePanel.value = activePanel.value === panel ? 'none' : panel
 }
 
 async function showFloatingWindow() {
@@ -251,16 +284,30 @@ function handleFloatingClick() {
         />
       </div>
       <div class="btn-group">
+        <button class="btn btn-outline" @click="togglePanel('stats')">统计图表</button>
+        <button class="btn btn-outline" @click="togglePanel('rules')">过滤规则</button>
+        <button class="btn btn-outline" @click="togglePanel('plugins')">插件扩展</button>
+        <button class="btn btn-outline" @click="replaySelected">重放选中</button>
         <button class="btn btn-primary" @click="exportData('excel')">导出 Excel</button>
         <button class="btn btn-outline" @click="exportData('csv')">导出 CSV</button>
         <button class="btn btn-outline" @click="exportData('json')">导出 JSON</button>
       </div>
     </div>
 
+    <TrafficStatsPanel v-if="activePanel === 'stats'" :stats="store.chartStats" />
+    <FilterRulesPanel v-if="activePanel === 'rules'" :rules="store.filterRules" @save="store.saveRules" />
+    <PluginPanel
+      v-if="activePanel === 'plugins'"
+      :plugins="store.plugins"
+      :plugins-path="pluginsPath"
+      @reload="store.reloadPlugins"
+    />
+
     <TrafficTable
       :records="store.filteredRecords"
       v-model:selected-ids="selectedRecordIds"
       @delete="handleDelete"
+      @replay="replayRecord"
       @view-detail="handleViewDetail"
     />
 

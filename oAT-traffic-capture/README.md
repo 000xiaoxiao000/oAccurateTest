@@ -221,8 +221,24 @@ A: 确保使用最新版 Microsoft Excel 或 WPS，或使用 LibreOffice 打开 
 
 ## 开发计划
 
-- [ ] 支持 WebSocket 流量捕获
-- [ ] 添加流量重放功能
-- [ ] 支持自定义过滤规则
-- [ ] 添加流量统计图表
-- [ ] 支持插件扩展
+- [x] 支持 WebSocket 流量捕获
+- [x] 添加流量重放功能
+- [x] 支持自定义过滤规则
+- [x] 添加流量统计图表
+- [x] 支持插件扩展
+
+## 插件扩展
+
+插件目录位于应用数据目录下的 `plugins` 文件夹。每个插件使用独立子目录，并提供 `plugin.json`：
+
+```json
+{
+  "id": "sample-plugin",
+  "name": "示例插件",
+  "version": "1.0.0",
+  "main": "index.js",
+  "enabled": true
+}
+```
+
+插件入口可导出 `onRecordCaptured(record)` 和 `beforeSave(record)`，返回修改后的记录；返回 `null` 时会丢弃该记录。

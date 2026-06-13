@@ -1,4 +1,4 @@
-import type { TrafficRecord } from '../types/traffic'
+import type { PluginInfo, ReplayResult, TrafficFilterRule, TrafficRecord } from '../types/traffic'
 
 declare global {
   interface Window {
@@ -11,6 +11,10 @@ declare global {
       getTrafficRecords: () => Promise<TrafficRecord[]>
       clearTrafficRecords: () => Promise<{ success: boolean }>
       deleteTrafficRecord: (id: string) => Promise<{ success: boolean }>
+      listFilterRules: () => Promise<TrafficFilterRule[]>
+      saveFilterRules: (rules: TrafficFilterRule[]) => Promise<{ success: boolean }>
+      replayRecord: (record: TrafficRecord) => Promise<ReplayResult>
+      replayRecords: (records: TrafficRecord[]) => Promise<ReplayResult[]>
       exportRecords: (format: string, records: TrafficRecord[]) => Promise<{ success: boolean; filePath?: string }>
       onTrafficCaptured: (callback: (record: TrafficRecord) => void) => void
       onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number; recordCount: number }) => void) => void
@@ -39,6 +43,9 @@ declare global {
       generateCert: () => Promise<{ success: boolean; certPath?: string; keyPath?: string; error?: string }>
       installCert: () => Promise<{ success: boolean; error?: string }>
       openCertFolder: () => Promise<void>
+      listPlugins: () => Promise<PluginInfo[]>
+      reloadPlugins: () => Promise<PluginInfo[]>
+      getPluginsPath: () => Promise<string>
     }
   }
 }

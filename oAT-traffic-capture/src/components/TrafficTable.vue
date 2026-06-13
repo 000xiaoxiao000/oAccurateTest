@@ -10,6 +10,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:selectedIds': [ids: string[]]
   delete: [id: string]
+  replay: [record: TrafficRecord]
   viewDetail: [record: TrafficRecord]
 }>()
 
@@ -125,7 +126,7 @@ function formatTime(timestamp: number): string {
           <th style="width: 90px">状态码</th>
           <th style="width: 90px">耗时</th>
           <th style="width: 155px">时间</th>
-          <th style="width: 110px">操作</th>
+          <th style="width: 150px">操作</th>
         </tr>
       </thead>
       <tbody>
@@ -155,6 +156,8 @@ function formatTime(timestamp: number): string {
           <td class="url-cell" :title="record.url" @click="emit('viewDetail', record)">
             {{ record.url }}
             <span class="proto">{{ record.protocol }}</span>
+            <span v-if="record.source === 'replay'" class="proto replay">重放</span>
+            <span v-for="tag in record.tags" :key="tag" class="proto tag">{{ tag }}</span>
           </td>
           <td>
             <span class="badge" :class="getStatusClass(record.statusCode)">
@@ -165,6 +168,7 @@ function formatTime(timestamp: number): string {
           <td>{{ formatTime(record.timestamp) }}</td>
           <td>
             <button class="action-btn" @click="emit('viewDetail', record)">详情</button>
+            <button class="action-btn" @click="emit('replay', record)">重放</button>
             <button class="action-btn danger" @click="emit('delete', record.id)">删除</button>
           </td>
         </tr>
@@ -268,6 +272,16 @@ tbody tr:hover {
   border-radius: 3px;
   margin-left: 6px;
   color: #8c8c8c;
+}
+
+.proto.replay {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.proto.tag {
+  background: #f6ffed;
+  color: #52c41a;
 }
 
 .case-tag {

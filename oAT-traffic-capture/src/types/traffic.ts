@@ -13,6 +13,12 @@ export interface TrafficRecord {
   responseHeaders?: Record<string, string>
   responseBody?: string
   error?: string
+  source?: 'capture' | 'manual' | 'replay' | 'plugin'
+  replayOf?: string
+  replayStatus?: 'pending' | 'success' | 'failed' | 'unsupported'
+  replayTime?: number
+  tags?: string[]
+  websocketMessages?: WsMessage[]
 }
 
 export interface ProxyStatus {
@@ -41,4 +47,31 @@ export interface WebSocketRecord extends TrafficRecord {
   protocol: 'WS' | 'WSS'
   messages: WsMessage[]
   connectionState: 'open' | 'closed'
+}
+
+export interface TrafficFilterRule {
+  id: string
+  name: string
+  enabled: boolean
+  target: 'url' | 'method' | 'protocol' | 'statusCode' | 'header' | 'body'
+  operator: 'contains' | 'equals' | 'regex' | 'startsWith' | 'endsWith'
+  value: string
+  action: 'include' | 'exclude' | 'mark'
+}
+
+export interface ReplayResult {
+  success: boolean
+  record?: TrafficRecord
+  error?: string
+}
+
+export interface PluginInfo {
+  id: string
+  name: string
+  version: string
+  main: string
+  enabled: boolean
+  path: string
+  description?: string
+  error?: string
 }

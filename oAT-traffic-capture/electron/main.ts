@@ -6,16 +6,21 @@ import { createProxyServer } from './proxy.js'
 import { disableSystemProxy, enableSystemProxy, getSystemProxyStatus } from './systemProxy.js'
 import { generateRootCert, getCertInfo, installCertMacOS, openCertFolder } from './certificate.js'
 import { connectMqtt, disconnectAllMqtt, disconnectMqtt } from './protocols/mqtt.js'
+import { applyCaptureRules } from './filterRules.js'
+import { replayRecord } from './replay.js'
+import { getPluginsPath, listPlugins, loadPlugins, runBeforeSaveHooks, runRecordCapturedHooks } from './plugins/pluginManager.js'
 import {
   deleteSession,
   initDatabase,
+  listFilterRules,
   listSessions,
   loadSessionRecords,
   saveRecord,
+  saveFilterRules,
   saveSession,
   updateSessionEndTime
 } from './database.js'
-import type { TrafficRecord } from './types.js'
+import type { TrafficFilterRule, TrafficRecord } from './types.js'
 import ExcelJS from 'exceljs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -28,6 +33,7 @@ let captureEnabled = false
 let currentCaseName = ''
 let currentSessionId = ''
 const trafficRecords: TrafficRecord[] = []
+let filterRules: TrafficFilterRule[] = []
 const PROXY_PORT = 8888
 
 function getCaptureState() {
@@ -45,6 +51,26 @@ function broadcastCaptureState() {
   floatingWindow?.webContents.send('capture-state-changed', state)
 }
 
+async function acceptCapturedRecord(record: TrafficRecord) {
+  if (!captureEnabled) return
+  const afterPlugins = await runRecordCapturedHooks({
+    ...record,
+    caseName: currentCaseName,
+    source: record.source ?? 'capture'
+  })
+  if (!afterPlugins) return
+  const afterRules = applyCaptureRules(afterPlugins, filterRules)
+  if (!afterRules) return
+  const beforeSave = await runBeforeSaveHooks(afterRules)
+  if (!beforeSave) return
+
+  trafficRecords.push(beforeSave)
+  saveRecord(beforeSave, currentSessionId)
+  mainWindow?.webContents.send('traffic-captured', beforeSave)
+  floatingWindow?.webContents.send('traffic-captured', beforeSave)
+  broadcastCaptureState()
+}
+
 function startProxyServer(server: any, port: number): Promise<number> {
   return new Promise((resolve, reject) => {
     server.listen({ port }, (error?: Error) => {
@@ -60,14 +86,7 @@ function startProxyServer(server: any, port: number): Promise<number> {
 async function ensureProxyServer(): Promise<number> {
   if (!proxyServer) {
     proxyServer = createProxyServer((record: TrafficRecord) => {
-      if (captureEnabled) {
-        record.caseName = currentCaseName
-        trafficRecords.push(record)
-        saveRecord(record, currentSessionId)
-        mainWindow?.webContents.send('traffic-captured', record)
-        floatingWindow?.webContents.send('traffic-captured', record)
-        broadcastCaptureState()
-      }
+      acceptCapturedRecord(record)
     })
 
     await startProxyServer(proxyServer, PROXY_PORT)
@@ -148,6 +167,8 @@ function restoreMainWindow() {
 
 app.whenReady().then(() => {
   initDatabase()
+  filterRules = listFilterRules()
+  loadPlugins()
   createWindow()
 
   app.on('activate', () => {
@@ -215,6 +236,14 @@ ipcMain.handle('get-traffic-records', async () => {
 ipcMain.handle('clear-traffic-records', async () => {
   trafficRecords.length = 0
   broadcastCaptureState()
+  return { success: true }
+})
+
+ipcMain.handle('list-filter-rules', async () => filterRules)
+
+ipcMain.handle('save-filter-rules', async (_event, rules: TrafficFilterRule[]) => {
+  filterRules = rules
+  saveFilterRules(filterRules)
   return { success: true }
 })
 
@@ -308,6 +337,36 @@ ipcMain.handle('export-records', async (_event, format: string, records: Traffic
   return { success: false }
 })
 
+ipcMain.handle('replay-record', async (_event, record: TrafficRecord) => {
+  const result = await replayRecord(record)
+  if (result.record) {
+    result.record.caseName = currentCaseName || record.caseName
+    trafficRecords.push(result.record)
+    saveRecord(result.record, currentSessionId || undefined)
+    mainWindow?.webContents.send('traffic-captured', result.record)
+    floatingWindow?.webContents.send('traffic-captured', result.record)
+    broadcastCaptureState()
+  }
+  return result
+})
+
+ipcMain.handle('replay-records', async (_event, records: TrafficRecord[]) => {
+  const results = []
+  for (const record of records) {
+    const result = await replayRecord(record)
+    if (result.record) {
+      result.record.caseName = currentCaseName || record.caseName
+      trafficRecords.push(result.record)
+      saveRecord(result.record, currentSessionId || undefined)
+      mainWindow?.webContents.send('traffic-captured', result.record)
+      floatingWindow?.webContents.send('traffic-captured', result.record)
+    }
+    results.push(result)
+  }
+  broadcastCaptureState()
+  return results
+})
+
 ipcMain.handle('get-proxy-status', async () => {
   try {
     return await getSystemProxyStatus()
@@ -356,14 +415,7 @@ ipcMain.handle('connect-mqtt', async (_event, config) => {
     connectMqtt(
       config,
       (record) => {
-        if (captureEnabled) {
-          record.caseName = currentCaseName
-          trafficRecords.push(record)
-          saveRecord(record, currentSessionId)
-          mainWindow?.webContents.send('traffic-captured', record)
-          floatingWindow?.webContents.send('traffic-captured', record)
-          broadcastCaptureState()
-        }
+        acceptCapturedRecord(record)
       },
       (id, status, error) => {
         mainWindow?.webContents.send('mqtt-status', { id, status, error })
@@ -400,3 +452,9 @@ ipcMain.handle('open-cert-folder', async () => {
   const info = getCertInfo()
   if (info.certPath) openCertFolder(info.certPath)
 })
+
+ipcMain.handle('list-plugins', async () => listPlugins())
+
+ipcMain.handle('reload-plugins', async () => loadPlugins())
+
+ipcMain.handle('get-plugins-path', async () => getPluginsPath())
