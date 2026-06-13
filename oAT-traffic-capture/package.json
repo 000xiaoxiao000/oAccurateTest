@@ -1,7 +1,7 @@
 {
-  "name": "traffic-capture-app",
+  "name": "oat-traffic-capture",
   "version": "1.0.0",
-  "description": "流量捕获与分析桌面工具",
+  "description": "oAT 流量采集与分析桌面工具",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -43,8 +43,8 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.traffic-capture.app",
-    "productName": "流量捕获工具",
+    "appId": "com.oat.traffic-capture",
+    "productName": "oAT 流量采集器",
     "directories": {
       "output": "release"
     },

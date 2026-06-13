@@ -177,7 +177,7 @@ ipcMain.handle('export-records', async (_event, format: string, records: Traffic
     if (!filePath) return { success: false }
 
     const workbook = new ExcelJS.Workbook()
-    workbook.creator = '流量捕获工具'
+    workbook.creator = 'oAT 流量采集器'
     workbook.created = new Date()
 
     const sheet = workbook.addWorksheet('流量记录')

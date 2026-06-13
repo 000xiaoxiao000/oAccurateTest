@@ -90,7 +90,7 @@ function handleLoadSession(records: TrafficRecord[]) {
     <header class="app-header">
       <div class="header-content">
         <div>
-          <h1 class="header-title">流量捕获工具</h1>
+          <h1 class="header-title">oAT 流量采集器</h1>
           <p class="header-subtitle">实时捕获并管理 HTTP、HTTPS、MQ 等协议的网络请求流量</p>
         </div>
         <ProxyControl :port="store.proxyPort" />

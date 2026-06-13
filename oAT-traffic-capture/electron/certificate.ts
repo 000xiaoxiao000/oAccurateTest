@@ -30,8 +30,8 @@ export function generateRootCert(): { certPath: string; keyPath: string } {
   cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 10)
 
   const attrs = [
-    { name: 'commonName', value: 'Traffic Capture Root CA' },
-    { name: 'organizationName', value: 'Traffic Capture Tool' }
+    { name: 'commonName', value: 'oAT Traffic Capture Root CA' },
+    { name: 'organizationName', value: 'oAT Traffic Capture' }
   ]
   cert.setSubject(attrs)
   cert.setIssuer(attrs)

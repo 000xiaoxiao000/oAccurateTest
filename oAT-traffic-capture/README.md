@@ -1,4 +1,4 @@
-# 流量捕获工具 (Traffic Capture App)
+# oAT 流量采集器 (oAT Traffic Capture)
 
 一个基于 Electron + Vue3 的桌面应用，用于捕获和管理 HTTP/HTTPS、MQ 等协议的网络流量。
 
@@ -126,7 +126,7 @@ chrome.exe --proxy-server="127.0.0.1:8888"
 ## 项目结构
 
 ```
-traffic-capture-app/
+oAT-traffic-capture/
 ├── electron/               # Electron 主进程
 │   ├── main.ts            # 主进程入口（窗口管理、IPC）
 │   ├── preload.ts         # 预加载脚本（安全桥接）

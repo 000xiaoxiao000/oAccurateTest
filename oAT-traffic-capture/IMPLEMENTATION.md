@@ -1,4 +1,4 @@
-# Electron 流量捕获桌面 App — 完整实施手册
+# oAT 流量采集器桌面 App — 完整实施手册
 
 > 基于现有代码基础，完善系统代理集成、多协议支持、数据持久化和证书管理。
 
@@ -12,7 +12,7 @@ sudo mkdir -p /Users/xiaoxiao/.npm/_logs
 sudo chown -R xiaoxiao /Users/xiaoxiao/.npm
 
 # 切换国内镜像源
-cd /Users/xiaoxiao/javaProject/oAccurateTest/traffic-capture-app
+cd /Users/xiaoxiao/javaProject/oAccurateTest/oAT-traffic-capture
 npm config set registry https://registry.npmmirror.com
 
 # 安装现有依赖
@@ -633,8 +633,8 @@ export function generateRootCert(): { certPath: string; keyPath: string } {
   cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 10)
 
   const attrs = [
-    { name: 'commonName', value: 'Traffic Capture Root CA' },
-    { name: 'organizationName', value: 'Traffic Capture Tool' }
+    { name: 'commonName', value: 'oAT Traffic Capture Root CA' },
+    { name: 'organizationName', value: 'oAT Traffic Capture' }
   ]
   cert.setSubject(attrs)
   cert.setIssuer(attrs)

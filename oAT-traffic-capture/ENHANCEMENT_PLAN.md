@@ -1,4 +1,4 @@
-# 流量捕获工具增强计划
+# oAT 流量采集器增强计划
 
 ## 目标
 将当前的 Electron 应用打造成真正独立的桌面 APP，支持系统级代理配置和多协议流量捕获。
@@ -84,10 +84,10 @@ export function generateRootCertificate() {
   
   const attrs = [{
     name: 'commonName',
-    value: 'Traffic Capture Root CA'
+    value: 'oAT Traffic Capture Root CA'
   }, {
     name: 'organizationName',
-    value: 'Traffic Capture Tool'
+    value: 'oAT Traffic Capture'
   }]
   
   cert.setSubject(attrs)
