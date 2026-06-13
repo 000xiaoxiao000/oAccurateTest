@@ -2,11 +2,11 @@ import forge from 'node-forge'
 import fs from 'fs'
 import path from 'path'
 import { app, shell } from 'electron'
-import { exec, execFile } from 'child_process'
+import { execFile } from 'child_process'
 import { promisify } from 'util'
 
-const execAsync = promisify(exec)
 const execFileAsync = promisify(execFile)
+const CERT_COMMON_NAMES = ['oAT Traffic Capture Root CA', 'NodeMITMProxyCA']
 
 export interface CertInfo {
   exists: boolean
@@ -15,12 +15,28 @@ export interface CertInfo {
 }
 
 function getCertDir(): string {
-  return path.join(app.getPath('userData'), 'certs')
+  return path.join(app.getPath('userData'), 'mitm-ca')
+}
+
+export function getProxyCaDir(): string {
+  return getCertDir()
+}
+
+function getCertsDir(): string {
+  return path.join(getCertDir(), 'certs')
+}
+
+function getKeysDir(): string {
+  return path.join(getCertDir(), 'keys')
 }
 
 export function generateRootCert(): { certPath: string; keyPath: string } {
   const certDir = getCertDir()
-  if (!fs.existsSync(certDir)) fs.mkdirSync(certDir, { recursive: true })
+  const certsDir = getCertsDir()
+  const keysDir = getKeysDir()
+  if (fs.existsSync(certDir)) fs.rmSync(certDir, { recursive: true, force: true })
+  fs.mkdirSync(certsDir, { recursive: true })
+  fs.mkdirSync(keysDir, { recursive: true })
 
   const keys = forge.pki.rsa.generateKeyPair(2048)
   const cert = forge.pki.createCertificate()
@@ -42,16 +58,17 @@ export function generateRootCert(): { certPath: string; keyPath: string } {
   ])
   cert.sign(keys.privateKey, forge.md.sha256.create())
 
-  const certPath = path.join(certDir, 'ca.pem')
-  const keyPath = path.join(certDir, 'ca.key')
+  const certPath = path.join(certsDir, 'ca.pem')
+  const keyPath = path.join(keysDir, 'ca.private.key')
   fs.writeFileSync(certPath, forge.pki.certificateToPem(cert))
   fs.writeFileSync(keyPath, forge.pki.privateKeyToPem(keys.privateKey))
+  fs.writeFileSync(path.join(keysDir, 'ca.public.key'), forge.pki.publicKeyToPem(keys.publicKey))
 
   return { certPath, keyPath }
 }
 
 export function getCertInfo(): CertInfo {
-  const certPath = path.join(getCertDir(), 'ca.pem')
+  const certPath = path.join(getCertsDir(), 'ca.pem')
   if (!fs.existsSync(certPath)) return { exists: false }
 
   const cert = forge.pki.certificateFromPem(fs.readFileSync(certPath, 'utf-8'))
@@ -65,10 +82,12 @@ export function getCertInfo(): CertInfo {
 export async function installCertMacOS(certPath: string): Promise<{ success: boolean; error?: string }> {
   const loginKeychain = path.join(app.getPath('home'), 'Library/Keychains/login.keychain-db')
   try {
+    await deleteTrustedCerts(false)
     await execFileAsync('security', ['add-trusted-cert', '-r', 'trustRoot', '-k', loginKeychain, certPath])
     return { success: true }
   } catch (error: any) {
     try {
+      await deleteTrustedCerts(true)
       const script = [
         `set certPath to POSIX path of ${JSON.stringify(certPath)}`,
         'do shell script "security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain " & quoted form of certPath with administrator privileges'
@@ -88,31 +107,40 @@ export async function installCertMacOS(certPath: string): Promise<{ success: boo
   }
 }
 
-export async function uninstallCertMacOS(): Promise<{ success: boolean; error?: string }> {
+function isDeleteNotFound(message: string): boolean {
+  return /could not be found|unable to delete certificate matching|SecCertificateSearchCopyNext/i.test(message)
+}
+
+async function deleteTrustedCerts(includeSystem: boolean): Promise<string[]> {
   const loginKeychain = path.join(app.getPath('home'), 'Library/Keychains/login.keychain-db')
-  const commonName = 'oAT Traffic Capture Root CA'
+  const keychains = includeSystem ? [loginKeychain, '/Library/Keychains/System.keychain'] : [loginKeychain]
   const errors: string[] = []
 
-  function isNotFound(message: string): boolean {
-    return /could not be found|unable to delete certificate matching|SecCertificateSearchCopyNext/i.test(message)
-  }
-
-  for (const keychain of [loginKeychain, '/Library/Keychains/System.keychain']) {
-    try {
-      await execFileAsync('security', ['delete-certificate', '-c', commonName, keychain])
-    } catch (error: any) {
-      const message = error?.stderr || error?.message || String(error)
-      if (!isNotFound(message)) {
-        errors.push(message)
+  for (const commonName of CERT_COMMON_NAMES) {
+    for (const keychain of keychains) {
+      try {
+        await execFileAsync('security', ['delete-certificate', '-c', commonName, keychain])
+      } catch (error: any) {
+        const message = error?.stderr || error?.message || String(error)
+        if (!isDeleteNotFound(message)) {
+          errors.push(message)
+        }
       }
     }
   }
+
+  return errors
+}
+
+export async function uninstallCertMacOS(): Promise<{ success: boolean; error?: string }> {
+  const errors = await deleteTrustedCerts(true)
 
   if (errors.length === 0) {
     return { success: true }
   }
 
   try {
+    const commonName = CERT_COMMON_NAMES[0]
     const script = [
       `set certName to ${JSON.stringify(commonName)}`,
       'do shell script "security delete-certificate -c " & quoted form of certName & " /Library/Keychains/System.keychain" with administrator privileges'
@@ -121,7 +149,7 @@ export async function uninstallCertMacOS(): Promise<{ success: boolean; error?: 
     return { success: true }
   } catch (error: any) {
     const message = error?.stderr || error?.message || String(error)
-    if (isNotFound(message)) {
+    if (isDeleteNotFound(message)) {
       return { success: true }
     }
     return {

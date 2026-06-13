@@ -1,8 +1,15 @@
 import Proxy from 'http-mitm-proxy'
 import type { TrafficRecord, WsMessage } from './types.js'
 
-export function createProxyServer(onTraffic: (record: TrafficRecord) => void) {
-  const proxy = Proxy()
+export function createProxyServer(onTraffic: (record: TrafficRecord) => void, sslCaDir?: string) {
+  const proxyFactory = Proxy as unknown as () => any
+  const proxy = proxyFactory()
+  if (sslCaDir) {
+    const originalListen = proxy.listen.bind(proxy)
+    proxy.listen = (options: Record<string, unknown> = {}, callback?: (...args: unknown[]) => void) => {
+      originalListen({ ...options, sslCaDir }, callback)
+    }
+  }
   const websocketRecords = new WeakMap<object, TrafficRecord>()
 
   function headerRecord(headers?: Record<string, string | string[]>): Record<string, string> {

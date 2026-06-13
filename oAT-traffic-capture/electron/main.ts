@@ -4,7 +4,7 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { createProxyServer } from './proxy.js'
 import { disableSystemProxy, enableSystemProxy, getSystemProxyStatus } from './systemProxy.js'
-import { generateRootCert, getCertInfo, installCertMacOS, openCertFolder, uninstallCertMacOS } from './certificate.js'
+import { generateRootCert, getCertInfo, getProxyCaDir, installCertMacOS, openCertFolder, uninstallCertMacOS } from './certificate.js'
 import { connectMqtt, disconnectAllMqtt, disconnectMqtt } from './protocols/mqtt.js'
 import { applyCaptureRules } from './filterRules.js'
 import { replayRecord } from './replay.js'
@@ -60,6 +60,13 @@ function broadcastCaptureState() {
   floatingWindow?.webContents.send('capture-state-changed', state)
 }
 
+function closeProxyServer() {
+  if (proxyServer) {
+    proxyServer.close()
+    proxyServer = null
+  }
+}
+
 async function acceptCapturedRecord(record: TrafficRecord) {
   if (!captureEnabled) return
   const afterPlugins = await runRecordCapturedHooks({
@@ -94,9 +101,12 @@ function startProxyServer(server: any, port: number): Promise<number> {
 
 async function ensureProxyServer(): Promise<number> {
   if (!proxyServer) {
+    if (!getCertInfo().exists) {
+      generateRootCert()
+    }
     proxyServer = createProxyServer((record: TrafficRecord) => {
       acceptCapturedRecord(record)
-    })
+    }, getProxyCaDir())
 
     await startProxyServer(proxyServer, PROXY_PORT)
   }
@@ -192,9 +202,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (proxyServer) {
-    proxyServer.close()
-  }
+  closeProxyServer()
   disconnectAllMqtt()
   if (process.platform !== 'darwin') {
     app.quit()
@@ -449,7 +457,11 @@ ipcMain.handle('get-cert-info', async () => getCertInfo())
 
 ipcMain.handle('generate-cert', async () => {
   try {
-    return { success: true, ...generateRootCert() }
+    closeProxyServer()
+    captureEnabled = false
+    const result = generateRootCert()
+    broadcastCaptureState()
+    return { success: true, ...result }
   } catch (error: any) {
     return { success: false, error: error.message }
   }
@@ -461,7 +473,12 @@ ipcMain.handle('install-cert', async () => {
   return await installCertMacOS(info.certPath)
 })
 
-ipcMain.handle('uninstall-cert', async () => uninstallCertMacOS())
+ipcMain.handle('uninstall-cert', async () => {
+  closeProxyServer()
+  captureEnabled = false
+  broadcastCaptureState()
+  return uninstallCertMacOS()
+})
 
 ipcMain.handle('open-cert-folder', async () => {
   const info = getCertInfo()
