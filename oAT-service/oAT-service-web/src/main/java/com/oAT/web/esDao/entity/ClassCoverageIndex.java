@@ -19,6 +19,9 @@ public class ClassCoverageIndex implements Serializable {
     @ExcelProperty("类名")
     private String className;
 
+    @ExcelIgnore
+    private String sourceType;
+
     @ExcelProperty("方法总数")
     private int totalMethods;
     @ExcelProperty("已覆盖方法数")
@@ -112,6 +115,8 @@ public class ClassCoverageIndex implements Serializable {
     public void setAppId(String appId) { this.appId = appId; }
     public String getClassName() { return className; }
     public void setClassName(String className) { this.className = className; }
+    public String getSourceType() { return sourceType; }
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
     public int getTotalMethods() { return totalMethods; }
     public void setTotalMethods(int totalMethods) { this.totalMethods = totalMethods; }
     public int getCoveredMethods() { return coveredMethods; }

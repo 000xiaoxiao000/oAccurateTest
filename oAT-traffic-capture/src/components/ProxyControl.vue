@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import type { CaptureProtocolConfig } from '../types/electron'
 
 const props = defineProps<{ port: number }>()
 
@@ -8,8 +9,25 @@ const systemProxyEnabled = ref(false)
 const loading = ref(false)
 const certLoading = ref(false)
 const certInfo = ref<{ exists: boolean; certPath?: string; expiresAt?: string }>({ exists: false })
+const protocols = ref<CaptureProtocolConfig>({
+  http: true,
+  https: true,
+  ws: true,
+  wss: true
+})
 const fallbackError = '主进程未返回错误信息，请查看终端日志'
 const missingElectronApiError = '当前窗口未连接 Electron 主进程。请关闭旧窗口，使用 npm run dev 启动的桌面窗口，不要在浏览器里打开 localhost 页面。'
+const protocolOptions: Array<{ key: keyof CaptureProtocolConfig; label: string; note: string }> = [
+  { key: 'http', label: 'HTTP', note: '普通接口流量' },
+  { key: 'https', label: 'HTTPS', note: '加密接口流量' },
+  { key: 'ws', label: 'WS', note: 'WebSocket 明文' },
+  { key: 'wss', label: 'WSS', note: 'WebSocket 加密' }
+]
+
+const selectedProtocolLabels = computed(() => protocolOptions
+  .filter(option => protocols.value[option.key])
+  .map(option => option.label)
+  .join(' / '))
 
 onMounted(async () => {
   isElectronWindow.value = Boolean(window.electronAPI)
@@ -17,6 +35,9 @@ onMounted(async () => {
 
   const status = await window.electronAPI.getProxyStatus()
   systemProxyEnabled.value = status?.enabled ?? false
+  if (status?.protocols) {
+    protocols.value = { ...protocols.value, ...status.protocols }
+  }
   await refreshCertInfo()
 })
 
@@ -25,7 +46,44 @@ async function refreshCertInfo() {
   certInfo.value = await window.electronAPI.getCertInfo()
 }
 
-async function toggleSystemProxy() {
+function hasSelectedProtocol() {
+  return Object.values(protocols.value).some(Boolean)
+}
+
+async function applySystemProxy() {
+  const api = window.electronAPI
+  if (!api) {
+    alert(missingElectronApiError)
+    return
+  }
+  if (!hasSelectedProtocol()) {
+    alert('请至少选择一种要代理和捕获的协议')
+    return
+  }
+
+  loading.value = true
+  try {
+    const selectedProtocols: CaptureProtocolConfig = {
+      http: protocols.value.http,
+      https: protocols.value.https,
+      ws: protocols.value.ws,
+      wss: protocols.value.wss
+    }
+    const result = await api.enableSystemProxy(props.port, selectedProtocols)
+    if (result?.success) {
+      systemProxyEnabled.value = true
+    } else {
+      alert(`应用系统代理失败（可能需要管理员权限）：${result?.error ?? fallbackError}`)
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    alert(`系统代理操作失败：${message || fallbackError}`)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function disableSystemProxy() {
   const api = window.electronAPI
   if (!api) {
     alert(missingElectronApiError)
@@ -34,21 +92,11 @@ async function toggleSystemProxy() {
 
   loading.value = true
   try {
-    if (systemProxyEnabled.value) {
-      const result = await api.disableSystemProxy()
-      if (result?.success) {
-        systemProxyEnabled.value = false
-      } else {
-        alert(`关闭系统代理失败：${result?.error ?? fallbackError}`)
-      }
-      return
-    }
-
-    const result = await api.enableSystemProxy(props.port)
+    const result = await api.disableSystemProxy()
     if (result?.success) {
-      systemProxyEnabled.value = true
+      systemProxyEnabled.value = false
     } else {
-      alert(`开启系统代理失败（可能需要管理员权限）：${result?.error ?? fallbackError}`)
+      alert(`关闭系统代理失败：${result?.error ?? fallbackError}`)
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -148,7 +196,7 @@ async function openCertFolder() {
       class="toggle-btn"
       :class="{ active: systemProxyEnabled, loading, unavailable: !isElectronWindow }"
       :disabled="loading || !isElectronWindow"
-      @click="toggleSystemProxy"
+      @click="applySystemProxy"
     >
       <span class="dot"></span>
       {{
@@ -157,13 +205,30 @@ async function openCertFolder() {
           : loading
             ? '处理中...'
             : systemProxyEnabled
-              ? `已启用 (127.0.0.1:${props.port})`
-              : '未启用'
+              ? `更新代理 (127.0.0.1:${props.port})`
+              : '启用代理'
       }}
     </button>
+    <button
+      class="mini-btn"
+      :disabled="loading || !isElectronWindow || !systemProxyEnabled"
+      @click="disableSystemProxy"
+    >
+      关闭代理
+    </button>
     <span class="hint">
-      {{ isElectronWindow ? '启用后系统 HTTP/HTTPS 流量会经过本地代理' : '系统代理只能在 Electron 桌面窗口中启用' }}
+      {{ isElectronWindow ? `当前选择：${selectedProtocolLabels || '未选择'}` : '系统代理只能在 Electron 桌面窗口中启用' }}
     </span>
+    <div class="protocol-actions">
+      <label v-for="option in protocolOptions" :key="option.key" class="protocol-option">
+        <input v-model="protocols[option.key]" type="checkbox" :disabled="loading || !isElectronWindow" />
+        <span>
+          <strong>{{ option.label }}</strong>
+          <small>{{ option.note }}</small>
+        </span>
+      </label>
+      <span class="hint protocol-hint">HTTP/WS 使用系统 Web 代理，HTTPS/WSS 使用系统 Secure Web 代理。</span>
+    </div>
     <div class="cert-actions">
       <span class="label">HTTPS 证书</span>
       <button class="mini-btn" :disabled="certLoading || !isElectronWindow" @click="generateCert">
@@ -246,6 +311,51 @@ async function openCertFolder() {
   gap: 8px;
   flex-wrap: wrap;
   width: 100%;
+}
+
+.protocol-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.protocol-option {
+  min-width: 118px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  cursor: pointer;
+}
+
+.protocol-option input {
+  width: 14px;
+  height: 14px;
+}
+
+.protocol-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.protocol-option strong {
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.protocol-option small {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+
+.protocol-hint {
+  align-self: center;
 }
 
 .mini-btn {

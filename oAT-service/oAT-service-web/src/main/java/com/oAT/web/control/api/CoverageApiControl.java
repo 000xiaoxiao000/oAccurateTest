@@ -504,6 +504,7 @@ public class CoverageApiControl {
         summary.setRepoBranch(report.getRepoBranch());
         summary.setRepoCommitId(report.getRepoCommitId());
         summary.setCreateTimeText(formatDate(report.getCreateTime()));
+        summary.setSourceType(normalizeSourceType(report.getSourceType()));
         summary.setLastProcessedTime(report.getLastProcessedTime());
         summary.setTotalClasses(report.getTotalClasses());
         summary.setCoveredClasses(report.getCoveredClasses());
@@ -603,6 +604,10 @@ public class CoverageApiControl {
 
     private String formatDate(java.util.Date date) {
         return date == null ? null : new SimpleDateFormat(DATE_TIME_PATTERN, Locale.CHINA).format(date);
+    }
+
+    private String normalizeSourceType(String sourceType) {
+        return StringUtils.hasText(sourceType) ? sourceType : "JAVA";
     }
 
     public static class CoverageOverviewPayload {
@@ -855,6 +860,7 @@ public class CoverageApiControl {
         private String repoBranch;
         private String repoCommitId;
         private String createTimeText;
+        private String sourceType;
         private String lastProcessedTime;
         private long totalClasses;
         private long coveredClasses;
@@ -884,6 +890,8 @@ public class CoverageApiControl {
         public void setRepoCommitId(String repoCommitId) { this.repoCommitId = repoCommitId; }
         public String getCreateTimeText() { return createTimeText; }
         public void setCreateTimeText(String createTimeText) { this.createTimeText = createTimeText; }
+        public String getSourceType() { return sourceType; }
+        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
         public String getLastProcessedTime() { return lastProcessedTime; }
         public void setLastProcessedTime(String lastProcessedTime) { this.lastProcessedTime = lastProcessedTime; }
         public long getTotalClasses() { return totalClasses; }

@@ -1,9 +1,31 @@
 import Proxy from 'http-mitm-proxy'
-import type { TrafficRecord, WsMessage } from './types.js'
+import type { CaptureProtocolConfig, CoverageRelayConfig, TrafficRecord, WsMessage } from './types.js'
 
-export function createProxyServer(onTraffic: (record: TrafficRecord) => void, sslCaDir?: string) {
+const defaultProtocols: CaptureProtocolConfig = {
+  http: true,
+  https: true,
+  ws: true,
+  wss: true
+}
+
+type CoverageReporterOptions = {
+  isEnabled: () => boolean
+  getConfig: () => CoverageRelayConfig
+}
+
+export function createProxyServer(
+  onTraffic: (record: TrafficRecord) => void,
+  sslCaDir?: string,
+  enabledProtocols: CaptureProtocolConfig = defaultProtocols,
+  coverageReporter?: CoverageReporterOptions
+) {
   const proxyFactory = Proxy as unknown as () => any
   const proxy = proxyFactory()
+  proxy.use?.((Proxy as any).gunzip)
+  let protocols = { ...defaultProtocols, ...enabledProtocols }
+  proxy.setEnabledProtocols = (nextProtocols: CaptureProtocolConfig) => {
+    protocols = { ...defaultProtocols, ...nextProtocols }
+  }
   if (sslCaDir) {
     const originalListen = proxy.listen.bind(proxy)
     proxy.listen = (options: Record<string, unknown> = {}, callback?: (...args: unknown[]) => void) => {
@@ -37,6 +59,10 @@ export function createProxyServer(onTraffic: (record: TrafficRecord) => void, ss
     return `${ctx.isSSL ? 'https' : 'http'}://${host}${requestUrl}`
   }
 
+  function isProtocolEnabled(protocol: keyof CaptureProtocolConfig): boolean {
+    return protocols[protocol] !== false
+  }
+
   function messageData(message: any): Pick<WsMessage, 'type' | 'data'> {
     if (Buffer.isBuffer(message)) {
       return { type: 'binary', data: message.toString('base64') }
@@ -44,7 +70,93 @@ export function createProxyServer(onTraffic: (record: TrafficRecord) => void, ss
     return { type: 'text', data: String(message) }
   }
 
+  function isCoverageRelayEnabled(): boolean {
+    return coverageReporter?.isEnabled() === true
+  }
+
+  function isHtmlResponse(ctx: any): boolean {
+    const contentType = String(ctx.serverToProxyResponse?.headers?.['content-type'] ?? '').toLowerCase()
+    return contentType.includes('text/html')
+  }
+
+  function isJavaScriptResponse(ctx: any): boolean {
+    const contentType = String(ctx.serverToProxyResponse?.headers?.['content-type'] ?? '').toLowerCase()
+    return contentType.includes('javascript') || contentType.includes('ecmascript')
+  }
+
+  function shouldInjectCoverageReporter(ctx: any, record: Partial<TrafficRecord>): boolean {
+    if (!isCoverageRelayEnabled()) return false
+    if (!isHtmlResponse(ctx) && !isJavaScriptResponse(ctx)) return false
+    if (record.method && !['GET', ''].includes(String(record.method).toUpperCase())) return false
+    return !/\/oat\/coverage\/report(\?|$)/i.test(record.url ?? '')
+  }
+
+  function buildCoverageReporterCode(): string {
+    const config = coverageReporter?.getConfig() ?? { intervalMs: 30000 }
+    const intervalMs = Number.isFinite(Number(config.intervalMs)) && Number(config.intervalMs) >= 1000
+      ? Math.round(Number(config.intervalMs))
+      : 30000
+    return `;(() => {
+  if (window.__oatCoverageReporterInstalled) return;
+  window.__oatCoverageReporterInstalled = true;
+  const endpoint = '/oat/coverage/report';
+  const intervalMs = ${intervalMs};
+  let missingReported = false;
+  const send = (payload) => {
+    const body = JSON.stringify(payload);
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
+      return;
+    }
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true
+    }).catch(() => {});
+  };
+  const report = (diagnoseMissing = false) => {
+    const coverage = window.__coverage__;
+    if (!coverage) {
+      if (diagnoseMissing && !missingReported) {
+        missingReported = true;
+        send({ coverageMissing: true, timestamp: Date.now(), intervalMs, href: location.href });
+      }
+      return;
+    }
+    send({ coverage, timestamp: Date.now(), intervalMs, href: location.href });
+  };
+  window.setTimeout(() => report(true), 1200);
+  window.setInterval(report, intervalMs);
+  window.addEventListener('beforeunload', report);
+})();`
+  }
+
+  function buildCoverageReporterScript(): string {
+    return `<script>${buildCoverageReporterCode()}</script>`
+  }
+
+  function injectCoverageReporter(body: string, ctx: any): string {
+    if (body.includes('__oatCoverageReporterInstalled')) return body
+    if (isJavaScriptResponse(ctx)) {
+      return `${body}\n${buildCoverageReporterCode()}\n`
+    }
+    const script = buildCoverageReporterScript()
+    if (/<\/head>/i.test(body)) {
+      return body.replace(/<\/head>/i, `${script}</head>`)
+    }
+    if (/<\/body>/i.test(body)) {
+      return body.replace(/<\/body>/i, `${script}</body>`)
+    }
+    return `${body}${script}`
+  }
+
   proxy.onRequest((ctx: any, callback: any) => {
+    const protocol = ctx.isSSL ? 'https' : 'http'
+    if (!isProtocolEnabled(protocol)) {
+      callback()
+      return
+    }
     const startTime = Date.now()
     const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
@@ -53,7 +165,7 @@ export function createProxyServer(onTraffic: (record: TrafficRecord) => void, ss
       caseName: '',
       method: ctx.clientToProxyRequest.method,
       url: getHttpUrl(ctx),
-      protocol: ctx.isSSL ? 'HTTPS' : 'HTTP',
+      protocol: protocol.toUpperCase(),
       timestamp: Date.now(),
       requestHeaders: headerRecord(ctx.clientToProxyRequest.headers),
       source: 'capture'
@@ -71,13 +183,31 @@ export function createProxyServer(onTraffic: (record: TrafficRecord) => void, ss
     })
 
     let responseBody = ''
+    const responseChunks: Buffer[] = []
+    let shouldInjectReporter = false
+    ctx.onResponse((ctx: any, callback: any) => {
+      shouldInjectReporter = shouldInjectCoverageReporter(ctx, record)
+      if (shouldInjectReporter) {
+        ctx.responseContentPotentiallyModified = true
+      }
+      callback()
+    })
+
     ctx.onResponseData((ctx: any, chunk: Buffer, callback: any) => {
+      if (shouldInjectReporter) {
+        responseChunks.push(chunk)
+        return callback(null, null)
+      }
       responseBody += chunk.toString()
       return callback(null, chunk)
     })
 
     ctx.onResponseEnd((ctx: any, callback: any) => {
       const endTime = Date.now()
+      if (shouldInjectReporter) {
+        responseBody = injectCoverageReporter(Buffer.concat(responseChunks).toString(), ctx)
+        ctx.proxyToClientResponse.write(responseBody)
+      }
       record.duration = endTime - startTime
       record.statusCode = ctx.serverToProxyResponse?.statusCode || 0
       record.responseHeaders = ctx.serverToProxyResponse?.headers
@@ -98,13 +228,18 @@ export function createProxyServer(onTraffic: (record: TrafficRecord) => void, ss
   })
 
   proxy.onWebSocketConnection((ctx: any, callback: any) => {
+    const protocol = ctx.isSSL ? 'wss' : 'ws'
+    if (!isProtocolEnabled(protocol)) {
+      callback()
+      return
+    }
     const req = ctx.clientToProxyWebSocket?.upgradeReq
     const record: TrafficRecord = {
       id: `ws-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       caseName: '',
       method: 'WS',
       url: getWebSocketUrl(ctx),
-      protocol: ctx.isSSL ? 'WSS' : 'WS',
+      protocol: protocol.toUpperCase(),
       statusCode: 'OPEN',
       duration: 0,
       timestamp: Date.now(),

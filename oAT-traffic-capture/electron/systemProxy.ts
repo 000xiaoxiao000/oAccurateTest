@@ -6,6 +6,12 @@ const execAsync = promisify(exec)
 export interface ProxyConfig {
   port: number
   bypass?: string[]
+  protocols?: {
+    http?: boolean
+    https?: boolean
+    ws?: boolean
+    wss?: boolean
+  }
 }
 
 function shellQuote(value: string): string {
@@ -64,8 +70,14 @@ export async function getNetworkServices(): Promise<string[]> {
 export async function enableSystemProxy(config: ProxyConfig): Promise<void> {
   const services = await getNetworkServices()
   const { port, bypass = ['localhost', '127.0.0.1', '*.local'] } = config
+  const protocols = config.protocols ?? { http: true, https: true, ws: true, wss: true }
+  const enableWebProxy = protocols.http === true || protocols.ws === true
+  const enableSecureWebProxy = protocols.https === true || protocols.wss === true
   if (services.length === 0) {
     throw new Error('未找到可配置的网络服务')
+  }
+  if (!enableWebProxy && !enableSecureWebProxy) {
+    throw new Error('请至少选择一种代理协议')
   }
 
   const bypassDomains = bypass.map(shellQuote).join(' ')
@@ -74,8 +86,8 @@ export async function enableSystemProxy(config: ProxyConfig): Promise<void> {
     const serviceCommands = [
       `networksetup -setwebproxy ${quotedService} 127.0.0.1 ${port}`,
       `networksetup -setsecurewebproxy ${quotedService} 127.0.0.1 ${port}`,
-      `networksetup -setwebproxystate ${quotedService} on`,
-      `networksetup -setsecurewebproxystate ${quotedService} on`
+      `networksetup -setwebproxystate ${quotedService} ${enableWebProxy ? 'on' : 'off'}`,
+      `networksetup -setsecurewebproxystate ${quotedService} ${enableSecureWebProxy ? 'on' : 'off'}`
     ]
 
     if (bypassDomains) {
@@ -105,22 +117,36 @@ export async function disableSystemProxy(): Promise<void> {
   await runNetworkSetupBatch(commands)
 }
 
-export async function getSystemProxyStatus(): Promise<{ enabled: boolean; port?: number }> {
+function parseNetworkProxyStatus(stdout: string): { enabled: boolean; port?: number } {
+  const lines = stdout.split('\n')
+  const enabled = lines.some(line => line.includes('Enabled: Yes'))
+  const portLine = lines.find(line => line.includes('Port:'))
+  const port = portLine ? parseInt(portLine.split(':')[1].trim()) : undefined
+  return { enabled, port }
+}
+
+export async function getSystemProxyStatus(): Promise<{ enabled: boolean; port?: number; protocols?: ProxyConfig['protocols'] }> {
   try {
     const services = await getNetworkServices()
     if (services.length === 0) return { enabled: false }
 
-    const { stdout } = await execAsync(`networksetup -getwebproxy ${shellQuote(services[0])}`)
-    const lines = stdout.split('\n')
-    const enabled = lines.some(line => line.includes('Enabled: Yes'))
-    
-    if (enabled) {
-      const portLine = lines.find(line => line.includes('Port:'))
-      const port = portLine ? parseInt(portLine.split(':')[1].trim()) : undefined
-      return { enabled: true, port }
+    const [webResult, secureResult] = await Promise.all([
+      execAsync(`networksetup -getwebproxy ${shellQuote(services[0])}`),
+      execAsync(`networksetup -getsecurewebproxy ${shellQuote(services[0])}`)
+    ])
+    const web = parseNetworkProxyStatus(webResult.stdout)
+    const secure = parseNetworkProxyStatus(secureResult.stdout)
+    const enabled = web.enabled || secure.enabled
+    return {
+      enabled,
+      port: web.port || secure.port,
+      protocols: {
+        http: web.enabled,
+        ws: web.enabled,
+        https: secure.enabled,
+        wss: secure.enabled
+      }
     }
-    
-    return { enabled: false }
   } catch (error) {
     return { enabled: false }
   }

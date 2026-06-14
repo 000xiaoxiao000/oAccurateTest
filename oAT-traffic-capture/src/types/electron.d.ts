@@ -1,11 +1,18 @@
-import type { PluginInfo, ReplayResult, TrafficFilterRule, TrafficRecord } from '../types/traffic'
+import type { BuiltinPluginId, CoverageRelayConfig, PluginInfo, ReplayResult, TrafficFilterRule, TrafficRecord } from '../types/traffic'
+
+export interface CaptureProtocolConfig {
+  http: boolean
+  https: boolean
+  ws: boolean
+  wss: boolean
+}
 
 declare global {
   interface Window {
     electronAPI: {
       startCapture: (caseName: string) => Promise<{ success: boolean; port?: number; error?: string }>
       stopCapture: () => Promise<{ success: boolean }>
-      getCaptureState: () => Promise<{ isCapturing: boolean; caseName: string; port: number; recordCount: number }>
+      getCaptureState: () => Promise<{ isCapturing: boolean; caseName: string; port: number; recordCount: number; protocols?: CaptureProtocolConfig }>
       showFloatingWindow: () => Promise<{ success: boolean }>
       restoreMainWindow: () => Promise<{ success: boolean }>
       getTrafficRecords: () => Promise<TrafficRecord[]>
@@ -17,9 +24,9 @@ declare global {
       replayRecords: (records: TrafficRecord[]) => Promise<ReplayResult[]>
       exportRecords: (format: string, records: TrafficRecord[]) => Promise<{ success: boolean; filePath?: string }>
       onTrafficCaptured: (callback: (record: TrafficRecord) => void) => void
-      onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number; recordCount: number }) => void) => void
-      getProxyStatus: () => Promise<{ enabled: boolean; port?: number }>
-      enableSystemProxy: (port: number) => Promise<{ success: boolean; error?: string }>
+      onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number; recordCount: number; protocols?: CaptureProtocolConfig }) => void) => void
+      getProxyStatus: () => Promise<{ enabled: boolean; port?: number; protocols?: CaptureProtocolConfig }>
+      enableSystemProxy: (port: number, protocols: CaptureProtocolConfig) => Promise<{ success: boolean; error?: string }>
       disableSystemProxy: () => Promise<{ success: boolean; error?: string }>
       listSessions: () => Promise<Array<{
         id: string
@@ -48,8 +55,11 @@ declare global {
       reloadPlugins: () => Promise<PluginInfo[]>
       getPluginsPath: () => Promise<string>
       openPluginsFolder: () => Promise<{ success: boolean }>
-      installBuiltinPlugin: () => Promise<PluginInfo[]>
+      installBuiltinPlugin: (pluginId?: BuiltinPluginId) => Promise<PluginInfo[]>
       uninstallBuiltinPlugin: () => Promise<PluginInfo[]>
+      uninstallPlugin: (pluginId: string) => Promise<PluginInfo[]>
+      getCoverageRelayConfig: () => Promise<CoverageRelayConfig>
+      setCoverageRelayConfig: (config: CoverageRelayConfig) => Promise<CoverageRelayConfig>
     }
   }
 }

@@ -987,6 +987,7 @@ public class VersionApiControl {
         card.setRepoCommitId(report.getRepoCommitId());
         card.setCreateTimeText(formatDate(report.getCreateTime()));
         card.setCreateTimeRelativeText(report.getCreateTime() == null ? null : DateUtil.timeDifference(report.getCreateTime()));
+        card.setSourceType(StringUtils.hasText(report.getSourceType()) ? report.getSourceType() : "JAVA");
         card.setReportType(report.getReportType());
         card.setBaseVersionNumber(report.getBaseVersionNumber());
         card.setBaseRepoCommitId(report.getBaseRepoCommitId());
@@ -1422,6 +1423,7 @@ public class VersionApiControl {
         private String repoCommitId;
         private String createTimeText;
         private String createTimeRelativeText;
+        private String sourceType;
         private Integer reportType;
         private String baseVersionNumber;
         private String baseRepoCommitId;
@@ -1446,6 +1448,8 @@ public class VersionApiControl {
         public void setCreateTimeText(String createTimeText) { this.createTimeText = createTimeText; }
         public String getCreateTimeRelativeText() { return createTimeRelativeText; }
         public void setCreateTimeRelativeText(String createTimeRelativeText) { this.createTimeRelativeText = createTimeRelativeText; }
+        public String getSourceType() { return sourceType; }
+        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
         public Integer getReportType() { return reportType; }
         public void setReportType(Integer reportType) { this.reportType = reportType; }
         public String getBaseVersionNumber() { return baseVersionNumber; }

@@ -3,12 +3,18 @@ import path from 'path'
 import { pathToFileURL } from 'url'
 import { app } from 'electron'
 import { shell } from 'electron'
-import type { PluginInfo, PluginManifest, TrafficRecord } from '../types.js'
+import type { CoverageRelayConfig, PluginInfo, PluginManifest, TrafficRecord } from '../types.js'
 
 type PluginModule = {
   onRecordCaptured?: (record: TrafficRecord) => TrafficRecord | null | Promise<TrafficRecord | null>
-  beforeSave?: (record: TrafficRecord) => TrafficRecord | null | Promise<TrafficRecord | null>
+  beforeSave?: (record: TrafficRecord, context?: PluginContext) => TrafficRecord | null | Promise<TrafficRecord | null>
 }
+
+type PluginContext = {
+  coverageRelay: CoverageRelayConfig
+}
+
+type BuiltinPluginId = 'traffic-cleanup-plugin' | 'oat-coverage-relay'
 
 type LoadedPlugin = {
   info: PluginInfo
@@ -16,9 +22,31 @@ type LoadedPlugin = {
 }
 
 const loadedPlugins = new Map<string, LoadedPlugin>()
+let coverageRelayConfig: CoverageRelayConfig = {
+  intervalMs: 30000
+}
 
 function pluginsRoot(): string {
   return path.join(app.getPath('userData'), 'plugins')
+}
+
+function coverageRelayConfigPath(): string {
+  return path.join(app.getPath('userData'), 'coverage-relay-config.json')
+}
+
+export function loadCoverageRelayConfig(): CoverageRelayConfig {
+  try {
+    const configPath = coverageRelayConfigPath()
+    if (!fs.existsSync(configPath)) return getCoverageRelayConfig()
+    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Partial<CoverageRelayConfig>
+    return setCoverageRelayConfig(parsed, false)
+  } catch {
+    return getCoverageRelayConfig()
+  }
+}
+
+function persistCoverageRelayConfig(): void {
+  fs.writeFileSync(coverageRelayConfigPath(), JSON.stringify(coverageRelayConfig, null, 2), 'utf-8')
 }
 
 function readManifest(pluginDir: string): PluginManifest | null {
@@ -37,6 +65,7 @@ export async function loadPlugins(): Promise<PluginInfo[]> {
   loadedPlugins.clear()
   const root = pluginsRoot()
   fs.mkdirSync(root, { recursive: true })
+  upgradeInstalledBuiltinPlugins(root)
   const entries = fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory())
 
   for (const entry of entries) {
@@ -77,6 +106,12 @@ export async function loadPlugins(): Promise<PluginInfo[]> {
   return listPlugins()
 }
 
+function upgradeInstalledBuiltinPlugins(root: string): void {
+  if (fs.existsSync(path.join(root, 'oat-coverage-relay'))) {
+    installCoverageRelayPlugin()
+  }
+}
+
 export function listPlugins(): PluginInfo[] {
   return [...loadedPlugins.values()].map(plugin => plugin.info)
 }
@@ -91,7 +126,25 @@ export function openPluginsFolder(): void {
   shell.openPath(getPluginsPath())
 }
 
-export async function installBuiltinPlugin(): Promise<PluginInfo[]> {
+export async function installBuiltinPlugin(pluginId?: BuiltinPluginId | 'all'): Promise<PluginInfo[]> {
+  const target = pluginId ?? 'all'
+  if (target === 'all') {
+    installTrafficCleanupPlugin()
+    installCoverageRelayPlugin()
+    return await loadPlugins()
+  }
+  if (target === 'traffic-cleanup-plugin') {
+    installTrafficCleanupPlugin()
+    return await loadPlugins()
+  }
+  if (target === 'oat-coverage-relay') {
+    installCoverageRelayPlugin()
+    return await loadPlugins()
+  }
+  throw new Error('不支持的内置插件')
+}
+
+function installTrafficCleanupPlugin(): void {
   const pluginDir = path.join(getPluginsPath(), 'traffic-cleanup-plugin')
   fs.mkdirSync(pluginDir, { recursive: true })
   const manifestPath = path.join(pluginDir, 'plugin.json')
@@ -146,16 +199,196 @@ export function beforeSave(record) {
   }
 
   ensureModulePackage(pluginDir)
+}
 
-  return await loadPlugins()
+function installCoverageRelayPlugin(): void {
+  const pluginDir = path.join(getPluginsPath(), 'oat-coverage-relay')
+  fs.mkdirSync(pluginDir, { recursive: true })
+  const manifestPath = path.join(pluginDir, 'plugin.json')
+  const entryPath = path.join(pluginDir, 'index.js')
+
+  fs.writeFileSync(manifestPath, JSON.stringify({
+    id: 'oat-coverage-relay',
+    name: '前端覆盖率中继插件',
+    version: '1.4.0',
+    main: 'index.js',
+    enabled: true,
+    description: '识别 Istanbul 覆盖率上报请求，附加用例名并转发到 oAT 服务端，同时保留上送状态'
+  }, null, 2), 'utf-8')
+
+  fs.writeFileSync(entryPath, `function parseJson(value) {
+  if (!value) return null
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+function isCoverageUrl(url) {
+  return /\\/oat\\/coverage\\/report(\\?|$)/i.test(url || '')
+    || /\\/api\\/projects\\/[^/]+\\/apps\\/[^/]+\\/coverage\\/frontend\\/report(\\?|$)/i.test(url || '')
+}
+
+function resolveDirectApiUrl(url) {
+  const match = String(url || '').match(/\\/api\\/projects\\/[^/]+\\/apps\\/[^/]+\\/coverage\\/frontend\\/report/i)
+  if (!match) return ''
+  try {
+    const parsed = new URL(url)
+    return parsed.origin + match[0]
+  } catch {
+    return match[0]
+  }
+}
+
+function resolveRelayApiUrl(record, body) {
+  const direct = resolveDirectApiUrl(record.url)
+  if (direct) return direct
+  return ''
+}
+
+function resolveConfiguredApiUrl(body, context) {
+  const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || context?.coverageRelay?.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
+  const projectId = body?.projectId || context?.coverageRelay?.projectId
+  const appId = body?.appId || body?.appKey || context?.coverageRelay?.appId
+  if (!serviceBaseUrl || !projectId || !appId) return ''
+  return String(serviceBaseUrl).replace(/\\/$/, '') + '/api/projects/' + encodeURIComponent(projectId) + '/apps/' + encodeURIComponent(appId) + '/coverage/frontend/report'
+}
+
+function relayRecord(record, body, context, status, options = {}) {
+  const tags = new Set(record.tags || [])
+  tags.add('COVERAGE')
+  tags.add('FRONTEND')
+  tags.add(status === 'success' ? 'COVERAGE_OK' : status === 'failed' ? 'COVERAGE_FAIL' : 'COVERAGE_SKIP')
+  const configuredIntervalMs = Number(context?.coverageRelay?.intervalMs) > 0 ? Number(context.coverageRelay.intervalMs) : 30000
+  const intervalMs = Number(body?.intervalMs) > 0 ? Number(body.intervalMs) : configuredIntervalMs
+  const now = Date.now()
+  return {
+    ...record,
+    id: 'coverage-relay-' + now + '-' + Math.random().toString(36).slice(2, 8),
+    method: 'COVERAGE',
+    protocol: 'COVERAGE',
+    statusCode: status === 'success' ? '已上送' : status === 'failed' ? '上送失败' : '未上送',
+    duration: options.duration ?? record.duration ?? 0,
+    timestamp: now,
+    responseBody: options.message || '',
+    tags: Array.from(tags),
+    coverageRelay: {
+      status,
+      targetUrl: options.targetUrl,
+      httpStatus: options.httpStatus,
+      error: options.error,
+      intervalMs,
+      nextReportAt: now + intervalMs,
+      projectId: body?.projectId || context?.coverageRelay?.projectId,
+      appId: body?.appId || body?.appKey || context?.coverageRelay?.appId,
+      versionNumber: body?.versionNumber,
+      commitId: body?.commitId
+    }
+  }
+}
+
+export function onRecordCaptured(record) {
+  if (record.source === 'replay') return record
+  if (!isCoverageUrl(record.url)) return record
+  const tags = new Set(record.tags || [])
+  tags.add('COVERAGE')
+  tags.add('FRONTEND')
+  return { ...record, tags: Array.from(tags) }
+}
+
+export async function beforeSave(record, context) {
+  if (record.source === 'replay') return record
+  if (!(record.tags || []).includes('COVERAGE')) return record
+  const start = Date.now()
+  const body = parseJson(record.requestBody)
+  const coverage = body?.coverage
+  if (body?.coverageMissing) {
+    return relayRecord(record, body, context, 'skipped', { error: '页面未发现 window.__coverage__，请确认被测前端已启用 Istanbul 插桩并刷新页面', duration: Date.now() - start })
+  }
+  if (!coverage) {
+    return relayRecord(record, body, context, 'skipped', { error: '请求体没有 coverage 字段', duration: Date.now() - start })
+  }
+  const targetUrl = resolveRelayApiUrl(record, body) || resolveConfiguredApiUrl(body, context)
+  if (!targetUrl) {
+    return relayRecord(record, body, context, 'failed', { error: '缺少 serviceBaseUrl/projectId/appId，无法确定服务端上送地址；请在采集器覆盖率上送区域配置默认目标', duration: Date.now() - start })
+  }
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        commitId: body.commitId,
+        versionNumber: body.versionNumber,
+        branch: body.branch,
+        caseName: body.caseName || record.caseName,
+        timestamp: body.timestamp || record.timestamp || Date.now(),
+        coverage
+      })
+    })
+    return relayRecord(record, body, context, response.ok ? 'success' : 'failed', {
+      targetUrl,
+      httpStatus: response.status,
+      error: response.ok ? undefined : '服务端返回 HTTP ' + response.status,
+      duration: Date.now() - start,
+      message: '覆盖率数据已中继到 ' + targetUrl
+    })
+  } catch (error) {
+    return relayRecord(record, body, context, 'failed', {
+      targetUrl,
+      error: error?.message || String(error),
+      duration: Date.now() - start
+    })
+  }
+}
+`, 'utf-8')
+
+  ensureModulePackage(pluginDir)
 }
 
 export async function uninstallBuiltinPlugin(): Promise<PluginInfo[]> {
-  const pluginDir = path.join(getPluginsPath(), 'traffic-cleanup-plugin')
+  for (const pluginName of ['traffic-cleanup-plugin', 'oat-coverage-relay']) {
+    removePluginDirectory(pluginName)
+  }
+  return await loadPlugins()
+}
+
+function removePluginDirectory(pluginId: string): void {
+  if (!pluginId || pluginId.includes('/') || pluginId.includes('\\') || pluginId === '.' || pluginId === '..') {
+    throw new Error('无效的插件 ID')
+  }
+  const root = getPluginsPath()
+  const pluginDir = path.resolve(root, pluginId)
+  const relative = path.relative(root, pluginDir)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('插件路径越界')
+  }
   if (fs.existsSync(pluginDir)) {
     fs.rmSync(pluginDir, { recursive: true, force: true })
   }
+}
+
+export async function uninstallPlugin(pluginId: string): Promise<PluginInfo[]> {
+  removePluginDirectory(pluginId)
   return await loadPlugins()
+}
+
+export function getCoverageRelayConfig(): CoverageRelayConfig {
+  return { ...coverageRelayConfig }
+}
+
+export function setCoverageRelayConfig(config: Partial<CoverageRelayConfig>, persist = true): CoverageRelayConfig {
+  const intervalMs = Number(config.intervalMs)
+  coverageRelayConfig = {
+    intervalMs: Number.isFinite(intervalMs) && intervalMs >= 1000 ? Math.round(intervalMs) : coverageRelayConfig.intervalMs,
+    serviceBaseUrl: typeof config.serviceBaseUrl === 'string' ? config.serviceBaseUrl.trim() : coverageRelayConfig.serviceBaseUrl,
+    projectId: typeof config.projectId === 'string' ? config.projectId.trim() : coverageRelayConfig.projectId,
+    appId: typeof config.appId === 'string' ? config.appId.trim() : coverageRelayConfig.appId
+  }
+  if (persist) {
+    persistCoverageRelayConfig()
+  }
+  return getCoverageRelayConfig()
 }
 
 export async function runRecordCapturedHooks(record: TrafficRecord): Promise<TrafficRecord | null> {
@@ -173,10 +406,13 @@ export async function runRecordCapturedHooks(record: TrafficRecord): Promise<Tra
 
 export async function runBeforeSaveHooks(record: TrafficRecord): Promise<TrafficRecord | null> {
   let next: TrafficRecord | null = record
+  const context: PluginContext = {
+    coverageRelay: getCoverageRelayConfig()
+  }
   for (const plugin of loadedPlugins.values()) {
     if (!next || !plugin.info.enabled || !plugin.module?.beforeSave) continue
     try {
-      next = await plugin.module.beforeSave(next)
+      next = await plugin.module.beforeSave(next, context)
     } catch (error: any) {
       plugin.info.error = error?.message ?? String(error)
     }

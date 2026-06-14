@@ -42,6 +42,7 @@ export function initDatabase(): void {
       replay_status TEXT,
       replay_time INTEGER,
       tags TEXT,
+      coverage_relay TEXT,
       websocket_messages TEXT,
       FOREIGN KEY(session_id) REFERENCES sessions(id)
     );
@@ -65,6 +66,7 @@ export function initDatabase(): void {
   ensureColumn('records', 'replay_status', 'TEXT')
   ensureColumn('records', 'replay_time', 'INTEGER')
   ensureColumn('records', 'tags', 'TEXT')
+  ensureColumn('records', 'coverage_relay', 'TEXT')
   ensureColumn('records', 'websocket_messages', 'TEXT')
 }
 
@@ -101,8 +103,8 @@ export function saveRecord(record: TrafficRecord, sessionId?: string): void {
       INSERT OR REPLACE INTO records
       (id, session_id, method, url, protocol, status_code, duration, timestamp,
        request_headers, request_body, response_headers, response_body, error,
-       source, replay_of, replay_status, replay_time, tags, websocket_messages)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       source, replay_of, replay_status, replay_time, tags, coverage_relay, websocket_messages)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     .run(
       record.id,
@@ -123,6 +125,7 @@ export function saveRecord(record: TrafficRecord, sessionId?: string): void {
       record.replayStatus ?? null,
       record.replayTime ?? null,
       JSON.stringify(record.tags ?? []),
+      record.coverageRelay ? JSON.stringify(record.coverageRelay) : null,
       JSON.stringify(record.websocketMessages ?? [])
     )
 }
@@ -176,6 +179,7 @@ export function loadSessionRecords(sessionId: string): TrafficRecord[] {
     replayStatus: row.replay_status ?? undefined,
     replayTime: row.replay_time ?? undefined,
     tags: JSON.parse(row.tags || '[]'),
+    coverageRelay: row.coverage_relay ? JSON.parse(row.coverage_relay) : undefined,
     websocketMessages: JSON.parse(row.websocket_messages || '[]')
   }))
 }

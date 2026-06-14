@@ -403,6 +403,18 @@ export function triggerCoverageGenerateIncremental(
   )
 }
 
+export function triggerFrontendCoverageGenerate(
+  projectId: string,
+  appId: string,
+  payload: { versionNumber?: string; branch?: string; commitId?: string },
+) {
+  return apiPost<string>(
+    `/api/projects/${projectId}/apps/${appId}/coverage/frontend/generate`,
+    JSON.stringify(payload),
+    'application/json',
+  )
+}
+
 export function fetchCoverageJob(projectId: string, jobId: string) {
   return apiGetRaw<{ id?: string; data?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string }>(
     `/api/projects/${projectId}/coverage/jobs/${jobId}`,

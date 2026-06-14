@@ -39,6 +39,7 @@ export interface AppSummary {
   currentCommitId?: string
   repoConfigured: boolean
   probeAlertEnabled: boolean
+  sourceType?: string
 }
 
 export interface AiSummary {
@@ -743,6 +744,7 @@ export interface ExtendedCoverageReportSummary extends CoverageReportSummary {
   baseVersionNumber?: string
   baseRepoCommitId?: string
   createTimeText?: string
+  sourceType?: string
 }
 
 export interface CoverageOverviewPayload {
@@ -958,6 +960,7 @@ export interface CoverageReportCard {
   repoCommitId?: string
   createTimeText?: string
   createTimeRelativeText?: string
+  sourceType?: string
   reportType?: number
   baseVersionNumber?: string
   baseRepoCommitId?: string

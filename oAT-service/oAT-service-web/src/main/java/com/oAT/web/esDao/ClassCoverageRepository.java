@@ -120,15 +120,16 @@ public class ClassCoverageRepository {
         normalize(index);
         jdbcTemplate.update("""
                         INSERT INTO oat_class_coverage (
-                            id, report_id, app_id, class_name, total_methods, covered_methods,
+                            id, report_id, app_id, class_name, source_type, total_methods, covered_methods,
                             total_branches, covered_branches, total_branch_targets, covered_branch_targets,
                             total_lines, covered_lines, total_complexity, line_rate, branch_rate,
                             method_rate, has_code_changes, methods_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
                         ON DUPLICATE KEY UPDATE
                             report_id = VALUES(report_id),
                             app_id = VALUES(app_id),
                             class_name = VALUES(class_name),
+                            source_type = VALUES(source_type),
                             total_methods = VALUES(total_methods),
                             covered_methods = VALUES(covered_methods),
                             total_branches = VALUES(total_branches),
@@ -149,6 +150,7 @@ public class ClassCoverageRepository {
                 index.getReportId(),
                 index.getAppId(),
                 index.getClassName(),
+                index.getSourceType(),
                 index.getTotalMethods(),
                 index.getCoveredMethods(),
                 index.getTotalBranches(),
@@ -368,6 +370,7 @@ public class ClassCoverageRepository {
         index.setReportId(rs.getString("report_id"));
         index.setAppId(rs.getString("app_id"));
         index.setClassName(rs.getString("class_name"));
+        index.setSourceType(readStringIfExists(rs, "source_type"));
         index.setTotalMethods(rs.getInt("total_methods"));
         index.setCoveredMethods(rs.getInt("covered_methods"));
         index.setTotalBranches(rs.getInt("total_branches"));
@@ -404,5 +407,13 @@ public class ClassCoverageRepository {
     private Boolean getBoolean(ResultSet rs, String columnName) throws SQLException {
         boolean value = rs.getBoolean(columnName);
         return rs.wasNull() ? null : value;
+    }
+
+    private String readStringIfExists(ResultSet rs, String columnName) throws SQLException {
+        try {
+            return rs.getString(columnName);
+        } catch (SQLException e) {
+            return null;
+        }
     }
 }

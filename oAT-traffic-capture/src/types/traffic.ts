@@ -18,7 +18,28 @@ export interface TrafficRecord {
   replayStatus?: 'pending' | 'success' | 'failed' | 'unsupported'
   replayTime?: number
   tags?: string[]
+  coverageRelay?: CoverageRelayInfo
   websocketMessages?: WsMessage[]
+}
+
+export interface CoverageRelayInfo {
+  status: 'success' | 'failed' | 'skipped'
+  targetUrl?: string
+  httpStatus?: number
+  error?: string
+  intervalMs?: number
+  nextReportAt?: number
+  projectId?: string
+  appId?: string
+  versionNumber?: string
+  commitId?: string
+}
+
+export interface CoverageRelayConfig {
+  intervalMs: number
+  serviceBaseUrl?: string
+  projectId?: string
+  appId?: string
 }
 
 export interface ProxyStatus {
@@ -75,3 +96,5 @@ export interface PluginInfo {
   description?: string
   error?: string
 }
+
+export type BuiltinPluginId = 'traffic-cleanup-plugin' | 'oat-coverage-relay' | 'all'

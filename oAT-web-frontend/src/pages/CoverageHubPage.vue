@@ -20,6 +20,14 @@
         <span>搜索版本/报告</span>
         <input v-model.trim="keyword" class="text-input" type="search" placeholder="版本号、分支、Commit" aria-label="搜索覆盖率版本或报告" />
       </label>
+      <label class="field source-field">
+        <span>覆盖率类型</span>
+        <select v-model="selectedSourceType" class="text-input">
+          <option value="ALL">全部</option>
+          <option value="JAVA">Java</option>
+          <option value="FRONTEND">前端 JS/TS</option>
+        </select>
+      </label>
       <button class="ghost-button" type="button" @click="loadApps">刷新应用</button>
     </div>
 
@@ -53,6 +61,15 @@
               <div class="meta-stack">
                 <span class="branch-name">{{ version.repoBranch || '-' }}</span>
                 <span class="commit-id" :title="commitTooltip(version.repoCommitId)">{{ version.repoCommitId || '-' }}</span>
+              </div>
+              <div class="coverage-data-stack">
+                <span
+                  v-for="status in coverageDataStatus(version)"
+                  :key="status.key"
+                  :class="['data-status-chip', status.tone]"
+                >
+                  {{ status.label }}
+                </span>
               </div>
               <span
                 class="time-text time-tooltip"
@@ -130,6 +147,7 @@
                   <span :class="['tag', report.reportType === 1 || report.baseVersionNumber || report.baseRepoCommitId ? 'increment' : report.reportType === 2 ? 'commit' : 'full']">
                     {{ report.reportType === 1 || report.baseVersionNumber || report.baseRepoCommitId ? '增量' : report.reportType === 2 ? '本次 Commit' : '全量' }}
                   </span>
+                  <span class="tag source">{{ sourceTypeLabel(report.sourceType) }}</span>
                 </div>
                 <div class="meta-stack">
                   <span class="branch-name">{{ report.repoBranch || '-' }}</span>
@@ -310,6 +328,7 @@ const centers = ref<Record<string, VersionCenterPayload>>({})
 const selectedAppId = ref('')
 const error = ref('')
 const keyword = ref('')
+const selectedSourceType = ref('ALL')
 const versionPage = ref(1)
 const versionPageSize = ref(6)
 const reportPage = ref(1)
@@ -330,8 +349,9 @@ const floatingTimeTooltipEl = ref<HTMLElement | null>(null)
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
 const keywordTerm = computed(() => keyword.value.toLowerCase())
 const visibleVersions = computed(() => compactVersionEntries(selectedCenter.value?.versions || []))
+const sourceTypeMatches = (value?: string) => selectedSourceType.value === 'ALL' || normalizeSourceType(value) === selectedSourceType.value
 const filteredVersions = computed(() => {
-  const versions = visibleVersions.value
+  const versions = visibleVersions.value.filter((version) => sourceTypeMatches(version.sourceType || 'JAVA'))
   const term = keywordTerm.value
   if (!term) return versions
   return versions.filter((version) => [
@@ -343,13 +363,14 @@ const filteredVersions = computed(() => {
   ].some((value) => String(value || '').toLowerCase().includes(term)))
 })
 const filteredReports = computed(() => {
-  const reports = selectedCenter.value?.coverageReports || []
+  const reports = (selectedCenter.value?.coverageReports || []).filter((report) => sourceTypeMatches(report.sourceType))
   const term = keywordTerm.value
   if (!term) return reports
   return reports.filter((report) => [
     report.versionNumber,
     report.repoBranch,
     report.repoCommitId,
+    sourceTypeLabel(report.sourceType),
     report.reportType === 1 || report.baseVersionNumber || report.baseRepoCommitId ? '增量' : report.reportType === 2 ? '本次 Commit' : '全量',
   ].some((value) => String(value || '').toLowerCase().includes(term)))
 })
@@ -398,6 +419,50 @@ function commitTooltip(value?: string) {
 function coverageRate(covered?: number, total?: number) {
   if (!total) return '0%'
   return `${(((covered || 0) / total) * 100).toFixed(1)}%`
+}
+
+function normalizeSourceType(value?: string) {
+  return (value || 'JAVA').toUpperCase()
+}
+
+function sourceTypeLabel(value?: string) {
+  const sourceType = normalizeSourceType(value)
+  if (sourceType === 'FRONTEND') return '前端'
+  if (sourceType === 'JAVA') return 'Java'
+  return sourceType
+}
+
+function isSameCommit(left?: string, right?: string) {
+  if (!left || !right) return true
+  return left === right || left.startsWith(right) || right.startsWith(left)
+}
+
+function reportsForVersion(version: VersionItemSummary) {
+  return (selectedCenter.value?.coverageReports || []).filter((report) =>
+    report.versionNumber === version.versionNumber && isSameCommit(report.repoCommitId, version.repoCommitId)
+  )
+}
+
+function coverageDataStatus(version: VersionItemSummary) {
+  const reports = reportsForVersion(version)
+  if (!reports.length && !version.hasReport) {
+    return [{ key: 'none', label: '暂无覆盖率数据', tone: 'empty' }]
+  }
+  const sourceTypes = new Set(reports.map((report) => normalizeSourceType(report.sourceType)))
+  const snapshotCount = reports.reduce((sum, report) => sum + (Number(report.snapshotCount) || 0), 0)
+  const statuses = []
+  if (sourceTypes.has('JAVA') || (version.hasReport && sourceTypes.size === 0)) {
+    statuses.push({ key: 'java', label: 'Java 覆盖率', tone: 'ok' })
+  }
+  if (sourceTypes.has('FRONTEND')) {
+    statuses.push({ key: 'frontend', label: '前端覆盖率', tone: 'ok' })
+  }
+  statuses.push({
+    key: 'traffic',
+    label: snapshotCount > 0 ? `流量数据 ${snapshotCount} 条` : '已生成报告',
+    tone: snapshotCount > 0 ? 'info' : 'neutral',
+  })
+  return statuses
 }
 
 function shortHash(value?: string) {
@@ -702,6 +767,11 @@ watch(keyword, () => {
   reportPage.value = 1
 })
 
+watch(selectedSourceType, () => {
+  versionPage.value = 1
+  reportPage.value = 1
+})
+
 watch([versionPageSize, () => filteredVersions.value.length], ([, total]) => {
   const totalPages = Math.max(1, Math.ceil(total / versionPageSize.value))
   if (versionPage.value > totalPages) {
@@ -742,6 +812,10 @@ onMounted(loadApps)
 
 .search-field {
   min-width: min(360px, 100%);
+}
+
+.source-field {
+  width: 160px;
 }
 
 .page-header,
@@ -901,7 +975,7 @@ onMounted(loadApps)
 
 .card-main {
   display: grid;
-  grid-template-columns: minmax(180px, 0.9fr) minmax(260px, 1.2fr) minmax(72px, auto);
+  grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1fr) minmax(180px, 0.8fr) minmax(72px, auto);
   align-items: center;
   gap: 18px;
 }
@@ -991,6 +1065,44 @@ onMounted(loadApps)
   color: #64748b;
   font-size: 12px;
   font-weight: 700;
+}
+
+.coverage-data-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.data-status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.data-status-chip.ok {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.data-status-chip.info {
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+}
+
+.data-status-chip.neutral {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+.data-status-chip.empty {
+  background: rgba(148, 163, 184, 0.14);
+  color: #64748b;
 }
 
 .action-row {

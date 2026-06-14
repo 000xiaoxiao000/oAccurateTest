@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useTrafficStore } from './stores/traffic'
 import TrafficTable from './components/TrafficTable.vue'
 import DetailModal from './components/DetailModal.vue'
@@ -19,12 +19,22 @@ const proxyInfoVisible = ref(false)
 const selectedRecordIds = ref<string[]>([])
 const activePanel = ref<'none' | 'stats' | 'rules' | 'plugins'>('none')
 const pluginsPath = ref('')
+const coverageIntervalSeconds = ref(30)
+const coverageServiceBaseUrl = ref('')
+const coverageProjectId = ref('')
+const coverageAppId = ref('')
+const relayNotice = ref<{ text: string; status: 'success' | 'failed' | 'skipped' } | null>(null)
+const hasCoverageRelayPlugin = computed(() => store.plugins.some(plugin => plugin.id === 'oat-coverage-relay'))
 const isFloatingMode = new URLSearchParams(window.location.search).get('floating') === '1'
 let floatingClickTimer: number | null = null
+let relayNoticeTimer: number | null = null
 
 onMounted(() => {
   window.electronAPI?.onTrafficCaptured((record: TrafficRecord) => {
     store.addRecord(record)
+    if (record.coverageRelay && hasCoverageRelayPlugin.value) {
+      showCoverageRelayNotice(record)
+    }
   })
   window.electronAPI?.onCaptureStateChanged((state) => {
     store.syncCaptureState(state)
@@ -34,6 +44,9 @@ onMounted(() => {
   })
   store.loadFilterRules()
   store.loadPlugins()
+  store.loadCoverageRelayConfig().then(() => {
+    syncCoverageRelayForm()
+  })
   window.electronAPI?.getPluginsPath().then((path) => {
     pluginsPath.value = path ?? ''
   })
@@ -111,6 +124,82 @@ function toggleStatusFilter(filter: 'success' | 'failed') {
   store.setStatusFilter(store.statusFilter === filter ? 'all' : filter)
 }
 
+function formatDuration(ms: number) {
+  if (ms < 1000) return `${ms}ms`
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 60) return `${seconds}s`
+  return `${Math.round(seconds / 60)}min`
+}
+
+function formatClock(timestamp?: number) {
+  if (!timestamp) return '-'
+  return new Date(timestamp).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+}
+
+function coverageRelayStatusText(status?: 'success' | 'failed' | 'skipped') {
+  if (status === 'success') return '成功'
+  if (status === 'failed') return '失败'
+  if (status === 'skipped') return '跳过'
+  return '未知'
+}
+
+function showCoverageRelayNotice(record: TrafficRecord) {
+  const relay = record.coverageRelay
+  if (!relay) return
+  const statusText = coverageRelayStatusText(relay.status)
+  const detail = relay.status === 'success'
+    ? relay.targetUrl ? `，目标 ${relay.targetUrl}` : ''
+    : relay.error ? `：${relay.error}` : ''
+  relayNotice.value = {
+    status: relay.status,
+    text: `覆盖率上送${statusText}${detail}`
+  }
+  if (relayNoticeTimer) {
+    window.clearTimeout(relayNoticeTimer)
+  }
+  relayNoticeTimer = window.setTimeout(() => {
+    relayNotice.value = null
+    relayNoticeTimer = null
+  }, 5000)
+}
+
+function syncCoverageRelayForm() {
+  coverageIntervalSeconds.value = Math.round(store.coverageRelayConfig.intervalMs / 1000)
+  coverageServiceBaseUrl.value = store.coverageRelayConfig.serviceBaseUrl ?? ''
+  coverageProjectId.value = store.coverageRelayConfig.projectId ?? ''
+  coverageAppId.value = store.coverageRelayConfig.appId ?? ''
+}
+
+async function saveCoverageRelayConfig() {
+  const seconds = Number(coverageIntervalSeconds.value)
+  if (!Number.isFinite(seconds) || seconds < 1) {
+    alert('覆盖率上送间隔不能小于 1 秒')
+    syncCoverageRelayForm()
+    return
+  }
+  await store.saveCoverageRelayConfig({
+    intervalMs: Math.round(seconds * 1000),
+    serviceBaseUrl: coverageServiceBaseUrl.value,
+    projectId: coverageProjectId.value,
+    appId: coverageAppId.value
+  })
+  syncCoverageRelayForm()
+  relayNotice.value = {
+    status: 'success',
+    text: `覆盖率上送配置已保存，默认目标 ${coverageServiceBaseUrl.value || '-'} / ${coverageProjectId.value || '-'} / ${coverageAppId.value || '-'}`
+  }
+  if (relayNoticeTimer) window.clearTimeout(relayNoticeTimer)
+  relayNoticeTimer = window.setTimeout(() => {
+    relayNotice.value = null
+    relayNoticeTimer = null
+  }, 3000)
+}
+
 async function replayRecord(record: TrafficRecord) {
   const result = await store.replay(record)
   if (!result?.success && result?.error) {
@@ -136,6 +225,10 @@ function togglePanel(panel: 'stats' | 'rules' | 'plugins') {
 
 async function openPluginsFolder() {
   await window.electronAPI?.openPluginsFolder()
+}
+
+async function uninstallPlugin(pluginId: string) {
+  await store.uninstallPlugin(pluginId)
 }
 
 async function showFloatingWindow() {
@@ -279,6 +372,68 @@ function handleFloatingClick() {
       </div>
     </div>
 
+    <div
+      v-if="hasCoverageRelayPlugin"
+      class="coverage-relay-bar"
+      :class="{ ok: store.coverageRelayStats.latestRelay?.status === 'success', failed: store.coverageRelayStats.latestRelay?.status === 'failed' }"
+    >
+      <div class="coverage-relay-main">
+        <span class="coverage-dot"></span>
+        <strong>覆盖率上送</strong>
+        <span v-if="store.coverageRelayStats.total === 0">暂无上送记录</span>
+        <span v-else>
+          最近一次 {{ coverageRelayStatusText(store.coverageRelayStats.latestRelay?.status) }}
+          · 成功 {{ store.coverageRelayStats.success }} / 失败 {{ store.coverageRelayStats.failed }}
+        </span>
+      </div>
+      <div class="coverage-relay-meta">
+        <label class="coverage-interval-control">
+          <span>服务</span>
+          <input
+            v-model.trim="coverageServiceBaseUrl"
+            class="wide"
+            type="text"
+            placeholder="http://localhost:8080"
+            @keyup.enter="saveCoverageRelayConfig"
+          />
+          <span>项目</span>
+          <input
+            v-model.trim="coverageProjectId"
+            type="text"
+            placeholder="projectId"
+            @keyup.enter="saveCoverageRelayConfig"
+          />
+          <span>应用</span>
+          <input
+            v-model.trim="coverageAppId"
+            type="text"
+            placeholder="appId"
+            @keyup.enter="saveCoverageRelayConfig"
+          />
+          <span>预计间隔</span>
+          <input
+            v-model.number="coverageIntervalSeconds"
+            type="number"
+            min="1"
+            step="1"
+            @keyup.enter="saveCoverageRelayConfig"
+          />
+          <span>秒</span>
+          <button type="button" @click="saveCoverageRelayConfig">保存</button>
+        </label>
+        <span>预计间隔约 {{ formatDuration(store.coverageRelayStats.intervalMs) }}</span>
+        <span>下次约 {{ formatClock(store.coverageRelayStats.nextReportAt) }}</span>
+        <span v-if="store.coverageRelayStats.latestRelay?.httpStatus">HTTP {{ store.coverageRelayStats.latestRelay.httpStatus }}</span>
+        <span v-if="store.coverageRelayStats.latestRelay?.error" class="coverage-error" :title="store.coverageRelayStats.latestRelay.error">
+          {{ store.coverageRelayStats.latestRelay.error }}
+        </span>
+      </div>
+    </div>
+
+    <div v-if="hasCoverageRelayPlugin && relayNotice" class="coverage-relay-notice" :class="relayNotice.status">
+      {{ relayNotice.text }}
+    </div>
+
     <div class="toolbar">
       <div class="search-box">
         <input
@@ -308,6 +463,7 @@ function handleFloatingClick() {
       @open-folder="openPluginsFolder"
       @install-builtin="store.installBuiltinPlugin"
       @uninstall-builtin="store.uninstallBuiltinPlugin"
+      @uninstall-plugin="(plugin) => uninstallPlugin(plugin.id)"
     />
 
     <TrafficTable
@@ -659,6 +815,132 @@ button.stat-item:hover {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.coverage-relay-bar {
+  min-height: 34px;
+  padding: 6px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e8e8e8;
+  background: #fafafa;
+  color: #595959;
+  font-size: 12px;
+}
+
+.coverage-relay-bar.ok {
+  background: #f6ffed;
+  color: #237804;
+}
+
+.coverage-relay-bar.failed {
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+.coverage-relay-main,
+.coverage-relay-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.coverage-relay-main strong {
+  color: #262626;
+}
+
+.coverage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #bfbfbf;
+}
+
+.coverage-relay-bar.ok .coverage-dot {
+  background: #52c41a;
+}
+
+.coverage-relay-bar.failed .coverage-dot {
+  background: #ff4d4f;
+}
+
+.coverage-relay-meta {
+  justify-content: flex-end;
+}
+
+.coverage-relay-meta span {
+  white-space: nowrap;
+}
+
+.coverage-interval-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.coverage-interval-control input {
+  width: 88px;
+  height: 24px;
+  box-sizing: border-box;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 0 6px;
+  color: #262626;
+  background: #fff;
+}
+
+.coverage-interval-control input.wide {
+  width: 180px;
+}
+
+.coverage-interval-control button {
+  height: 24px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 0 8px;
+  background: #fff;
+  color: #595959;
+  cursor: pointer;
+}
+
+.coverage-relay-notice {
+  margin: 8px 18px 0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #d9d9d9;
+  background: #fafafa;
+  color: #595959;
+  font-size: 13px;
+}
+
+.coverage-relay-notice.success {
+  border-color: #b7eb8f;
+  background: #f6ffed;
+  color: #237804;
+}
+
+.coverage-relay-notice.failed {
+  border-color: #ffa39e;
+  background: #fff1f0;
+  color: #cf1322;
+}
+
+.coverage-relay-notice.skipped {
+  border-color: #ffe58f;
+  background: #fffbe6;
+  color: #ad6800;
+}
+
+.coverage-error {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
@@ -672,6 +954,17 @@ button.stat-item:hover {
   border-bottom: 1px solid #f0f0f0;
   background: white;
   gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .coverage-relay-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .coverage-relay-meta {
+    justify-content: flex-start;
+  }
 }
 
 .search-box input {

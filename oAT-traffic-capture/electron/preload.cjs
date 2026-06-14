@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('capture-state-changed', (_event, state) => callback(state))
   },
   getProxyStatus: () => ipcRenderer.invoke('get-proxy-status'),
-  enableSystemProxy: (port) => ipcRenderer.invoke('enable-system-proxy', port),
+  enableSystemProxy: (port, protocols) => ipcRenderer.invoke('enable-system-proxy', port, protocols),
   disableSystemProxy: () => ipcRenderer.invoke('disable-system-proxy'),
   listSessions: () => ipcRenderer.invoke('list-sessions'),
   loadSession: (sessionId) => ipcRenderer.invoke('load-session', sessionId),
@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reloadPlugins: () => ipcRenderer.invoke('reload-plugins'),
   getPluginsPath: () => ipcRenderer.invoke('get-plugins-path'),
   openPluginsFolder: () => ipcRenderer.invoke('open-plugins-folder'),
-  installBuiltinPlugin: () => ipcRenderer.invoke('install-builtin-plugin'),
-  uninstallBuiltinPlugin: () => ipcRenderer.invoke('uninstall-builtin-plugin')
+  installBuiltinPlugin: (pluginId) => ipcRenderer.invoke('install-builtin-plugin', pluginId),
+  uninstallBuiltinPlugin: () => ipcRenderer.invoke('uninstall-builtin-plugin'),
+  uninstallPlugin: (pluginId) => ipcRenderer.invoke('uninstall-plugin', pluginId),
+  getCoverageRelayConfig: () => ipcRenderer.invoke('get-coverage-relay-config'),
+  setCoverageRelayConfig: (config) => ipcRenderer.invoke('set-coverage-relay-config', config)
 })

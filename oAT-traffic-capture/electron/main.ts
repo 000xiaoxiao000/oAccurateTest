@@ -9,14 +9,18 @@ import { connectMqtt, disconnectAllMqtt, disconnectMqtt } from './protocols/mqtt
 import { applyCaptureRules } from './filterRules.js'
 import { replayRecord } from './replay.js'
 import {
+  getCoverageRelayConfig,
   getPluginsPath,
   installBuiltinPlugin,
   listPlugins,
+  loadCoverageRelayConfig,
   loadPlugins,
   openPluginsFolder,
   runBeforeSaveHooks,
   runRecordCapturedHooks,
-  uninstallBuiltinPlugin
+  setCoverageRelayConfig,
+  uninstallBuiltinPlugin,
+  uninstallPlugin
 } from './plugins/pluginManager.js'
 import {
   deleteSession,
@@ -29,7 +33,7 @@ import {
   saveSession,
   updateSessionEndTime
 } from './database.js'
-import type { TrafficFilterRule, TrafficRecord } from './types.js'
+import type { CaptureProtocolConfig, TrafficFilterRule, TrafficRecord } from './types.js'
 import ExcelJS from 'exceljs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -44,13 +48,20 @@ let currentSessionId = ''
 const trafficRecords: TrafficRecord[] = []
 let filterRules: TrafficFilterRule[] = []
 const PROXY_PORT = 8888
+let enabledProtocols: CaptureProtocolConfig = {
+  http: true,
+  https: true,
+  ws: true,
+  wss: true
+}
 
 function getCaptureState() {
   return {
     isCapturing: captureEnabled,
     caseName: currentCaseName,
     port: proxyServer?.httpPort ?? PROXY_PORT,
-    recordCount: trafficRecords.length
+    recordCount: trafficRecords.length,
+    protocols: enabledProtocols
   }
 }
 
@@ -67,21 +78,26 @@ function closeProxyServer() {
   }
 }
 
+function isCoverageRelayPluginEnabled(): boolean {
+  return listPlugins().some(plugin => plugin.id === 'oat-coverage-relay' && plugin.enabled && !plugin.error)
+}
+
 async function acceptCapturedRecord(record: TrafficRecord) {
-  if (!captureEnabled) return
   const afterPlugins = await runRecordCapturedHooks({
     ...record,
     caseName: currentCaseName,
     source: record.source ?? 'capture'
   })
   if (!afterPlugins) return
-  const afterRules = applyCaptureRules(afterPlugins, filterRules)
+  const isCoverageRecord = (afterPlugins.tags ?? []).includes('COVERAGE')
+  if (!captureEnabled && !isCoverageRecord) return
+  const afterRules = captureEnabled ? applyCaptureRules(afterPlugins, filterRules) : afterPlugins
   if (!afterRules) return
   const beforeSave = await runBeforeSaveHooks(afterRules)
   if (!beforeSave) return
 
   trafficRecords.push(beforeSave)
-  saveRecord(beforeSave, currentSessionId)
+  saveRecord(beforeSave, captureEnabled ? currentSessionId : undefined)
   mainWindow?.webContents.send('traffic-captured', beforeSave)
   floatingWindow?.webContents.send('traffic-captured', beforeSave)
   broadcastCaptureState()
@@ -106,9 +122,14 @@ async function ensureProxyServer(): Promise<number> {
     }
     proxyServer = createProxyServer((record: TrafficRecord) => {
       acceptCapturedRecord(record)
-    }, getProxyCaDir())
+    }, getProxyCaDir(), enabledProtocols, {
+      isEnabled: isCoverageRelayPluginEnabled,
+      getConfig: getCoverageRelayConfig
+    })
 
     await startProxyServer(proxyServer, PROXY_PORT)
+  } else {
+    proxyServer.setEnabledProtocols?.(enabledProtocols)
   }
 
   return proxyServer.httpPort ?? PROXY_PORT
@@ -188,10 +209,11 @@ function restoreMainWindow() {
   floatingWindow?.close()
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   initDatabase()
   filterRules = listFilterRules()
-  loadPlugins()
+  loadCoverageRelayConfig()
+  await loadPlugins()
   createWindow()
 
   app.on('activate', () => {
@@ -390,16 +412,25 @@ ipcMain.handle('replay-records', async (_event, records: TrafficRecord[]) => {
 
 ipcMain.handle('get-proxy-status', async () => {
   try {
-    return await getSystemProxyStatus()
+    const status = await getSystemProxyStatus()
+    if (status.protocols) {
+      enabledProtocols = { ...enabledProtocols, ...status.protocols }
+    }
+    return { ...status, protocols: enabledProtocols }
   } catch (error: any) {
-    return { enabled: false, error: error?.message ?? String(error) }
+    return { enabled: false, protocols: enabledProtocols, error: error?.message ?? String(error) }
   }
 })
 
-ipcMain.handle('enable-system-proxy', async (_event, port: number) => {
+ipcMain.handle('enable-system-proxy', async (_event, port: number, protocols?: CaptureProtocolConfig) => {
   try {
+    enabledProtocols = { ...enabledProtocols, ...(protocols ?? {}) }
     const proxyPort = await ensureProxyServer()
-    await enableSystemProxy({ port: proxyPort || port, bypass: ['localhost', '127.0.0.1', '*.local'] })
+    await enableSystemProxy({
+      port: proxyPort || port,
+      bypass: ['localhost', '127.0.0.1', '*.local'],
+      protocols: enabledProtocols
+    })
     broadcastCaptureState()
     return { success: true }
   } catch (error: any) {
@@ -496,6 +527,12 @@ ipcMain.handle('open-plugins-folder', async () => {
   return { success: true }
 })
 
-ipcMain.handle('install-builtin-plugin', async () => installBuiltinPlugin())
+ipcMain.handle('install-builtin-plugin', async (_event, pluginId?: 'traffic-cleanup-plugin' | 'oat-coverage-relay' | 'all') => installBuiltinPlugin(pluginId))
 
 ipcMain.handle('uninstall-builtin-plugin', async () => uninstallBuiltinPlugin())
+
+ipcMain.handle('uninstall-plugin', async (_event, pluginId: string) => uninstallPlugin(pluginId))
+
+ipcMain.handle('get-coverage-relay-config', async () => loadCoverageRelayConfig())
+
+ipcMain.handle('set-coverage-relay-config', async (_event, config) => setCoverageRelayConfig(config))

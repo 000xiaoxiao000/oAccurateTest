@@ -23,7 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('capture-state-changed', (_event, state) => callback(state))
   },
   getProxyStatus: () => ipcRenderer.invoke('get-proxy-status'),
-  enableSystemProxy: (port: number) => ipcRenderer.invoke('enable-system-proxy', port),
+  enableSystemProxy: (port: number, protocols: any) => ipcRenderer.invoke('enable-system-proxy', port, protocols),
   disableSystemProxy: () => ipcRenderer.invoke('disable-system-proxy'),
   listSessions: () => ipcRenderer.invoke('list-sessions'),
   loadSession: (sessionId: string) => ipcRenderer.invoke('load-session', sessionId),
@@ -42,6 +42,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   reloadPlugins: () => ipcRenderer.invoke('reload-plugins'),
   getPluginsPath: () => ipcRenderer.invoke('get-plugins-path'),
   openPluginsFolder: () => ipcRenderer.invoke('open-plugins-folder'),
-  installBuiltinPlugin: () => ipcRenderer.invoke('install-builtin-plugin'),
-  uninstallBuiltinPlugin: () => ipcRenderer.invoke('uninstall-builtin-plugin')
+  installBuiltinPlugin: (pluginId?: 'traffic-cleanup-plugin' | 'oat-coverage-relay' | 'all') => ipcRenderer.invoke('install-builtin-plugin', pluginId),
+  uninstallBuiltinPlugin: () => ipcRenderer.invoke('uninstall-builtin-plugin'),
+  uninstallPlugin: (pluginId: string) => ipcRenderer.invoke('uninstall-plugin', pluginId),
+  getCoverageRelayConfig: () => ipcRenderer.invoke('get-coverage-relay-config'),
+  setCoverageRelayConfig: (config: { intervalMs: number; serviceBaseUrl?: string; projectId?: string; appId?: string }) => ipcRenderer.invoke('set-coverage-relay-config', config)
 })

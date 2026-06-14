@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { PluginInfo } from '../types/traffic'
+import { ref } from 'vue'
+import type { BuiltinPluginId, PluginInfo } from '../types/traffic'
 
 defineProps<{
   plugins: PluginInfo[]
@@ -9,9 +10,26 @@ defineProps<{
 const emit = defineEmits<{
   reload: []
   openFolder: []
-  installBuiltin: []
+  installBuiltin: [pluginId: BuiltinPluginId]
   uninstallBuiltin: []
+  uninstallPlugin: [plugin: PluginInfo]
 }>()
+
+const builtinPluginOptions: Array<{ id: BuiltinPluginId; label: string }> = [
+  { id: 'all', label: '全部内置插件' },
+  { id: 'traffic-cleanup-plugin', label: '流量清洗插件' },
+  { id: 'oat-coverage-relay', label: '前端覆盖率中继插件' }
+]
+const selectedBuiltinPlugin = ref<BuiltinPluginId>('all')
+
+function requestUninstall(plugin: PluginInfo) {
+  if (!confirm(`确定卸载插件「${plugin.name}」？插件目录将被删除。`)) return
+  emit('uninstallPlugin', plugin)
+}
+
+function installSelectedBuiltinPlugin() {
+  emit('installBuiltin', selectedBuiltinPlugin.value)
+}
 </script>
 
 <template>
@@ -24,14 +42,19 @@ const emit = defineEmits<{
       </div>
       <div class="actions">
         <button class="small-btn secondary" type="button" @click="emit('openFolder')">打开目录</button>
-        <button class="small-btn secondary" type="button" @click="emit('installBuiltin')">安装内置插件</button>
+        <select v-model="selectedBuiltinPlugin" class="plugin-select">
+          <option v-for="option in builtinPluginOptions" :key="option.id" :value="option.id">
+            {{ option.label }}
+          </option>
+        </select>
+        <button class="small-btn secondary" type="button" @click="installSelectedBuiltinPlugin">安装</button>
         <button class="small-btn secondary danger" type="button" @click="emit('uninstallBuiltin')">卸载内置插件</button>
         <button class="small-btn primary" type="button" @click="emit('reload')">重新加载</button>
       </div>
     </div>
     <div class="builtin-info">
-      <strong>内置插件：流量清洗插件</strong>
-      <span>过滤 OPTIONS 预检和静态资源，自动标记 API、错误、慢请求。</span>
+      <strong>内置插件：流量清洗 + 前端覆盖率中继</strong>
+      <span>过滤 OPTIONS/静态资源，并识别 Istanbul 覆盖率请求附加用例名后转发。</span>
     </div>
     <div v-if="plugins.length === 0" class="empty-line">插件目录中暂无插件</div>
     <div v-for="plugin in plugins" :key="plugin.id" class="plugin-row">
@@ -44,6 +67,9 @@ const emit = defineEmits<{
       </span>
       <p v-if="plugin.description">{{ plugin.description }}</p>
       <p v-if="plugin.error" class="error-text">{{ plugin.error }}</p>
+      <div class="plugin-actions">
+        <button class="small-btn secondary danger" type="button" @click="requestUninstall(plugin)">卸载此插件</button>
+      </div>
     </div>
   </section>
 </template>
@@ -103,6 +129,17 @@ p {
   justify-content: flex-end;
 }
 
+.plugin-select {
+  height: 32px;
+  min-width: 150px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 0 8px;
+  background: #fff;
+  color: #595959;
+  font-size: 13px;
+}
+
 .plugin-row {
   border: 1px solid #f0f0f0;
   border-radius: 6px;
@@ -138,6 +175,12 @@ p {
 
 .plugin-row p {
   grid-column: 1 / -1;
+}
+
+.plugin-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .empty-line {

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PluginInfo, TrafficFilterRule, TrafficRecord } from '../types/traffic'
+import type { BuiltinPluginId, CoverageRelayConfig, PluginInfo, TrafficFilterRule, TrafficRecord } from '../types/traffic'
 
 export const useTrafficStore = defineStore('traffic', () => {
   const records = ref<TrafficRecord[]>([])
@@ -12,8 +12,12 @@ export const useTrafficStore = defineStore('traffic', () => {
   const capturedCount = ref(0)
   const filterRules = ref<TrafficFilterRule[]>([])
   const plugins = ref<PluginInfo[]>([])
+  const coverageRelayConfig = ref<CoverageRelayConfig>({ intervalMs: 30000 })
 
   function isSuccessRecord(record: TrafficRecord): boolean {
+    if (record.coverageRelay) {
+      return record.coverageRelay.status === 'success'
+    }
     const code = Number(record.statusCode)
     return !isNaN(code) && code >= 200 && code < 400
   }
@@ -39,6 +43,27 @@ export const useTrafficStore = defineStore('traffic', () => {
       ? Math.round(records.value.reduce((acc, r) => acc + r.duration, 0) / total)
       : 0
     return { total, success, failed, avgDuration }
+  })
+
+  const coverageRelayStats = computed(() => {
+    const coverageRecords = records.value.filter(record => record.coverageRelay)
+    const success = coverageRecords.filter(record => record.coverageRelay?.status === 'success').length
+    const failed = coverageRecords.filter(record => record.coverageRelay?.status === 'failed').length
+    const skipped = coverageRecords.filter(record => record.coverageRelay?.status === 'skipped').length
+    const latest = coverageRecords[0]
+    const latestRelay = latest?.coverageRelay
+    const intervalMs = latestRelay?.intervalMs ?? coverageRelayConfig.value.intervalMs
+    const nextReportAt = latestRelay?.nextReportAt
+    return {
+      total: coverageRecords.length,
+      success,
+      failed,
+      skipped,
+      latest,
+      latestRelay,
+      intervalMs,
+      nextReportAt
+    }
   })
 
   const chartStats = computed(() => {
@@ -134,12 +159,25 @@ export const useTrafficStore = defineStore('traffic', () => {
     plugins.value = await window.electronAPI?.reloadPlugins() ?? []
   }
 
-  async function installBuiltinPlugin() {
-    plugins.value = await window.electronAPI?.installBuiltinPlugin() ?? []
+  async function installBuiltinPlugin(pluginId: BuiltinPluginId = 'all') {
+    plugins.value = await window.electronAPI?.installBuiltinPlugin(pluginId) ?? []
   }
 
   async function uninstallBuiltinPlugin() {
     plugins.value = await window.electronAPI?.uninstallBuiltinPlugin() ?? []
+  }
+
+  async function uninstallPlugin(pluginId: string) {
+    plugins.value = await window.electronAPI?.uninstallPlugin(pluginId) ?? []
+  }
+
+  async function loadCoverageRelayConfig() {
+    coverageRelayConfig.value = await window.electronAPI?.getCoverageRelayConfig() ?? coverageRelayConfig.value
+  }
+
+  async function saveCoverageRelayConfig(config: CoverageRelayConfig) {
+    coverageRelayConfig.value = await window.electronAPI?.setCoverageRelayConfig(config) ?? coverageRelayConfig.value
+    return coverageRelayConfig.value
   }
 
   async function startCapture(caseName: string) {
@@ -178,8 +216,10 @@ export const useTrafficStore = defineStore('traffic', () => {
     capturedCount,
     filterRules,
     plugins,
+    coverageRelayConfig,
     filteredRecords,
     stats,
+    coverageRelayStats,
     chartStats,
     addRecord,
     deleteRecord,
@@ -194,6 +234,9 @@ export const useTrafficStore = defineStore('traffic', () => {
     reloadPlugins,
     installBuiltinPlugin,
     uninstallBuiltinPlugin,
+    uninstallPlugin,
+    loadCoverageRelayConfig,
+    saveCoverageRelayConfig,
     startCapture,
     stopCapture,
     syncCaptureState

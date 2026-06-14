@@ -14,6 +14,8 @@ public class CoverageReportIndex implements Serializable {
     private String repoCommitId;
     private Date createTime;
 
+    private String sourceType;
+
     private String lastProcessedTime;
 
     private long totalClasses;
@@ -66,6 +68,8 @@ public class CoverageReportIndex implements Serializable {
     public void setRepoCommitId(String repoCommitId) { this.repoCommitId = repoCommitId; }
     public Date getCreateTime() { return createTime; }
     public void setCreateTime(Date createTime) { this.createTime = createTime; }
+    public String getSourceType() { return sourceType; }
+    public void setSourceType(String sourceType) { this.sourceType = sourceType; }
     public String getLastProcessedTime() { return lastProcessedTime; }
     public void setLastProcessedTime(String lastProcessedTime) { this.lastProcessedTime = lastProcessedTime; }
     public long getTotalClasses() { return totalClasses; }

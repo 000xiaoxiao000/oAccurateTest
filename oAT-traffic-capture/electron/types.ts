@@ -17,7 +17,35 @@ export interface TrafficRecord {
   replayStatus?: 'pending' | 'success' | 'failed' | 'unsupported'
   replayTime?: number
   tags?: string[]
+  coverageRelay?: CoverageRelayInfo
   websocketMessages?: WsMessage[]
+}
+
+export interface CoverageRelayInfo {
+  status: 'success' | 'failed' | 'skipped'
+  targetUrl?: string
+  httpStatus?: number
+  error?: string
+  intervalMs?: number
+  nextReportAt?: number
+  projectId?: string
+  appId?: string
+  versionNumber?: string
+  commitId?: string
+}
+
+export interface CoverageRelayConfig {
+  intervalMs: number
+  serviceBaseUrl?: string
+  projectId?: string
+  appId?: string
+}
+
+export interface CaptureProtocolConfig {
+  http: boolean
+  https: boolean
+  ws: boolean
+  wss: boolean
 }
 
 export interface CaptureSession {
