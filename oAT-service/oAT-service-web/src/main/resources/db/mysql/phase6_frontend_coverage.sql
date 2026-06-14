@@ -1,0 +1,21 @@
+ALTER TABLE `oat_coverage_report`
+  ADD COLUMN `source_type` VARCHAR(32) DEFAULT 'JAVA' AFTER `create_time`;
+
+ALTER TABLE `oat_class_coverage`
+  ADD COLUMN `source_type` VARCHAR(32) DEFAULT 'JAVA' AFTER `class_name`;
+
+CREATE TABLE IF NOT EXISTS `oat_frontend_coverage_report` (
+  `id` VARCHAR(64) PRIMARY KEY,
+  `project_id` VARCHAR(64) NOT NULL,
+  `app_id` VARCHAR(64) NOT NULL,
+  `commit_id` VARCHAR(128),
+  `version_number` VARCHAR(64),
+  `branch` VARCHAR(128),
+  `case_name` VARCHAR(255),
+  `timestamp` BIGINT,
+  `coverage_json` LONGTEXT NOT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_frontend_cov_app_commit` (`app_id`, `commit_id`),
+  INDEX `idx_frontend_cov_app_version` (`app_id`, `version_number`),
+  INDEX `idx_frontend_cov_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='前端 Istanbul 覆盖率原始上报表';
