@@ -27,6 +27,8 @@ const coverageAppId = ref('')
 const coveragePort = ref(8889)
 const proxyPort = ref(8888)
 const coverageRelayEnabled = ref(false)
+const coverageTestLoading = ref(false)
+const coverageTestResult = ref<{ status: 'success' | 'failed'; text: string } | null>(null)
 const relayNotice = ref<{ text: string; status: 'success' | 'failed' | 'skipped' } | null>(null)
 const hasCoverageRelayPlugin = computed(() => store.plugins.some(plugin => plugin.id === 'oat-coverage-relay'))
 const isFloatingMode = new URLSearchParams(window.location.search).get('floating') === '1'
@@ -211,22 +213,22 @@ async function saveCoverageRelayConfig() {
   if (!Number.isFinite(seconds) || seconds < 1) {
     alert('覆盖率上送间隔不能小于 1 秒')
     syncCoverageRelayForm()
-    return
+    return false
   }
   if (!Number.isInteger(nextCoveragePort) || nextCoveragePort <= 0 || nextCoveragePort > 65535) {
     alert('覆盖率接收端口必须是 1-65535 的整数')
     syncCoverageRelayForm()
-    return
+    return false
   }
   if (!Number.isInteger(nextProxyPort) || nextProxyPort <= 0 || nextProxyPort > 65535) {
     alert('系统代理端口必须是 1-65535 的整数')
     syncCoverageRelayForm()
-    return
+    return false
   }
   if (nextCoveragePort === nextProxyPort) {
     alert('覆盖率接收端口不能和系统代理端口相同')
     syncCoverageRelayForm()
-    return
+    return false
   }
   await store.saveCoverageRelayConfig({
     enabled: coverageRelayEnabled.value,
@@ -247,6 +249,97 @@ async function saveCoverageRelayConfig() {
     relayNotice.value = null
     relayNoticeTimer = null
   }, 3000)
+  return true
+}
+
+function buildCoverageTestUrl() {
+  const serviceBaseUrl = coverageServiceBaseUrl.value.replace(/\/$/, '')
+  return `${serviceBaseUrl}/api/projects/${encodeURIComponent(coverageProjectId.value)}/apps/${encodeURIComponent(coverageAppId.value)}/coverage/frontend/report`
+}
+
+function buildCoverageTestBody() {
+  const testFile = '/oat-coverage-test.js'
+  return {
+    projectId: coverageProjectId.value,
+    appId: coverageAppId.value,
+    caseName: 'oAT traffic capture coverage test',
+    timestamp: Date.now(),
+    coverage: {
+      [testFile]: {
+        path: testFile,
+        statementMap: {
+          '0': {
+            start: { line: 1, column: 0 },
+            end: { line: 1, column: 24 }
+          }
+        },
+        fnMap: {
+          '0': {
+            name: 'oatCoverageTest',
+            decl: {
+              start: { line: 1, column: 0 },
+              end: { line: 1, column: 15 }
+            },
+            loc: {
+              start: { line: 1, column: 0 },
+              end: { line: 1, column: 24 }
+            }
+          }
+        },
+        branchMap: {},
+        s: { '0': 1 },
+        f: { '0': 1 },
+        b: {}
+      }
+    }
+  }
+}
+
+async function testCoverageServiceWebReport() {
+  coverageTestResult.value = null
+  if (!coverageServiceBaseUrl.value || !coverageProjectId.value || !coverageAppId.value) {
+    coverageTestResult.value = {
+      status: 'failed',
+      text: '请先填写服务、项目、应用'
+    }
+    return
+  }
+  coverageTestLoading.value = true
+  try {
+    const saved = await saveCoverageRelayConfig()
+    if (!saved) return
+    const targetUrl = buildCoverageTestUrl()
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(buildCoverageTestBody())
+    })
+    const responseText = await response.text()
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}${responseText ? `：${responseText.slice(0, 300)}` : ''}`)
+    }
+    relayNotice.value = {
+      status: 'success',
+      text: `oAT-service-web 测试上报成功：${targetUrl}`
+    }
+    coverageTestResult.value = {
+      status: 'success',
+      text: '测试上报成功'
+    }
+    if (relayNoticeTimer) window.clearTimeout(relayNoticeTimer)
+    relayNoticeTimer = window.setTimeout(() => {
+      relayNotice.value = null
+      relayNoticeTimer = null
+    }, 5000)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    coverageTestResult.value = {
+      status: 'failed',
+      text: `测试上报失败：${message}`
+    }
+  } finally {
+    coverageTestLoading.value = false
+  }
 }
 
 async function setCoverageRelayEnabled(enabled: boolean) {
@@ -533,26 +626,46 @@ function handleFloatingClick() {
             <span>{{ coverageRelayEnabled ? '覆盖率已启用' : '覆盖率已停用' }}</span>
           </div>
           <div class="coverage-toggle-row">
-            <button
-              class="btn"
-              :class="coverageRelayEnabled ? 'btn-outline' : 'btn-primary'"
-              type="button"
-              :disabled="!hasCoverageRelayPlugin"
-              @click="setCoverageRelayEnabled(!coverageRelayEnabled)"
-            >
-              {{ coverageRelayEnabled ? '停用前端覆盖率' : '启用前端覆盖率' }}
-            </button>
             <span>
-              {{ hasCoverageRelayPlugin ? `覆盖率接收地址 http://localhost:${store.coveragePort}/oat/coverage/report，系统代理端口 ${store.proxyPort}` : '未检测到覆盖率中继插件，请先在插件面板安装' }}
+              {{ hasCoverageRelayPlugin ? `覆盖率接收地址 http://localhost:${store.coveragePort}/oat/coverage/report` : '未检测到覆盖率中继插件，请先在插件面板安装' }}
             </span>
           </div>
-          <div class="coverage-form">
+          <div class="coverage-form-grid">
+            <label><span>接收端口</span><input v-model.number="coveragePort" type="number" min="1" max="65535" step="1" /></label>
+            <label><span>间隔秒</span><input v-model.number="coverageIntervalSeconds" type="number" min="1" step="1" /></label>
+            <div class="coverage-toggle-field">
+              <span>前端覆盖率</span>
+              <button
+                class="btn coverage-toggle-btn"
+                :class="coverageRelayEnabled ? 'btn-outline' : 'btn-primary'"
+                type="button"
+                :disabled="!hasCoverageRelayPlugin"
+                @click="setCoverageRelayEnabled(!coverageRelayEnabled)"
+              >
+                {{ coverageRelayEnabled ? '停用' : '启用' }}
+              </button>
+            </div>
             <label><span>服务</span><input v-model.trim="coverageServiceBaseUrl" type="text" placeholder="http://localhost:8080" /></label>
             <label><span>项目</span><input v-model.trim="coverageProjectId" type="text" placeholder="projectId" /></label>
             <label><span>应用</span><input v-model.trim="coverageAppId" type="text" placeholder="appId" /></label>
-            <label><span>间隔秒</span><input v-model.number="coverageIntervalSeconds" type="number" min="1" step="1" /></label>
-            <label><span>接收端口</span><input v-model.number="coveragePort" type="number" min="1" max="65535" step="1" /></label>
+          </div>
+          <div class="coverage-actions">
             <button class="btn btn-primary" type="button" @click="saveCoverageRelayConfig">保存配置</button>
+            <button
+              class="btn btn-outline"
+              type="button"
+              :disabled="coverageTestLoading"
+              @click="testCoverageServiceWebReport"
+            >
+              {{ coverageTestLoading ? '测试中...' : '测试上报' }}
+            </button>
+            <span
+              v-if="coverageTestResult"
+              class="coverage-test-result"
+              :class="coverageTestResult.status"
+            >
+              {{ coverageTestResult.text }}
+            </span>
           </div>
         </div>
         <div class="metric-grid">
@@ -900,8 +1013,7 @@ function handleFloatingClick() {
 .topbar-actions,
 .btn-group,
 .control-row,
-.panel-toolbar,
-.coverage-form {
+.panel-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -982,7 +1094,8 @@ function handleFloatingClick() {
 }
 
 .input-group span,
-.coverage-form span {
+.coverage-form-grid span,
+.coverage-toggle-field > span {
   color: #475569;
   font-size: 12px;
   font-weight: 600;
@@ -990,7 +1103,7 @@ function handleFloatingClick() {
 
 .input-group input,
 .search-box input,
-.coverage-form input {
+.coverage-form-grid input {
   height: 32px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -1001,7 +1114,7 @@ function handleFloatingClick() {
 
 .input-group input:focus,
 .search-box input:focus,
-.coverage-form input:focus {
+.coverage-form-grid input:focus {
   outline: none;
   border-color: #2563eb;
   box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
@@ -1223,9 +1336,11 @@ button.metric-card {
   overflow: hidden;
 }
 
-.coverage-form {
+.coverage-form-grid {
   padding: 12px;
-  align-items: flex-end;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 12px;
 }
 
 .coverage-toggle-row {
@@ -1241,10 +1356,48 @@ button.metric-card {
   font-size: 12px;
 }
 
-.coverage-form label {
-  min-width: 160px;
+.coverage-form-grid label,
+.coverage-toggle-field {
   display: grid;
   gap: 5px;
+}
+
+.coverage-form-grid label:nth-child(4),
+.coverage-form-grid label:nth-child(5),
+.coverage-form-grid label:nth-child(6) {
+  grid-column: span 2;
+}
+
+.coverage-toggle-btn {
+  width: 100%;
+}
+
+.coverage-actions {
+  padding: 0 12px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.coverage-test-result {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.coverage-test-result.success {
+  color: #047857;
+  background: #ecfdf5;
+}
+
+.coverage-test-result.failed {
+  color: #b91c1c;
+  background: #fef2f2;
 }
 
 .settings-panel :deep(.proxy-control) {
@@ -1315,6 +1468,16 @@ button.metric-card {
   .workspace-grid {
     grid-template-columns: 1fr;
   }
+
+  .coverage-form-grid {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
+  }
+
+  .coverage-form-grid label:nth-child(4),
+  .coverage-form-grid label:nth-child(5),
+  .coverage-form-grid label:nth-child(6) {
+    grid-column: span 1;
+  }
 }
 
 @media (max-width: 820px) {
@@ -1333,6 +1496,10 @@ button.metric-card {
 
   .metric-grid {
     grid-template-columns: repeat(2, minmax(118px, 1fr));
+  }
+
+  .coverage-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 
