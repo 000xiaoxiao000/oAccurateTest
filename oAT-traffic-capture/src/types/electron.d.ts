@@ -7,12 +7,23 @@ export interface CaptureProtocolConfig {
   wss: boolean
 }
 
+export interface RuntimeLogEntry {
+  id: number
+  timestamp: number
+  level: 'log' | 'info' | 'warn' | 'error'
+  text: string
+}
+
 declare global {
   interface Window {
     electronAPI: {
       startCapture: (caseName: string) => Promise<{ success: boolean; port?: number; coveragePort?: number; error?: string }>
       stopCapture: () => Promise<{ success: boolean }>
       getCaptureState: () => Promise<{ isCapturing: boolean; caseName: string; port: number; coveragePort?: number; recordCount: number; protocols?: CaptureProtocolConfig }>
+      getRuntimeLogs: () => Promise<RuntimeLogEntry[]>
+      clearRuntimeLogs: () => Promise<{ success: boolean }>
+      onRuntimeLogAppended: (callback: (entry: RuntimeLogEntry) => void) => () => void
+      onRuntimeLogsCleared: (callback: () => void) => () => void
       showFloatingWindow: () => Promise<{ success: boolean }>
       restoreMainWindow: () => Promise<{ success: boolean }>
       getTrafficRecords: () => Promise<TrafficRecord[]>

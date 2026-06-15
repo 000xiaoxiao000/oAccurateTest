@@ -53,11 +53,65 @@ const trafficRecords: TrafficRecord[] = []
 let filterRules: TrafficFilterRule[] = []
 const DEFAULT_PROXY_PORT = 8888
 const DEFAULT_COVERAGE_PORT = 8889
+const MAX_RUNTIME_LOG_LINES = 1000
+type RuntimeLogLevel = 'log' | 'info' | 'warn' | 'error'
+type RuntimeLogEntry = {
+  id: number
+  timestamp: number
+  level: RuntimeLogLevel
+  text: string
+}
+const runtimeLogs: RuntimeLogEntry[] = []
+let runtimeLogId = 0
 let enabledProtocols: CaptureProtocolConfig = {
   http: true,
   https: true,
   ws: true,
   wss: true
+}
+
+function stringifyLogArg(arg: unknown): string {
+  if (arg instanceof Error) {
+    return arg.stack || arg.message
+  }
+  if (typeof arg === 'string') {
+    return arg
+  }
+  try {
+    return JSON.stringify(arg)
+  } catch {
+    return String(arg)
+  }
+}
+
+function pushRuntimeLog(level: RuntimeLogLevel, args: unknown[]) {
+  const entry = {
+    id: ++runtimeLogId,
+    timestamp: Date.now(),
+    level,
+    text: args.map(stringifyLogArg).join(' ')
+  }
+  runtimeLogs.push(entry)
+  if (runtimeLogs.length > MAX_RUNTIME_LOG_LINES) {
+    runtimeLogs.splice(0, runtimeLogs.length - MAX_RUNTIME_LOG_LINES)
+  }
+  mainWindow?.webContents.send('runtime-log-appended', entry)
+}
+
+function installRuntimeLogCapture() {
+  const originalConsole = {
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console)
+  }
+  ;(['log', 'info', 'warn', 'error'] as RuntimeLogLevel[]).forEach((level) => {
+    console[level] = (...args: unknown[]) => {
+      pushRuntimeLog(level, args)
+      originalConsole[level](...args)
+    }
+  })
+  pushRuntimeLog('info', ['运行日志已启动'])
 }
 
 function getCaptureState() {
@@ -263,6 +317,7 @@ function restoreMainWindow() {
 }
 
 app.whenReady().then(async () => {
+  installRuntimeLogCapture()
   initDatabase()
   filterRules = listFilterRules()
   const coverageConfig = loadCoverageRelayConfig()
@@ -317,6 +372,14 @@ ipcMain.handle('stop-capture', async () => {
 })
 
 ipcMain.handle('get-capture-state', async () => getCaptureState())
+
+ipcMain.handle('get-runtime-logs', async () => runtimeLogs)
+
+ipcMain.handle('clear-runtime-logs', async () => {
+  runtimeLogs.length = 0
+  mainWindow?.webContents.send('runtime-logs-cleared')
+  return { success: true }
+})
 
 ipcMain.handle('show-floating-window', async () => {
   createFloatingWindow()

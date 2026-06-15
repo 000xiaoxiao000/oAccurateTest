@@ -5,6 +5,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startCapture: (caseName: string) => ipcRenderer.invoke('start-capture', caseName),
   stopCapture: () => ipcRenderer.invoke('stop-capture'),
   getCaptureState: () => ipcRenderer.invoke('get-capture-state'),
+  getRuntimeLogs: () => ipcRenderer.invoke('get-runtime-logs'),
+  clearRuntimeLogs: () => ipcRenderer.invoke('clear-runtime-logs'),
+  onRuntimeLogAppended: (callback: (entry: any) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, entry: any) => callback(entry)
+    ipcRenderer.on('runtime-log-appended', listener)
+    return () => ipcRenderer.removeListener('runtime-log-appended', listener)
+  },
+  onRuntimeLogsCleared: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('runtime-logs-cleared', listener)
+    return () => ipcRenderer.removeListener('runtime-logs-cleared', listener)
+  },
   showFloatingWindow: () => ipcRenderer.invoke('show-floating-window'),
   restoreMainWindow: () => ipcRenderer.invoke('restore-main-window'),
   getTrafficRecords: () => ipcRenderer.invoke('get-traffic-records'),

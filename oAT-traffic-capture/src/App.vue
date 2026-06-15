@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useTrafficStore } from './stores/traffic'
 import TrafficTable from './components/TrafficTable.vue'
 import DetailModal from './components/DetailModal.vue'
@@ -10,10 +10,12 @@ import ProxyControl from './components/ProxyControl.vue'
 import SessionHistory from './components/SessionHistory.vue'
 import TrafficStatsPanel from './components/TrafficStatsPanel.vue'
 import type { TrafficRecord } from './types/traffic'
+import type { RuntimeLogEntry } from './types/electron'
 
 const store = useTrafficStore()
 const showDetail = ref(false)
 const showMqInput = ref(false)
+const showRuntimeLogs = ref(false)
 const selectedRecord = ref<TrafficRecord | null>(null)
 const proxyInfoVisible = ref(false)
 const selectedRecordIds = ref<string[]>([])
@@ -30,6 +32,9 @@ const coverageRelayEnabled = ref(false)
 const coverageTestLoading = ref(false)
 const coverageTestResult = ref<{ status: 'success' | 'failed'; text: string } | null>(null)
 const relayNotice = ref<{ text: string; status: 'success' | 'failed' | 'skipped' } | null>(null)
+const runtimeLogs = ref<RuntimeLogEntry[]>([])
+const runtimeLogAutoScroll = ref(true)
+const runtimeLogBody = ref<HTMLElement | null>(null)
 const hasCoverageRelayPlugin = computed(() => store.plugins.some(plugin => plugin.id === 'oat-coverage-relay'))
 const isFloatingMode = new URLSearchParams(window.location.search).get('floating') === '1'
 const currentSectionTitle = computed(() => {
@@ -56,6 +61,8 @@ const detailRecord = computed(() => selectedRecord.value ?? store.filteredRecord
 const coverageWithoutRelayCount = computed(() => Math.max(0, store.records.length - store.coverageRelayStats.total))
 let floatingClickTimer: number | null = null
 let relayNoticeTimer: number | null = null
+let unsubscribeRuntimeLog: (() => void) | undefined
+let unsubscribeRuntimeLogClear: (() => void) | undefined
 
 onMounted(() => {
   window.electronAPI?.onTrafficCaptured((record: TrafficRecord) => {
@@ -78,6 +85,30 @@ onMounted(() => {
   window.electronAPI?.getPluginsPath().then((path) => {
     pluginsPath.value = path ?? ''
   })
+  window.electronAPI?.getRuntimeLogs().then((logs) => {
+    runtimeLogs.value = logs ?? []
+  })
+  unsubscribeRuntimeLog = window.electronAPI?.onRuntimeLogAppended((entry) => {
+    runtimeLogs.value = [...runtimeLogs.value, entry].slice(-1000)
+  })
+  unsubscribeRuntimeLogClear = window.electronAPI?.onRuntimeLogsCleared(() => {
+    runtimeLogs.value = []
+  })
+})
+
+watch([runtimeLogs, showRuntimeLogs], () => {
+  if (!showRuntimeLogs.value || !runtimeLogAutoScroll.value) return
+  nextTick(() => {
+    const body = runtimeLogBody.value
+    if (body) {
+      body.scrollTop = body.scrollHeight
+    }
+  })
+})
+
+onUnmounted(() => {
+  unsubscribeRuntimeLog?.()
+  unsubscribeRuntimeLogClear?.()
 })
 
 async function toggleCapture() {
@@ -174,6 +205,27 @@ function coverageRelayStatusText(status?: 'success' | 'failed' | 'skipped') {
   if (status === 'failed') return '失败'
   if (status === 'skipped') return '跳过'
   return '未知'
+}
+
+function formatRuntimeLogTime(timestamp: number) {
+  const time = new Date(timestamp)
+  const ms = String(time.getMilliseconds()).padStart(3, '0')
+  return `${time.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })}.${ms}`
+}
+
+async function openRuntimeLogs() {
+  runtimeLogs.value = await window.electronAPI?.getRuntimeLogs() ?? []
+  showRuntimeLogs.value = true
+}
+
+async function clearRuntimeLogs() {
+  await window.electronAPI?.clearRuntimeLogs()
+  runtimeLogs.value = []
 }
 
 function showCoverageRelayNotice(record: TrafficRecord) {
@@ -706,7 +758,7 @@ function handleFloatingClick() {
         <SessionHistory @load="handleLoadSession" />
       </section>
 
-      <section v-else class="page-content single-column">
+      <section v-else class="page-content single-column settings-content">
         <section class="panel settings-panel">
           <div class="panel-header">
             <strong>系统代理与证书</strong>
@@ -738,6 +790,9 @@ function handleFloatingClick() {
             @uninstall-plugin="(plugin) => uninstallPlugin(plugin.id)"
           />
         </section>
+        <div class="settings-log-row">
+          <button class="btn btn-outline runtime-log-trigger" type="button" @click="openRuntimeLogs">查看运行日志</button>
+        </div>
       </section>
 
       <DetailModal
@@ -751,6 +806,34 @@ function handleFloatingClick() {
         @close="showMqInput = false"
         @add="addMqRecord"
       />
+
+      <div v-if="showRuntimeLogs" class="runtime-log-overlay" @click.self="showRuntimeLogs = false">
+        <section class="runtime-log-modal" role="dialog" aria-modal="true" aria-label="运行日志">
+          <header class="runtime-log-header">
+            <h2>运行日志</h2>
+            <div class="runtime-log-actions">
+              <button class="btn btn-outline" type="button" @click="clearRuntimeLogs">清空</button>
+              <button class="btn btn-outline" type="button" @click="runtimeLogAutoScroll = !runtimeLogAutoScroll">
+                {{ runtimeLogAutoScroll ? '暂停滚动' : '继续滚动' }}
+              </button>
+              <button class="runtime-log-close" type="button" aria-label="关闭运行日志" @click="showRuntimeLogs = false">×</button>
+            </div>
+          </header>
+          <div ref="runtimeLogBody" class="runtime-log-body">
+            <div v-if="runtimeLogs.length === 0" class="runtime-log-empty">暂无运行日志</div>
+            <div
+              v-for="entry in runtimeLogs"
+              :key="entry.id"
+              class="runtime-log-line"
+              :class="entry.level"
+            >
+              <span>[{{ formatRuntimeLogTime(entry.timestamp) }}]</span>
+              <strong>{{ entry.level.toUpperCase() }}</strong>
+              <code>{{ entry.text }}</code>
+            </div>
+          </div>
+        </section>
+      </div>
     </main>
   </div>
 </template>
@@ -1441,6 +1524,24 @@ button.metric-card {
   color: #64748b;
 }
 
+.settings-content {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.settings-log-row {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 18px 70px 36px 12px;
+}
+
+.runtime-log-trigger {
+  position: static;
+  flex: 0 0 auto;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+}
+
 .settings-panel :deep(.toggle-btn),
 .settings-panel :deep(.mini-btn),
 .settings-panel :deep(.protocol-option) {
@@ -1453,6 +1554,103 @@ button.metric-card {
   background: #f0fdf4;
   border-color: #86efac;
   color: #166534;
+}
+
+.runtime-log-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 26px;
+  background: rgba(15, 23, 42, 0.24);
+}
+
+.runtime-log-modal {
+  width: min(1180px, calc(100vw - 52px));
+  height: min(760px, calc(100vh - 52px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  padding: 26px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
+}
+
+.runtime-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.runtime-log-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.runtime-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.runtime-log-close {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  cursor: pointer;
+  font-size: 34px;
+  line-height: 26px;
+}
+
+.runtime-log-body {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #1f1f1f;
+  color: #d4d4d4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.runtime-log-empty {
+  color: #9ca3af;
+}
+
+.runtime-log-line {
+  display: grid;
+  grid-template-columns: 106px 58px minmax(0, 1fr);
+  gap: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.runtime-log-line span,
+.runtime-log-line strong {
+  color: #cbd5e1;
+}
+
+.runtime-log-line code {
+  color: inherit;
+  font-family: inherit;
+}
+
+.runtime-log-line.warn code,
+.runtime-log-line.warn strong {
+  color: #facc15;
+}
+
+.runtime-log-line.error code,
+.runtime-log-line.error strong {
+  color: #f87171;
 }
 
 @keyframes pulse {
@@ -1500,6 +1698,33 @@ button.metric-card {
 
   .coverage-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .settings-log-row {
+    min-height: 96px;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 12px 0 0;
+  }
+
+  .runtime-log-overlay {
+    padding: 12px;
+  }
+
+  .runtime-log-modal {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 24px);
+    padding: 18px;
+  }
+
+  .runtime-log-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .runtime-log-line {
+    grid-template-columns: 1fr;
+    gap: 0;
   }
 }
 
