@@ -102,12 +102,12 @@
             </thead>
             <tbody>
               <tr v-for="item in payload.classPage?.content || []" :key="item.className" :class="['class-row', item.hasCodeChanges && 'row-changed']">
-                <td :title="`${item.className}.java`">
+                <td :title="displayClassName(item.className, true)">
                   <span class="cell-name-row">
                     <span class="cell-name-text">
                       <span class="tree-fold muted">−</span>
                       <span class="tree-icon">📄</span>
-                      <span class="class-name">{{ item.className }}.java</span>
+                      <span class="class-name">{{ displayClassName(item.className) }}</span>
                     </span>
                     <span
                       v-if="item.hasCodeChanges"
@@ -178,7 +178,7 @@
                   </button>
                   <span v-else class="tree-fold muted">−</span>
                   <span class="tree-icon">{{ row.type === 'package' ? '📁' : '📄' }}</span>
-                  <span>{{ row.type === 'class' ? `${row.name}.java` : row.name }}</span>
+                  <span>{{ row.type === 'class' ? displayClassName(row.name) : row.name }}</span>
                   <span
                     v-if="row.type === 'class' && row.hasCodeChanges"
                     class="change-badge"
@@ -268,6 +268,28 @@ function percent(value?: number) {
 function rateTone(value?: number, total = 1) {
   if (total <= 0) return ''
   return (value || 0) > 0 ? 'positive' : 'negative'
+}
+
+function isPathLikeName(value?: string) {
+  return Boolean(value && (value.includes('/') || value.includes('\\') || /\.[a-z0-9]+$/i.test(value)))
+}
+
+function displayClassName(value?: string, keepFullPath = false) {
+  if (!value) return ''
+  if (isPathLikeName(value)) {
+    const normalized = value.replace(/\\/g, '/')
+    if (keepFullPath) return normalized
+    const sourceMarkers = ['/src/', '/app/', '/pages/', '/components/', '/lib/']
+    for (const marker of sourceMarkers) {
+      const markerIndex = normalized.indexOf(marker)
+      if (markerIndex <= 0) continue
+      const rootPath = normalized.slice(0, markerIndex)
+      const rootName = rootPath.slice(rootPath.lastIndexOf('/') + 1)
+      if (rootName) return `${rootName}${normalized.slice(markerIndex)}`
+    }
+    return normalized.replace(/^\/+/, '')
+  }
+  return `${value}.java`
 }
 
 function toTreeRow(node: CoverageTreeNode, level: number): TreeRow {
@@ -435,30 +457,12 @@ async function load() {
       maxComplexity: filters.maxComplexity,
     })
     
-    if (payload.value.classPage?.content) {
-      payload.value.classPage.content = sortClassesByCoverage(payload.value.classPage.content)
-    }
-    
     treeRows.value = viewType.value === 'tree' ? (payload.value.treeNodes || []).map((node) => toTreeRow(node, 0)) : []
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载覆盖率明细失败'
   } finally {
     loading.value = false
   }
-}
-
-function sortClassesByCoverage(classes: any[]) {
-  return [...classes].sort((a, b) => {
-    const aHasCoverage = (a.lineRate || 0) > 0 || (a.branchRate || 0) > 0 || (a.methodRate || 0) > 0
-    const bHasCoverage = (b.lineRate || 0) > 0 || (b.branchRate || 0) > 0 || (b.methodRate || 0) > 0
-    
-    if (aHasCoverage && !bHasCoverage) return -1
-    if (!aHasCoverage && bHasCoverage) return 1
-    
-    if (a.lineRate !== b.lineRate) return (b.lineRate || 0) - (a.lineRate || 0)
-    if (a.branchRate !== b.branchRate) return (b.branchRate || 0) - (a.branchRate || 0)
-    return (b.methodRate || 0) - (a.methodRate || 0)
-  })
 }
 
 watch(

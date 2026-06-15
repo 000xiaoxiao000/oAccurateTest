@@ -44,7 +44,7 @@ public class WebConfig implements WebMvcConfigurer {
         configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/projects/**/apps/**/coverage/frontend/report", configuration);
+        source.registerCorsConfiguration("/api/projects/*/apps/*/coverage/frontend/report", configuration);
 
         FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(new CorsFilter(source));
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);

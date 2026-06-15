@@ -15,6 +15,9 @@ public final class CoverageSourceClassUtil {
         if (!StringUtils.hasText(className)) {
             return Collections.emptyList();
         }
+        if (isPathLikeName(className)) {
+            return Collections.singletonList(normalizePathName(className));
+        }
 
         String normalizedClassName = className.replace('$', '.');
         String[] segments = normalizedClassName.split("\\.");
@@ -36,6 +39,22 @@ public final class CoverageSourceClassUtil {
 
     public static List<String> buildSourcePathCandidates(String className) {
         List<String> candidates = new ArrayList<>();
+        if (isPathLikeName(className)) {
+            String normalizedPath = normalizePathName(className);
+            addCandidate(candidates, normalizedPath);
+            String withoutLeadingSlash = normalizedPath.startsWith("/") ? normalizedPath.substring(1) : normalizedPath;
+            addCandidate(candidates, withoutLeadingSlash);
+            addPathSuffixCandidates(candidates, withoutLeadingSlash);
+            if (!hasKnownSourceExtension(normalizedPath)) {
+                String[] extensions = {".js", ".jsx", ".ts", ".tsx", ".vue", ".css", ".scss", ".less"};
+                for (String extension : extensions) {
+                    addCandidate(candidates, normalizedPath + extension);
+                    addCandidate(candidates, withoutLeadingSlash + extension);
+                    addPathSuffixCandidates(candidates, withoutLeadingSlash + extension);
+                }
+            }
+            return candidates;
+        }
         for (String candidateClassName : buildSourceClassCandidates(className)) {
             candidates.add(candidateClassName.replace('.', '/') + ".java");
         }
@@ -90,12 +109,83 @@ public final class CoverageSourceClassUtil {
         return -1;
     }
 
+    public static boolean isPathLikeName(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        return value.indexOf('/') >= 0 || value.indexOf('\\') >= 0 || hasKnownSourceExtension(value);
+    }
+
+    public static String normalizePathName(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        String normalized = value.replace('\\', '/');
+        while (normalized.contains("//")) {
+            normalized = normalized.replace("//", "/");
+        }
+        return normalized;
+    }
+
+    public static String displayFileName(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        String normalized = normalizePathName(value);
+        int index = normalized.lastIndexOf('/');
+        return index >= 0 ? normalized.substring(index + 1) : normalized;
+    }
+
     public static boolean isLikelyTypeSegment(String segment) {
         if (!StringUtils.hasText(segment)) {
             return false;
         }
         char firstChar = segment.charAt(0);
         return Character.isUpperCase(firstChar) || Character.isDigit(firstChar);
+    }
+
+    private static void addCandidate(List<String> candidates, String candidate) {
+        if (StringUtils.hasText(candidate) && !candidates.contains(candidate)) {
+            candidates.add(candidate);
+        }
+    }
+
+    private static void addPathSuffixCandidates(List<String> candidates, String path) {
+        String[] markers = {
+                "src/",
+                "src/main/",
+                "src/main/java/",
+                "src/main/resources/",
+                "src/test/",
+                "src/test/java/",
+                "app/",
+                "pages/",
+                "components/",
+                "lib/"
+        };
+        for (String marker : markers) {
+            int index = path.lastIndexOf("/" + marker);
+            if (index >= 0) {
+                addCandidate(candidates, path.substring(index + 1));
+            }
+            if (path.startsWith(marker)) {
+                addCandidate(candidates, path);
+            }
+        }
+    }
+
+    private static boolean hasKnownSourceExtension(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+        String lower = value.toLowerCase(java.util.Locale.ROOT);
+        String[] extensions = {".java", ".js", ".jsx", ".ts", ".tsx", ".vue", ".css", ".scss", ".less"};
+        for (String extension : extensions) {
+            if (lower.endsWith(extension)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isAllDigits(String segment) {

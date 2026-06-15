@@ -3057,7 +3057,7 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         }
 
         String normalizedParent = StringUtils.hasText(parentPackage) ? parentPackage.trim() : "";
-        String prefix = normalizedParent.isEmpty() ? "" : normalizedParent + ".";
+        String prefix = buildTreePrefix(normalizedParent);
         List<ClassCoverageIndex> classes = classCoverageRepository.findTreeCandidates(reportId, classNameSearch, methodNameSearch,
                 minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate,
                 minComplexity, maxComplexity, prefix);
@@ -3065,11 +3065,12 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         Map<String, CoverageTreeNode> nodesMap = new HashMap<>();
         Set<String> exactClassNames = classes.stream()
                 .map(ClassCoverageIndex::getClassName)
+                .map(this::normalizeCoverageTreeName)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toSet());
 
         for (ClassCoverageIndex cc : classes) {
-            String classFullName = cc.getClassName();
+            String classFullName = normalizeCoverageTreeName(cc.getClassName());
             if (!StringUtils.hasText(classFullName) || !classFullName.startsWith(prefix)) {
                 continue;
             }
@@ -3077,18 +3078,19 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             String remaining = classFullName.substring(prefix.length());
             TreeNodeIdentity identity = resolveImmediateTreeNode(prefix, remaining, classFullName, exactClassNames);
 
-            CoverageTreeNode node = nodesMap.get(identity.fullName);
+            String nodeKey = identity.type + ":" + identity.fullName;
+            CoverageTreeNode node = nodesMap.get(nodeKey);
             if (node == null) {
                 node = new CoverageTreeNode();
                 node.setFullName(identity.fullName);
                 node.setName(identity.nodeName);
                 node.setType(identity.type);
                 node.setParentId(normalizedParent);
-                node.setId(reportId + ":" + identity.fullName);
-                nodesMap.put(identity.fullName, node);
+                node.setId(reportId + ":" + identity.type + ":" + identity.fullName);
+                nodesMap.put(nodeKey, node);
             }
 
-            boolean hasChildren = classFullName.startsWith(identity.fullName + ".");
+            boolean hasChildren = hasTreeChildren(classFullName, identity.fullName);
             if (hasChildren) {
                 node.setHasChildren(true);
             }
@@ -3115,9 +3117,33 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
             node.setBranchRate(rate(node.getCoveredBranchTargets(), node.getTotalBranchTargets()));
             node.setMethodRate(rate(node.getCoveredMethods(), node.getTotalMethods()));
         }
-        nodes.sort(Comparator.comparing(CoverageTreeNode::getType)
+        nodes.sort(Comparator.comparingInt((CoverageTreeNode node) -> "package".equals(node.getType()) ? 0 : 1)
                 .thenComparing(CoverageTreeNode::getFullName, Comparator.nullsLast(String::compareTo)));
         return nodes;
+    }
+
+    private String normalizeCoverageTreeName(String className) {
+        if (!StringUtils.hasText(className)) {
+            return className;
+        }
+        return CoverageSourceClassUtil.isPathLikeName(className)
+                ? CoverageSourceClassUtil.normalizePathName(className)
+                : className;
+    }
+
+    private String buildTreePrefix(String parent) {
+        if (!StringUtils.hasText(parent)) {
+            return "";
+        }
+        return CoverageSourceClassUtil.isPathLikeName(parent) ? CoverageSourceClassUtil.normalizePathName(parent) + "/" : parent + ".";
+    }
+
+    private boolean hasTreeChildren(String classFullName, String nodeFullName) {
+        if (!StringUtils.hasText(classFullName) || !StringUtils.hasText(nodeFullName)) {
+            return false;
+        }
+        String separator = CoverageSourceClassUtil.isPathLikeName(classFullName) ? "/" : ".";
+        return classFullName.startsWith(nodeFullName + separator);
     }
 
     private double rate(long covered, long total) {
@@ -3125,6 +3151,31 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
     }
 
     private TreeNodeIdentity resolveImmediateTreeNode(String prefix, String remaining, String classFullName, Set<String> exactClassNames) {
+        if (CoverageSourceClassUtil.isPathLikeName(classFullName)) {
+            if (!StringUtils.hasText(prefix)) {
+                TreeNodeIdentity sourceRoot = resolvePathSourceRootNode(classFullName);
+                if (sourceRoot != null) {
+                    return sourceRoot;
+                }
+            }
+            String normalizedRemaining = CoverageSourceClassUtil.normalizePathName(remaining);
+            boolean leadingSlash = normalizedRemaining.startsWith("/");
+            if (leadingSlash) {
+                normalizedRemaining = normalizedRemaining.substring(1);
+            }
+            String[] segments = normalizedRemaining.split("/");
+            if (segments.length == 0) {
+                return new TreeNodeIdentity(CoverageSourceClassUtil.displayFileName(classFullName), classFullName, "class");
+            }
+            if (segments.length == 1) {
+                String fullName = prefix + (leadingSlash && prefix.isEmpty() ? "/" : "") + segments[0];
+                return new TreeNodeIdentity(segments[0], fullName, "class");
+            }
+            String nodeName = segments[0];
+            String fullName = prefix + (leadingSlash && prefix.isEmpty() ? "/" : "") + nodeName;
+            return new TreeNodeIdentity(nodeName, fullName, "package");
+        }
+
         String[] segments = remaining.split("\\.");
         if (segments.length == 0) {
             return new TreeNodeIdentity(classFullName, classFullName, "class");
@@ -3142,6 +3193,23 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         String nodeName = segments[0];
         String fullName = prefix + nodeName;
         return new TreeNodeIdentity(nodeName, fullName, "package");
+    }
+
+    private TreeNodeIdentity resolvePathSourceRootNode(String classFullName) {
+        String normalized = CoverageSourceClassUtil.normalizePathName(classFullName);
+        String[] sourceMarkers = {"/src/", "/app/", "/pages/", "/components/", "/lib/"};
+        for (String marker : sourceMarkers) {
+            int markerIndex = normalized.indexOf(marker);
+            if (markerIndex <= 0) {
+                continue;
+            }
+            String rootPath = normalized.substring(0, markerIndex);
+            String rootName = CoverageSourceClassUtil.displayFileName(rootPath);
+            if (StringUtils.hasText(rootName)) {
+                return new TreeNodeIdentity(rootName, rootPath, "package");
+            }
+        }
+        return null;
     }
 
     private static class TreeNodeIdentity {
