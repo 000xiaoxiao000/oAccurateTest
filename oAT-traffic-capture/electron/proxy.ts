@@ -74,6 +74,21 @@ export function createProxyServer(
     return coverageReporter?.isEnabled() === true
   }
 
+  function isCoverageReportUrl(url?: string): boolean {
+    return /\/oat\/coverage\/report(\?|$)/i.test(url ?? '')
+      || /\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/frontend\/report(\?|$)/i.test(url ?? '')
+  }
+
+  function coverageResponseHeaders(): Record<string, string> {
+    return {
+      'content-type': 'application/json',
+      'access-control-allow-origin': '*',
+      'access-control-allow-methods': 'POST, OPTIONS',
+      'access-control-allow-headers': 'content-type',
+      'x-oat-coverage-relay': 'intercepted'
+    }
+  }
+
   function isHtmlResponse(ctx: any): boolean {
     const contentType = String(ctx.serverToProxyResponse?.headers?.['content-type'] ?? '').toLowerCase()
     return contentType.includes('text/html')
@@ -88,7 +103,47 @@ export function createProxyServer(
     if (!isCoverageRelayEnabled()) return false
     if (!isHtmlResponse(ctx) && !isJavaScriptResponse(ctx)) return false
     if (record.method && !['GET', ''].includes(String(record.method).toUpperCase())) return false
-    return !/\/oat\/coverage\/report(\?|$)/i.test(record.url ?? '')
+    return !isCoverageReportUrl(record.url)
+  }
+
+  function handleCoverageReportRequest(ctx: any, record: Partial<TrafficRecord>, startTime: number): void {
+    let requestBody = ''
+    ctx.clientToProxyRequest.on('data', (chunk: Buffer) => {
+      requestBody += chunk.toString()
+    })
+    ctx.clientToProxyRequest.on('end', () => {
+      record.requestBody = requestBody
+      record.duration = Date.now() - startTime
+      record.statusCode = 204
+      record.responseHeaders = coverageResponseHeaders()
+      record.responseBody = ''
+      if (String(record.method).toUpperCase() !== 'OPTIONS') {
+        onTraffic(record as TrafficRecord)
+      }
+
+      if (!ctx.proxyToClientResponse.headersSent) {
+        ctx.proxyToClientResponse.writeHead(204, record.responseHeaders)
+      }
+      ctx.proxyToClientResponse.end()
+    })
+    ctx.clientToProxyRequest.on('error', (err: Error) => {
+      record.statusCode = 'ERROR'
+      record.error = err.message
+      record.duration = Date.now() - startTime
+      onTraffic(record as TrafficRecord)
+      if (!ctx.proxyToClientResponse.headersSent) {
+        ctx.proxyToClientResponse.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' })
+      }
+      ctx.proxyToClientResponse.end(err.message)
+    })
+    ctx.clientToProxyRequest.resume()
+  }
+
+  function buildCoverageEndpoint(config: CoverageRelayConfig): string {
+    if (config.serviceBaseUrl && config.projectId && config.appId) {
+      return `${config.serviceBaseUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(config.projectId)}/apps/${encodeURIComponent(config.appId)}/coverage/frontend/report`
+    }
+    return '/oat/coverage/report'
   }
 
   function buildCoverageReporterCode(): string {
@@ -96,14 +151,21 @@ export function createProxyServer(
     const intervalMs = Number.isFinite(Number(config.intervalMs)) && Number(config.intervalMs) >= 1000
       ? Math.round(Number(config.intervalMs))
       : 30000
+    const endpoint = buildCoverageEndpoint(config)
+    const meta = {
+      serviceBaseUrl: config.serviceBaseUrl,
+      projectId: config.projectId,
+      appId: config.appId
+    }
     return `;(() => {
   if (window.__oatCoverageReporterInstalled) return;
   window.__oatCoverageReporterInstalled = true;
-  const endpoint = '/oat/coverage/report';
+  const endpoint = ${JSON.stringify(endpoint)};
   const intervalMs = ${intervalMs};
+  const meta = ${JSON.stringify(meta)};
   let missingReported = false;
   const send = (payload) => {
-    const body = JSON.stringify(payload);
+    const body = JSON.stringify({ ...meta, ...payload });
     if (navigator.sendBeacon) {
       navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
       return;
@@ -169,6 +231,11 @@ export function createProxyServer(
       timestamp: Date.now(),
       requestHeaders: headerRecord(ctx.clientToProxyRequest.headers),
       source: 'capture'
+    }
+
+    if (isCoverageRelayEnabled() && isCoverageReportUrl(record.url)) {
+      handleCoverageReportRequest(ctx, record, startTime)
+      return
     }
 
     let requestBody = ''

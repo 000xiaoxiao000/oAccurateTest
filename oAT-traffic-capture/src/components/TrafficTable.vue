@@ -99,6 +99,20 @@ function getStatusClass(status: number | string): string {
   return 's-2xx'
 }
 
+function getCoverageClass(record: TrafficRecord): string {
+  if (record.coverageRelay?.status === 'success') return 'c-success'
+  if (record.coverageRelay?.status === 'failed') return 'c-failed'
+  if (record.coverageRelay?.status === 'skipped') return 'c-skipped'
+  return 'c-none'
+}
+
+function getCoverageText(record: TrafficRecord): string {
+  if (record.coverageRelay?.status === 'success') return '已上送'
+  if (record.coverageRelay?.status === 'failed') return '失败'
+  if (record.coverageRelay?.status === 'skipped') return '跳过'
+  return '无字段'
+}
+
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN', {
     year: 'numeric',
@@ -124,6 +138,7 @@ function formatTime(timestamp: number): string {
           <th style="width: 90px">方法</th>
           <th>请求 URL</th>
           <th style="width: 90px">状态码</th>
+          <th style="width: 90px">覆盖率</th>
           <th style="width: 90px">耗时</th>
           <th style="width: 155px">时间</th>
           <th style="width: 150px">操作</th>
@@ -131,7 +146,7 @@ function formatTime(timestamp: number): string {
       </thead>
       <tbody>
         <tr v-if="records.length === 0">
-          <td colspan="8" class="empty-state">
+          <td colspan="9" class="empty-state">
             <div class="empty-icon">📭</div>
             <div>暂无流量记录</div>
             <div class="empty-hint">点击"开始捕获"后，系统将自动记录经过代理的流量</div>
@@ -162,6 +177,11 @@ function formatTime(timestamp: number): string {
           <td>
             <span class="badge" :class="getStatusClass(record.statusCode)">
               {{ record.statusCode }}
+            </span>
+          </td>
+          <td>
+            <span class="coverage-badge" :class="getCoverageClass(record)">
+              {{ getCoverageText(record) }}
             </span>
           </td>
           <td>{{ record.duration }}ms</td>
@@ -252,6 +272,21 @@ tbody tr:hover {
 .s-2xx { background: #f6ffed; color: #52c41a; }
 .s-4xx { background: #fff7e6; color: #fa8c16; }
 .s-5xx { background: #fff1f0; color: #ff4d4f; }
+
+.coverage-badge {
+  display: inline-block;
+  min-width: 50px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.c-success { background: #f6ffed; color: #237804; }
+.c-failed { background: #fff1f0; color: #cf1322; }
+.c-skipped { background: #fffbe6; color: #ad6800; }
+.c-none { background: #f5f5f5; color: #8c8c8c; }
 
 .url-cell {
   max-width: 380px;

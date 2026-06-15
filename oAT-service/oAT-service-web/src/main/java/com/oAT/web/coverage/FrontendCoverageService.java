@@ -79,7 +79,7 @@ public class FrontendCoverageService {
         List<FrontendCoverageReport> rawReports = frontendCoverageReportRepository.findByAppAndVersion(appId, versionNumber, commitId);
         Assert.isTrue(!rawReports.isEmpty(), "没有可生成的前端覆盖率上报数据");
 
-        Map<String, ClassCoverageIndex> coverageMap = new LinkedHashMap<>();
+        Map<String, FrontendFileCoverage> coverageMap = new LinkedHashMap<>();
         long lastTimestamp = 0L;
         for (FrontendCoverageReport rawReport : rawReports) {
             lastTimestamp = Math.max(lastTimestamp, rawReport.timestamp == null ? 0L : rawReport.timestamp);
@@ -101,7 +101,7 @@ public class FrontendCoverageService {
         return report;
     }
 
-    private void mergeIstanbulCoverage(String coverageJson, Map<String, ClassCoverageIndex> coverageMap, String appId) {
+    private void mergeIstanbulCoverage(String coverageJson, Map<String, FrontendFileCoverage> coverageMap, String appId) {
         try {
             JsonNode root = UtilJson.getObjectMapper().readTree(coverageJson);
             Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
@@ -112,20 +112,21 @@ public class FrontendCoverageService {
                 if (!StringUtils.hasText(filePath)) {
                     continue;
                 }
-                ClassCoverageIndex next = parseFileCoverage(filePath, fileNode, appId);
-                ClassCoverageIndex existing = coverageMap.get(filePath);
-                coverageMap.put(filePath, existing == null ? next : mergeFileCoverage(existing, next));
+                FrontendFileCoverage next = parseFileCoverage(filePath, fileNode, appId);
+                FrontendFileCoverage existing = coverageMap.get(filePath);
+                coverageMap.put(filePath, existing == null ? next : existing.merge(next));
             }
         } catch (Exception e) {
             throw new IllegalArgumentException("解析 Istanbul 覆盖率失败", e);
         }
     }
 
-    private ClassCoverageIndex parseFileCoverage(String filePath, JsonNode fileNode, String appId) {
-        Map<Integer, Integer> lineCounts = new LinkedHashMap<>();
+    private FrontendFileCoverage parseFileCoverage(String filePath, JsonNode fileNode, String appId) {
+        Set<Integer> totalLines = new LinkedHashSet<>();
+        Set<Integer> coveredLines = new LinkedHashSet<>();
         JsonNode statementMap = fileNode.get("statementMap");
         JsonNode statementCounts = fileNode.get("s");
-        if (statementMap != null && statementCounts != null) {
+        if (statementMap != null) {
             Iterator<Map.Entry<String, JsonNode>> statements = statementMap.fields();
             while (statements.hasNext()) {
                 Map.Entry<String, JsonNode> statement = statements.next();
@@ -136,8 +137,11 @@ public class FrontendCoverageService {
                 if (line <= 0) {
                     continue;
                 }
-                int count = statementCounts.path(statement.getKey()).asInt(0);
-                lineCounts.merge(line, count, Math::max);
+                int count = statementCounts == null ? 0 : statementCounts.path(statement.getKey()).asInt(0);
+                totalLines.add(line);
+                if (count > 0) {
+                    coveredLines.add(line);
+                }
             }
         }
 
@@ -148,27 +152,29 @@ public class FrontendCoverageService {
         classCoverage.setAppId(appId);
         classCoverage.setClassName(filePath);
         classCoverage.setSourceType(SOURCE_TYPE_FRONTEND);
-        classCoverage.setTotalLines(lineCounts.size());
-        classCoverage.setCoveredLines((int) lineCounts.values().stream().filter(count -> count > 0).count());
+        classCoverage.setTotalLines(totalLines.size());
+        classCoverage.setCoveredLines(coveredLines.size());
         classCoverage.setTotalMethods(methods.size());
         classCoverage.setCoveredMethods((int) methods.stream().filter(ClassCoverageIndex.MethodCoverageDetail::isCovered).count());
-        classCoverage.setTotalBranches(branchStats.totalBranches);
-        classCoverage.setCoveredBranches(branchStats.coveredBranches);
-        classCoverage.setTotalBranchTargets(branchStats.totalTargets);
-        classCoverage.setCoveredBranchTargets(branchStats.coveredTargets);
-        classCoverage.setTotalComplexity(methods.size() + branchStats.totalBranches);
+        classCoverage.setTotalBranches(branchStats.totalBranches.size());
+        classCoverage.setCoveredBranches(branchStats.coveredBranches.size());
+        classCoverage.setTotalBranchTargets(branchStats.totalTargets.size());
+        classCoverage.setCoveredBranchTargets(branchStats.coveredTargets.size());
+        classCoverage.setTotalComplexity(methods.size() + branchStats.totalBranches.size());
         classCoverage.setMethods(methods);
         classCoverage.setLineRate(rate(classCoverage.getCoveredLines(), classCoverage.getTotalLines()));
         classCoverage.setMethodRate(rate(classCoverage.getCoveredMethods(), classCoverage.getTotalMethods()));
         classCoverage.setBranchRate(rate(classCoverage.getCoveredBranchTargets(), classCoverage.getTotalBranchTargets()));
-        return classCoverage;
+        return new FrontendFileCoverage(classCoverage, totalLines, coveredLines,
+                branchStats.totalBranches, branchStats.coveredBranches,
+                branchStats.totalTargets, branchStats.coveredTargets);
     }
 
     private List<ClassCoverageIndex.MethodCoverageDetail> parseFunctions(JsonNode fileNode) {
         List<ClassCoverageIndex.MethodCoverageDetail> methods = new ArrayList<>();
         JsonNode functionMap = fileNode.get("fnMap");
         JsonNode functionCounts = fileNode.get("f");
-        if (functionMap == null || functionCounts == null) {
+        if (functionMap == null) {
             return methods;
         }
         Iterator<Map.Entry<String, JsonNode>> functions = functionMap.fields();
@@ -177,7 +183,7 @@ public class FrontendCoverageService {
             JsonNode fn = function.getValue();
             int startLine = fn.path("loc").path("start").path("line").asInt(0);
             int endLine = fn.path("loc").path("end").path("line").asInt(startLine);
-            int count = functionCounts.path(function.getKey()).asInt(0);
+            int count = functionCounts == null ? 0 : functionCounts.path(function.getKey()).asInt(0);
             Set<Integer> totalLines = new LinkedHashSet<>();
             for (int line = Math.max(1, startLine); line <= Math.max(startLine, endLine); line++) {
                 totalLines.add(line);
@@ -203,57 +209,42 @@ public class FrontendCoverageService {
 
     private BranchStats parseBranches(JsonNode fileNode) {
         BranchStats stats = new BranchStats();
+        JsonNode branchMap = fileNode.get("branchMap");
         JsonNode branchCounts = fileNode.get("b");
-        if (branchCounts == null) {
+        if (branchMap == null && branchCounts == null) {
             return stats;
         }
-        Iterator<Map.Entry<String, JsonNode>> branches = branchCounts.fields();
+        JsonNode branchesNode = branchMap == null ? branchCounts : branchMap;
+        Iterator<Map.Entry<String, JsonNode>> branches = branchesNode.fields();
         while (branches.hasNext()) {
-            JsonNode counts = branches.next().getValue();
-            if (!counts.isArray()) {
+            Map.Entry<String, JsonNode> branch = branches.next();
+            String branchId = branch.getKey();
+            JsonNode counts = branchCounts == null ? null : branchCounts.get(branchId);
+            JsonNode locations = branchMap == null ? null : branch.getValue().get("locations");
+            int targetCount = locations != null && locations.isArray()
+                    ? locations.size()
+                    : counts != null && counts.isArray() ? counts.size() : 0;
+            if (targetCount <= 0) {
                 continue;
             }
-            stats.totalBranches++;
+            stats.totalBranches.add(branchId);
             int coveredTargetsForBranch = 0;
-            for (JsonNode countNode : counts) {
-                stats.totalTargets++;
-                if (countNode.asInt(0) > 0) {
-                    stats.coveredTargets++;
+            for (int targetIndex = 0; targetIndex < targetCount; targetIndex++) {
+                String targetId = branchId + ":" + targetIndex;
+                stats.totalTargets.add(targetId);
+                if (counts != null && counts.path(targetIndex).asInt(0) > 0) {
+                    stats.coveredTargets.add(targetId);
                     coveredTargetsForBranch++;
                 }
             }
             if (coveredTargetsForBranch > 0) {
-                stats.coveredBranches++;
+                stats.coveredBranches.add(branchId);
             }
         }
         return stats;
     }
 
-    private ClassCoverageIndex mergeFileCoverage(ClassCoverageIndex left, ClassCoverageIndex right) {
-        left.setCoveredLines(Math.min(left.getTotalLines(), left.getCoveredLines() + right.getCoveredLines()));
-        left.setCoveredMethods(Math.min(left.getTotalMethods(), left.getCoveredMethods() + right.getCoveredMethods()));
-        left.setCoveredBranches(Math.min(left.getTotalBranches(), left.getCoveredBranches() + right.getCoveredBranches()));
-        left.setCoveredBranchTargets(Math.min(left.getTotalBranchTargets(), left.getCoveredBranchTargets() + right.getCoveredBranchTargets()));
-        left.setLineRate(rate(left.getCoveredLines(), left.getTotalLines()));
-        left.setMethodRate(rate(left.getCoveredMethods(), left.getTotalMethods()));
-        left.setBranchRate(rate(left.getCoveredBranchTargets(), left.getTotalBranchTargets()));
-
-        Map<String, ClassCoverageIndex.MethodCoverageDetail> rightMethods = new LinkedHashMap<>();
-        for (ClassCoverageIndex.MethodCoverageDetail method : right.getMethods()) {
-            rightMethods.put(method.getMethodName() + "\n" + method.getMethodDesc(), method);
-        }
-        for (ClassCoverageIndex.MethodCoverageDetail method : left.getMethods()) {
-            ClassCoverageIndex.MethodCoverageDetail next = rightMethods.get(method.getMethodName() + "\n" + method.getMethodDesc());
-            if (next != null && next.isCovered()) {
-                method.setCovered(true);
-                method.setCoveredLines(method.getTotalLines());
-                method.setCoveredLineNumbers(method.getTotalLineNumbers());
-            }
-        }
-        return left;
-    }
-
-    private void saveSummary(CoverageReportIndex report, Map<String, ClassCoverageIndex> coverageMap) {
+    private void saveSummary(CoverageReportIndex report, Map<String, FrontendFileCoverage> coverageMap) {
         long coveredClasses = 0;
         long totalMethods = 0;
         long coveredMethods = 0;
@@ -266,7 +257,8 @@ public class FrontendCoverageService {
         int totalComplexity = 0;
 
         List<ClassCoverageIndex> batch = new ArrayList<>();
-        for (ClassCoverageIndex item : coverageMap.values()) {
+        for (FrontendFileCoverage fileCoverage : coverageMap.values()) {
+            ClassCoverageIndex item = fileCoverage.toClassCoverageIndex();
             item.setReportId(report.getId());
             item.setId(report.getId() + "_" + item.getClassName().hashCode());
             if (item.getCoveredLines() > 0) {
@@ -321,10 +313,108 @@ public class FrontendCoverageService {
     }
 
     private static class BranchStats {
-        int totalBranches;
-        int coveredBranches;
-        int totalTargets;
-        int coveredTargets;
+        Set<String> totalBranches = new LinkedHashSet<>();
+        Set<String> coveredBranches = new LinkedHashSet<>();
+        Set<String> totalTargets = new LinkedHashSet<>();
+        Set<String> coveredTargets = new LinkedHashSet<>();
+    }
+
+    private class FrontendFileCoverage {
+        private final ClassCoverageIndex index;
+        private final Set<Integer> totalLines;
+        private final Set<Integer> coveredLines;
+        private final Set<String> totalBranches;
+        private final Set<String> coveredBranches;
+        private final Set<String> totalBranchTargets;
+        private final Set<String> coveredBranchTargets;
+
+        FrontendFileCoverage(ClassCoverageIndex index,
+                             Set<Integer> totalLines,
+                             Set<Integer> coveredLines,
+                             Set<String> totalBranches,
+                             Set<String> coveredBranches,
+                             Set<String> totalBranchTargets,
+                             Set<String> coveredBranchTargets) {
+            this.index = index;
+            this.totalLines = new LinkedHashSet<>(totalLines);
+            this.coveredLines = new LinkedHashSet<>(coveredLines);
+            this.totalBranches = new LinkedHashSet<>(totalBranches);
+            this.coveredBranches = new LinkedHashSet<>(coveredBranches);
+            this.totalBranchTargets = new LinkedHashSet<>(totalBranchTargets);
+            this.coveredBranchTargets = new LinkedHashSet<>(coveredBranchTargets);
+        }
+
+        FrontendFileCoverage merge(FrontendFileCoverage next) {
+            totalLines.addAll(next.totalLines);
+            coveredLines.addAll(next.coveredLines);
+            totalBranches.addAll(next.totalBranches);
+            coveredBranches.addAll(next.coveredBranches);
+            totalBranchTargets.addAll(next.totalBranchTargets);
+            coveredBranchTargets.addAll(next.coveredBranchTargets);
+            mergeMethods(index.getMethods(), next.index.getMethods());
+            return this;
+        }
+
+        ClassCoverageIndex toClassCoverageIndex() {
+            index.setTotalLines(totalLines.size());
+            index.setCoveredLines(coveredLines.size());
+            index.setTotalBranches(totalBranches.size());
+            index.setCoveredBranches(coveredBranches.size());
+            index.setTotalBranchTargets(totalBranchTargets.size());
+            index.setCoveredBranchTargets(coveredBranchTargets.size());
+            index.setCoveredMethods((int) index.getMethods().stream()
+                    .filter(ClassCoverageIndex.MethodCoverageDetail::isCovered)
+                    .count());
+            index.setTotalComplexity(index.getTotalMethods() + index.getTotalBranches());
+            index.setLineRate(rate(index.getCoveredLines(), index.getTotalLines()));
+            index.setMethodRate(rate(index.getCoveredMethods(), index.getTotalMethods()));
+            index.setBranchRate(rate(index.getCoveredBranchTargets(), index.getTotalBranchTargets()));
+            return index;
+        }
+
+        private void mergeMethods(List<ClassCoverageIndex.MethodCoverageDetail> target,
+                                  List<ClassCoverageIndex.MethodCoverageDetail> source) {
+            Map<String, ClassCoverageIndex.MethodCoverageDetail> targetMethods = new LinkedHashMap<>();
+            for (ClassCoverageIndex.MethodCoverageDetail method : target) {
+                targetMethods.put(methodKey(method), method);
+            }
+            for (ClassCoverageIndex.MethodCoverageDetail method : source) {
+                ClassCoverageIndex.MethodCoverageDetail existing = targetMethods.get(methodKey(method));
+                if (existing == null) {
+                    target.add(method);
+                    continue;
+                }
+                mergeMethod(existing, method);
+            }
+            index.setTotalMethods(target.size());
+        }
+
+        private void mergeMethod(ClassCoverageIndex.MethodCoverageDetail target,
+                                 ClassCoverageIndex.MethodCoverageDetail source) {
+            Set<Integer> total = new LinkedHashSet<>();
+            if (target.getTotalLineNumbers() != null) {
+                total.addAll(target.getTotalLineNumbers());
+            }
+            if (source.getTotalLineNumbers() != null) {
+                total.addAll(source.getTotalLineNumbers());
+            }
+            Set<Integer> covered = new LinkedHashSet<>();
+            if (target.getCoveredLineNumbers() != null) {
+                covered.addAll(target.getCoveredLineNumbers());
+            }
+            if (source.getCoveredLineNumbers() != null) {
+                covered.addAll(source.getCoveredLineNumbers());
+            }
+            target.setTotalLineNumbers(new ArrayList<>(total));
+            target.setCoveredLineNumbers(new ArrayList<>(covered));
+            target.setTotalLines(total.size());
+            target.setCoveredLines(covered.size());
+            target.setCovered(!covered.isEmpty());
+        }
+
+        private String methodKey(ClassCoverageIndex.MethodCoverageDetail method) {
+            return method.getMethodName() + "\n" + method.getMethodDesc();
+        }
     }
 
     public static class FrontendCoverageReportRequest {

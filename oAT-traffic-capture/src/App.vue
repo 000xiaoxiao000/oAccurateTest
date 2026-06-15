@@ -18,6 +18,7 @@ const selectedRecord = ref<TrafficRecord | null>(null)
 const proxyInfoVisible = ref(false)
 const selectedRecordIds = ref<string[]>([])
 const activePanel = ref<'none' | 'stats' | 'rules' | 'plugins'>('none')
+const activeSection = ref<'capture' | 'coverage' | 'requests' | 'sessions' | 'settings'>('capture')
 const pluginsPath = ref('')
 const coverageIntervalSeconds = ref(30)
 const coverageServiceBaseUrl = ref('')
@@ -26,6 +27,28 @@ const coverageAppId = ref('')
 const relayNotice = ref<{ text: string; status: 'success' | 'failed' | 'skipped' } | null>(null)
 const hasCoverageRelayPlugin = computed(() => store.plugins.some(plugin => plugin.id === 'oat-coverage-relay'))
 const isFloatingMode = new URLSearchParams(window.location.search).get('floating') === '1'
+const currentSectionTitle = computed(() => {
+  const titles = {
+    capture: '采集工作台',
+    coverage: '覆盖率中心',
+    requests: '请求记录',
+    sessions: '会话管理',
+    settings: '系统设置'
+  }
+  return titles[activeSection.value]
+})
+const currentSectionSubtitle = computed(() => {
+  const subtitles = {
+    capture: '实时捕获并观察请求、状态和覆盖率上送结果',
+    coverage: '集中查看覆盖率上送配置、批次状态和失败信息',
+    requests: '按用例、协议、状态检索历史请求并执行重放或导出',
+    sessions: '加载、删除和复用历史采集会话',
+    settings: '管理系统代理、证书、协议、过滤规则和插件'
+  }
+  return subtitles[activeSection.value]
+})
+const detailRecord = computed(() => selectedRecord.value ?? store.filteredRecords[0] ?? null)
+const coverageWithoutRelayCount = computed(() => Math.max(0, store.records.length - store.coverageRelayStats.total))
 let floatingClickTimer: number | null = null
 let relayNoticeTimer: number | null = null
 
@@ -223,6 +246,11 @@ function togglePanel(panel: 'stats' | 'rules' | 'plugins') {
   activePanel.value = activePanel.value === panel ? 'none' : panel
 }
 
+function selectSection(section: typeof activeSection.value) {
+  activeSection.value = section
+  activePanel.value = 'none'
+}
+
 async function openPluginsFolder() {
   await window.electronAPI?.openPluginsFolder()
 }
@@ -284,209 +312,262 @@ function handleFloatingClick() {
     </button>
   </div>
 
-  <div v-else class="app">
-    <header class="app-header">
-      <div class="header-content">
+  <div v-else class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">oA</span>
         <div>
-          <h1 class="header-title">oAT 流量采集器</h1>
-          <p class="header-subtitle">实时捕获并管理 HTTP、HTTPS、MQ 等协议的网络请求流量</p>
+          <strong>oAT 采集器</strong>
+          <small>Traffic Capture</small>
         </div>
-        <ProxyControl :port="store.proxyPort" />
       </div>
-    </header>
+      <nav class="nav" aria-label="主导航">
+        <button type="button" :class="{ active: activeSection === 'capture' }" @click="selectSection('capture')">采集工作台</button>
+        <button type="button" :class="{ active: activeSection === 'coverage' }" @click="selectSection('coverage')">覆盖率中心</button>
+        <button type="button" :class="{ active: activeSection === 'requests' }" @click="selectSection('requests')">请求记录</button>
+        <button type="button" :class="{ active: activeSection === 'sessions' }" @click="selectSection('sessions')">会话管理</button>
+        <button type="button" :class="{ active: activeSection === 'settings' }" @click="selectSection('settings')">系统设置</button>
+      </nav>
+      <div class="sidebar-status">
+        <span class="status-dot" :class="{ active: store.isCapturing }"></span>
+        <span>{{ store.isCapturing ? '捕获中' : '未捕获' }}</span>
+        <strong>{{ store.capturedCount }}</strong>
+        <span>条流量</span>
+      </div>
+    </aside>
 
-    <div class="control-panel">
-      <div class="control-row">
-        <div class="input-group">
-          <label for="caseName">用例名称 / 流量描述</label>
-          <input
-            id="caseName"
-            v-model="store.currentCaseName"
-            type="text"
-            placeholder="例如：用户登录流程、订单创建接口测试..."
-            :disabled="store.isCapturing"
-          />
+    <main class="main-shell">
+      <header class="topbar">
+        <div>
+          <h1>{{ currentSectionTitle }}</h1>
+          <p>{{ currentSectionSubtitle }}</p>
         </div>
-        <div class="btn-group">
+        <div class="topbar-actions">
+          <span class="status-pill">代理 127.0.0.1:{{ store.proxyPort }}</span>
+          <span class="status-pill">{{ store.isCapturing ? '正在捕获' : '等待捕获' }}</span>
+          <button class="btn btn-outline" type="button" @click="selectSection('settings')">设置</button>
           <button
             class="btn"
             :class="store.isCapturing ? 'btn-danger' : 'btn-success'"
+            type="button"
             @click="toggleCapture"
           >
-            {{ store.isCapturing ? '⏹ 停止捕获' : '▶ 开始捕获' }}
+            {{ store.isCapturing ? '停止捕获' : '开始捕获' }}
           </button>
-          <button class="btn btn-outline" @click="showFloatingWindow">
-            悬浮最小化
-          </button>
-          <button class="btn btn-outline" @click="showMqInput = true">
-            + 手动录入 MQ
-          </button>
-          <button class="btn btn-outline" @click="handleClear">清空记录</button>
         </div>
-      </div>
+      </header>
 
-      <div v-if="proxyInfoVisible" class="proxy-tip">
-        <span class="tip-icon">ℹ️</span>
-        代理已启动在端口 <strong>{{ store.proxyPort }}</strong>，请在浏览器或系统网络设置中配置 HTTP 代理为
-        <strong>127.0.0.1:{{ store.proxyPort }}</strong>
-      </div>
-    </div>
-
-    <div class="stats-bar">
-      <div class="stats">
-        <button
-          type="button"
-          class="stat-item"
-          :class="{ active: store.statusFilter === 'all' }"
-          @click="store.setStatusFilter('all')"
-        >
-          <span class="stat-label">总请求数</span>
-          <span class="stat-value">{{ store.stats.total }}</span>
-        </button>
-        <button
-          type="button"
-          class="stat-item"
-          :class="{ active: store.statusFilter === 'success' }"
-          @click="toggleStatusFilter('success')"
-        >
-          <span class="stat-label">成功</span>
-          <span class="stat-value success">{{ store.stats.success }}</span>
-        </button>
-        <button
-          type="button"
-          class="stat-item"
-          :class="{ active: store.statusFilter === 'failed' }"
-          @click="toggleStatusFilter('failed')"
-        >
-          <span class="stat-label">失败</span>
-          <span class="stat-value danger">{{ store.stats.failed }}</span>
-        </button>
-        <div class="stat-item">
-          <span class="stat-label">平均耗时</span>
-          <span class="stat-value">{{ store.stats.avgDuration }}ms</span>
+      <section v-if="activeSection === 'capture'" class="page-content">
+        <div class="control-card">
+          <div class="control-row">
+            <label class="input-group" for="caseName">
+              <span>用例名称 / 流量描述</span>
+              <input
+                id="caseName"
+                v-model="store.currentCaseName"
+                type="text"
+                placeholder="例如：用户登录流程、订单创建接口测试..."
+                :disabled="store.isCapturing"
+              />
+            </label>
+            <div class="btn-group">
+              <button class="btn btn-outline" type="button" @click="showFloatingWindow">悬浮最小化</button>
+              <button class="btn btn-outline" type="button" @click="showMqInput = true">手动录入 MQ</button>
+              <button class="btn btn-outline" type="button" @click="handleClear">清空记录</button>
+            </div>
+          </div>
+          <div v-if="proxyInfoVisible" class="proxy-tip">
+            代理已启动在端口 <strong>{{ store.proxyPort }}</strong>，请配置 HTTP 代理为 <strong>127.0.0.1:{{ store.proxyPort }}</strong>
+          </div>
         </div>
-      </div>
-      <div v-if="store.isCapturing" class="recording-indicator">
-        <span class="dot"></span>
-        正在捕获中 · 端口 {{ store.proxyPort }}
-      </div>
-    </div>
 
-    <div
-      v-if="hasCoverageRelayPlugin"
-      class="coverage-relay-bar"
-      :class="{ ok: store.coverageRelayStats.latestRelay?.status === 'success', failed: store.coverageRelayStats.latestRelay?.status === 'failed' }"
-    >
-      <div class="coverage-relay-main">
-        <span class="coverage-dot"></span>
-        <strong>覆盖率上送</strong>
-        <span v-if="store.coverageRelayStats.total === 0">暂无上送记录</span>
-        <span v-else>
-          最近一次 {{ coverageRelayStatusText(store.coverageRelayStats.latestRelay?.status) }}
-          · 成功 {{ store.coverageRelayStats.success }} / 失败 {{ store.coverageRelayStats.failed }}
-        </span>
-      </div>
-      <div class="coverage-relay-meta">
-        <label class="coverage-interval-control">
-          <span>服务</span>
-          <input
-            v-model.trim="coverageServiceBaseUrl"
-            class="wide"
-            type="text"
-            placeholder="http://localhost:8080"
-            @keyup.enter="saveCoverageRelayConfig"
+        <div class="metric-grid">
+          <button type="button" class="metric-card" :class="{ active: store.statusFilter === 'all' }" @click="store.setStatusFilter('all')">
+            <span>总请求</span>
+            <strong>{{ store.stats.total }}</strong>
+          </button>
+          <button type="button" class="metric-card" :class="{ active: store.statusFilter === 'success' }" @click="toggleStatusFilter('success')">
+            <span>成功</span>
+            <strong class="success">{{ store.stats.success }}</strong>
+          </button>
+          <button type="button" class="metric-card" :class="{ active: store.statusFilter === 'failed' }" @click="toggleStatusFilter('failed')">
+            <span>失败</span>
+            <strong class="danger">{{ store.stats.failed }}</strong>
+          </button>
+          <div class="metric-card">
+            <span>平均耗时</span>
+            <strong>{{ store.stats.avgDuration }}ms</strong>
+          </div>
+          <div class="metric-card">
+            <span>覆盖率成功</span>
+            <strong class="success">{{ store.coverageRelayStats.success }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>覆盖率失败</span>
+            <strong class="danger">{{ store.coverageRelayStats.failed }}</strong>
+          </div>
+        </div>
+
+        <div v-if="hasCoverageRelayPlugin && relayNotice" class="coverage-relay-notice" :class="relayNotice.status">
+          {{ relayNotice.text }}
+        </div>
+
+        <div class="workspace-grid">
+          <section class="panel table-panel">
+            <div class="panel-toolbar">
+              <div class="search-box">
+                <input v-model="store.searchQuery" type="text" placeholder="搜索 URL、用例名称或方法..." />
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-outline" type="button" @click="togglePanel('stats')">统计图表</button>
+                <button class="btn btn-outline" type="button" @click="togglePanel('rules')">过滤规则</button>
+                <button class="btn btn-outline" type="button" @click="replaySelected">重放选中</button>
+                <button class="btn btn-primary" type="button" @click="exportData('excel')">导出 Excel</button>
+                <button class="btn btn-outline" type="button" @click="exportData('csv')">CSV</button>
+                <button class="btn btn-outline" type="button" @click="exportData('json')">JSON</button>
+              </div>
+            </div>
+            <TrafficStatsPanel v-if="activePanel === 'stats'" :stats="store.chartStats" />
+            <FilterRulesPanel v-if="activePanel === 'rules'" :rules="store.filterRules" @save="store.saveRules" />
+            <TrafficTable
+              :records="store.filteredRecords"
+              v-model:selected-ids="selectedRecordIds"
+              @delete="handleDelete"
+              @replay="replayRecord"
+              @view-detail="handleViewDetail"
+            />
+          </section>
+
+          <aside class="right-rail">
+            <section class="panel side-panel">
+              <div class="panel-header">
+                <strong>覆盖率概览</strong>
+                <button class="link-btn" type="button" @click="selectSection('coverage')">查看全部</button>
+              </div>
+              <div class="coverage-grid">
+                <div><span>已上送</span><strong class="success">{{ store.coverageRelayStats.success }}</strong></div>
+                <div><span>失败</span><strong class="danger">{{ store.coverageRelayStats.failed }}</strong></div>
+                <div><span>跳过</span><strong>{{ store.coverageRelayStats.skipped }}</strong></div>
+                <div><span>无字段</span><strong>{{ coverageWithoutRelayCount }}</strong></div>
+              </div>
+              <p class="muted">
+                下次约 {{ formatClock(store.coverageRelayStats.nextReportAt) }}，间隔 {{ formatDuration(store.coverageRelayStats.intervalMs) }}
+              </p>
+            </section>
+
+            <section class="panel side-panel">
+              <div class="panel-header">
+                <strong>请求详情</strong>
+                <button v-if="detailRecord" class="link-btn" type="button" @click="handleViewDetail(detailRecord)">完整详情</button>
+              </div>
+              <div v-if="detailRecord" class="detail-stack">
+                <div class="kv"><span>用例</span><strong>{{ detailRecord.caseName || '未命名' }}</strong></div>
+                <div class="kv"><span>方法</span><strong>{{ detailRecord.method }}</strong></div>
+                <div class="kv"><span>状态</span><strong>{{ detailRecord.statusCode }}</strong></div>
+                <div class="kv"><span>耗时</span><strong>{{ detailRecord.duration }}ms</strong></div>
+                <div class="kv wide"><span>URL</span><strong>{{ detailRecord.url }}</strong></div>
+                <div class="code-preview">{{ detailRecord.responseBody || detailRecord.requestBody || '暂无请求或响应正文' }}</div>
+              </div>
+              <div v-else class="empty-side">暂无请求记录</div>
+            </section>
+          </aside>
+        </div>
+      </section>
+
+      <section v-else-if="activeSection === 'coverage'" class="page-content single-column">
+        <div class="panel coverage-config">
+          <div class="panel-header">
+            <strong>覆盖率上送配置</strong>
+            <span>{{ hasCoverageRelayPlugin ? '插件已启用' : '未检测到覆盖率插件' }}</span>
+          </div>
+          <div class="coverage-form">
+            <label><span>服务</span><input v-model.trim="coverageServiceBaseUrl" type="text" placeholder="http://localhost:8080" /></label>
+            <label><span>项目</span><input v-model.trim="coverageProjectId" type="text" placeholder="projectId" /></label>
+            <label><span>应用</span><input v-model.trim="coverageAppId" type="text" placeholder="appId" /></label>
+            <label><span>间隔秒</span><input v-model.number="coverageIntervalSeconds" type="number" min="1" step="1" /></label>
+            <button class="btn btn-primary" type="button" @click="saveCoverageRelayConfig">保存配置</button>
+          </div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric-card"><span>覆盖率记录</span><strong>{{ store.coverageRelayStats.total }}</strong></div>
+          <div class="metric-card"><span>成功</span><strong class="success">{{ store.coverageRelayStats.success }}</strong></div>
+          <div class="metric-card"><span>失败</span><strong class="danger">{{ store.coverageRelayStats.failed }}</strong></div>
+          <div class="metric-card"><span>跳过</span><strong>{{ store.coverageRelayStats.skipped }}</strong></div>
+          <div class="metric-card"><span>无覆盖字段</span><strong>{{ coverageWithoutRelayCount }}</strong></div>
+          <div class="metric-card"><span>下次上送</span><strong>{{ formatClock(store.coverageRelayStats.nextReportAt) }}</strong></div>
+        </div>
+        <TrafficStatsPanel :stats="store.chartStats" />
+      </section>
+
+      <section v-else-if="activeSection === 'requests'" class="page-content single-column">
+        <section class="panel table-panel">
+          <div class="panel-toolbar">
+            <div class="search-box">
+              <input v-model="store.searchQuery" type="text" placeholder="搜索 URL、用例名称或方法..." />
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-outline" type="button" @click="replaySelected">重放选中</button>
+              <button class="btn btn-primary" type="button" @click="exportData('excel')">导出 Excel</button>
+              <button class="btn btn-outline" type="button" @click="exportData('csv')">导出 CSV</button>
+              <button class="btn btn-outline" type="button" @click="exportData('json')">导出 JSON</button>
+            </div>
+          </div>
+          <TrafficTable
+            :records="store.filteredRecords"
+            v-model:selected-ids="selectedRecordIds"
+            @delete="handleDelete"
+            @replay="replayRecord"
+            @view-detail="handleViewDetail"
           />
-          <span>项目</span>
-          <input
-            v-model.trim="coverageProjectId"
-            type="text"
-            placeholder="projectId"
-            @keyup.enter="saveCoverageRelayConfig"
+        </section>
+      </section>
+
+      <section v-else-if="activeSection === 'sessions'" class="page-content single-column">
+        <SessionHistory @load="handleLoadSession" />
+      </section>
+
+      <section v-else class="page-content single-column">
+        <section class="panel settings-panel">
+          <div class="panel-header">
+            <strong>系统代理与证书</strong>
+            <span>端口 {{ store.proxyPort }}</span>
+          </div>
+          <ProxyControl :port="store.proxyPort" />
+        </section>
+        <section class="panel settings-panel">
+          <div class="panel-header">
+            <strong>规则与插件</strong>
+            <div class="btn-group">
+              <button class="btn btn-outline" type="button" @click="togglePanel('rules')">过滤规则</button>
+              <button class="btn btn-outline" type="button" @click="togglePanel('plugins')">插件扩展</button>
+            </div>
+          </div>
+          <FilterRulesPanel v-if="activePanel === 'rules'" :rules="store.filterRules" @save="store.saveRules" />
+          <PluginPanel
+            v-if="activePanel === 'plugins'"
+            :plugins="store.plugins"
+            :plugins-path="pluginsPath"
+            @reload="store.reloadPlugins"
+            @open-folder="openPluginsFolder"
+            @install-builtin="store.installBuiltinPlugin"
+            @uninstall-builtin="store.uninstallBuiltinPlugin"
+            @uninstall-plugin="(plugin) => uninstallPlugin(plugin.id)"
           />
-          <span>应用</span>
-          <input
-            v-model.trim="coverageAppId"
-            type="text"
-            placeholder="appId"
-            @keyup.enter="saveCoverageRelayConfig"
-          />
-          <span>预计间隔</span>
-          <input
-            v-model.number="coverageIntervalSeconds"
-            type="number"
-            min="1"
-            step="1"
-            @keyup.enter="saveCoverageRelayConfig"
-          />
-          <span>秒</span>
-          <button type="button" @click="saveCoverageRelayConfig">保存</button>
-        </label>
-        <span>预计间隔约 {{ formatDuration(store.coverageRelayStats.intervalMs) }}</span>
-        <span>下次约 {{ formatClock(store.coverageRelayStats.nextReportAt) }}</span>
-        <span v-if="store.coverageRelayStats.latestRelay?.httpStatus">HTTP {{ store.coverageRelayStats.latestRelay.httpStatus }}</span>
-        <span v-if="store.coverageRelayStats.latestRelay?.error" class="coverage-error" :title="store.coverageRelayStats.latestRelay.error">
-          {{ store.coverageRelayStats.latestRelay.error }}
-        </span>
-      </div>
-    </div>
+        </section>
+      </section>
 
-    <div v-if="hasCoverageRelayPlugin && relayNotice" class="coverage-relay-notice" :class="relayNotice.status">
-      {{ relayNotice.text }}
-    </div>
+      <DetailModal
+        :record="selectedRecord"
+        :show="showDetail"
+        @close="showDetail = false"
+      />
 
-    <div class="toolbar">
-      <div class="search-box">
-        <input
-          v-model="store.searchQuery"
-          type="text"
-          placeholder="搜索 URL、用例名称或方法..."
-        />
-      </div>
-      <div class="btn-group">
-        <button class="btn btn-outline" @click="togglePanel('stats')">统计图表</button>
-        <button class="btn btn-outline" @click="togglePanel('rules')">过滤规则</button>
-        <button class="btn btn-outline" @click="togglePanel('plugins')">插件扩展</button>
-        <button class="btn btn-outline" @click="replaySelected">重放选中</button>
-        <button class="btn btn-primary" @click="exportData('excel')">导出 Excel</button>
-        <button class="btn btn-outline" @click="exportData('csv')">导出 CSV</button>
-        <button class="btn btn-outline" @click="exportData('json')">导出 JSON</button>
-      </div>
-    </div>
-
-    <TrafficStatsPanel v-if="activePanel === 'stats'" :stats="store.chartStats" />
-    <FilterRulesPanel v-if="activePanel === 'rules'" :rules="store.filterRules" @save="store.saveRules" />
-    <PluginPanel
-      v-if="activePanel === 'plugins'"
-      :plugins="store.plugins"
-      :plugins-path="pluginsPath"
-      @reload="store.reloadPlugins"
-      @open-folder="openPluginsFolder"
-      @install-builtin="store.installBuiltinPlugin"
-      @uninstall-builtin="store.uninstallBuiltinPlugin"
-      @uninstall-plugin="(plugin) => uninstallPlugin(plugin.id)"
-    />
-
-    <TrafficTable
-      :records="store.filteredRecords"
-      v-model:selected-ids="selectedRecordIds"
-      @delete="handleDelete"
-      @replay="replayRecord"
-      @view-detail="handleViewDetail"
-    />
-
-    <SessionHistory @load="handleLoadSession" />
-
-    <DetailModal
-      :record="selectedRecord"
-      :show="showDetail"
-      @close="showDetail = false"
-    />
-
-    <MqInputModal
-      :show="showMqInput"
-      @close="showMqInput = false"
-      @add="addMqRecord"
-    />
+      <MqInputModal
+        :show="showMqInput"
+        @close="showMqInput = false"
+        @add="addMqRecord"
+      />
+    </main>
   </div>
 </template>
 
@@ -621,298 +702,429 @@ function handleFloatingClick() {
   background: #f5f5f5;
 }
 
-.app {
+
+.app-shell {
   min-height: 100vh;
-  background: #f0f2f5;
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  background: #eef1f5;
+  color: #1f2937;
+}
+
+.sidebar {
+  background: #17202b;
+  color: #e5edf6;
+  padding: 18px 14px;
   display: flex;
   flex-direction: column;
+  gap: 18px;
 }
 
-.app-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 12px 18px;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.header-content {
-  max-width: 1400px;
-  margin: 0 auto;
+.brand strong,
+.brand small {
+  display: block;
 }
 
-.header-title {
-  font-size: 19px;
-  font-weight: 600;
-  margin: 0 0 4px;
+.brand small {
+  margin-top: 2px;
+  color: #94a3b8;
+  font-size: 11px;
 }
 
-.header-subtitle {
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #7dd3fc;
+  color: #102030;
+  font-weight: 800;
+}
+
+.nav {
+  display: grid;
+  gap: 6px;
+}
+
+.nav button {
+  height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 12px;
+  background: transparent;
+  color: #b8c4d2;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nav button:hover,
+.nav button.active {
+  color: #ffffff;
+  background: #2563eb;
+}
+
+.sidebar-status {
+  margin-top: auto;
+  min-height: 40px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #cbd5e1;
   font-size: 12px;
-  opacity: 0.85;
-  margin: 0;
 }
 
-.control-panel {
-  background: #fafafa;
-  border-bottom: 1px solid #e8e8e8;
-  padding: 8px 18px;
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.status-dot.active {
+  background: #22c55e;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.main-shell {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.topbar {
+  min-height: 64px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #dfe4ea;
+}
+
+.topbar h1 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.topbar p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.topbar-actions,
+.btn-group,
+.control-row,
+.panel-toolbar,
+.coverage-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.btn {
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover,
+.link-btn:hover {
+  opacity: 0.86;
+}
+
+.btn-success { background: #16a34a; color: #ffffff; }
+.btn-danger { background: #dc2626; color: #ffffff; }
+.btn-primary { background: #2563eb; color: #ffffff; }
+.btn-outline {
+  background: #ffffff;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.page-content {
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 18px 18px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.single-column {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.control-card,
+.panel {
+  background: #ffffff;
+  border: 1px solid #dfe4ea;
+  border-radius: 8px;
+}
+
+.control-card {
+  padding: 12px;
 }
 
 .control-row {
-  display: flex;
-  gap: 12px;
   align-items: flex-end;
-  flex-wrap: wrap;
 }
 
 .input-group {
   flex: 1;
   min-width: 280px;
+  display: grid;
+  gap: 5px;
 }
 
-.input-group label {
-  display: block;
-  margin-bottom: 4px;
-  font-weight: 500;
-  color: #262626;
+.input-group span,
+.coverage-form span {
+  color: #475569;
   font-size: 12px;
+  font-weight: 600;
 }
 
-.input-group input {
-  width: 100%;
-  height: 28px;
+.input-group input,
+.search-box input,
+.coverage-form input {
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   padding: 0 10px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  font-size: 13px;
-  transition: border-color 0.2s;
+  color: #1f2937;
+  background: #ffffff;
 }
 
-.input-group input:focus {
+.input-group input:focus,
+.search-box input:focus,
+.coverage-form input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
 }
 
 .input-group input:disabled {
-  background: #f5f5f5;
-  cursor: not-allowed;
-}
-
-.btn-group {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.btn {
-  height: 28px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: opacity 0.2s;
-  white-space: nowrap;
-}
-
-.btn:hover {
-  opacity: 0.85;
-}
-
-.btn-success { background: #52c41a; color: white; }
-.btn-danger { background: #ff4d4f; color: white; }
-.btn-primary { background: #667eea; color: white; }
-.btn-outline {
-  background: white;
-  color: #595959;
-  border: 1px solid #d9d9d9;
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .proxy-tip {
-  margin-top: 8px;
-  padding: 6px 12px;
-  background: #e6f7ff;
-  border: 1px solid #91d5ff;
-  border-radius: 4px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-size: 13px;
-  color: #096dd9;
 }
 
-.tip-icon {
-  margin-right: 6px;
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(118px, 1fr));
+  gap: 10px;
 }
 
-.stats-bar {
-  padding: 6px 18px;
-  background: #f9f9f9;
-  border-bottom: 1px solid #e8e8e8;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.metric-card {
+  min-height: 64px;
+  padding: 9px 10px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: left;
 }
 
-.stats {
-  display: flex;
-  gap: 20px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-  background: transparent;
-  font: inherit;
-}
-
-button.stat-item {
+button.metric-card {
   cursor: pointer;
 }
 
-button.stat-item:hover {
-  background: #f0f2ff;
+.metric-card.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
 }
 
-.stat-item.active {
-  background: #eef2ff;
-  border-color: #aebcff;
-}
-
-.stat-label {
-  color: #8c8c8c;
+.metric-card span {
+  display: block;
+  color: #64748b;
   font-size: 12px;
 }
 
-.stat-value {
-  font-weight: 600;
-  color: #262626;
-  font-size: 14px;
+.metric-card strong {
+  display: block;
+  margin-top: 5px;
+  color: #1f2937;
+  font-size: 18px;
 }
 
-.stat-value.success { color: #52c41a; }
-.stat-value.danger { color: #ff4d4f; }
+.success { color: #16a34a !important; }
+.danger { color: #dc2626 !important; }
 
-.recording-indicator {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  background: #fff1f0;
-  border: 1px solid #ffa39e;
-  border-radius: 4px;
-  color: #cf1322;
-  font-size: 13px;
+.workspace-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
 }
 
-.dot {
-  width: 8px;
-  height: 8px;
-  background: #ff4d4f;
-  border-radius: 50%;
-  animation: pulse 1.5s ease-in-out infinite;
+.table-panel {
+  min-width: 0;
+  overflow: hidden;
 }
 
-.coverage-relay-bar {
-  min-height: 34px;
-  padding: 6px 18px;
+.panel-toolbar,
+.panel-header {
+  min-height: 48px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5eaf0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-bottom: 1px solid #e8e8e8;
-  background: #fafafa;
-  color: #595959;
-  font-size: 12px;
-}
-
-.coverage-relay-bar.ok {
-  background: #f6ffed;
-  color: #237804;
-}
-
-.coverage-relay-bar.failed {
-  background: #fff1f0;
-  color: #cf1322;
-}
-
-.coverage-relay-main,
-.coverage-relay-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
   flex-wrap: wrap;
 }
 
-.coverage-relay-main strong {
-  color: #262626;
+.search-box input {
+  width: min(320px, 100%);
 }
 
-.coverage-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #bfbfbf;
+.right-rail {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
 }
 
-.coverage-relay-bar.ok .coverage-dot {
-  background: #52c41a;
+.side-panel {
+  min-width: 0;
+  overflow: hidden;
 }
 
-.coverage-relay-bar.failed .coverage-dot {
-  background: #ff4d4f;
+.coverage-grid {
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.coverage-relay-meta {
-  justify-content: flex-end;
+.coverage-grid div {
+  padding: 10px;
+  border: 1px solid #e5eaf0;
+  border-radius: 8px;
+  background: #f8fafc;
 }
 
-.coverage-relay-meta span {
-  white-space: nowrap;
+.coverage-grid span,
+.kv span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
 }
 
-.coverage-interval-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: inherit;
-  white-space: nowrap;
+.coverage-grid strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 18px;
 }
 
-.coverage-interval-control input {
-  width: 88px;
-  height: 24px;
-  box-sizing: border-box;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  padding: 0 6px;
-  color: #262626;
-  background: #fff;
+.muted {
+  margin: 0;
+  padding: 0 12px 12px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
-.coverage-interval-control input.wide {
-  width: 180px;
-}
-
-.coverage-interval-control button {
-  height: 24px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  padding: 0 8px;
-  background: #fff;
-  color: #595959;
+.link-btn {
+  border: 0;
+  background: transparent;
+  color: #2563eb;
   cursor: pointer;
+  font-size: 12px;
+}
+
+.detail-stack {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  font-size: 13px;
+}
+
+.kv strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kv.wide {
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+
+.code-preview {
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: #101828;
+  color: #d1e7ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.empty-side {
+  padding: 24px 12px;
+  color: #94a3b8;
+  text-align: center;
+  font-size: 13px;
 }
 
 .coverage-relay-notice {
-  margin: 8px 18px 0;
-  padding: 8px 12px;
-  border-radius: 4px;
+  padding: 9px 12px;
+  border-radius: 6px;
   border: 1px solid #d9d9d9;
-  background: #fafafa;
+  background: #ffffff;
   color: #595959;
   font-size: 13px;
 }
@@ -935,10 +1147,49 @@ button.stat-item:hover {
   color: #ad6800;
 }
 
-.coverage-error {
-  max-width: 360px;
+.coverage-config,
+.settings-panel {
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.coverage-form {
+  padding: 12px;
+  align-items: flex-end;
+}
+
+.coverage-form label {
+  min-width: 160px;
+  display: grid;
+  gap: 5px;
+}
+
+.settings-panel :deep(.proxy-control) {
+  margin: 0;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.settings-panel :deep(.label) {
+  color: #334155;
+}
+
+.settings-panel :deep(.hint),
+.settings-panel :deep(.protocol-option small) {
+  color: #64748b;
+}
+
+.settings-panel :deep(.toggle-btn),
+.settings-panel :deep(.mini-btn),
+.settings-panel :deep(.protocol-option) {
+  border-color: #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.settings-panel :deep(.toggle-btn.active) {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
 }
 
 @keyframes pulse {
@@ -946,39 +1197,33 @@ button.stat-item:hover {
   50% { opacity: 0.3; }
 }
 
-.toolbar {
-  padding: 7px 18px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #f0f0f0;
-  background: white;
-  gap: 16px;
+@media (max-width: 1180px) {
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(118px, 1fr));
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-@media (max-width: 900px) {
-  .coverage-relay-bar {
+@media (max-width: 820px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .topbar {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .coverage-relay-meta {
-    justify-content: flex-start;
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(118px, 1fr));
   }
 }
 
-.search-box input {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid #d9d9d9;
-  border-radius: 4px;
-  font-size: 13px;
-  width: 220px;
-  transition: border-color 0.2s;
-}
-
-.search-box input:focus {
-  outline: none;
-  border-color: #667eea;
-}
 </style>
