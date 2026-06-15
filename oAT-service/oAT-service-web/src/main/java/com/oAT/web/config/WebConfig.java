@@ -45,6 +45,7 @@ public class WebConfig implements WebMvcConfigurer {
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/projects/*/apps/*/coverage/frontend/report", configuration);
+        source.registerCorsConfiguration("/api/projects/*/apps/*/coverage/universal/*/report", configuration);
 
         FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(new CorsFilter(source));
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
@@ -59,6 +60,7 @@ public class WebConfig implements WebMvcConfigurer {
                         "/client/**", "/r/**", "/error", "/share/**", "/share/api/**",
                         "/webhook/**",
                         "/api/projects/*/apps/*/coverage/frontend/report",
+                        "/api/projects/*/apps/*/coverage/universal/*/report",
                         "/api/auth/login", "/api/auth/register", "/api/auth/me");
         registry.addInterceptor(aiInteractiveAccessInterceptor).addPathPatterns("/api/projects/*/ai/**");
         registry.addInterceptor(projectInterceptor).addPathPatterns("/p/**");
@@ -67,6 +69,12 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/projects/*/apps/*/coverage/frontend/report")
+                .allowedOriginPatterns("*")
+                .allowedMethods("POST", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true)
+                .maxAge(3600);
+        registry.addMapping("/api/projects/*/apps/*/coverage/universal/*/report")
                 .allowedOriginPatterns("*")
                 .allowedMethods("POST", "OPTIONS")
                 .allowedHeaders("*")

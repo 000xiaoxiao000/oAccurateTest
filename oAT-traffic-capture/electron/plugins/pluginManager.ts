@@ -233,10 +233,11 @@ function parseJson(value) {
 function isCoverageUrl(url) {
   return /\\/oat\\/coverage\\/report(\\?|$)/i.test(url || '')
     || /\\/api\\/projects\\/[^/]+\\/apps\\/[^/]+\\/coverage\\/frontend\\/report(\\?|$)/i.test(url || '')
+    || /\\/api\\/projects\\/[^/]+\\/apps\\/[^/]+\\/coverage\\/universal\\/(CPP|GO|PYTHON)\\/report(\\?|$)/i.test(url || '')
 }
 
 function resolveDirectApiUrl(url) {
-  const match = String(url || '').match(/\\/api\\/projects\\/[^/]+\\/apps\\/[^/]+\\/coverage\\/frontend\\/report/i)
+  const match = String(url || '').match(/\\/api\\/projects\\/[^/]+\\/apps\\/[^/]+\\/coverage\\/(frontend|universal\\/(CPP|GO|PYTHON))\\/report/i)
   if (!match) return ''
   try {
     const parsed = new URL(url)
@@ -252,16 +253,35 @@ function resolveRelayApiUrl(record, body) {
   return ''
 }
 
-function resolveConfiguredApiUrl(body, context) {
+function normalizeSourceType(body, url) {
+  const fromUrl = String(url || '').match(/\\/coverage\\/universal\\/([^/?#]+)\\/report/i)?.[1]
+  const raw = String(body?.sourceType || fromUrl || 'FRONTEND').trim().toUpperCase()
+  if (raw === 'CPP' || raw === 'C++' || raw === 'C' || raw === 'CXX') return 'CPP'
+  if (raw === 'GO' || raw === 'GOLANG') return 'GO'
+  if (raw === 'PYTHON' || raw === 'PY') return 'PYTHON'
+  return 'FRONTEND'
+}
+
+function coveragePayload(body) {
+  if (!body) return undefined
+  if (body.coverageData !== undefined) return body.coverageData
+  if (body.data !== undefined) return body.data
+  if (body.profile !== undefined) return body.profile
+  return body.coverage
+}
+
+function resolveConfiguredApiUrl(record, body, context) {
   const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || context?.coverageRelay?.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
   const projectId = body?.projectId || context?.coverageRelay?.projectId
   const appId = body?.appId || body?.appKey || context?.coverageRelay?.appId
   if (!serviceBaseUrl || !projectId || !appId) return ''
-  return String(serviceBaseUrl).replace(/\\/$/, '') + '/api/projects/' + encodeURIComponent(projectId) + '/apps/' + encodeURIComponent(appId) + '/coverage/frontend/report'
+  const sourceType = normalizeSourceType(body, record.url)
+  const path = sourceType === 'FRONTEND' ? '/coverage/frontend/report' : '/coverage/universal/' + sourceType + '/report'
+  return String(serviceBaseUrl).replace(/\\/$/, '') + '/api/projects/' + encodeURIComponent(projectId) + '/apps/' + encodeURIComponent(appId) + path
 }
 
 function resolveTargetApiUrl(record, body, context) {
-  return resolveConfiguredApiUrl(body, context) || resolveRelayApiUrl(record, body)
+  return resolveConfiguredApiUrl(record, body, context) || resolveRelayApiUrl(record, body)
 }
 
 function coverageSignature(coverage) {
@@ -285,8 +305,9 @@ function coverageDedupeKey(targetUrl, body) {
 
 function relayRecord(record, body, context, status, options = {}) {
   const tags = new Set(record.tags || [])
+  const sourceType = normalizeSourceType(body, record.url)
   tags.add('COVERAGE')
-  tags.add('FRONTEND')
+  tags.add(sourceType)
   tags.add(status === 'success' ? 'COVERAGE_OK' : status === 'failed' ? 'COVERAGE_FAIL' : 'COVERAGE_SKIP')
   const configuredIntervalMs = Number(context?.coverageRelay?.intervalMs) > 0 ? Number(context.coverageRelay.intervalMs) : 30000
   const intervalMs = Number(body?.intervalMs) > 0 ? Number(body.intervalMs) : configuredIntervalMs
@@ -321,7 +342,7 @@ export function onRecordCaptured(record) {
   if (!isCoverageUrl(record.url)) return record
   const tags = new Set(record.tags || [])
   tags.add('COVERAGE')
-  tags.add('FRONTEND')
+  tags.add(normalizeSourceType(null, record.url))
   return { ...record, tags: Array.from(tags) }
 }
 
@@ -331,12 +352,14 @@ export async function beforeSave(record, context) {
   if (!(record.tags || []).includes('COVERAGE')) return record
   const start = Date.now()
   const body = parseJson(record.requestBody)
-  const coverage = body?.coverage
-  if (body?.coverageMissing) {
+  const sourceType = normalizeSourceType(body, record.url)
+  const coverage = coveragePayload(body)
+  if (sourceType === 'FRONTEND' && body?.coverageMissing) {
     return relayRecord(record, body, context, 'skipped', { error: '页面未发现 window.__coverage__，请确认被测前端已启用 Istanbul 插桩并刷新页面', duration: Date.now() - start })
   }
-  if (!coverage) {
-    return relayRecord(record, body, context, 'skipped', { error: '请求体没有 coverage 字段', duration: Date.now() - start })
+  if (coverage === undefined || coverage === null || coverage === '') {
+    const expectedField = sourceType === 'FRONTEND' ? 'coverage' : 'coverageData/data/profile'
+    return relayRecord(record, body, context, 'skipped', { error: '请求体没有 ' + expectedField + ' 字段', duration: Date.now() - start })
   }
   const targetUrl = resolveTargetApiUrl(record, body, context)
   if (!targetUrl) {
@@ -362,7 +385,7 @@ export async function beforeSave(record, context) {
         branch: body.branch,
         caseName: body.caseName || record.caseName,
         timestamp: body.timestamp || record.timestamp || Date.now(),
-        coverage
+        ...(sourceType === 'FRONTEND' ? { coverage } : { coverageData: coverage })
       })
     })
     if (response.ok) {

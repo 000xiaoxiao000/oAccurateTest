@@ -267,6 +267,7 @@ public class FrontendContextApiControl {
         summary.setCurrentCommitId(app.getCurrentCommitId());
         summary.setRepoConfigured(app.getRepoAddress() != null && !app.getRepoAddress().trim().isEmpty());
         summary.setProbeAlertEnabled(Boolean.TRUE.equals(app.getProbeAlertEnabled()));
+        summary.setSourceType("JAVA");
         return summary;
     }
 
@@ -418,6 +419,7 @@ public class FrontendContextApiControl {
         private String currentCommitId;
         private boolean repoConfigured;
         private boolean probeAlertEnabled;
+        private String sourceType;
 
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
@@ -441,6 +443,8 @@ public class FrontendContextApiControl {
         public void setRepoConfigured(boolean repoConfigured) { this.repoConfigured = repoConfigured; }
         public boolean isProbeAlertEnabled() { return probeAlertEnabled; }
         public void setProbeAlertEnabled(boolean probeAlertEnabled) { this.probeAlertEnabled = probeAlertEnabled; }
+        public String getSourceType() { return sourceType; }
+        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
     }
 
     public static class AiSummary {

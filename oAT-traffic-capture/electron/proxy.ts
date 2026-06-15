@@ -19,6 +19,7 @@ export type CoverageReportBody = {
   projectId?: string
   appId?: string
   appKey?: string
+  sourceType?: string
   commitId?: string
   versionNumber?: string
   branch?: string
@@ -26,6 +27,9 @@ export type CoverageReportBody = {
   timestamp?: number
   intervalMs?: number
   coverage?: unknown
+  coverageData?: unknown
+  data?: unknown
+  profile?: unknown
   coverageMissing?: boolean
 }
 
@@ -63,10 +67,14 @@ function buildCoverageRelayTarget(
   const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || config.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
   const projectId = body?.projectId || config.projectId
   const appId = body?.appId || body?.appKey || config.appId
+  const sourceType = normalizeCoverageSourceType(body, record.url)
+  const reportPath = sourceType === 'FRONTEND'
+    ? 'coverage/frontend/report'
+    : `coverage/universal/${sourceType}/report`
   if (serviceBaseUrl && projectId && appId) {
-    return `${String(serviceBaseUrl).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}/coverage/frontend/report`
+    return `${String(serviceBaseUrl).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}/${reportPath}`
   }
-  const match = String(record.url || '').match(/\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/frontend\/report/i)
+  const match = String(record.url || '').match(/\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/(?:frontend|universal\/(?:CPP|GO|PYTHON))\/report/i)
   if (!match) return ''
   try {
     const parsed = new URL(String(record.url))
@@ -74,6 +82,23 @@ function buildCoverageRelayTarget(
   } catch {
     return match[0]
   }
+}
+
+function normalizeCoverageSourceType(body?: CoverageReportBody | null, url?: string): 'FRONTEND' | 'CPP' | 'GO' | 'PYTHON' {
+  const fromUrl = String(url || '').match(/\/coverage\/universal\/([^/?#]+)\/report/i)?.[1]
+  const raw = String(body?.sourceType || fromUrl || 'FRONTEND').trim().toUpperCase()
+  if (raw === 'CPP' || raw === 'C++' || raw === 'C' || raw === 'CXX') return 'CPP'
+  if (raw === 'GO' || raw === 'GOLANG') return 'GO'
+  if (raw === 'PYTHON' || raw === 'PY') return 'PYTHON'
+  return 'FRONTEND'
+}
+
+function coveragePayload(body: CoverageReportBody | null): unknown {
+  if (!body) return undefined
+  if (body.coverageData !== undefined) return body.coverageData
+  if (body.data !== undefined) return body.data
+  if (body.profile !== undefined) return body.profile
+  return body.coverage
 }
 
 function coverageSignature(coverage: unknown): string {
@@ -84,14 +109,14 @@ function coverageSignature(coverage: unknown): string {
   }
 }
 
-function coverageDedupeKey(targetUrl: string, body: CoverageReportBody): string {
+function coverageDedupeKey(targetUrl: string, body: CoverageReportBody | null): string {
   return [
     targetUrl,
-    body.projectId || '',
-    body.appId || body.appKey || '',
-    body.versionNumber || '',
-    body.commitId || '',
-    body.branch || ''
+    body?.projectId || '',
+    body?.appId || body?.appKey || '',
+    body?.versionNumber || '',
+    body?.commitId || '',
+    body?.branch || ''
   ].join('|')
 }
 
@@ -127,12 +152,14 @@ export async function relayCoverageReport(
   responseBody: string
 }> {
   const body = parseCoverageReportBody(requestBody)
+  const sourceType = normalizeCoverageSourceType(body, record.url)
+  const payload = coveragePayload(body)
   const tags = new Set(record.tags || [])
   tags.add('COVERAGE')
-  tags.add('FRONTEND')
+  tags.add(sourceType)
   record.tags = Array.from(tags)
 
-  if (body?.coverageMissing) {
+  if (sourceType === 'FRONTEND' && body?.coverageMissing) {
     record.coverageRelay = coverageRelayInfo('skipped', body, coverageReporter, {
       error: '页面未发现 window.__coverage__，请确认被测前端已启用 Istanbul 插桩并刷新页面'
     })
@@ -143,12 +170,13 @@ export async function relayCoverageReport(
     }
   }
 
-  if (!body?.coverage) {
-    record.coverageRelay = coverageRelayInfo('skipped', body, coverageReporter, { error: '请求体没有 coverage 字段' })
+  if (payload === undefined || payload === null || payload === '') {
+    const expectedField = sourceType === 'FRONTEND' ? 'coverage' : 'coverageData/data/profile'
+    record.coverageRelay = coverageRelayInfo('skipped', body, coverageReporter, { error: `请求体没有 ${expectedField} 字段` })
     record.statusCode = '未上送'
     return {
       statusCode: 400,
-      responseBody: JSON.stringify({ result: false, message: '请求体没有 coverage 字段' })
+      responseBody: JSON.stringify({ result: false, message: `请求体没有 ${expectedField} 字段` })
     }
   }
 
@@ -164,7 +192,7 @@ export async function relayCoverageReport(
     }
   }
 
-  const signature = coverageSignature(body.coverage)
+  const signature = coverageSignature(payload)
   const dedupeKey = coverageDedupeKey(targetUrl, body)
   if (lastRelayedCoverageSignatures.get(dedupeKey) === signature) {
     record.coverageRelay = coverageRelayInfo('skipped', body, coverageReporter, {
@@ -179,17 +207,18 @@ export async function relayCoverageReport(
   }
 
   try {
+    const requestPayload = {
+      commitId: body?.commitId,
+      versionNumber: body?.versionNumber,
+      branch: body?.branch,
+      caseName: body?.caseName || record.caseName,
+      timestamp: body?.timestamp || record.timestamp || Date.now(),
+      ...(sourceType === 'FRONTEND' ? { coverage: payload } : { coverageData: payload })
+    }
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        commitId: body.commitId,
-        versionNumber: body.versionNumber,
-        branch: body.branch,
-        caseName: body.caseName || record.caseName,
-        timestamp: body.timestamp || record.timestamp || Date.now(),
-        coverage: body.coverage
-      })
+      body: JSON.stringify(requestPayload)
     })
     const responseText = await response.text().catch(() => '')
     if (response.ok) {
@@ -205,7 +234,7 @@ export async function relayCoverageReport(
       statusCode: response.ok ? 200 : 502,
       responseBody: responseText || JSON.stringify({
         result: response.ok,
-        message: response.ok ? '前端覆盖率已由采集器上送到 oAT-service-web' : `oAT-service-web 返回 HTTP ${response.status}`
+        message: response.ok ? `${sourceType}覆盖率已由采集器上送到 oAT-service-web` : `oAT-service-web 返回 HTTP ${response.status}`
       })
     }
   } catch (error: any) {
@@ -285,6 +314,7 @@ export function createProxyServer(
   function isCoverageReportUrl(url?: string): boolean {
     return /\/oat\/coverage\/report(\?|$)/i.test(url ?? '')
       || /\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/frontend\/report(\?|$)/i.test(url ?? '')
+      || /\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/universal\/(?:CPP|GO|PYTHON)\/report(\?|$)/i.test(url ?? '')
   }
 
 

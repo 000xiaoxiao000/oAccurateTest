@@ -263,6 +263,7 @@ public class ApplicationCenterApiControl {
             summary.setCurrentCommitId(app.getCurrentCommitId());
             summary.setRepoConfigured(StringUtils.hasText(app.getRepoAddress()));
             summary.setProbeAlertEnabled(Boolean.TRUE.equals(app.getProbeAlertEnabled()));
+            summary.setSourceType("JAVA");
             result.add(summary);
         }
         return result;
@@ -302,6 +303,7 @@ public class ApplicationCenterApiControl {
         summary.setCurrentCommitId(app.getCurrentCommitId());
         summary.setRepoConfigured(StringUtils.hasText(app.getRepoAddress()));
         summary.setProbeAlertEnabled(Boolean.TRUE.equals(app.getProbeAlertEnabled()));
+        summary.setSourceType("JAVA");
         return summary;
     }
 

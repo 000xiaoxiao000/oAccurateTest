@@ -2,7 +2,7 @@ package com.oAT.web.coverage;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.oAT.web.common.UtilJson;
-import com.oAT.web.coverage.FrontendCoverageReportRepository.FrontendCoverageReport;
+import com.oAT.web.coverage.UniversalCoverageRawRepository.UniversalCoverageRawReport;
 import com.oAT.web.coverage.universal.CoverageParser;
 import com.oAT.web.coverage.universal.CoverageParserRegistry;
 import com.oAT.web.coverage.universal.SourceType;
@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,49 +24,50 @@ import java.util.Map;
 import java.util.UUID;
 
 @Service
-public class FrontendCoverageService {
-    public static final String SOURCE_TYPE_FRONTEND = "FRONTEND";
-
-    private final FrontendCoverageReportRepository frontendCoverageReportRepository;
+public class UniversalCoverageIngestService {
+    private final UniversalCoverageRawRepository rawRepository;
     private final AppService appService;
     private final CoverageParserRegistry coverageParserRegistry;
     private final UniversalCoverageService universalCoverageService;
 
-    public FrontendCoverageService(FrontendCoverageReportRepository frontendCoverageReportRepository,
-                                   AppService appService,
-                                   CoverageParserRegistry coverageParserRegistry,
-                                   UniversalCoverageService universalCoverageService) {
-        this.frontendCoverageReportRepository = frontendCoverageReportRepository;
+    public UniversalCoverageIngestService(UniversalCoverageRawRepository rawRepository,
+                                          AppService appService,
+                                          CoverageParserRegistry coverageParserRegistry,
+                                          UniversalCoverageService universalCoverageService) {
+        this.rawRepository = rawRepository;
         this.appService = appService;
         this.coverageParserRegistry = coverageParserRegistry;
         this.universalCoverageService = universalCoverageService;
     }
 
-    public String saveReport(String projectId, String appId, FrontendCoverageReportRequest request) {
+    public String saveReport(String projectId, String appId, SourceType sourceType, UniversalCoverageReportRequest request) {
         Assert.hasText(projectId, "projectId不能为空");
         Assert.hasText(appId, "appId不能为空");
+        Assert.notNull(sourceType, "sourceType不能为空");
         Assert.notNull(request, "请求体不能为空");
-        Assert.notNull(request.getCoverage(), "coverage不能为空");
+        Assert.hasText(request.getCoverageData(), "coverageData不能为空");
 
         AppVo app = appService.getApp(appId);
         Assert.notNull(app, "应用不存在");
 
-        FrontendCoverageReport report = new FrontendCoverageReport();
+        UniversalCoverageRawReport report = new UniversalCoverageRawReport();
         report.projectId = projectId;
         report.appId = appId;
+        report.sourceType = sourceType.name();
         report.commitId = firstText(request.getCommitId(), app.getCurrentCommitId());
         report.versionNumber = firstText(request.getVersionNumber(), app.getCurrentVersion(), report.commitId);
         report.branch = firstText(request.getBranch(), app.getCurrentBranch());
         report.caseName = request.getCaseName();
         report.timestamp = request.getTimestamp();
-        report.coverageJson = UtilJson.writeValueAsString(request.getCoverage());
-        return frontendCoverageReportRepository.save(report);
+        report.coverageData = request.getCoverageData();
+        return rawRepository.save(report);
     }
 
     @Transactional
-    public CoverageReportIndex generateReport(String projectId, String appId, FrontendCoverageGenerateRequest request) {
+    public CoverageReportIndex generateReport(String projectId, String appId, SourceType sourceType, UniversalCoverageGenerateRequest request) {
         Assert.hasText(projectId, "projectId不能为空");
         Assert.hasText(appId, "appId不能为空");
+        Assert.notNull(sourceType, "sourceType不能为空");
         AppVo app = appService.getApp(appId);
         Assert.notNull(app, "应用不存在");
 
@@ -74,20 +76,21 @@ public class FrontendCoverageService {
         String commitId = firstText(request == null ? null : request.getCommitId(), app.getCurrentCommitId());
         Assert.hasText(versionNumber, "versionNumber不能为空");
 
-        List<FrontendCoverageReport> rawReports = frontendCoverageReportRepository.findByAppAndVersion(appId, versionNumber, commitId);
-        Assert.isTrue(!rawReports.isEmpty(), "没有可生成的前端覆盖率上报数据");
+        List<UniversalCoverageRawReport> rawReports = rawRepository.findByAppAndVersion(appId, sourceType.name(), versionNumber, commitId);
+        Assert.isTrue(!rawReports.isEmpty(), "没有可生成的" + sourceType.name() + "覆盖率上报数据");
 
+        CoverageParser parser = coverageParserRegistry.get(sourceType);
         Map<String, UniversalCoverageFile> coverageMap = new LinkedHashMap<>();
-        CoverageParser parser = coverageParserRegistry.get(SourceType.FRONTEND);
         long lastTimestamp = 0L;
-        for (FrontendCoverageReport rawReport : rawReports) {
+        for (UniversalCoverageRawReport rawReport : rawReports) {
             lastTimestamp = Math.max(lastTimestamp, rawReport.timestamp == null ? 0L : rawReport.timestamp);
-            List<UniversalCoverageFile> files = parser.parse(rawReport.coverageJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            List<UniversalCoverageFile> files = parser.parse(rawReport.coverageData.getBytes(StandardCharsets.UTF_8));
             Map<String, UniversalCoverageFile> nextMap = universalCoverageService.mergeFiles(files);
             for (Map.Entry<String, UniversalCoverageFile> entry : nextMap.entrySet()) {
                 coverageMap.compute(entry.getKey(), (key, existing) -> existing == null ? entry.getValue() : existing.merge(entry.getValue()));
             }
         }
+        Assert.isTrue(!coverageMap.isEmpty(), "覆盖率数据解析结果为空");
 
         CoverageReportIndex report = new CoverageReportIndex();
         report.setId(UUID.randomUUID().toString());
@@ -96,7 +99,7 @@ public class FrontendCoverageService {
         report.setRepoBranch(branch);
         report.setRepoCommitId(commitId);
         report.setCreateTime(new Date());
-        report.setSourceType(SourceType.FRONTEND.name());
+        report.setSourceType(sourceType.name());
         report.setReportType(0);
         report.setLastProcessedTime(lastTimestamp > 0 ? String.valueOf(lastTimestamp) : String.valueOf(System.currentTimeMillis()));
 
@@ -116,13 +119,63 @@ public class FrontendCoverageService {
         return null;
     }
 
-    public static class FrontendCoverageReportRequest {
+    public static UniversalCoverageReportRequest parseReportRequest(String requestBody) {
+        Assert.hasText(requestBody, "请求体不能为空");
+        try {
+            JsonNode root = UtilJson.getObjectMapper().readTree(requestBody);
+            UniversalCoverageReportRequest request = new UniversalCoverageReportRequest();
+            request.setCommitId(text(root, "commitId", "commit_id", "commitSha"));
+            request.setVersionNumber(text(root, "versionNumber", "version", "version_number"));
+            request.setBranch(text(root, "branch", "repoBranch"));
+            request.setCaseName(text(root, "caseName", "case_name"));
+            request.setTimestamp(longValue(root, "timestamp", "time"));
+
+            JsonNode coverageNode = first(root, "coverageData", "coverage", "data", "profile");
+            if (coverageNode == null) {
+                request.setCoverageData(requestBody);
+            } else if (coverageNode.isTextual()) {
+                request.setCoverageData(coverageNode.asText());
+            } else {
+                request.setCoverageData(UtilJson.writeValueAsString(coverageNode));
+            }
+            return request;
+        } catch (Exception ignored) {
+            UniversalCoverageReportRequest request = new UniversalCoverageReportRequest();
+            request.setCoverageData(requestBody);
+            return request;
+        }
+    }
+
+    private static JsonNode first(JsonNode node, String... names) {
+        if (node == null) {
+            return null;
+        }
+        for (String name : names) {
+            JsonNode value = node.get(name);
+            if (value != null && !value.isNull()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static String text(JsonNode node, String... names) {
+        JsonNode value = first(node, names);
+        return value == null ? null : value.asText();
+    }
+
+    private static Long longValue(JsonNode node, String... names) {
+        JsonNode value = first(node, names);
+        return value == null || value.isNull() ? null : value.asLong();
+    }
+
+    public static class UniversalCoverageReportRequest {
         private String commitId;
         private String versionNumber;
         private String branch;
         private String caseName;
         private Long timestamp;
-        private JsonNode coverage;
+        private String coverageData;
 
         public String getCommitId() { return commitId; }
         public void setCommitId(String commitId) { this.commitId = commitId; }
@@ -134,11 +187,11 @@ public class FrontendCoverageService {
         public void setCaseName(String caseName) { this.caseName = caseName; }
         public Long getTimestamp() { return timestamp; }
         public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
-        public JsonNode getCoverage() { return coverage; }
-        public void setCoverage(JsonNode coverage) { this.coverage = coverage; }
+        public String getCoverageData() { return coverageData; }
+        public void setCoverageData(String coverageData) { this.coverageData = coverageData; }
     }
 
-    public static class FrontendCoverageGenerateRequest {
+    public static class UniversalCoverageGenerateRequest {
         private String versionNumber;
         private String branch;
         private String commitId;

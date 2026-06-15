@@ -916,6 +916,7 @@ public class VersionApiControl {
         summary.setCurrentBranch(app.getCurrentBranch());
         summary.setCurrentCommitId(app.getCurrentCommitId());
         summary.setRepoConfigured(StringUtils.hasText(app.getRepoAddress()));
+        summary.setSourceType("JAVA");
         return summary;
     }
 
@@ -1306,6 +1307,7 @@ public class VersionApiControl {
         private String currentBranch;
         private String currentCommitId;
         private boolean repoConfigured;
+        private String sourceType;
 
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
@@ -1319,6 +1321,8 @@ public class VersionApiControl {
         public void setCurrentCommitId(String currentCommitId) { this.currentCommitId = currentCommitId; }
         public boolean isRepoConfigured() { return repoConfigured; }
         public void setRepoConfigured(boolean repoConfigured) { this.repoConfigured = repoConfigured; }
+        public String getSourceType() { return sourceType; }
+        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
     }
 
     public static class VersionItemSummary {

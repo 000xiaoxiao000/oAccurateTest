@@ -470,6 +470,7 @@ public class CoverageApiControl {
         summary.setCurrentVersion(app.getCurrentVersion());
         summary.setCurrentBranch(app.getCurrentBranch());
         summary.setCurrentCommitId(app.getCurrentCommitId());
+        summary.setSourceType("JAVA");
         return summary;
     }
 
@@ -812,6 +813,7 @@ public class CoverageApiControl {
         private String currentVersion;
         private String currentBranch;
         private String currentCommitId;
+        private String sourceType;
 
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
@@ -823,6 +825,8 @@ public class CoverageApiControl {
         public void setCurrentBranch(String currentBranch) { this.currentBranch = currentBranch; }
         public String getCurrentCommitId() { return currentCommitId; }
         public void setCurrentCommitId(String currentCommitId) { this.currentCommitId = currentCommitId; }
+        public String getSourceType() { return sourceType; }
+        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
     }
 
     public static class VersionSummary {

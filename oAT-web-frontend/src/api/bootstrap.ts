@@ -415,6 +415,19 @@ export function triggerFrontendCoverageGenerate(
   )
 }
 
+export function triggerUniversalCoverageGenerate(
+  projectId: string,
+  appId: string,
+  sourceType: 'CPP' | 'GO' | 'PYTHON',
+  payload: { versionNumber?: string; branch?: string; commitId?: string },
+) {
+  return apiPost<string>(
+    `/api/projects/${projectId}/apps/${appId}/coverage/universal/${sourceType}/generate`,
+    JSON.stringify(payload),
+    'application/json',
+  )
+}
+
 export function fetchCoverageJob(projectId: string, jobId: string) {
   return apiGetRaw<{ id?: string; data?: string; progress?: number; progressName?: string; finish?: boolean; success?: boolean; message?: string }>(
     `/api/projects/${projectId}/coverage/jobs/${jobId}`,

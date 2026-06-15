@@ -26,6 +26,9 @@
           <option value="ALL">全部</option>
           <option value="JAVA">Java</option>
           <option value="FRONTEND">前端 JS/TS</option>
+          <option value="CPP">C/C++</option>
+          <option value="GO">Go</option>
+          <option value="PYTHON">Python</option>
         </select>
       </label>
       <button class="ghost-button" type="button" @click="loadApps">刷新应用</button>
@@ -110,6 +113,17 @@
                 @click="generateFrontendCoverage(version)"
               >
                 {{ isGeneratingVersion(version, 'frontend') ? '前端生成中...' : '生成前端报告' }}
+              </button>
+              <button
+                v-for="coverageSource in universalGenerateSources"
+                :key="coverageSource.type"
+                class="ghost-button small-button generate-button universal-generate-button"
+                type="button"
+                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :title="generateDisabledTitle(version, coverageSource.type)"
+                @click="generateUniversalCoverage(version, coverageSource.type)"
+              >
+                {{ isGeneratingVersion(version, coverageSource.type) ? `${coverageSource.shortLabel}生成中...` : `生成${coverageSource.shortLabel}报告` }}
               </button>
               <button
                 class="ghost-button small-button generate-button"
@@ -324,6 +338,7 @@ import {
   triggerCoverageGenerate,
   triggerCoverageGenerateIncremental,
   triggerFrontendCoverageGenerate,
+  triggerUniversalCoverageGenerate,
 } from '@/api/bootstrap'
 import { backendApiUrl } from '@/api/http'
 import AppPagination from '@/components/AppPagination.vue'
@@ -355,13 +370,20 @@ const incrementalError = ref('')
 const incrementalForm = ref({ baseVersionNumber: '', baseCommitId: '', baseReportId: '' })
 const floatingTimeTooltip = ref({ visible: false, text: '', x: 0, y: 0, arrowOffset: 0 })
 const floatingTimeTooltipEl = ref<HTMLElement | null>(null)
+const universalGenerateSources = [
+  { type: 'GO', shortLabel: 'Go' },
+  { type: 'PYTHON', shortLabel: 'Python' },
+  { type: 'CPP', shortLabel: 'C/C++' },
+] as const
 
 const selectedCenter = computed(() => centers.value[selectedAppId.value])
 const keywordTerm = computed(() => keyword.value.toLowerCase())
 const visibleVersions = computed(() => compactVersionEntries(selectedCenter.value?.versions || []))
 const sourceTypeMatches = (value?: string) => selectedSourceType.value === 'ALL' || normalizeSourceType(value) === selectedSourceType.value
+const versionSourceTypeMatches = (version: VersionItemSummary) =>
+  sourceTypeMatches(version.sourceType || 'JAVA') || reportsForVersion(version).some((report) => sourceTypeMatches(report.sourceType))
 const filteredVersions = computed(() => {
-  const versions = visibleVersions.value.filter((version) => sourceTypeMatches(version.sourceType || 'JAVA'))
+  const versions = visibleVersions.value.filter((version) => versionSourceTypeMatches(version))
   const term = keywordTerm.value
   if (!term) return versions
   return versions.filter((version) => [
@@ -439,6 +461,9 @@ function sourceTypeLabel(value?: string) {
   const sourceType = normalizeSourceType(value)
   if (sourceType === 'FRONTEND') return '前端'
   if (sourceType === 'JAVA') return 'Java'
+  if (sourceType === 'CPP') return 'C/C++'
+  if (sourceType === 'GO') return 'Go'
+  if (sourceType === 'PYTHON') return 'Python'
   return sourceType
 }
 
@@ -466,6 +491,11 @@ function coverageDataStatus(version: VersionItemSummary) {
   }
   if (sourceTypes.has('FRONTEND')) {
     statuses.push({ key: 'frontend', label: '前端覆盖率', tone: 'ok' })
+  }
+  for (const coverageSource of universalGenerateSources) {
+    if (sourceTypes.has(coverageSource.type)) {
+      statuses.push({ key: coverageSource.type.toLowerCase(), label: `${coverageSource.shortLabel} 覆盖率`, tone: 'ok' })
+    }
   }
   statuses.push({
     key: 'traffic',
@@ -560,7 +590,8 @@ function selectBaseReport(report: CoverageReportCard) {
   incrementalError.value = ''
 }
 
-type VersionGenerateType = 'full' | 'incremental' | 'frontend'
+type UniversalGenerateType = typeof universalGenerateSources[number]['type']
+type VersionGenerateType = 'full' | 'incremental' | 'frontend' | UniversalGenerateType
 
 function versionActionKey(version: VersionItemSummary, type: VersionGenerateType) {
   return `${type}:${version.id || version.versionNumber}:${version.repoCommitId || ''}`
@@ -578,6 +609,9 @@ function generateDisabledTitle(version: VersionItemSummary, type: VersionGenerat
   if (!version.current) return '非当前版本仅支持查看覆盖率，不能生成报告'
   if (generatingVersionKey.value && !isGeneratingVersion(version, type)) return '已有覆盖率生成任务处理中，请稍后再试'
   if (type === 'frontend') return '合并已上报的 Istanbul 前端覆盖率数据，生成前端覆盖率报告'
+  if (type === 'GO') return '合并已上报的 Go cover profile 数据，生成 Go 覆盖率报告'
+  if (type === 'PYTHON') return '合并已上报的 coverage.py JSON 数据，生成 Python 覆盖率报告'
+  if (type === 'CPP') return '合并已上报的 gcov/llvm-cov JSON 数据，生成 C/C++ 覆盖率报告'
   return type === 'full' ? '生成当前版本的版本全量报告' : '选择基准后生成当前版本的版本增量报告'
 }
 
@@ -668,6 +702,28 @@ async function generateFrontendCoverage(version: VersionItemSummary) {
   } catch (err) {
     generationFailed.value = true
     generationNotice.value = err instanceof Error ? err.message : '生成前端覆盖率报告失败'
+  } finally {
+    generatingVersionKey.value = ''
+  }
+}
+
+async function generateUniversalCoverage(version: VersionItemSummary, sourceType: UniversalGenerateType) {
+  if (!canGenerateVersion(version) || generatingVersionKey.value || !selectedAppId.value) return
+  generatingVersionKey.value = versionActionKey(version, sourceType)
+  generationFailed.value = false
+  generationNotice.value = ''
+  error.value = ''
+  try {
+    await triggerUniversalCoverageGenerate(projectId.value, selectedAppId.value, sourceType, {
+      versionNumber: version.versionNumber,
+      branch: version.repoBranch || undefined,
+      commitId: version.repoCommitId || undefined,
+    })
+    generationNotice.value = `${sourceTypeLabel(sourceType)}覆盖率报告生成完成，已刷新报告列表`
+    await refreshCenter(selectedAppId.value)
+  } catch (err) {
+    generationFailed.value = true
+    generationNotice.value = err instanceof Error ? err.message : `生成${sourceTypeLabel(sourceType)}覆盖率报告失败`
   } finally {
     generatingVersionKey.value = ''
   }
