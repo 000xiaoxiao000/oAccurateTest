@@ -23,7 +23,10 @@ type LoadedPlugin = {
 
 const loadedPlugins = new Map<string, LoadedPlugin>()
 let coverageRelayConfig: CoverageRelayConfig = {
-  intervalMs: 30000
+  enabled: false,
+  intervalMs: 30000,
+  coveragePort: 8889,
+  proxyPort: 8888
 }
 
 function pluginsRoot(): string {
@@ -210,13 +213,15 @@ function installCoverageRelayPlugin(): void {
   fs.writeFileSync(manifestPath, JSON.stringify({
     id: 'oat-coverage-relay',
     name: '前端覆盖率中继插件',
-    version: '1.4.0',
+    version: '1.4.1',
     main: 'index.js',
     enabled: true,
     description: '识别 Istanbul 覆盖率上报请求，附加用例名并转发到 oAT 服务端，同时保留上送状态'
   }, null, 2), 'utf-8')
 
-  fs.writeFileSync(entryPath, `function parseJson(value) {
+  fs.writeFileSync(entryPath, `const lastRelayedCoverageSignatures = new Map()
+
+function parseJson(value) {
   if (!value) return null
   try {
     return JSON.parse(value)
@@ -253,6 +258,29 @@ function resolveConfiguredApiUrl(body, context) {
   const appId = body?.appId || body?.appKey || context?.coverageRelay?.appId
   if (!serviceBaseUrl || !projectId || !appId) return ''
   return String(serviceBaseUrl).replace(/\\/$/, '') + '/api/projects/' + encodeURIComponent(projectId) + '/apps/' + encodeURIComponent(appId) + '/coverage/frontend/report'
+}
+
+function resolveTargetApiUrl(record, body, context) {
+  return resolveConfiguredApiUrl(body, context) || resolveRelayApiUrl(record, body)
+}
+
+function coverageSignature(coverage) {
+  try {
+    return JSON.stringify(coverage)
+  } catch {
+    return String(coverage)
+  }
+}
+
+function coverageDedupeKey(targetUrl, body) {
+  return [
+    targetUrl,
+    body?.projectId || '',
+    body?.appId || body?.appKey || '',
+    body?.versionNumber || '',
+    body?.commitId || '',
+    body?.branch || ''
+  ].join('|')
 }
 
 function relayRecord(record, body, context, status, options = {}) {
@@ -299,6 +327,7 @@ export function onRecordCaptured(record) {
 
 export async function beforeSave(record, context) {
   if (record.source === 'replay') return record
+  if (record.coverageRelay) return record
   if (!(record.tags || []).includes('COVERAGE')) return record
   const start = Date.now()
   const body = parseJson(record.requestBody)
@@ -309,9 +338,19 @@ export async function beforeSave(record, context) {
   if (!coverage) {
     return relayRecord(record, body, context, 'skipped', { error: '请求体没有 coverage 字段', duration: Date.now() - start })
   }
-  const targetUrl = resolveRelayApiUrl(record, body) || resolveConfiguredApiUrl(body, context)
+  const targetUrl = resolveTargetApiUrl(record, body, context)
   if (!targetUrl) {
     return relayRecord(record, body, context, 'failed', { error: '缺少 serviceBaseUrl/projectId/appId，无法确定服务端上送地址；请在采集器覆盖率上送区域配置默认目标', duration: Date.now() - start })
+  }
+  const signature = coverageSignature(coverage)
+  const dedupeKey = coverageDedupeKey(targetUrl, body)
+  if (lastRelayedCoverageSignatures.get(dedupeKey) === signature) {
+    return relayRecord(record, body, context, 'skipped', {
+      targetUrl,
+      error: '覆盖率数据未变化，已跳过重复上送',
+      duration: Date.now() - start,
+      message: '覆盖率数据未变化，已跳过重复上送'
+    })
   }
   try {
     const response = await fetch(targetUrl, {
@@ -326,6 +365,9 @@ export async function beforeSave(record, context) {
         coverage
       })
     })
+    if (response.ok) {
+      lastRelayedCoverageSignatures.set(dedupeKey, signature)
+    }
     return relayRecord(record, body, context, response.ok ? 'success' : 'failed', {
       targetUrl,
       httpStatus: response.status,
@@ -379,8 +421,13 @@ export function getCoverageRelayConfig(): CoverageRelayConfig {
 
 export function setCoverageRelayConfig(config: Partial<CoverageRelayConfig>, persist = true): CoverageRelayConfig {
   const intervalMs = Number(config.intervalMs)
+  const coveragePort = Number(config.coveragePort)
+  const proxyPort = Number(config.proxyPort)
   coverageRelayConfig = {
+    enabled: typeof config.enabled === 'boolean' ? config.enabled : coverageRelayConfig.enabled,
     intervalMs: Number.isFinite(intervalMs) && intervalMs >= 1000 ? Math.round(intervalMs) : coverageRelayConfig.intervalMs,
+    coveragePort: Number.isInteger(coveragePort) && coveragePort > 0 && coveragePort <= 65535 ? coveragePort : coverageRelayConfig.coveragePort,
+    proxyPort: Number.isInteger(proxyPort) && proxyPort > 0 && proxyPort <= 65535 ? proxyPort : coverageRelayConfig.proxyPort,
     serviceBaseUrl: typeof config.serviceBaseUrl === 'string' ? config.serviceBaseUrl.trim() : coverageRelayConfig.serviceBaseUrl,
     projectId: typeof config.projectId === 'string' ? config.projectId.trim() : coverageRelayConfig.projectId,
     appId: typeof config.appId === 'string' ? config.appId.trim() : coverageRelayConfig.appId

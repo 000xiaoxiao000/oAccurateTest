@@ -9,10 +9,11 @@ export const useTrafficStore = defineStore('traffic', () => {
   const searchQuery = ref('')
   const statusFilter = ref<'all' | 'success' | 'failed'>('all')
   const proxyPort = ref(8888)
+  const coveragePort = ref(8889)
   const capturedCount = ref(0)
   const filterRules = ref<TrafficFilterRule[]>([])
   const plugins = ref<PluginInfo[]>([])
-  const coverageRelayConfig = ref<CoverageRelayConfig>({ intervalMs: 30000 })
+  const coverageRelayConfig = ref<CoverageRelayConfig>({ enabled: false, intervalMs: 30000, coveragePort: 8889, proxyPort: 8888 })
 
   function isSuccessRecord(record: TrafficRecord): boolean {
     if (record.coverageRelay) {
@@ -173,10 +174,14 @@ export const useTrafficStore = defineStore('traffic', () => {
 
   async function loadCoverageRelayConfig() {
     coverageRelayConfig.value = await window.electronAPI?.getCoverageRelayConfig() ?? coverageRelayConfig.value
+    proxyPort.value = coverageRelayConfig.value.proxyPort ?? proxyPort.value
+    coveragePort.value = coverageRelayConfig.value.coveragePort ?? coveragePort.value
   }
 
   async function saveCoverageRelayConfig(config: CoverageRelayConfig) {
     coverageRelayConfig.value = await window.electronAPI?.setCoverageRelayConfig(config) ?? coverageRelayConfig.value
+    proxyPort.value = coverageRelayConfig.value.proxyPort ?? proxyPort.value
+    coveragePort.value = coverageRelayConfig.value.coveragePort ?? coveragePort.value
     return coverageRelayConfig.value
   }
 
@@ -186,6 +191,7 @@ export const useTrafficStore = defineStore('traffic', () => {
     if (result?.success) {
       isCapturing.value = true
       proxyPort.value = result.port ?? 8888
+      coveragePort.value = result.coveragePort ?? coveragePort.value
     }
     return result
   }
@@ -195,9 +201,12 @@ export const useTrafficStore = defineStore('traffic', () => {
     isCapturing.value = false
   }
 
-  function syncCaptureState(state: { isCapturing: boolean; caseName: string; port: number; recordCount?: number }) {
+  function syncCaptureState(state: { isCapturing: boolean; caseName: string; port: number; coveragePort?: number; recordCount?: number }) {
     isCapturing.value = state.isCapturing
     proxyPort.value = state.port
+    if (typeof state.coveragePort === 'number') {
+      coveragePort.value = state.coveragePort
+    }
     if (typeof state.recordCount === 'number') {
       capturedCount.value = state.recordCount
     }
@@ -213,6 +222,7 @@ export const useTrafficStore = defineStore('traffic', () => {
     searchQuery,
     statusFilter,
     proxyPort,
+    coveragePort,
     capturedCount,
     filterRules,
     plugins,

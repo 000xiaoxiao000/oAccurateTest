@@ -24,6 +24,9 @@ const coverageIntervalSeconds = ref(30)
 const coverageServiceBaseUrl = ref('')
 const coverageProjectId = ref('')
 const coverageAppId = ref('')
+const coveragePort = ref(8889)
+const proxyPort = ref(8888)
+const coverageRelayEnabled = ref(false)
 const relayNotice = ref<{ text: string; status: 'success' | 'failed' | 'skipped' } | null>(null)
 const hasCoverageRelayPlugin = computed(() => store.plugins.some(plugin => plugin.id === 'oat-coverage-relay'))
 const isFloatingMode = new URLSearchParams(window.location.search).get('floating') === '1'
@@ -192,21 +195,44 @@ function showCoverageRelayNotice(record: TrafficRecord) {
 }
 
 function syncCoverageRelayForm() {
+  coverageRelayEnabled.value = store.coverageRelayConfig.enabled
   coverageIntervalSeconds.value = Math.round(store.coverageRelayConfig.intervalMs / 1000)
   coverageServiceBaseUrl.value = store.coverageRelayConfig.serviceBaseUrl ?? ''
   coverageProjectId.value = store.coverageRelayConfig.projectId ?? ''
   coverageAppId.value = store.coverageRelayConfig.appId ?? ''
+  coveragePort.value = store.coverageRelayConfig.coveragePort ?? store.coveragePort
+  proxyPort.value = store.coverageRelayConfig.proxyPort ?? store.proxyPort
 }
 
 async function saveCoverageRelayConfig() {
   const seconds = Number(coverageIntervalSeconds.value)
+  const nextCoveragePort = Number(coveragePort.value)
+  const nextProxyPort = Number(proxyPort.value)
   if (!Number.isFinite(seconds) || seconds < 1) {
     alert('覆盖率上送间隔不能小于 1 秒')
     syncCoverageRelayForm()
     return
   }
+  if (!Number.isInteger(nextCoveragePort) || nextCoveragePort <= 0 || nextCoveragePort > 65535) {
+    alert('覆盖率接收端口必须是 1-65535 的整数')
+    syncCoverageRelayForm()
+    return
+  }
+  if (!Number.isInteger(nextProxyPort) || nextProxyPort <= 0 || nextProxyPort > 65535) {
+    alert('系统代理端口必须是 1-65535 的整数')
+    syncCoverageRelayForm()
+    return
+  }
+  if (nextCoveragePort === nextProxyPort) {
+    alert('覆盖率接收端口不能和系统代理端口相同')
+    syncCoverageRelayForm()
+    return
+  }
   await store.saveCoverageRelayConfig({
+    enabled: coverageRelayEnabled.value,
     intervalMs: Math.round(seconds * 1000),
+    coveragePort: nextCoveragePort,
+    proxyPort: nextProxyPort,
     serviceBaseUrl: coverageServiceBaseUrl.value,
     projectId: coverageProjectId.value,
     appId: coverageAppId.value
@@ -214,13 +240,38 @@ async function saveCoverageRelayConfig() {
   syncCoverageRelayForm()
   relayNotice.value = {
     status: 'success',
-    text: `覆盖率上送配置已保存，默认目标 ${coverageServiceBaseUrl.value || '-'} / ${coverageProjectId.value || '-'} / ${coverageAppId.value || '-'}`
+    text: `覆盖率上送已${coverageRelayEnabled.value ? '启用' : '停用'}，接收端口 ${coveragePort.value}，默认目标 ${coverageServiceBaseUrl.value || '-'} / ${coverageProjectId.value || '-'} / ${coverageAppId.value || '-'}`
   }
   if (relayNoticeTimer) window.clearTimeout(relayNoticeTimer)
   relayNoticeTimer = window.setTimeout(() => {
     relayNotice.value = null
     relayNoticeTimer = null
   }, 3000)
+}
+
+async function setCoverageRelayEnabled(enabled: boolean) {
+  coverageRelayEnabled.value = enabled
+  await saveCoverageRelayConfig()
+}
+
+async function saveProxyPortConfig() {
+  const nextProxyPort = Number(proxyPort.value)
+  const nextCoveragePort = Number(store.coverageRelayConfig.coveragePort ?? coveragePort.value)
+  if (!Number.isInteger(nextProxyPort) || nextProxyPort <= 0 || nextProxyPort > 65535) {
+    alert('系统代理端口必须是 1-65535 的整数')
+    syncCoverageRelayForm()
+    return
+  }
+  if (nextProxyPort === nextCoveragePort) {
+    alert('系统代理端口不能和覆盖率接收端口相同')
+    syncCoverageRelayForm()
+    return
+  }
+  await store.saveCoverageRelayConfig({
+    ...store.coverageRelayConfig,
+    proxyPort: nextProxyPort
+  })
+  syncCoverageRelayForm()
 }
 
 async function replayRecord(record: TrafficRecord) {
@@ -344,6 +395,7 @@ function handleFloatingClick() {
         </div>
         <div class="topbar-actions">
           <span class="status-pill">代理 127.0.0.1:{{ store.proxyPort }}</span>
+          <span class="status-pill">覆盖率 127.0.0.1:{{ store.coveragePort }}</span>
           <span class="status-pill">{{ store.isCapturing ? '正在捕获' : '等待捕获' }}</span>
           <button class="btn btn-outline" type="button" @click="selectSection('settings')">设置</button>
           <button
@@ -478,13 +530,28 @@ function handleFloatingClick() {
         <div class="panel coverage-config">
           <div class="panel-header">
             <strong>覆盖率上送配置</strong>
-            <span>{{ hasCoverageRelayPlugin ? '插件已启用' : '未检测到覆盖率插件' }}</span>
+            <span>{{ coverageRelayEnabled ? '覆盖率已启用' : '覆盖率已停用' }}</span>
+          </div>
+          <div class="coverage-toggle-row">
+            <button
+              class="btn"
+              :class="coverageRelayEnabled ? 'btn-outline' : 'btn-primary'"
+              type="button"
+              :disabled="!hasCoverageRelayPlugin"
+              @click="setCoverageRelayEnabled(!coverageRelayEnabled)"
+            >
+              {{ coverageRelayEnabled ? '停用前端覆盖率' : '启用前端覆盖率' }}
+            </button>
+            <span>
+              {{ hasCoverageRelayPlugin ? `覆盖率接收地址 http://localhost:${store.coveragePort}/oat/coverage/report，系统代理端口 ${store.proxyPort}` : '未检测到覆盖率中继插件，请先在插件面板安装' }}
+            </span>
           </div>
           <div class="coverage-form">
             <label><span>服务</span><input v-model.trim="coverageServiceBaseUrl" type="text" placeholder="http://localhost:8080" /></label>
             <label><span>项目</span><input v-model.trim="coverageProjectId" type="text" placeholder="projectId" /></label>
             <label><span>应用</span><input v-model.trim="coverageAppId" type="text" placeholder="appId" /></label>
             <label><span>间隔秒</span><input v-model.number="coverageIntervalSeconds" type="number" min="1" step="1" /></label>
+            <label><span>接收端口</span><input v-model.number="coveragePort" type="number" min="1" max="65535" step="1" /></label>
             <button class="btn btn-primary" type="button" @click="saveCoverageRelayConfig">保存配置</button>
           </div>
         </div>
@@ -532,7 +599,11 @@ function handleFloatingClick() {
             <strong>系统代理与证书</strong>
             <span>端口 {{ store.proxyPort }}</span>
           </div>
-          <ProxyControl :port="store.proxyPort" />
+          <div class="settings-port-row">
+            <label><span>系统代理端口</span><input v-model.number="proxyPort" type="number" min="1" max="65535" step="1" /></label>
+            <button class="btn btn-primary" type="button" @click="saveProxyPortConfig">保存端口</button>
+          </div>
+          <ProxyControl :port="proxyPort" />
         </section>
         <section class="panel settings-panel">
           <div class="panel-header">
@@ -1157,6 +1228,19 @@ button.metric-card {
   align-items: flex-end;
 }
 
+.coverage-toggle-row {
+  padding: 12px 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.coverage-toggle-row span {
+  color: #64748b;
+  font-size: 12px;
+}
+
 .coverage-form label {
   min-width: 160px;
   display: grid;
@@ -1167,6 +1251,32 @@ button.metric-card {
   margin: 0;
   padding: 12px;
   background: #ffffff;
+}
+
+.settings-port-row {
+  padding: 12px 12px 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-port-row label {
+  min-width: 180px;
+  display: grid;
+  gap: 5px;
+}
+
+.settings-port-row span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.settings-port-row input {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
 }
 
 .settings-panel :deep(.label) {

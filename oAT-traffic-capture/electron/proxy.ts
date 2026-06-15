@@ -8,9 +8,217 @@ const defaultProtocols: CaptureProtocolConfig = {
   wss: true
 }
 
-type CoverageReporterOptions = {
+export type CoverageReporterOptions = {
   isEnabled: () => boolean
   getConfig: () => CoverageRelayConfig
+}
+
+export type CoverageReportBody = {
+  serviceBaseUrl?: string
+  endpointBaseUrl?: string
+  projectId?: string
+  appId?: string
+  appKey?: string
+  commitId?: string
+  versionNumber?: string
+  branch?: string
+  caseName?: string
+  timestamp?: number
+  intervalMs?: number
+  coverage?: unknown
+  coverageMissing?: boolean
+}
+
+const lastRelayedCoverageSignatures = new Map<string, string>()
+
+export function coverageResponseHeaders(headers?: Record<string, string | string[] | undefined>): Record<string, string> {
+  const origin = String(headers?.origin || '')
+  const requestHeaders = String(headers?.['access-control-request-headers'] || 'content-type')
+  return {
+    'content-type': 'application/json',
+    'access-control-allow-origin': origin || '*',
+    'access-control-allow-credentials': origin ? 'true' : 'false',
+    'access-control-allow-methods': 'POST, OPTIONS',
+    'access-control-allow-headers': requestHeaders,
+    'vary': 'Origin',
+    'x-oat-coverage-relay': 'intercepted'
+  }
+}
+
+function parseCoverageReportBody(requestBody: string): CoverageReportBody | null {
+  if (!requestBody) return null
+  try {
+    return JSON.parse(requestBody) as CoverageReportBody
+  } catch {
+    return null
+  }
+}
+
+function buildCoverageRelayTarget(
+  record: Partial<TrafficRecord>,
+  body: CoverageReportBody | null,
+  coverageReporter?: CoverageReporterOptions
+): string {
+  const config = coverageReporter?.getConfig() ?? { enabled: false, intervalMs: 30000, coveragePort: 8889, proxyPort: 8888 }
+  const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || config.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
+  const projectId = body?.projectId || config.projectId
+  const appId = body?.appId || body?.appKey || config.appId
+  if (serviceBaseUrl && projectId && appId) {
+    return `${String(serviceBaseUrl).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}/coverage/frontend/report`
+  }
+  const match = String(record.url || '').match(/\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/frontend\/report/i)
+  if (!match) return ''
+  try {
+    const parsed = new URL(String(record.url))
+    return `${parsed.origin}${match[0]}`
+  } catch {
+    return match[0]
+  }
+}
+
+function coverageSignature(coverage: unknown): string {
+  try {
+    return JSON.stringify(coverage)
+  } catch {
+    return String(coverage)
+  }
+}
+
+function coverageDedupeKey(targetUrl: string, body: CoverageReportBody): string {
+  return [
+    targetUrl,
+    body.projectId || '',
+    body.appId || body.appKey || '',
+    body.versionNumber || '',
+    body.commitId || '',
+    body.branch || ''
+  ].join('|')
+}
+
+function coverageRelayInfo(
+  status: 'success' | 'failed' | 'skipped',
+  body: CoverageReportBody | null,
+  coverageReporter?: CoverageReporterOptions,
+  options: { targetUrl?: string; httpStatus?: number; error?: string } = {}
+) {
+  const config = coverageReporter?.getConfig() ?? { enabled: false, intervalMs: 30000, coveragePort: 8889, proxyPort: 8888 }
+  const intervalMs = Number(body?.intervalMs) > 0 ? Number(body?.intervalMs) : config.intervalMs
+  const now = Date.now()
+  return {
+    status,
+    targetUrl: options.targetUrl,
+    httpStatus: options.httpStatus,
+    error: options.error,
+    intervalMs,
+    nextReportAt: now + intervalMs,
+    projectId: body?.projectId || config.projectId,
+    appId: body?.appId || body?.appKey || config.appId,
+    versionNumber: body?.versionNumber,
+    commitId: body?.commitId
+  }
+}
+
+export async function relayCoverageReport(
+  record: Partial<TrafficRecord>,
+  requestBody: string,
+  coverageReporter?: CoverageReporterOptions
+): Promise<{
+  statusCode: number
+  responseBody: string
+}> {
+  const body = parseCoverageReportBody(requestBody)
+  const tags = new Set(record.tags || [])
+  tags.add('COVERAGE')
+  tags.add('FRONTEND')
+  record.tags = Array.from(tags)
+
+  if (body?.coverageMissing) {
+    record.coverageRelay = coverageRelayInfo('skipped', body, coverageReporter, {
+      error: '页面未发现 window.__coverage__，请确认被测前端已启用 Istanbul 插桩并刷新页面'
+    })
+    record.statusCode = '未上送'
+    return {
+      statusCode: 200,
+      responseBody: JSON.stringify({ result: true, skipped: true, reason: 'coverageMissing', message: '页面未发现 window.__coverage__，请确认被测前端已启用 Istanbul 插桩并刷新页面' })
+    }
+  }
+
+  if (!body?.coverage) {
+    record.coverageRelay = coverageRelayInfo('skipped', body, coverageReporter, { error: '请求体没有 coverage 字段' })
+    record.statusCode = '未上送'
+    return {
+      statusCode: 400,
+      responseBody: JSON.stringify({ result: false, message: '请求体没有 coverage 字段' })
+    }
+  }
+
+  const targetUrl = buildCoverageRelayTarget(record, body, coverageReporter)
+  if (!targetUrl) {
+    record.coverageRelay = coverageRelayInfo('failed', body, coverageReporter, {
+      error: '缺少 serviceBaseUrl/projectId/appId，无法确定服务端上送地址'
+    })
+    record.statusCode = '上送失败'
+    return {
+      statusCode: 400,
+      responseBody: JSON.stringify({ result: false, message: '缺少 serviceBaseUrl/projectId/appId，无法确定服务端上送地址' })
+    }
+  }
+
+  const signature = coverageSignature(body.coverage)
+  const dedupeKey = coverageDedupeKey(targetUrl, body)
+  if (lastRelayedCoverageSignatures.get(dedupeKey) === signature) {
+    record.coverageRelay = coverageRelayInfo('skipped', body, coverageReporter, {
+      targetUrl,
+      error: '覆盖率数据未变化，已跳过重复上送'
+    })
+    record.statusCode = '未上送'
+    return {
+      statusCode: 200,
+      responseBody: JSON.stringify({ result: true, skipped: true, reason: 'unchanged', message: '覆盖率数据未变化，已跳过重复上送' })
+    }
+  }
+
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        commitId: body.commitId,
+        versionNumber: body.versionNumber,
+        branch: body.branch,
+        caseName: body.caseName || record.caseName,
+        timestamp: body.timestamp || record.timestamp || Date.now(),
+        coverage: body.coverage
+      })
+    })
+    const responseText = await response.text().catch(() => '')
+    if (response.ok) {
+      lastRelayedCoverageSignatures.set(dedupeKey, signature)
+    }
+    record.coverageRelay = coverageRelayInfo(response.ok ? 'success' : 'failed', body, coverageReporter, {
+      targetUrl,
+      httpStatus: response.status,
+      error: response.ok ? undefined : `服务端返回 HTTP ${response.status}`
+    })
+    record.statusCode = response.ok ? '已上送' : '上送失败'
+    return {
+      statusCode: response.ok ? 200 : 502,
+      responseBody: responseText || JSON.stringify({
+        result: response.ok,
+        message: response.ok ? '前端覆盖率已由采集器上送到 oAT-service-web' : `oAT-service-web 返回 HTTP ${response.status}`
+      })
+    }
+  } catch (error: any) {
+    record.coverageRelay = coverageRelayInfo('failed', body, coverageReporter, {
+      targetUrl,
+      error: error?.message || String(error)
+    })
+    record.statusCode = '上送失败'
+    return {
+      statusCode: 502,
+      responseBody: JSON.stringify({ result: false, message: error?.message || String(error) })
+    }
+  }
 }
 
 export function createProxyServer(
@@ -79,15 +287,6 @@ export function createProxyServer(
       || /\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/frontend\/report(\?|$)/i.test(url ?? '')
   }
 
-  function coverageResponseHeaders(): Record<string, string> {
-    return {
-      'content-type': 'application/json',
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'POST, OPTIONS',
-      'access-control-allow-headers': 'content-type',
-      'x-oat-coverage-relay': 'intercepted'
-    }
-  }
 
   function isHtmlResponse(ctx: any): boolean {
     const contentType = String(ctx.serverToProxyResponse?.headers?.['content-type'] ?? '').toLowerCase()
@@ -111,20 +310,38 @@ export function createProxyServer(
     ctx.clientToProxyRequest.on('data', (chunk: Buffer) => {
       requestBody += chunk.toString()
     })
-    ctx.clientToProxyRequest.on('end', () => {
+    ctx.clientToProxyRequest.on('end', async () => {
       record.requestBody = requestBody
+      record.responseHeaders = coverageResponseHeaders(ctx.clientToProxyRequest?.headers)
+      if (String(record.method).toUpperCase() === 'OPTIONS') {
+        record.duration = Date.now() - startTime
+        record.statusCode = 204
+        record.responseBody = ''
+        if (!ctx.proxyToClientResponse.headersSent) {
+          ctx.proxyToClientResponse.writeHead(204, record.responseHeaders)
+        }
+        ctx.proxyToClientResponse.end()
+        return
+      }
+
+      const relayResult = await relayCoverageReport(record, requestBody, coverageReporter)
       record.duration = Date.now() - startTime
-      record.statusCode = 204
-      record.responseHeaders = coverageResponseHeaders()
-      record.responseBody = ''
-      if (String(record.method).toUpperCase() !== 'OPTIONS') {
+      record.responseBody = relayResult.responseBody
+      record.responseHeaders = {
+        ...record.responseHeaders,
+        'content-length': Buffer.byteLength(relayResult.responseBody).toString()
+      }
+      if (!record.statusCode) {
+        record.statusCode = relayResult.statusCode
+      }
+      if (record.coverageRelay) {
         onTraffic(record as TrafficRecord)
       }
 
       if (!ctx.proxyToClientResponse.headersSent) {
-        ctx.proxyToClientResponse.writeHead(204, record.responseHeaders)
+        ctx.proxyToClientResponse.writeHead(relayResult.statusCode, record.responseHeaders)
       }
-      ctx.proxyToClientResponse.end()
+      ctx.proxyToClientResponse.end(relayResult.responseBody)
     })
     ctx.clientToProxyRequest.on('error', (err: Error) => {
       record.statusCode = 'ERROR'
@@ -139,15 +356,13 @@ export function createProxyServer(
     ctx.clientToProxyRequest.resume()
   }
 
-  function buildCoverageEndpoint(config: CoverageRelayConfig): string {
-    if (config.serviceBaseUrl && config.projectId && config.appId) {
-      return `${config.serviceBaseUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(config.projectId)}/apps/${encodeURIComponent(config.appId)}/coverage/frontend/report`
-    }
-    return '/oat/coverage/report'
+  function buildCoverageEndpoint(_config: CoverageRelayConfig): string {
+    const port = Number(_config.coveragePort) > 0 ? Number(_config.coveragePort) : 8889
+    return `http://localhost:${port}/oat/coverage/report`
   }
 
   function buildCoverageReporterCode(): string {
-    const config = coverageReporter?.getConfig() ?? { intervalMs: 30000 }
+    const config = coverageReporter?.getConfig() ?? { enabled: false, intervalMs: 30000 }
     const intervalMs = Number.isFinite(Number(config.intervalMs)) && Number(config.intervalMs) >= 1000
       ? Math.round(Number(config.intervalMs))
       : 30000
@@ -164,18 +379,32 @@ export function createProxyServer(
   const intervalMs = ${intervalMs};
   const meta = ${JSON.stringify(meta)};
   let missingReported = false;
-  const send = (payload) => {
+  let inFlight = false;
+  let lastSentCoverageSignature = '';
+  const send = (payload, coverageSignature) => {
+    if (inFlight) return;
     const body = JSON.stringify({ ...meta, ...payload });
-    if (navigator.sendBeacon) {
-      navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
+    if (window.fetch) {
+      inFlight = true;
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        credentials: 'omit'
+      }).then((response) => {
+        return response.clone().json().catch(() => null).then((data) => {
+          if (coverageSignature && response.ok && !data?.skipped && data?.result !== false) {
+            lastSentCoverageSignature = coverageSignature;
+          }
+          if (data?.skipped || data?.result === false) {
+            console.info('[oAT coverage]', data.message || data.reason || 'coverage relay response', data);
+          }
+        });
+      }).catch(() => {}).finally(() => {
+        inFlight = false;
+      });
       return;
     }
-    fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-      keepalive: true
-    }).catch(() => {});
   };
   const report = (diagnoseMissing = false) => {
     const coverage = window.__coverage__;
@@ -186,7 +415,9 @@ export function createProxyServer(
       }
       return;
     }
-    send({ coverage, timestamp: Date.now(), intervalMs, href: location.href });
+    const coverageSignature = JSON.stringify(coverage);
+    if (coverageSignature === lastSentCoverageSignature) return;
+    send({ coverage, timestamp: Date.now(), intervalMs, href: location.href }, coverageSignature);
   };
   window.setTimeout(() => report(true), 1200);
   window.setInterval(report, intervalMs);

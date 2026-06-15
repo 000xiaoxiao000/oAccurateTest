@@ -3,6 +3,7 @@ import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { createProxyServer } from './proxy.js'
+import { coverageRelayPort, createCoverageRelayServer } from './coverageRelayServer.js'
 import { disableSystemProxy, enableSystemProxy, getSystemProxyStatus } from './systemProxy.js'
 import { generateRootCert, getCertInfo, getProxyCaDir, installCertMacOS, openCertFolder, uninstallCertMacOS } from './certificate.js'
 import { connectMqtt, disconnectAllMqtt, disconnectMqtt } from './protocols/mqtt.js'
@@ -42,12 +43,16 @@ const __dirname = path.dirname(__filename)
 let mainWindow: BrowserWindow | null = null
 let floatingWindow: BrowserWindow | null = null
 let proxyServer: any = null
+let coverageRelayServer: any = null
+let activeProxyPort = 8888
+let activeCoverageRelayPort = 8889
 let captureEnabled = false
 let currentCaseName = ''
 let currentSessionId = ''
 const trafficRecords: TrafficRecord[] = []
 let filterRules: TrafficFilterRule[] = []
-const PROXY_PORT = 8888
+const DEFAULT_PROXY_PORT = 8888
+const DEFAULT_COVERAGE_PORT = 8889
 let enabledProtocols: CaptureProtocolConfig = {
   http: true,
   https: true,
@@ -56,10 +61,12 @@ let enabledProtocols: CaptureProtocolConfig = {
 }
 
 function getCaptureState() {
+  const config = getCoverageRelayConfig()
   return {
     isCapturing: captureEnabled,
     caseName: currentCaseName,
-    port: proxyServer?.httpPort ?? PROXY_PORT,
+    port: proxyServer?.httpPort ?? config.proxyPort ?? DEFAULT_PROXY_PORT,
+    coveragePort: coverageRelayServer?.address?.()?.port ?? config.coveragePort ?? DEFAULT_COVERAGE_PORT,
     recordCount: trafficRecords.length,
     protocols: enabledProtocols
   }
@@ -78,8 +85,17 @@ function closeProxyServer() {
   }
 }
 
+function closeCoverageRelayServer() {
+  if (coverageRelayServer) {
+    coverageRelayServer.close()
+    coverageRelayServer = null
+  }
+}
+
 function isCoverageRelayPluginEnabled(): boolean {
-  return listPlugins().some(plugin => plugin.id === 'oat-coverage-relay' && plugin.enabled && !plugin.error)
+  const config = getCoverageRelayConfig()
+  return config.enabled === true
+    && listPlugins().some(plugin => plugin.id === 'oat-coverage-relay' && plugin.enabled && !plugin.error)
 }
 
 async function acceptCapturedRecord(record: TrafficRecord) {
@@ -116,6 +132,11 @@ function startProxyServer(server: any, port: number): Promise<number> {
 }
 
 async function ensureProxyServer(): Promise<number> {
+  const config = getCoverageRelayConfig()
+  const configuredPort = Number(config.proxyPort) > 0 ? Number(config.proxyPort) : DEFAULT_PROXY_PORT
+  if (proxyServer && activeProxyPort !== configuredPort) {
+    closeProxyServer()
+  }
   if (!proxyServer) {
     if (!getCertInfo().exists) {
       generateRootCert()
@@ -127,12 +148,44 @@ async function ensureProxyServer(): Promise<number> {
       getConfig: getCoverageRelayConfig
     })
 
-    await startProxyServer(proxyServer, PROXY_PORT)
+    await startProxyServer(proxyServer, configuredPort)
+    activeProxyPort = proxyServer.httpPort ?? configuredPort
   } else {
     proxyServer.setEnabledProtocols?.(enabledProtocols)
   }
 
-  return proxyServer.httpPort ?? PROXY_PORT
+  return proxyServer.httpPort ?? configuredPort
+}
+
+function startCoverageRelayServer(server: any, port: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.listen(port, (error?: Error) => {
+      if (error) {
+        reject(error)
+        return
+      }
+      const address = server.address()
+      resolve(typeof address === 'object' && address ? address.port : port)
+    })
+  })
+}
+
+async function ensureCoverageRelayServer(): Promise<number> {
+  const config = getCoverageRelayConfig()
+  const configuredPort = coverageRelayPort(config)
+  if (coverageRelayServer && activeCoverageRelayPort !== configuredPort) {
+    closeCoverageRelayServer()
+  }
+  if (!coverageRelayServer) {
+    coverageRelayServer = createCoverageRelayServer((record: TrafficRecord) => {
+      acceptCapturedRecord(record)
+    }, {
+      isEnabled: isCoverageRelayPluginEnabled,
+      getConfig: getCoverageRelayConfig
+    })
+    activeCoverageRelayPort = await startCoverageRelayServer(coverageRelayServer, configuredPort)
+  }
+  return activeCoverageRelayPort
 }
 
 function createWindow() {
@@ -212,8 +265,11 @@ function restoreMainWindow() {
 app.whenReady().then(async () => {
   initDatabase()
   filterRules = listFilterRules()
-  loadCoverageRelayConfig()
+  const coverageConfig = loadCoverageRelayConfig()
   await loadPlugins()
+  if (coverageConfig.enabled) {
+    await ensureCoverageRelayServer()
+  }
   createWindow()
 
   app.on('activate', () => {
@@ -225,6 +281,7 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   closeProxyServer()
+  closeCoverageRelayServer()
   disconnectAllMqtt()
   if (process.platform !== 'darwin') {
     app.quit()
@@ -241,7 +298,7 @@ ipcMain.handle('start-capture', async (_event, caseName: string) => {
     saveSession({ id: currentSessionId, caseName, startTime: Date.now() })
     broadcastCaptureState()
 
-    return { success: true, port }
+    return { success: true, port, coveragePort: getCaptureState().coveragePort }
   } catch (error: any) {
     captureEnabled = false
     proxyServer = null
@@ -424,6 +481,10 @@ ipcMain.handle('get-proxy-status', async () => {
 
 ipcMain.handle('enable-system-proxy', async (_event, port: number, protocols?: CaptureProtocolConfig) => {
   try {
+    const config = getCoverageRelayConfig()
+    if (Number(port) > 0 && Number(port) !== config.proxyPort) {
+      setCoverageRelayConfig({ proxyPort: Number(port) })
+    }
     enabledProtocols = { ...enabledProtocols, ...(protocols ?? {}) }
     const proxyPort = await ensureProxyServer()
     await enableSystemProxy({
@@ -535,4 +596,18 @@ ipcMain.handle('uninstall-plugin', async (_event, pluginId: string) => uninstall
 
 ipcMain.handle('get-coverage-relay-config', async () => loadCoverageRelayConfig())
 
-ipcMain.handle('set-coverage-relay-config', async (_event, config) => setCoverageRelayConfig(config))
+ipcMain.handle('set-coverage-relay-config', async (_event, config) => {
+  const previousConfig = getCoverageRelayConfig()
+  const nextConfig = setCoverageRelayConfig(config)
+  if (Number(previousConfig.proxyPort) !== Number(nextConfig.proxyPort)) {
+    closeProxyServer()
+  }
+  if (Number(previousConfig.coveragePort) !== Number(nextConfig.coveragePort)) {
+    closeCoverageRelayServer()
+  }
+  if (nextConfig.enabled) {
+    await ensureCoverageRelayServer()
+  }
+  broadcastCaptureState()
+  return nextConfig
+})

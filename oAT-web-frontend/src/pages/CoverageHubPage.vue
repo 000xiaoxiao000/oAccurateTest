@@ -103,6 +103,15 @@
                 {{ isGeneratingVersion(version, 'full') ? '全量生成中...' : '生成版本全量' }}
               </button>
               <button
+                class="ghost-button small-button generate-button frontend-generate-button"
+                type="button"
+                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :title="generateDisabledTitle(version, 'frontend')"
+                @click="generateFrontendCoverage(version)"
+              >
+                {{ isGeneratingVersion(version, 'frontend') ? '前端生成中...' : '生成前端报告' }}
+              </button>
+              <button
                 class="ghost-button small-button generate-button"
                 type="button"
                 :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
@@ -314,6 +323,7 @@ import {
   fetchVersionCenter,
   triggerCoverageGenerate,
   triggerCoverageGenerateIncremental,
+  triggerFrontendCoverageGenerate,
 } from '@/api/bootstrap'
 import { backendApiUrl } from '@/api/http'
 import AppPagination from '@/components/AppPagination.vue'
@@ -550,7 +560,9 @@ function selectBaseReport(report: CoverageReportCard) {
   incrementalError.value = ''
 }
 
-function versionActionKey(version: VersionItemSummary, type: 'full' | 'incremental') {
+type VersionGenerateType = 'full' | 'incremental' | 'frontend'
+
+function versionActionKey(version: VersionItemSummary, type: VersionGenerateType) {
   return `${type}:${version.id || version.versionNumber}:${version.repoCommitId || ''}`
 }
 
@@ -558,13 +570,14 @@ function canGenerateVersion(version: VersionItemSummary) {
   return Boolean(version.current)
 }
 
-function isGeneratingVersion(version: VersionItemSummary, type: 'full' | 'incremental') {
+function isGeneratingVersion(version: VersionItemSummary, type: VersionGenerateType) {
   return generatingVersionKey.value === versionActionKey(version, type)
 }
 
-function generateDisabledTitle(version: VersionItemSummary, type: 'full' | 'incremental') {
+function generateDisabledTitle(version: VersionItemSummary, type: VersionGenerateType) {
   if (!version.current) return '非当前版本仅支持查看覆盖率，不能生成报告'
   if (generatingVersionKey.value && !isGeneratingVersion(version, type)) return '已有覆盖率生成任务处理中，请稍后再试'
+  if (type === 'frontend') return '合并已上报的 Istanbul 前端覆盖率数据，生成前端覆盖率报告'
   return type === 'full' ? '生成当前版本的版本全量报告' : '选择基准后生成当前版本的版本增量报告'
 }
 
@@ -633,6 +646,28 @@ async function generateVersionFull(version: VersionItemSummary) {
   } catch (err) {
     generationFailed.value = true
     generationNotice.value = err instanceof Error ? err.message : '生成版本全量报告失败'
+  } finally {
+    generatingVersionKey.value = ''
+  }
+}
+
+async function generateFrontendCoverage(version: VersionItemSummary) {
+  if (!canGenerateVersion(version) || generatingVersionKey.value || !selectedAppId.value) return
+  generatingVersionKey.value = versionActionKey(version, 'frontend')
+  generationFailed.value = false
+  generationNotice.value = ''
+  error.value = ''
+  try {
+    await triggerFrontendCoverageGenerate(projectId.value, selectedAppId.value, {
+      versionNumber: version.versionNumber,
+      branch: version.repoBranch || undefined,
+      commitId: version.repoCommitId || undefined,
+    })
+    generationNotice.value = '前端覆盖率报告生成完成，已刷新报告列表'
+    await refreshCenter(selectedAppId.value)
+  } catch (err) {
+    generationFailed.value = true
+    generationNotice.value = err instanceof Error ? err.message : '生成前端覆盖率报告失败'
   } finally {
     generatingVersionKey.value = ''
   }

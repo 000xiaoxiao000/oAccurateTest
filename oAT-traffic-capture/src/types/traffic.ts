@@ -36,7 +36,10 @@ export interface CoverageRelayInfo {
 }
 
 export interface CoverageRelayConfig {
+  enabled: boolean
   intervalMs: number
+  coveragePort?: number
+  proxyPort?: number
   serviceBaseUrl?: string
   projectId?: string
   appId?: string

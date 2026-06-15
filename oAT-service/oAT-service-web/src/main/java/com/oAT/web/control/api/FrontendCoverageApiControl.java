@@ -1,6 +1,7 @@
 package com.oAT.web.control.api;
 
 import com.oAT.web.control.entity.ResultNotified;
+import com.oAT.web.common.UtilJson;
 import com.oAT.web.coverage.FrontendCoverageService;
 import com.oAT.web.coverage.FrontendCoverageService.FrontendCoverageGenerateRequest;
 import com.oAT.web.coverage.FrontendCoverageService.FrontendCoverageReportRequest;
@@ -9,6 +10,8 @@ import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
 import org.springframework.util.Assert;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 
 @RestController
 @RequestMapping("/api/projects/{projectId}/apps/{appId}/coverage/frontend")
+@CrossOrigin(originPatterns = "*", allowCredentials = "true", methods = {RequestMethod.POST, RequestMethod.OPTIONS})
 public class FrontendCoverageApiControl {
     private final FrontendCoverageService frontendCoverageService;
     private final ProjectService projectService;
@@ -28,12 +32,17 @@ public class FrontendCoverageApiControl {
         this.projectService = projectService;
     }
 
-    @PostMapping("/report")
+    @PostMapping(value = "/report", consumes = {"application/json", "text/plain", "*/*"})
     public ResultNotified<String> report(@PathVariable String projectId,
                                          @PathVariable String appId,
-                                         @RequestBody FrontendCoverageReportRequest request) {
+                                         @RequestBody String requestBody) {
+        FrontendCoverageReportRequest request = parseReportRequest(requestBody);
         String reportId = frontendCoverageService.saveReport(projectId, appId, request);
         return new ResultNotified<>(true, "前端覆盖率上报成功", reportId);
+    }
+
+    @RequestMapping(value = "/report", method = RequestMethod.OPTIONS)
+    public void reportOptions() {
     }
 
     @PostMapping("/generate")
@@ -44,6 +53,15 @@ public class FrontendCoverageApiControl {
         ensureProjectAccess(projectId, user);
         CoverageReportIndex report = frontendCoverageService.generateReport(projectId, appId, request);
         return new ResultNotified<>(true, "前端覆盖率报告生成成功", report.getId());
+    }
+
+    private FrontendCoverageReportRequest parseReportRequest(String requestBody) {
+        Assert.hasText(requestBody, "请求体不能为空");
+        try {
+            return UtilJson.getObjectMapper().readValue(requestBody, FrontendCoverageReportRequest.class);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("前端覆盖率上报请求体不是有效 JSON", e);
+        }
     }
 
     private ProjectVo ensureProjectAccess(String projectId, UserVo user) {

@@ -109,7 +109,7 @@ function getCoverageClass(record: TrafficRecord): string {
 function getCoverageText(record: TrafficRecord): string {
   if (record.coverageRelay?.status === 'success') return '已上送'
   if (record.coverageRelay?.status === 'failed') return '失败'
-  if (record.coverageRelay?.status === 'skipped') return '跳过'
+  if (record.coverageRelay?.status === 'skipped') return record.coverageRelay.error?.includes('window.__coverage__') ? '未插桩' : '跳过'
   return '无字段'
 }
 

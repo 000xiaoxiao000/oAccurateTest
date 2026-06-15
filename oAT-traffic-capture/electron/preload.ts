@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTrafficCaptured: (callback: (record: TrafficRecord) => void) => {
     ipcRenderer.on('traffic-captured', (_event, record) => callback(record))
   },
-  onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number; recordCount: number }) => void) => {
+  onCaptureStateChanged: (callback: (state: { isCapturing: boolean; caseName: string; port: number; coveragePort?: number; recordCount: number }) => void) => {
     ipcRenderer.on('capture-state-changed', (_event, state) => callback(state))
   },
   getProxyStatus: () => ipcRenderer.invoke('get-proxy-status'),
@@ -46,5 +46,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   uninstallBuiltinPlugin: () => ipcRenderer.invoke('uninstall-builtin-plugin'),
   uninstallPlugin: (pluginId: string) => ipcRenderer.invoke('uninstall-plugin', pluginId),
   getCoverageRelayConfig: () => ipcRenderer.invoke('get-coverage-relay-config'),
-  setCoverageRelayConfig: (config: { intervalMs: number; serviceBaseUrl?: string; projectId?: string; appId?: string }) => ipcRenderer.invoke('set-coverage-relay-config', config)
+  setCoverageRelayConfig: (config: { enabled: boolean; intervalMs: number; coveragePort?: number; proxyPort?: number; serviceBaseUrl?: string; projectId?: string; appId?: string }) => ipcRenderer.invoke('set-coverage-relay-config', config)
 })

@@ -10,11 +10,17 @@ type CoveragePayload = {
 
 type CoverageWindow = Window & {
   __coverage__?: unknown
+  __oatCoverageReportInFlight?: boolean
+  __oatCoverageLastSentSignature?: string
 }
 
 export function reportOatCoverage(endpoint: string, meta: CoveragePayload): void {
-  const coverage = (window as CoverageWindow).__coverage__
+  const coverageWindow = window as CoverageWindow
+  const coverage = coverageWindow.__coverage__
   if (!coverage) return
+
+  const coverageSignature = JSON.stringify(coverage)
+  if (coverageSignature === coverageWindow.__oatCoverageLastSentSignature) return
 
   const body = JSON.stringify({
     ...meta,
@@ -22,18 +28,28 @@ export function reportOatCoverage(endpoint: string, meta: CoveragePayload): void
     timestamp: Date.now(),
   })
 
-  if (navigator.sendBeacon) {
-    const blob = new Blob([body], { type: 'application/json' })
-    navigator.sendBeacon(endpoint, blob)
+  if (window.fetch) {
+    if (coverageWindow.__oatCoverageReportInFlight) return
+    coverageWindow.__oatCoverageReportInFlight = true
+    void fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      credentials: 'omit',
+    }).then((response) => {
+      if (response.ok) {
+        return response.clone().json().catch(() => null).then((data) => {
+          if (!data?.skipped && data?.result !== false) {
+            coverageWindow.__oatCoverageLastSentSignature = coverageSignature
+          }
+        })
+      }
+      return undefined
+    }).catch(() => {}).finally(() => {
+      coverageWindow.__oatCoverageReportInFlight = false
+    })
     return
   }
-
-  void fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-    keepalive: true,
-  })
 }
 
 export function installOatCoverageReporter(endpoint: string, meta: CoveragePayload, intervalMs = 30000): () => void {
