@@ -12,6 +12,14 @@
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="payload">
       <form class="form-card" @submit.prevent="save">
+        <label class="block app-id-field">
+          <span>应用 Id</span>
+          <div class="copy-input-row">
+            <input class="text-input" type="text" :value="displayAppId" readonly />
+            <button class="secondary-button copy-button" type="button" @click="copyAppId">复制</button>
+          </div>
+        </label>
+
         <div class="form-grid">
           <label>
             <span>应用名称</span>
@@ -137,14 +145,17 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
+import { useToast } from '@/composables/useToast'
 
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
+const toast = useToast()
 const projectId = computed(() => String(route.params.projectId || ''))
 const appId = computed(() => String(route.params.appId || ''))
 const storeKey = computed(() => `${projectId.value}:${appId.value}`)
 const payload = computed(() => projectStore.appSettingsByKey[storeKey.value])
+const displayAppId = computed(() => payload.value?.app?.id || appId.value)
 const loading = ref(false)
 const error = ref('')
 const deleteDialogOpen = ref(false)
@@ -187,6 +198,28 @@ function syncForm() {
   form.probeAlertOnOnline = app.probeAlertOnOnline
   form.probeAlertOnOffline = app.probeAlertOnOffline
   form.probeAlertOnRecovered = app.probeAlertOnRecovered
+}
+
+async function copyAppId() {
+  if (!displayAppId.value) {
+    toast.warning('没有可复制的应用 Id')
+    return
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(displayAppId.value)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = displayAppId.value
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      textarea.remove()
+    }
+    toast.success('应用 Id 已复制')
+  } catch {
+    toast.error('复制应用 Id 失败')
+  }
 }
 
 async function load() {
@@ -333,6 +366,22 @@ onMounted(load)
   margin-top: 16px;
 }
 
+.app-id-field {
+  margin-top: 0;
+}
+
+.copy-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.copy-button {
+  min-width: 72px;
+  white-space: nowrap;
+}
+
 .text-input,
 .text-area,
 .select {
@@ -394,6 +443,10 @@ onMounted(load)
 @media (max-width: 900px) {
   .form-grid,
   .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .copy-input-row {
     grid-template-columns: 1fr;
   }
 }

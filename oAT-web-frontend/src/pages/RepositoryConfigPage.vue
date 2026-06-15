@@ -23,7 +23,23 @@
           </label>
           <label>
             <span>密码 / Token</span>
-            <input v-model="form.repoPassword" class="text-input" type="password" />
+            <div class="password-input-wrap">
+              <input
+                v-model="form.repoPassword"
+                class="text-input password-input"
+                :type="showRepoPassword ? 'text' : 'password'"
+                autocomplete="current-password"
+              />
+              <button
+                class="password-toggle"
+                type="button"
+                :aria-label="showRepoPassword ? '隐藏密码 / Token' : '显示密码 / Token'"
+                :title="showRepoPassword ? '隐藏密码 / Token' : '显示密码 / Token'"
+                @click="showRepoPassword = !showRepoPassword"
+              >
+                <span :class="showRepoPassword ? 'eye-icon eye-open' : 'eye-icon eye-slash'"></span>
+              </button>
+            </div>
           </label>
         </div>
 
@@ -63,6 +79,7 @@ const payload = computed(() => projectStore.repositoryByKey[storeKey.value])
 const loading = ref(false)
 const error = ref('')
 const branches = ref<string[]>([])
+const showRepoPassword = ref(false)
 
 const form = reactive({
   repoAddress: '',
@@ -195,10 +212,76 @@ onMounted(load)
 }
 
 .text-input {
+  width: 100%;
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 12px;
   padding: 10px 12px;
   background: #fff;
+}
+
+.password-input-wrap {
+  position: relative;
+}
+
+.password-input {
+  padding-right: 48px;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 999px;
+  padding: 0;
+  color: #64748b;
+  background: transparent;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.password-toggle:hover {
+  color: #0f766e;
+  background: rgba(15, 118, 110, .08);
+}
+
+.eye-icon {
+  position: relative;
+  display: inline-block;
+  width: 21px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 60% 60% 55% 55%;
+  transform: rotate(-2deg);
+}
+
+.eye-icon::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.eye-icon.eye-slash::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: 5px;
+  width: 27px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .92);
+  transform: rotate(-36deg);
 }
 
 .actions {
