@@ -90,6 +90,7 @@ public class SandboxStatusReporter {
             payload.put("startMode", startMode == null ? "" : startMode.name());
             payload.put("sandboxVersion", runtime.properties().getProperty("agentVersion", "1.0-SNAPSHOT"));
             payload.put("modules", runtime.moduleManager().stateNames());
+            payload.put("moduleEnhancements", runtime.enhancementRegistry().summaries());
             payload.put("bootstrapEnhancements", buildBootstrapEnhancementStatus(runtime));
 
             Map<String, String> params = new HashMap<String, String>();

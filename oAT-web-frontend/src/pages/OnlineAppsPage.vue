@@ -93,8 +93,16 @@
                               :key="module.name"
                               :class="['module-chip', moduleTone(module.state)]"
                             >
-                              <strong>{{ module.name }}</strong>
-                              <em>{{ module.state }}</em>
+                              <span class="module-chip-main">
+                                <strong>{{ module.name }}</strong>
+                                <em>{{ module.state }}</em>
+                              </span>
+                              <span
+                                :class="['module-hit', moduleEnhancementInfo(item.sandboxStatus, module).hit ? 'hit' : 'miss']"
+                                :title="moduleEnhancementInfo(item.sandboxStatus, module).title"
+                              >
+                                {{ moduleEnhancementInfo(item.sandboxStatus, module).label }}
+                              </span>
                             </span>
                           </div>
                           <button
@@ -179,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import AppPagination from '@/components/AppPagination.vue'
@@ -207,6 +215,8 @@ const copiedKey = ref('')
 const modulePreviewLimit = 6
 const commandPollIntervalMs = 2000
 const commandPollTimeoutMs = 45000
+const onlineRefreshIntervalMs = 5000
+let onlineRefreshTimer: number | undefined
 
 type SandboxCommand = 'start' | 'stop' | 'restart' | 'status'
 
@@ -221,11 +231,27 @@ interface SandboxStatusPayload {
   startMode?: string
   sandboxVersion?: string
   modules?: Record<string, unknown>
+  moduleEnhancements?: Record<string, SandboxModuleEnhancement>
+  bootstrapEnhancements?: SandboxBootstrapEnhancement[]
 }
 
 interface SandboxModuleEntry {
   name: string
   state: string
+}
+
+interface SandboxModuleEnhancement {
+  enhancedClassCount?: number
+  enhancedMethodCount?: number
+  sampleMethods?: string[]
+}
+
+interface SandboxBootstrapEnhancement {
+  moduleId?: string
+  className?: string
+  methodName?: string
+  state?: string
+  errorMessage?: string
 }
 
 const filteredSessions = computed(() => {
@@ -420,15 +446,53 @@ function visibleModuleEntries(item: OnlineSessionSummary) {
   return selected
 }
 
+function moduleEnhancementInfo(status: string | undefined, module: SandboxModuleEntry) {
+  const moduleName = module.name
+  if (module.state === 'SKIPPED') {
+    return { hit: false, label: '已跳过', title: '模块配置不满足加载条件，未注册增强目标' }
+  }
+  const parsed = parseSandboxStatus(status)
+  const bootstrapHits = (parsed?.bootstrapEnhancements || []).filter((item) => item.moduleId === moduleName && item.state === 'ACTIVE')
+  if (bootstrapHits.length) {
+    const samples = bootstrapHits
+      .slice(0, 8)
+      .map((item) => `${item.className || '-'}#${item.methodName || '-'}`)
+    return { hit: true, label: `命中 ${bootstrapHits.length} 个增强点`, title: samples.join('\n') }
+  }
+  if (moduleName === 'system-log') {
+    return { hit: true, label: '无需目标命中', title: 'SystemLog 模块安装 System.out/System.err 代理，不依赖业务类目标命中' }
+  }
+  if (!parsed?.moduleEnhancements) {
+    return { hit: false, label: '未上报命中', title: '当前 agent 未上报模块实际增强记录' }
+  }
+  const enhancement = parsed.moduleEnhancements[moduleName]
+  const classCount = Number(enhancement?.enhancedClassCount || 0)
+  const methodCount = Number(enhancement?.enhancedMethodCount || 0)
+  if (classCount <= 0 && methodCount <= 0) {
+    return { hit: false, label: '未命中目标', title: '未发现被测 JVM 中加载并增强了该模块匹配的类/方法' }
+  }
+  const samples = Array.isArray(enhancement?.sampleMethods) ? enhancement.sampleMethods.slice(0, 8) : []
+  const title = samples.length ? samples.join('\n') : `增强类 ${classCount} 个，方法 ${methodCount} 个`
+  if (methodCount <= 0) {
+    return { hit: true, label: `命中 ${classCount} 类`, title }
+  }
+  return { hit: true, label: `命中 ${classCount} 类/${methodCount} 方法`, title }
+}
+
 function moduleStats(status?: string) {
   const counts = new Map<string, number>()
   for (const module of sandboxModuleEntries(status)) {
     counts.set(module.state, (counts.get(module.state) || 0) + 1)
   }
-  const order = ['ACTIVE', 'ERROR', 'FROZEN', 'LOADED', 'UNLOADED', 'UNKNOWN']
+  const order = ['ACTIVE', 'ERROR', 'SKIPPED', 'FROZEN', 'LOADED', 'UNLOADED', 'UNKNOWN']
   return Array.from(counts.entries())
     .map(([state, count]) => ({ state, count }))
-    .sort((left, right) => order.indexOf(left.state) - order.indexOf(right.state))
+    .sort((left, right) => moduleStateOrder(left.state, order) - moduleStateOrder(right.state, order))
+}
+
+function moduleStateOrder(state: string, order: string[]) {
+  const index = order.indexOf(state)
+  return index >= 0 ? index : order.length
 }
 
 function normalizeModuleState(state: unknown) {
@@ -523,7 +587,21 @@ watch(() => filteredSessions.value.length, (total) => {
   }
 })
 
-onMounted(load)
+onMounted(() => {
+  load()
+  onlineRefreshTimer = window.setInterval(() => {
+    if (!loading.value) {
+      load({ silent: true })
+    }
+  }, onlineRefreshIntervalMs)
+})
+
+onUnmounted(() => {
+  if (onlineRefreshTimer !== undefined) {
+    window.clearInterval(onlineRefreshTimer)
+    onlineRefreshTimer = undefined
+  }
+})
 </script>
 
 <style scoped>
@@ -787,7 +865,7 @@ onMounted(load)
 
 .module-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 8px;
 }
 
@@ -831,10 +909,12 @@ onMounted(load)
 }
 
 .module-chip {
-  justify-content: space-between;
-  gap: 7px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 7px 9px;
   width: 100%;
+  min-width: 0;
 }
 
 .inline-button {
@@ -850,11 +930,41 @@ onMounted(load)
 
 .module-chip strong {
   color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .module-chip em {
+  flex: 0 0 auto;
   font-style: normal;
   opacity: 0.78;
+}
+
+.module-chip-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.module-hit {
+  overflow: hidden;
+  color: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.82;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-hit.hit {
+  opacity: 1;
+}
+
+.module-hit.miss {
+  opacity: 0.62;
 }
 
 .tone-ok {

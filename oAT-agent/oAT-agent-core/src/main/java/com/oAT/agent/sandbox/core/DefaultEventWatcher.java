@@ -29,6 +29,14 @@ public class DefaultEventWatcher implements EventWatcher {
                                       MethodMatcher methodMatcher,
                                       EnumSet<EventType> eventTypes,
                                       EventListener listener) {
+        return watch("", classMatcher, methodMatcher, eventTypes, listener);
+    }
+
+    public synchronized WatchId watch(String moduleId,
+                                      ClassMatcher classMatcher,
+                                      MethodMatcher methodMatcher,
+                                      EnumSet<EventType> eventTypes,
+                                      EventListener listener) {
         if (classMatcher == null) {
             throw new IllegalArgumentException("classMatcher must not be null");
         }
@@ -40,7 +48,7 @@ public class DefaultEventWatcher implements EventWatcher {
         }
         long listenerId = listenerRegistry.register(listener);
         WatchId watchId = new WatchId(watchIdGenerator.incrementAndGet());
-        watches.put(watchId.value(), new WatchDefinition(watchId, listenerId, classMatcher, methodMatcher,
+        watches.put(watchId.value(), new WatchDefinition(moduleId, watchId, listenerId, classMatcher, methodMatcher,
                 EnumSet.copyOf(eventTypes)));
         return watchId;
     }

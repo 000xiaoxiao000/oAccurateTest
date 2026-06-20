@@ -12,6 +12,7 @@ public class SandboxRuntime {
     private final ModuleManager moduleManager;
     private final ListenerRegistry listenerRegistry;
     private final DefaultEventWatcher eventWatcher;
+    private final SandboxEnhancementRegistry enhancementRegistry;
     private final SandboxTransformer transformer;
     private final BootstrapEnhanceManager bootstrapEnhanceManager;
     private volatile boolean stopped;
@@ -23,7 +24,8 @@ public class SandboxRuntime {
         this.moduleManager = new ModuleManager();
         this.listenerRegistry = new ListenerRegistry();
         this.eventWatcher = new DefaultEventWatcher(listenerRegistry);
-        this.transformer = new SandboxTransformer(eventWatcher);
+        this.enhancementRegistry = new SandboxEnhancementRegistry();
+        this.transformer = new SandboxTransformer(eventWatcher, enhancementRegistry);
         this.bootstrapEnhanceManager = new BootstrapEnhanceManager(instrumentation);
         this.instrumentation.addTransformer(transformer, true);
     }
@@ -45,7 +47,8 @@ public class SandboxRuntime {
     }
 
     public SandboxContext moduleContext() {
-        return new SandboxContext(instrumentation, properties, traceContext, eventWatcher, bootstrapEnhanceManager);
+        return new SandboxContext(instrumentation, properties, traceContext, eventWatcher, bootstrapEnhanceManager,
+                enhancementRegistry);
     }
 
     public ListenerRegistry listenerRegistry() {
@@ -58,6 +61,10 @@ public class SandboxRuntime {
 
     public SandboxTransformer transformer() {
         return transformer;
+    }
+
+    public SandboxEnhancementRegistry enhancementRegistry() {
+        return enhancementRegistry;
     }
 
     public BootstrapEnhanceManager bootstrapEnhanceManager() {

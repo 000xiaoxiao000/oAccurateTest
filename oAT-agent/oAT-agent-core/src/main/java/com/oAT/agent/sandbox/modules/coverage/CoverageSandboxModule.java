@@ -7,6 +7,8 @@ import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.jacoco.data.CompactDataOutput;
 import com.oAT.agent.sandbox.api.ModuleContext;
 import com.oAT.agent.sandbox.api.OatModule;
+import com.oAT.agent.sandbox.core.SandboxContext;
+import com.oAT.agent.sandbox.core.SandboxEnhancementRegistry;
 import com.oAT.agent.trace.TraceContext;
 
 public class CoverageSandboxModule implements OatModule {
@@ -27,7 +29,9 @@ public class CoverageSandboxModule implements OatModule {
             return;
         }
         unloadCollectors();
-        codeStackCollect = new CodeStackCollect(traceContext, context.instrumentation());
+        SandboxEnhancementRegistry registry = context instanceof SandboxContext
+                ? ((SandboxContext) context).enhancementRegistry() : null;
+        codeStackCollect = new CodeStackCollect(traceContext, context.instrumentation(), registry, id());
         CodeStackCollect.INSTANCE = codeStackCollect;
         codeStaticStackCollect = new CodeStaticStackCollect(traceContext, context.instrumentation());
         CodeStaticStackCollect.INSTANCE = codeStaticStackCollect;

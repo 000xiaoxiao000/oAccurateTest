@@ -25,9 +25,11 @@ public class SandboxTransformer implements ClassFileTransformer {
     private static final String SPY_INTERNAL_NAME = OatSpy.class.getName().replace('.', '/');
 
     private final DefaultEventWatcher eventWatcher;
+    private final SandboxEnhancementRegistry enhancementRegistry;
 
-    public SandboxTransformer(DefaultEventWatcher eventWatcher) {
+    public SandboxTransformer(DefaultEventWatcher eventWatcher, SandboxEnhancementRegistry enhancementRegistry) {
         this.eventWatcher = eventWatcher;
+        this.enhancementRegistry = enhancementRegistry;
     }
 
     @Override
@@ -48,9 +50,16 @@ public class SandboxTransformer implements ClassFileTransformer {
             ClassReader reader = new ClassReader(classfileBuffer);
             ClassWriter writer = new SafeClassWriter(reader, ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES,
                     loader);
-            ClassVisitor visitor = new SandboxClassVisitor(writer, loader, dottedClassName, classWatches);
+            List<PendingEnhancement> pendingEnhancements = new ArrayList<PendingEnhancement>();
+            ClassVisitor visitor = new SandboxClassVisitor(writer, loader, dottedClassName, classWatches,
+                    pendingEnhancements);
             reader.accept(visitor, ClassReader.EXPAND_FRAMES);
-            return writer.toByteArray();
+            byte[] enhanced = writer.toByteArray();
+            for (PendingEnhancement pending : pendingEnhancements) {
+                enhancementRegistry.record(pending.moduleId, pending.className, pending.methodName,
+                        pending.descriptor);
+            }
+            return enhanced;
         } catch (Throwable t) {
             logger.error("[Sandbox] transform failed, class=" + dottedClassName + " "
                     + StackTraceFormatter.formatExceptionWithAgentMark(t));
@@ -85,16 +94,19 @@ public class SandboxTransformer implements ClassFileTransformer {
         private final ClassLoader loader;
         private final String className;
         private final List<WatchDefinition> classWatches;
+        private final List<PendingEnhancement> pendingEnhancements;
         private String internalClassName;
 
         SandboxClassVisitor(ClassVisitor cv,
                             ClassLoader loader,
                             String className,
-                            List<WatchDefinition> classWatches) {
+                            List<WatchDefinition> classWatches,
+                            List<PendingEnhancement> pendingEnhancements) {
             super(InstrSupport.ASM_API_VERSION, cv);
             this.loader = loader;
             this.className = className;
             this.classWatches = classWatches;
+            this.pendingEnhancements = pendingEnhancements;
         }
 
         @Override
@@ -128,8 +140,25 @@ public class SandboxTransformer implements ClassFileTransformer {
             if (methodWatches.isEmpty()) {
                 return mv;
             }
+            for (WatchDefinition watch : methodWatches) {
+                pendingEnhancements.add(new PendingEnhancement(watch.moduleId(), className, name, descriptor));
+            }
             return new SandboxAdviceAdapter(mv, access, name, descriptor, loader, className, internalClassName,
                     methodWatches);
+        }
+    }
+
+    private static class PendingEnhancement {
+        private final String moduleId;
+        private final String className;
+        private final String methodName;
+        private final String descriptor;
+
+        private PendingEnhancement(String moduleId, String className, String methodName, String descriptor) {
+            this.moduleId = moduleId;
+            this.className = className;
+            this.methodName = methodName;
+            this.descriptor = descriptor;
         }
     }
 

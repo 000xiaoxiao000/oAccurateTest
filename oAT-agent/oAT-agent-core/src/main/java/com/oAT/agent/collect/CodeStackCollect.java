@@ -9,6 +9,7 @@ import com.oAT.agent.jacoco.flow.ClassProbesAdapter;
 import com.oAT.agent.jacoco.instr.ClassInfo;
 import com.oAT.agent.jacoco.instr.ClassInstrumenter;
 import com.oAT.agent.jacoco.instr.InstrSupport;
+import com.oAT.agent.sandbox.core.SandboxEnhancementRegistry;
 import com.oAT.agent.trace.TraceContext;
 import com.oAT.shaded.asm97.*;
 
@@ -28,8 +29,17 @@ public class CodeStackCollect implements ClassFileTransformer {
     private final WildcardMatcher includes;
     private final WildcardMatcher excludeClassloader;
     private final Instrumentation instrumentation;
+    private final SandboxEnhancementRegistry enhancementRegistry;
+    private final String enhancementModuleId;
 
     public CodeStackCollect(TraceContext context, Instrumentation instrumentation) {
+        this(context, instrumentation, null, null);
+    }
+
+    public CodeStackCollect(TraceContext context,
+                            Instrumentation instrumentation,
+                            SandboxEnhancementRegistry enhancementRegistry,
+                            String enhancementModuleId) {
         try {
             //包含的代码堆栈表达式
             String includeExpr = context.getConfig("codeStack.include");
@@ -54,6 +64,8 @@ public class CodeStackCollect implements ClassFileTransformer {
             //排除监听器跟踪内部代码堆栈
             excludeInner = new WildcardMatcher("com.oAT.agent.*");
             this.instrumentation = instrumentation;
+            this.enhancementRegistry = enhancementRegistry;
+            this.enhancementModuleId = enhancementModuleId;
 
 
             //添加类转换器
@@ -154,6 +166,9 @@ public class CodeStackCollect implements ClassFileTransformer {
             }
 
             logger.info("[Agent-info]完成 CodeStack 采集器初始化, " + className);
+            if (enhancementRegistry != null) {
+                enhancementRegistry.recordClass(enhancementModuleId, className);
+            }
             return writer.toByteArray();
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]transform 方法异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));

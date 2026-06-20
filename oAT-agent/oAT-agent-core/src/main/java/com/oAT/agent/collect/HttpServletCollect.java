@@ -13,6 +13,7 @@ import com.oAT.agent.jacoco.data.StackNodeVoBuilder;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
+import com.oAT.agent.sandbox.core.SandboxEnhancementRegistry;
 import com.oAT.agent.trace.ISessionDestroy;
 import com.oAT.agent.trace.TraceContext;
 import com.oAT.agent.trace.TraceRequest;
@@ -104,11 +105,18 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
 
     private final TraceContext traceContext;
     private final DeferredHttpTraceNodeRegistry deferredNodeRegistry = new DeferredHttpTraceNodeRegistry();
+    private volatile SandboxEnhancementRegistry enhancementRegistry;
+    private volatile String enhancementModuleId;
 
     public HttpServletCollect(TraceContext context, Instrumentation instrumentation, String... httpDrivers) {
         super(instrumentation);
         this.traceContext = context;
         this.httpDrivers = Arrays.asList(httpDrivers);
+    }
+
+    public void configureEnhancementRegistry(SandboxEnhancementRegistry enhancementRegistry, String enhancementModuleId) {
+        this.enhancementRegistry = enhancementRegistry;
+        this.enhancementModuleId = enhancementModuleId;
     }
 
     private HttpServletRequestAdapter createRequestAdapter(Object[] params) {
@@ -641,6 +649,9 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
                 byteCode = byteLoade.toByteCode();
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]toByteCode error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            }
+            if (byteCode != null && enhancementRegistry != null) {
+                enhancementRegistry.record(enhancementModuleId, TARGET_CLASS, TARGET_METHOD, "");
             }
             try {
                 ctclass.detach();

@@ -17,6 +17,7 @@ import com.oAT.agent.sandbox.api.ThrowsEvent;
 import com.oAT.agent.sandbox.api.WatchId;
 import com.oAT.agent.sandbox.api.WildcardClassMatcher;
 import com.oAT.agent.sandbox.api.WildcardMethodMatcher;
+import com.oAT.agent.sandbox.core.ModuleSkippedException;
 import com.oAT.agent.trace.TraceContext;
 import com.oAT.agent.trace.TraceRequest;
 import com.oAT.agent.trace.TraceSession;
@@ -50,7 +51,7 @@ public class ServiceSandboxModule implements OatModule, EventListener {
                 "get&set&add&hashCode&toString&equals"));
         if (!StringUtils.hasText(include)) {
             logger.warn("[Sandbox-Service] service include is blank, module skipped");
-            return;
+            throw new ModuleSkippedException("service include is blank");
         }
         this.watchId = context.eventWatcher().watch(
                 new WildcardClassMatcher(include, exclude),

@@ -24,6 +24,8 @@ import com.oAT.agent.sandbox.api.ReturnEvent;
 import com.oAT.agent.sandbox.api.SandboxEvent;
 import com.oAT.agent.sandbox.api.ThrowsEvent;
 import com.oAT.agent.sandbox.api.WatchId;
+import com.oAT.agent.sandbox.core.SandboxContext;
+import com.oAT.agent.sandbox.core.SandboxEnhancementRegistry;
 import com.oAT.agent.trace.TraceContext;
 import com.oAT.agent.trace.TraceRequest;
 import com.oAT.agent.trace.TraceSession;
@@ -57,6 +59,9 @@ public class HttpServletSandboxModule implements OatModule, EventListener {
         this.context = context;
         this.traceContext = context.traceContext() instanceof TraceContext ? (TraceContext) context.traceContext() : null;
         if (HttpServletCollect.INSTANCE != null) {
+            SandboxEnhancementRegistry registry = context instanceof SandboxContext
+                    ? ((SandboxContext) context).enhancementRegistry() : null;
+            HttpServletCollect.INSTANCE.configureEnhancementRegistry(registry, id());
             logger.info("[Sandbox-HTTP] reuse HttpServletCollect as request entry");
             return;
         }

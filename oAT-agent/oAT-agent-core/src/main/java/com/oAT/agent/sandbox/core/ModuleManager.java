@@ -29,11 +29,19 @@ public class ModuleManager {
         ModuleHolder holder = new ModuleHolder(module);
         modules.put(id, holder);
         try {
-            module.load(context);
+            if (context instanceof SandboxContext) {
+                module.load(((SandboxContext) context).withModuleId(id));
+            } else {
+                module.load(context);
+            }
             holder.state = ModuleState.LOADED;
             module.active();
             holder.state = ModuleState.ACTIVE;
             logger.info("[Sandbox] module active: " + id);
+        } catch (ModuleSkippedException e) {
+            holder.state = ModuleState.SKIPPED;
+            holder.lastError = e.getMessage();
+            logger.warn("[Sandbox] module skipped: " + id + ", " + e.getMessage());
         } catch (Throwable t) {
             holder.state = ModuleState.ERROR;
             holder.lastError = StackTraceFormatter.formatExceptionWithAgentMark(t);
@@ -61,6 +69,10 @@ public class ModuleManager {
     public synchronized void unloadAll() {
         for (Map.Entry<String, ModuleHolder> entry : modules.entrySet()) {
             ModuleHolder holder = entry.getValue();
+            if (holder.state == ModuleState.SKIPPED) {
+                holder.state = ModuleState.UNLOADED;
+                continue;
+            }
             try {
                 holder.module.frozen();
                 holder.state = ModuleState.FROZEN;
