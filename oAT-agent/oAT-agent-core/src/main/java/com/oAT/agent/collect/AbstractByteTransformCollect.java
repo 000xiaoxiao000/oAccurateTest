@@ -11,7 +11,6 @@ import java.io.UnsupportedEncodingException;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
-import java.util.concurrent.Callable;
 
 public abstract class AbstractByteTransformCollect {
     private final static Log logger = LogFactory.getLog(AbstractByteTransformCollect.class);
@@ -77,16 +76,6 @@ public abstract class AbstractByteTransformCollect {
 
     //插桩
     public abstract byte[] transform(ClassLoader loader, String className, ProtectionDomain protectionDomain, byte[] classfileBuffer);
-
-    //TODO 所有监控目标直接执行的方法，都必须经过此代理
-    public Object proxyInvoker(Callable callable) {
-        try {
-            return callable.call();
-        } catch (Throwable t) {
-            logger.error("[Agent-EXCError]插桩逻辑执行异常" + StackTraceFormatter.formatExceptionWithAgentMark(t));
-        }
-        return null;
-    }
 
     private static final java.util.Set<String> PRINTED_JARS =
             java.util.Collections.synchronizedSet(new java.util.HashSet<String>());

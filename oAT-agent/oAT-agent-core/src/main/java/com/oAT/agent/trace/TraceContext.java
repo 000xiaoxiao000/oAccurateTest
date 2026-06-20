@@ -18,12 +18,7 @@ import com.oAT.server.model.ClientInfoVo;
 import com.oAT.server.model.ClientSessionVo;
 
 import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.lang.instrument.Instrumentation;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,11 +39,7 @@ public class TraceContext {
     private final Properties config;
     private TransferService transferService;
     private ClientSessionVo clientSession;
-
-    // 记录 agent 启动时间
-    private final long agentStartTime = System.currentTimeMillis();
-    // 标记日志是否已发送
-    private volatile boolean agentLogsSent = false;
+    private volatile boolean staticInfoSent = false;
 
     // 定义一个枚举来表示不同的配置状态
     enum ConfigStatus {
@@ -530,19 +521,13 @@ public class TraceContext {
         int retryInterval = 5111; // 重试间隔时间，单位为毫秒
         int attempt = 0;    //尝试连接次数，初始从0开始计数
 
-        // 服务可用且只发送启动前5分钟的日志，只发一次
         if (isServerAvailable()) {
             if (!running || Thread.currentThread().isInterrupted()) {
                 return false;
             }
-            // 只在启动5-6分钟内且未发送过日志时发送
-            if (!agentLogsSent
-                    && (1 * 60 * 1000 < System.currentTimeMillis() - agentStartTime
-                    && System.currentTimeMillis() - agentStartTime < 6 * 60 * 1000)) {
-                sendAgentLogs();
-                agentLogsSent = true;
-
+            if (!staticInfoSent) {
                 CompactDataOutput.trySendStaticInfo();
+                staticInfoSent = true;
             }
         }
 
@@ -755,97 +740,4 @@ public class TraceContext {
         }
     }
 
-    // 发送 agent 日志文件大小限制
-    private static final int MAX_UPLOAD_SIZE = 1024 * 1024; // 1MB
-
-    // 发送 agent 日志文件
-    private void sendAgentLogs() {
-        if (getRemoteServer().isEmpty()) {
-            logger.warn("[Agent-warn]<UNK>'server'<UNK>");
-            return;
-        }
-        if (clientSession == null) {
-            logger.warn("[Agent-sendAgentLogs]clientSession is null, 无法发送日志");
-            return;
-        }
-        String logPath = config.getProperty("log.path", SystemUtil.getAgentPath() + "/logs/");
-        File logDir = new File(logPath);
-        if (!logDir.exists() || !logDir.isDirectory()) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("[Agent-debug]日志目录不存在或不是目录: " + logDir);
-            }
-            return;
-        }
-        final String pidPrefix = SystemUtil.getPid() + "-" + SystemUtil.getAppKeyFromArgs();
-        StringBuilder readLog = new StringBuilder();
-        int totalRead = 0;
-
-        File[] files = logDir.listFiles(new FilenameFilter() {
-            @Override
-            public boolean accept(File dir, String name) {
-                return name.startsWith(pidPrefix) && name.endsWith(".log") && !name.endsWith(".log.lck");
-            }
-        });
-
-        if (files != null) {
-            List<File> logFiles = new ArrayList<File>();
-            for (File f : files) {
-                if (f.isFile() && f.length() > 0 && f.canRead()) {
-                    logFiles.add(f);
-                }
-            }
-
-            Collections.sort(logFiles, new Comparator<File>() {
-                @Override
-                public int compare(File o1, File o2) {
-                    long t1 = o1.lastModified();
-                    long t2 = o2.lastModified();
-                    return Long.compare(t1, t2);
-                }
-            });
-
-            for (File path : logFiles) {
-                if (totalRead >= MAX_UPLOAD_SIZE) break;
-                String fileName = path.getAbsolutePath();
-                try (RandomAccessFile raf = new RandomAccessFile(fileName, "r")) {
-                    byte[] buffer = new byte[8192];
-                    int len;
-                    while ((len = raf.read(buffer)) != -1) {
-                        if (totalRead + len > MAX_UPLOAD_SIZE) {
-                            len = MAX_UPLOAD_SIZE - totalRead;
-                        }
-                        readLog.append(new String(buffer, 0, len, StandardCharsets.UTF_8));
-                        totalRead += len;
-                        if (totalRead >= MAX_UPLOAD_SIZE) break;
-                    }
-                } catch (IOException e) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("[Agent-debug]跳过无法读取的日志文件(可能被锁): " + fileName + ", error: " + e.getMessage());
-                    }
-                }
-            }
-        }
-
-        if (readLog.length() == 0) return;
-        String uploadUrl = getRemoteServer() + "/client/agentLogs";
-        Map<String, String> params = new HashMap<String, String>();
-        params.put("sessionId", clientSession.getSessionId());
-        params.put("logs", readLog.toString());
-        try {
-            HttpClient.execHttp(uploadUrl, params).get(10, TimeUnit.SECONDS);
-            double sizeMb = totalRead / 1024.0 / 1024.0;
-            logger.info("[Agent-info]发送日志文件成功，大小: " + String.format("%.2f MB", sizeMb));
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            logger.warn("[Agent-warn]发送日志被中断");
-        } catch (ExecutionException | TimeoutException e) {
-            logger.error("[Agent-EXCError]发送日志失败. error: " + e.getMessage());
-        } catch (NoClassDefFoundError | Exception e) {
-            logger.error("[Agent-EXCError]发送日志过程中发生异常: " + e.getMessage());
-        }
-    }
-
-    public TransferService getTransferService() {
-        return transferService;
-    }
 }

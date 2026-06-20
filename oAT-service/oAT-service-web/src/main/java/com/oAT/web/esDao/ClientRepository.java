@@ -52,9 +52,9 @@ public class ClientRepository {
         jdbcTemplate.update("""
                         INSERT INTO oat_client_session (
                             id, type, status, app_id, agent_version, system_dir, pid, address_ip,
-                            login_time, last_heartbeat_time, agent_logs, package_verify_data,
-                            session_json, create_time, update_time
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            login_time, last_heartbeat_time, package_verify_data, session_json,
+                            create_time, update_time
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON DUPLICATE KEY UPDATE
                             type = VALUES(type),
                             status = VALUES(status),
@@ -65,7 +65,6 @@ public class ClientRepository {
                             address_ip = VALUES(address_ip),
                             login_time = VALUES(login_time),
                             last_heartbeat_time = VALUES(last_heartbeat_time),
-                            agent_logs = VALUES(agent_logs),
                             package_verify_data = VALUES(package_verify_data),
                             session_json = VALUES(session_json),
                             update_time = VALUES(update_time)
@@ -80,7 +79,6 @@ public class ClientRepository {
                 clientInfo == null ? null : clientInfo.getAddressIp(),
                 session == null ? null : session.getLoginTime(),
                 session == null ? null : session.getLastHeartbeatTime(),
-                session == null ? null : session.getAgentLogs(),
                 session == null ? null : session.getPackageVerifyData(),
                 UtilJson.writeValueAsString(session),
                 toTimestamp(index.getCreateTime()),
@@ -131,9 +129,6 @@ public class ClientRepository {
         }
         if (session.getLastHeartbeatTime() == null) {
             session.setLastHeartbeatTime(getLong(rs, "last_heartbeat_time"));
-        }
-        if (!StringUtils.hasText(session.getAgentLogs())) {
-            session.setAgentLogs(rs.getString("agent_logs"));
         }
         if (!StringUtils.hasText(session.getPackageVerifyData())) {
             session.setPackageVerifyData(rs.getString("package_verify_data"));

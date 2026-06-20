@@ -33,8 +33,6 @@ public class ClientSession implements Serializable {
 
     private Long lastHeartbeatTime;
 
-    private String agentLogs;
-
     private String packageVerifyData;
 
     private String sandboxStatus;
@@ -89,14 +87,6 @@ public class ClientSession implements Serializable {
 
     public void setLastHeartbeatTime(Long lastHeartbeatTime) {
         this.lastHeartbeatTime = lastHeartbeatTime;
-    }
-
-    public String getAgentLogs() {
-        return agentLogs;
-    }
-
-    public void setAgentLogs(String agentLogs) {
-        this.agentLogs = agentLogs;
     }
 
     public String getPackageVerifyData() {

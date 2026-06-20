@@ -1,6 +1,5 @@
 package com.oAT.web.control;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientInfoVo;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 
 @Controller
@@ -110,16 +108,6 @@ public class ClientSessionControl {
         Assert.notNull(data, "param 'data' must be not null");
         sessionService.saveStaticData(appId, data);
         return "succeed";
-    }
-
-    @PostMapping("/agentLogs")
-    @ResponseBody
-    public void agentLogs(String sessionId, String logs) {
-        if (StringUtils.isBlank(sessionId)) {
-            logger.error("[agentLogs]sessionId为空");
-            return;
-        }
-        sessionService.putAgentLogs(sessionId, logs);
     }
 
     @PostMapping("/packageVerify")

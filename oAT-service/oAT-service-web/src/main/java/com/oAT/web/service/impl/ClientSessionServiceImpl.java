@@ -437,34 +437,6 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         return stats;
     }
 
-    // agent插桩日志根据sessionId存储
-    @Override
-    public void putAgentLogs(String sessionId, String readAgentLogs) {
-        if (!StringUtils.hasText(sessionId)) {
-            return;
-        }
-        // 校验 Redis 是否有该 sessionId，避免已过期/离线会话继续写入日志
-        if (!redisTemplate.hasKey(SESSIONS_KEY_PREFIX + sessionId)) {
-            logger.warn("[putAgentLogs]Redis中无session，拒绝写入日志，sessionId: {}", sessionId);
-            return;
-        }
-        clientRepository.findById(sessionId).ifPresent(clientIndex -> {
-            ClientSession session = clientIndex.getSession();
-            if (session == null) {
-                logger.warn("[putAgentLogs]Session为空，拒绝写入日志，sessionId: {}", sessionId);
-                return;
-            }
-            if (ClientSession.Status.active.toString().equals(session.getStatus())) {
-                session.setAgentLogs(readAgentLogs);
-                clientIndex.setUpdateTime(new Date());
-                clientRepository.save(clientIndex);
-                logger.debug("[putAgentLogs]存储 agent 日志，sessionId: {}", sessionId);
-            } else {
-                logger.warn("[putAgentLogs]会话非active状态，拒绝写入日志，sessionId: {}", sessionId);
-            }
-        });
-    }
-
     // 将包验证信息存储到 MySQL
     @Override
     public void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage) {

@@ -42,9 +42,6 @@ public interface ClientSessionService {
 
     void saveStaticData(String appId, String data);
 
-    // agent插桩日志根据sessionId存储
-    void putAgentLogs(String sessionId, String readAgentLogs);
-
     // 将包验证信息存储到ES
     void putPackageVerify(String sessionId, String packagePath, String gitCommitIdFromPackage);
 

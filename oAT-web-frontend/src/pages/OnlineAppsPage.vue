@@ -86,24 +86,26 @@
                             <span>{{ stat.state }}</span>
                           </div>
                         </div>
-                        <div class="module-list">
-                          <span
-                            v-for="module in visibleModuleEntries(item)"
-                            :key="module.name"
-                            :class="['module-chip', moduleTone(module.state)]"
+                        <div class="module-list-wrap">
+                          <div class="module-list">
+                            <span
+                              v-for="module in visibleModuleEntries(item)"
+                              :key="module.name"
+                              :class="['module-chip', moduleTone(module.state)]"
+                            >
+                              <strong>{{ module.name }}</strong>
+                              <em>{{ module.state }}</em>
+                            </span>
+                          </div>
+                          <button
+                            v-if="sandboxModuleEntries(item.sandboxStatus).length > modulePreviewLimit"
+                            class="inline-button"
+                            type="button"
+                            @click="toggleModules(item)"
                           >
-                            <strong>{{ module.name }}</strong>
-                            <em>{{ module.state }}</em>
-                          </span>
+                            {{ expandedModulesKey === sessionKey(item) ? '收起模块' : `查看全部 ${sandboxModuleEntries(item.sandboxStatus).length} 个模块` }}
+                          </button>
                         </div>
-                        <button
-                          v-if="sandboxModuleEntries(item.sandboxStatus).length > modulePreviewLimit"
-                          class="inline-button"
-                          type="button"
-                          @click="toggleModules(item)"
-                        >
-                          {{ expandedModulesKey === sessionKey(item) ? '收起模块' : `查看全部 ${sandboxModuleEntries(item.sandboxStatus).length} 个模块` }}
-                        </button>
                       </div>
                       <strong v-else class="status-text">{{ formatSandboxStatus(item.sandboxStatus) }}</strong>
                     </div>
@@ -784,19 +786,21 @@ onMounted(load)
 }
 
 .module-list {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
   gap: 8px;
 }
 
 .module-panel {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
 }
 
 .module-stats {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 8px;
 }
 
@@ -807,6 +811,12 @@ onMounted(load)
   width: fit-content;
   border-radius: 8px;
   padding: 8px 10px;
+}
+
+.module-list-wrap {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
 }
 
 .module-stat strong {
@@ -821,8 +831,10 @@ onMounted(load)
 }
 
 .module-chip {
+  justify-content: space-between;
   gap: 7px;
   padding: 7px 9px;
+  width: 100%;
 }
 
 .inline-button {
@@ -881,6 +893,10 @@ onMounted(load)
   .toolbar-card {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .module-panel {
+    grid-template-columns: 1fr;
   }
 }
 </style>
