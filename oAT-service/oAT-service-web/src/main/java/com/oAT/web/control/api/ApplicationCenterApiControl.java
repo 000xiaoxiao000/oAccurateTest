@@ -57,10 +57,11 @@ public class ApplicationCenterApiControl {
     public ResultNotified<OnlineSessionsPayload> onlineSessions(@PathVariable String projectId,
                                                                 @SessionAttribute UserVo user) {
         ensureProjectAccess(projectId, user);
-        List<ClientSessionVo> sessions = getProjectOnlineSessions(projectId);
+        List<ClientSessionVo> sessions = deduplicateSessions(getProjectOnlineSessions(projectId));
         List<OnlineSessionSummary> items = new ArrayList<>();
         for (ClientSessionVo session : sessions) {
             OnlineSessionSummary item = new OnlineSessionSummary();
+            item.setSessionId(session.getSessionId());
             item.setAddressIp(session.getClientInfo().getAddressIp());
             item.setAgentVersion(session.getClientInfo().getAgentVersion());
             item.setSystemDir(session.getClientInfo().getSystemDir());
@@ -68,6 +69,7 @@ public class ApplicationCenterApiControl {
             item.setJvmVersion(session.getClientInfo().getJvmVersion());
             item.setJvmOption(session.getClientInfo().getJvmOption());
             item.setOnlineTime(session.getOnlineTime());
+            item.setSandboxStatus(session.getSandboxStatus());
             item.setAppId(session.getClientInfo().getAppKey());
             item.setAppName(session.getApplication() == null ? "未定义" : session.getApplication().getAppName());
             item.setProjectSrcName(session.getApplication() == null ? "" : session.getApplication().getProjectSrcName());
@@ -78,6 +80,24 @@ public class ApplicationCenterApiControl {
         payload.setTotal(items.size());
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取在线应用成功", payload);
+    }
+
+    @PostMapping("/online-sessions/{sessionId}/sandbox-command")
+    public ResultNotified<String> sandboxCommand(@PathVariable String projectId,
+                                                 @PathVariable String sessionId,
+                                                 @SessionAttribute UserVo user,
+                                                 @RequestBody SandboxCommandRequest request) {
+        ensureProjectAccess(projectId, user);
+        Assert.notNull(request, "请求不能为空");
+        Assert.hasText(request.getCommand(), "command 不能为空");
+        String command = request.getCommand().trim();
+        Assert.isTrue("start".equals(command) || "stop".equals(command)
+                || "restart".equals(command) || "status".equals(command), "不支持的 sandbox 命令");
+        boolean belongsToProject = getProjectOnlineSessions(projectId).stream()
+                .anyMatch(session -> sessionId.equals(session.getSessionId()));
+        Assert.isTrue(belongsToProject, "在线会话不存在或不属于当前项目");
+        clientSessionService.putSandboxCommand(sessionId, command);
+        return new ResultNotified<>(true, "Sandbox 命令已下发", command);
     }
 
     @GetMapping("/apps/{appId}/settings")
@@ -247,6 +267,35 @@ public class ApplicationCenterApiControl {
         return list;
     }
 
+    private List<ClientSessionVo> deduplicateSessions(List<ClientSessionVo> sessions) {
+        if (sessions == null || sessions.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, ClientSessionVo> latest = new HashMap<>();
+        for (ClientSessionVo session : sessions) {
+            if (session == null || session.getClientInfo() == null) {
+                continue;
+            }
+            String key = String.join("|",
+                    firstText(session.getClientInfo().getAppKey()),
+                    firstText(session.getClientInfo().getPid()),
+                    firstText(session.getClientInfo().getSystemDir()));
+            ClientSessionVo existing = latest.get(key);
+            if (existing == null || safeTime(session.getLastHeartbeatTime()) >= safeTime(existing.getLastHeartbeatTime())) {
+                latest.put(key, session);
+            }
+        }
+        return new ArrayList<>(latest.values());
+    }
+
+    private static long safeTime(Long time) {
+        return time == null ? 0L : time;
+    }
+
+    private static String firstText(String value) {
+        return value == null ? "" : value;
+    }
+
     private List<FrontendContextApiControl.AppSummary> toAppSummaries(List<AppVo> apps) {
         List<FrontendContextApiControl.AppSummary> result = new ArrayList<>();
         for (AppVo app : apps) {
@@ -332,6 +381,7 @@ public class ApplicationCenterApiControl {
     }
 
     public static class OnlineSessionSummary {
+        private String sessionId;
         private String appId;
         private String addressIp;
         private String agentVersion;
@@ -342,7 +392,10 @@ public class ApplicationCenterApiControl {
         private String onlineTime;
         private String appName;
         private String projectSrcName;
+        private String sandboxStatus;
 
+        public String getSessionId() { return sessionId; }
+        public void setSessionId(String sessionId) { this.sessionId = sessionId; }
         public String getAppId() { return appId; }
         public void setAppId(String appId) { this.appId = appId; }
         public String getAddressIp() { return addressIp; }
@@ -363,6 +416,15 @@ public class ApplicationCenterApiControl {
         public void setAppName(String appName) { this.appName = appName; }
         public String getProjectSrcName() { return projectSrcName; }
         public void setProjectSrcName(String projectSrcName) { this.projectSrcName = projectSrcName; }
+        public String getSandboxStatus() { return sandboxStatus; }
+        public void setSandboxStatus(String sandboxStatus) { this.sandboxStatus = sandboxStatus; }
+    }
+
+    public static class SandboxCommandRequest {
+        private String command;
+
+        public String getCommand() { return command; }
+        public void setCommand(String command) { this.command = command; }
     }
 
     public static class AppSettingsPayload {

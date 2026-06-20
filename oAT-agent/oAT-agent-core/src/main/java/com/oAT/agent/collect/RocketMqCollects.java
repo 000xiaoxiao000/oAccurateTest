@@ -32,7 +32,19 @@ public class RocketMqCollects extends AbstractByteTransformCollect implements IC
     public RocketMqCollects(TraceContext context, Instrumentation instrumentation) {
         super(instrumentation);
         this.traceContext = context;
+        initProducerMethods();
+    }
 
+    public RocketMqCollects(TraceContext context) {
+        super();
+        this.traceContext = context;
+        initProducerMethods();
+    }
+
+    private static synchronized void initProducerMethods() {
+        if (!PRODUCER_METHOD_METHODDESCS.isEmpty()) {
+            return;
+        }
         List<String> sendDescs = Arrays.asList(
                 "(Lorg/apache/rocketmq/common/message/Message;)Lorg/apache/rocketmq/client/producer/SendResult;",
                 "(Lorg/apache/rocketmq/common/message/Message;J)Lorg/apache/rocketmq/client/producer/SendResult;",

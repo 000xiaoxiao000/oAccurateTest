@@ -3,6 +3,9 @@ package com.oAT.agent;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.sandbox.core.SandboxLauncher;
+import com.oAT.agent.sandbox.core.SandboxRuntime;
+import com.oAT.agent.sandbox.core.StartMode;
 import com.oAT.agent.trace.TraceContext;
 
 import java.io.*;
@@ -20,6 +23,7 @@ public class Agent {
     public static TraceContext traceContext;
 
     public static Instrumentation instrumentation;
+    private static volatile String lastStartupArg;
 
     public static void premain(String arg, Instrumentation instrumentation) {
         try {
@@ -62,22 +66,33 @@ public class Agent {
             System.setProperty("java.class.path", newClasspath);
 
             // 调用实例方法进行启动
-            start(arg, instrumentation);
+            start(arg, instrumentation, StartMode.PREMAIN);
         } catch (Throwable t) {
             logger.error("[Agent-EXCError] Agent初始化失败，被测系统将继续启动。错误原因: "
                     + StackTraceFormatter.formatExceptionWithAgentMark(t));
         }
     }
 
-    private static void start(String arg, Instrumentation instrumentation) {
+    private static void start(String arg, Instrumentation instrumentation, StartMode startMode) {
         try {
-            if (arg == null) {
-                logger.error("[Agent-start]启动参数不能为空");
-                return;
-            }
             Agent.instrumentation = instrumentation;
+            lastStartupArg = arg;
             // 启动逻辑
             logger.info("[Agent-202601061956]Agent is starting...");
+            SandboxRuntime runtime = SandboxLauncher.start(arg, instrumentation, startMode);
+            traceContext = runtime.traceContext();
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError] Agent启动过程中发生错误，但不影响被测系统运行。错误原因: "
+                    + StackTraceFormatter.formatExceptionWithAgentMark(t));
+        }
+    }
+
+    public static Properties buildStartupProperties(String arg) {
+        if (arg == null) {
+            throw new IllegalArgumentException("[Agent-start]启动参数不能为空");
+        }
+        try {
+            Properties startupProperties = new Properties();
             Properties properties = new Properties();
 
 //        try {
@@ -88,38 +103,28 @@ public class Agent {
 //            return;
 //        }
 
-            //装载Debug调试参数信息，其可直接覆盖上述配置
-            String[] kv = null;
+            //装载启动参数信息，其可直接覆盖配置文件
             if (!arg.trim().isEmpty()) {
-                kv = arg.split("=");
-                if (kv.length == 2) {
-                    properties.setProperty(kv[0], kv[1]);
-                } else {
-                    try {
-                        // 使用 StringReader 避免 ISO-8859-1 编码限制，确保非ASCII字符正确
-                        properties.load(new StringReader(arg.replaceAll(",", "\n")));
-                    } catch (IOException ioException) {
-                        logger.error("[Agent-EXCError]Config format is error" + StackTraceFormatter.formatExceptionWithAgentMark(ioException));
-                        return;
-                    }
+                try {
+                    // 使用 StringReader 避免 ISO-8859-1 编码限制，确保非ASCII字符正确
+                    startupProperties.load(new StringReader(arg.replaceAll(",", "\n")));
+                } catch (IOException ioException) {
+                    logger.error("[Agent-EXCError]Config format is error" + StackTraceFormatter.formatExceptionWithAgentMark(ioException));
+                    throw new IllegalArgumentException("[Agent-EXCError]Config format is error", ioException);
                 }
             }
 
-            String appKey = "";
-            if (kv != null && kv.length > 1) {
-                appKey = kv[1];
-            }
+            String appKey = startupProperties.getProperty("appKey", "");
             Properties agentConfigs = getAgentConfigs(appKey);
             if (agentConfigs.isEmpty()) {
                 logger.warn("[Agent-start] 无法加载有效配置，Agent部分功能可能受限。appKey: " + appKey);
             } else {
                 properties.putAll(agentConfigs);
             }
-            //构建追踪上下文
-            traceContext = new TraceContext(properties, instrumentation);
+            properties.putAll(startupProperties);
+            return properties;
         } catch (Throwable t) {
-            logger.error("[Agent-EXCError] Agent启动过程中发生错误，但不影响被测系统运行。错误原因: "
-                    + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            throw t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
         }
     }
 
@@ -159,6 +164,12 @@ public class Agent {
 
     private static final String[] AGENT_CONFIG_KEYS = {
             "server", "heartbeatTime", "sessionTimeout", "agentVersion",
+            "sandbox.jdbc.enabled", "sandbox.service.enabled", "sandbox.http-servlet.enabled",
+            "sandbox.clickhouse-jdbc.enabled",
+            "sandbox.http-client-v3.enabled", "sandbox.http-client-v4.enabled", "sandbox.feign.enabled",
+            "sandbox.dubbo.enabled", "sandbox.sofa-rpc.enabled", "sandbox.mq-producer.enabled",
+            "sandbox.mq-consumer.enabled", "sandbox.redis.enabled", "sandbox.redisson.enabled",
+            "sandbox.coverage.enabled", "sandbox.system-log.enabled", "sandbox.thread-pool.enabled",
             "collect.threadPool",
             //HTTP 请求与响应采集
             "collect.HttpServlet",
@@ -245,6 +256,81 @@ public class Agent {
      * JVM attach 入口
      */
     public static void agentmain(String arg, Instrumentation instrumentation) {
-        System.setProperty("file.encoding", "UTF-8");
+        try {
+            System.setProperty("file.encoding", "UTF-8");
+            System.setProperty("sun.jnu.encoding", "UTF-8");
+            String action = parseAttachAction(arg);
+            if ("stop".equalsIgnoreCase(action)) {
+                SandboxLauncher.stop();
+                return;
+            }
+            if ("restart".equalsIgnoreCase(action)) {
+                Agent.instrumentation = instrumentation;
+                SandboxRuntime runtime = SandboxLauncher.restart(removeAttachAction(arg), instrumentation, StartMode.ATTACH);
+                traceContext = runtime.traceContext();
+                return;
+            }
+            if ("status".equalsIgnoreCase(action)) {
+                SandboxRuntime runtime = SandboxLauncher.getRuntime();
+                logger.info("[Sandbox] status=" + (runtime == null ? "NOT_STARTED" : runtime.moduleManager().stateNames()));
+                return;
+            }
+            start(removeAttachAction(arg), instrumentation, StartMode.ATTACH);
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError] Agent attach 初始化失败，被测系统将继续运行。错误原因: "
+                    + StackTraceFormatter.formatExceptionWithAgentMark(t));
+        }
+    }
+
+    public static void handleSandboxCommand(String command) {
+        if (command == null || command.trim().isEmpty()) {
+            return;
+        }
+        String action = command.trim();
+        if ("stop".equalsIgnoreCase(action)) {
+            SandboxLauncher.stop();
+            return;
+        }
+        if ("restart".equalsIgnoreCase(action)) {
+            SandboxRuntime runtime = SandboxLauncher.restart(lastStartupArg, instrumentation, StartMode.ATTACH);
+            traceContext = runtime.traceContext();
+            return;
+        }
+        if ("start".equalsIgnoreCase(action)) {
+            SandboxRuntime runtime = SandboxLauncher.start(lastStartupArg, instrumentation, StartMode.ATTACH);
+            traceContext = runtime.traceContext();
+            return;
+        }
+        if ("status".equalsIgnoreCase(action)) {
+            SandboxRuntime runtime = SandboxLauncher.getRuntime();
+            logger.info("[Sandbox] status=" + (runtime == null ? "NOT_STARTED" : runtime.moduleManager().stateNames()));
+        }
+    }
+
+    private static String parseAttachAction(String arg) {
+        Properties properties = parseArgProperties(arg);
+        return properties.getProperty("action", "start");
+    }
+
+    private static String removeAttachAction(String arg) {
+        if (arg == null || arg.trim().isEmpty()) {
+            return arg;
+        }
+        return Arrays.stream(arg.split(","))
+                .filter(item -> !item.trim().startsWith("action="))
+                .collect(Collectors.joining(","));
+    }
+
+    private static Properties parseArgProperties(String arg) {
+        Properties properties = new Properties();
+        if (arg == null || arg.trim().isEmpty()) {
+            return properties;
+        }
+        try {
+            properties.load(new StringReader(arg.replaceAll(",", "\n")));
+        } catch (IOException e) {
+            logger.warn("[Agent-EXCError]attach 参数解析失败: " + arg);
+        }
+        return properties;
     }
 }

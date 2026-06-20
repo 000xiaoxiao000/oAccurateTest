@@ -35,6 +35,11 @@ public class KafkaMqReceiveCollects extends AbstractByteTransformCollect impleme
         this.traceContext = context;
     }
 
+    public KafkaMqReceiveCollects(TraceContext context) {
+        super();
+        this.traceContext = context;
+    }
+
     static {
         BEGIN_SRC =
                 KafkaMqReceiveCollects.class.getName()

@@ -45,6 +45,10 @@ public class ClientSessionVo implements java.io.Serializable {
      * 在线时长
      */
     private String onlineTime;
+    /**
+     * JVM Sandbox 运行状态
+     */
+    private String sandboxStatus;
 
     public String getSessionId() {
         return sessionId;
@@ -124,5 +128,13 @@ public class ClientSessionVo implements java.io.Serializable {
 
     public void setOnlineTime(String onlineTime) {
         this.onlineTime = onlineTime;
+    }
+
+    public String getSandboxStatus() {
+        return sandboxStatus;
+    }
+
+    public void setSandboxStatus(String sandboxStatus) {
+        this.sandboxStatus = sandboxStatus;
     }
 }

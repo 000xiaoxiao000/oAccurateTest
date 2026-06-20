@@ -36,6 +36,13 @@ public class ClickHouseJdbcCollects extends AbstractByteTransformCollect impleme
         }
     }
 
+    public ClickHouseJdbcCollects(TraceContext tcontext) {
+        super();
+        INSTANCE = this;
+        this.traceContext = tcontext;
+        this.ckjdbcDrivers = java.util.Collections.emptyList();
+    }
+
     private static final String beginSrc;
     private static final String endSrc;
     private static final String errorSrc;

@@ -45,6 +45,11 @@ public class DubboReceiveCollect extends AbstractByteTransformCollect implements
         this.traceContext = traceContext;
     }
 
+    public DubboReceiveCollect(TraceContext traceContext) {
+        super();
+        this.traceContext = traceContext;
+    }
+
     // 统一异常捕捉的问题
     public DubboRemoteTraceNodeWrapper begin(Object[] params) {
         if (params == null || params.length < 2 || params[1] == null) {

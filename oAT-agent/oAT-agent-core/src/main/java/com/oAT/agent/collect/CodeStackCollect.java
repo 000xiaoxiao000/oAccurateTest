@@ -27,6 +27,7 @@ public class CodeStackCollect implements ClassFileTransformer {
     private final WildcardMatcher excludes;
     private final WildcardMatcher includes;
     private final WildcardMatcher excludeClassloader;
+    private final Instrumentation instrumentation;
 
     public CodeStackCollect(TraceContext context, Instrumentation instrumentation) {
         try {
@@ -52,10 +53,11 @@ public class CodeStackCollect implements ClassFileTransformer {
                     "sun.reflect.DelegatingClassLoader" : excludeClassloaderExpr);
             //排除监听器跟踪内部代码堆栈
             excludeInner = new WildcardMatcher("com.oAT.agent.*");
+            this.instrumentation = instrumentation;
 
 
             //添加类转换器
-            instrumentation.addTransformer(this);
+            instrumentation.addTransformer(this, true);
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]CodeStackCollect初始化异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             throw t instanceof RuntimeException ? (RuntimeException) t : new RuntimeException(t);
@@ -134,6 +136,9 @@ public class CodeStackCollect implements ClassFileTransformer {
             if (InstrSupport.isInterface(reader)) {
                 return null;
             }
+            if (isAlreadyInstrumented(reader)) {
+                return null;
+            }
             // 使用自定义SafeClassWriter
             final ClassWriter writer = new SafeClassWriter(ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES,
                     loader);
@@ -155,6 +160,40 @@ public class CodeStackCollect implements ClassFileTransformer {
             // transform方法不能抛出异常，否则会影响JVM类加载，必须返回null
             return null;
         }
+    }
+
+    public void close() {
+        try {
+            instrumentation.removeTransformer(this);
+        } catch (Throwable t) {
+            logger.warn("[Agent-CodeStack]remove transformer failed: " + t.getMessage());
+        }
+    }
+
+    private boolean isAlreadyInstrumented(ClassReader reader) {
+        final boolean[] instrumented = new boolean[]{false};
+        try {
+            reader.accept(new ClassVisitor(Opcodes.ASM9) {
+                @Override
+                public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
+                    if (InstrSupport.DATAFIELD_NAME.equals(name)) {
+                        instrumented[0] = true;
+                    }
+                    return null;
+                }
+
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
+                    if (InstrSupport.INITMETHOD_NAME.equals(name)) {
+                        instrumented[0] = true;
+                    }
+                    return null;
+                }
+            }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        } catch (Throwable ignored) {
+            return false;
+        }
+        return instrumented[0];
     }
 
     private boolean doFilter(ClassLoader loader, String className, ProtectionDomain protectionDomain) {

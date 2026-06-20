@@ -50,6 +50,11 @@ public class SofaClientCollect extends AbstractByteTransformCollect implements I
         this.traceContext = traceContext;
     }
 
+    public SofaClientCollect(TraceContext traceContext) {
+        super();
+        this.traceContext = traceContext;
+    }
+
     public SofaRpcTraceNode begin(Object[] args, Object targetObj) {
         if (traceContext == null || traceContext.getTraceSession() == null) {
             return null;

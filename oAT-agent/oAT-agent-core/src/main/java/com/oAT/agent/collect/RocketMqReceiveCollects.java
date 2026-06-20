@@ -43,6 +43,11 @@ public class RocketMqReceiveCollects extends AbstractByteTransformCollect implem
         this.traceContext = context;
     }
 
+    public RocketMqReceiveCollects(TraceContext context) {
+        super();
+        this.traceContext = context;
+    }
+
     //this.defaultMQPushConsumerImpl
     static {
         BEGIN_SRC =

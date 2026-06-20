@@ -34,6 +34,12 @@ public class HttpClientCollectV3 extends AbstractByteTransformCollect implements
         this.httpClientDrivers = Arrays.asList(httpClientDrivers);
     }
 
+    public HttpClientCollectV3(TraceContext context) {
+        super();
+        this.traceContext = context;
+        this.httpClientDrivers = Collections.emptyList();
+    }
+
     static {
         BEGIN_SRC = HttpClientCollectV3.class.getName() + " instance = " + HttpClientCollectV3.class.getName() +
                 ".INSTANCE;\r\n" + HttpClientTraceNode.class.getName() + " node = instance.begin($args);";

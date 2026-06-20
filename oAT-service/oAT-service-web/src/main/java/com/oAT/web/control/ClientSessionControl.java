@@ -98,7 +98,8 @@ public class ClientSessionControl {
             return "fail";
         }
         sessionService.heartbeat(sessionId, appId, timesTamp);
-        return "heartbeatOK";
+        String command = sessionService.pollSandboxCommand(sessionId);
+        return StringUtils.isBlank(command) ? "heartbeatOK" : "heartbeatOK:" + command;
     }
 
     @PostMapping("/uploadStaticData")
@@ -136,5 +137,15 @@ public class ClientSessionControl {
         // 存储验证结果到ES
         sessionService.putPackageVerify(sessionId, packagePath, gitCommitIdFromPackage);
 
+    }
+
+    @PostMapping("/sandbox/status")
+    @ResponseBody
+    public void sandboxStatus(String sessionId, String status) {
+        if (StringUtils.isBlank(sessionId)) {
+            logger.warn("[sandboxStatus]sessionId 为空，忽略 sandbox 状态");
+            return;
+        }
+        sessionService.putSandboxStatus(sessionId, status);
     }
 }

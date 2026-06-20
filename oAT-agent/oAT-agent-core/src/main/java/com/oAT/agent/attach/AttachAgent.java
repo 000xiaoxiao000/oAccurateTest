@@ -1,142 +1,145 @@
 package com.oAT.agent.attach;
 
-import com.oAT.agent.AttachStart;
-import com.oAT.shaded.zeroturnaround.zip.ZipUtil;
-
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.reflect.Method;
-import java.net.URL;
 import java.net.URLClassLoader;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 
 public class AttachAgent {
-    public AttachAgent(String[] args) throws Exception{
-        File folder = getFolder();
-
-        long pid = selectProcessByNumber(args, folder);
-
-        attachToSelectedProcess(pid, folder);
+    public AttachAgent(String[] args) throws Exception {
+        List<JavaProcess> processes = hasPid(args) ? new ArrayList<JavaProcess>() : listJavaProcesses();
+        String pid = resolvePid(args, processes);
+        String agentArgs = args != null && args.length > 1 ? args[1] : "";
+        attach(pid, findAgentJar(), agentArgs);
     }
 
-    /**
-     * 获取 arthas-bin.zip 文件夹
-     */
-    private File getFolder() throws IOException {
-        File folder = new File(System.getProperty("user.home"), ".arthas");
-        if (!folder.exists() && !folder.mkdirs()) {
-            throw new IOException("Failed to create directory: " + folder.getAbsolutePath());
-        }
-        System.out.println("Arthas target folder: " + folder.getAbsolutePath());
-
-        String zipResourcePath = "/lib/arthas-bin.zip";
-        try (InputStream inputStream = AttachStart.class.getResourceAsStream(zipResourcePath)) {
-            if (inputStream == null) {
-                throw new RuntimeException("Could not find " + zipResourcePath + " in classpath.");
-            }
-            unzip(inputStream, folder);
-        }
-
-        System.out.println("Arthas extracted successfully.");
-        return folder;
+    private boolean hasPid(String[] args) {
+        return args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty();
     }
 
-    /**
-     * 解压 arthas-bin.zip
-     */
-    private void unzip(InputStream inputStream, File targetDir) {
-        ZipUtil.unpack(inputStream, targetDir);
+    private String resolvePid(String[] args, List<JavaProcess> processes) {
+        if (args != null && args.length > 0 && args[0] != null && !args[0].trim().isEmpty()) {
+            return args[0].trim();
+        }
+        if (processes.isEmpty()) {
+            throw new IllegalStateException("No attachable Java process found");
+        }
+        System.out.println("Attachable Java processes:");
+        for (int i = 0; i < processes.size(); i++) {
+            JavaProcess process = processes.get(i);
+            System.out.println((i + 1) + ". " + process.pid + " " + process.displayName);
+        }
+        System.out.print("Select process number: ");
+        Scanner scanner = new Scanner(System.in);
+        int selected = scanner.nextInt();
+        if (selected < 1 || selected > processes.size()) {
+            throw new IllegalArgumentException("Invalid process number: " + selected);
+        }
+        return processes.get(selected - 1).pid;
     }
 
-    /**
-     * 创建 Arthas ClassLoader
-     */
-    private URLClassLoader createArthasClassLoader(File folder) throws Exception {
-        File bootJar = new File(folder, "arthas-boot.jar");
-        if (!bootJar.exists()) {
-            throw new FileNotFoundException("arthas-boot.jar not found at " + bootJar.getAbsolutePath());
+    private List<JavaProcess> listJavaProcesses() throws Exception {
+        List<JavaProcess> result = new ArrayList<JavaProcess>();
+        Class<?> vmClass = loadVirtualMachineClass();
+        Method listMethod = vmClass.getMethod("list");
+        List<?> descriptors = (List<?>) listMethod.invoke(null);
+        for (Object descriptor : descriptors) {
+            Method idMethod = descriptor.getClass().getMethod("id");
+            Method displayNameMethod = descriptor.getClass().getMethod("displayName");
+            String id = String.valueOf(idMethod.invoke(descriptor));
+            String displayName = String.valueOf(displayNameMethod.invoke(descriptor));
+            result.add(new JavaProcess(id, displayName));
         }
-        return new URLClassLoader(new URL[]{bootJar.toURI().toURL()}, ClassLoader.getSystemClassLoader());
+        return result;
     }
 
-    /**
-     * 选择PID
-     */
-    private long selectProcessByNumber(String[] args, File folder) throws Exception {
-        if (args.length > 0) {
-            // 如果命令行指定了PID，直接使用
-            return Long.parseLong(args[0]);
-        }
-
-        // 交互式选择：显示进程列表
-        System.out.println("已发现现有 Java 进程，请选择一个并输入该进程的序列号，例如：1。然后按回车键。");
-
-        // 使用ProcessUtils.select()获取用户选择的PID
-        try (URLClassLoader classLoader = createArthasClassLoader(folder)) {
-            Class<?> processUtilsClass = classLoader.loadClass("com.taobao.arthas.boot.ProcessUtils");
-            Method selectMethod = processUtilsClass.getMethod("select", boolean.class, long.class, String.class);
-            long pid = (long) selectMethod.invoke(null, false, -1, null);
-
-            if (pid < 0) {
-                System.err.println("未选择有效的进程");
-                System.exit(1);
-            }
-
-            return pid;
-        }
-    }
-
-    /**
-     * 根据选择的PID，附着进程
-     */
-    private void attachToSelectedProcess(long pid, File folder) {
+    private void attach(String pid, File agentJar, String agentArgs) throws Exception {
+        Object vm = null;
+        Class<?> vmClass = loadVirtualMachineClass();
         try {
-            // 构建启动参数
-            List<String> attachArgs = new ArrayList<>();
-            attachArgs.add("-jar");
-            attachArgs.add(new File(folder, "arthas-core.jar").getAbsolutePath());
-            attachArgs.add("-pid");
-            attachArgs.add(String.valueOf(pid));
-            attachArgs.add("-telnet-port");
-            attachArgs.add("3658");
-            attachArgs.add("-http-port");
-            attachArgs.add("8563");
-            attachArgs.add("-core");
-            attachArgs.add(new File(folder, "arthas-core.jar").getAbsolutePath());
-            attachArgs.add("-agent");
-            attachArgs.add(new File(folder, "arthas-agent.jar").getAbsolutePath());
-
-            // 启动arthas-core.jar进行附加
-            try (URLClassLoader classLoader = createArthasClassLoader(folder)) {
-                Class<?> processUtilsClass = classLoader.loadClass("com.taobao.arthas.boot.ProcessUtils");
-                Method startArthasCoreMethod = processUtilsClass.getMethod("startArthasCore", long.class, List.class);
-                startArthasCoreMethod.invoke(null, pid, attachArgs);
+            Method attachMethod = vmClass.getMethod("attach", String.class);
+            vm = attachMethod.invoke(null, pid);
+            Method loadAgentMethod = vmClass.getMethod("loadAgent", String.class, String.class);
+            loadAgentMethod.invoke(vm, agentJar.getAbsolutePath(), agentArgs == null ? "" : agentArgs);
+            System.out.println("oAT agent attached to process " + pid + ", agent=" + agentJar.getAbsolutePath());
+        } finally {
+            if (vm != null) {
+                Method detachMethod = vmClass.getMethod("detach");
+                detachMethod.invoke(vm);
             }
-
-            System.out.println("正在附加到进程 " + pid + "...");
-
-            // 连接到 Arthas 控制台
-            connectToArthasConsole(folder);
-
-        } catch (Exception e) {
-            System.err.println("附加到进程 " + pid + " 失败: " + e.getMessage());
         }
     }
 
-    /**
-     * 连接控制台
-     */
-    private void connectToArthasConsole(File folder) {
+    private Class<?> loadVirtualMachineClass() throws Exception {
         try {
-            File clientJar = new File(folder, "arthas-client.jar");
-            ProcessBuilder pb = new ProcessBuilder("java", "-jar", clientJar.getAbsolutePath(), "127.0.0.1", "3658");
-            pb.inheritIO();
-            pb.start().waitFor();
-        } catch (Exception e) {
-            System.err.println("Failed to start arthas client: " + e.getMessage());
+            return Class.forName("com.sun.tools.attach.VirtualMachine");
+        } catch (ClassNotFoundException ignored) {
+            try {
+                return Class.forName("com.ibm.tools.attach.VirtualMachine");
+            } catch (ClassNotFoundException ignoredAgain) {
+                return loadVirtualMachineClassFromToolsJar();
+            }
+        }
+    }
+
+    private Class<?> loadVirtualMachineClassFromToolsJar() throws Exception {
+        File toolsJar = findToolsJar();
+        if (toolsJar == null || !toolsJar.isFile()) {
+            throw new ClassNotFoundException("Attach API not found. Use a JDK instead of a JRE, or run with "
+                    + "$JAVA_HOME/lib/tools.jar on classpath. java.home=" + System.getProperty("java.home"));
+        }
+        URLClassLoader loader = new URLClassLoader(new URL[]{toolsJar.toURI().toURL()},
+                AttachAgent.class.getClassLoader());
+        return Class.forName("com.sun.tools.attach.VirtualMachine", true, loader);
+    }
+
+    private File findToolsJar() {
+        String javaHome = System.getProperty("java.home");
+        List<File> candidates = new ArrayList<File>();
+        if (javaHome != null && !javaHome.trim().isEmpty()) {
+            File home = new File(javaHome);
+            candidates.add(new File(home, "lib/tools.jar"));
+            File parent = home.getParentFile();
+            if (parent != null) {
+                candidates.add(new File(parent, "lib/tools.jar"));
+            }
+        }
+        String envJavaHome = System.getenv("JAVA_HOME");
+        if (envJavaHome != null && !envJavaHome.trim().isEmpty()) {
+            File home = new File(envJavaHome);
+            candidates.add(new File(home, "lib/tools.jar"));
+            File parent = home.getParentFile();
+            if (parent != null) {
+                candidates.add(new File(parent, "lib/tools.jar"));
+            }
+        }
+        for (File candidate : candidates) {
+            if (candidate.isFile()) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private File findAgentJar() {
+        URL url = AttachAgent.class.getProtectionDomain().getCodeSource().getLocation();
+        File file = new File(url.getFile());
+        if (!file.isFile()) {
+            throw new IllegalStateException("Cannot locate agent jar from " + file.getAbsolutePath());
+        }
+        return file;
+    }
+
+    private static class JavaProcess {
+        private final String pid;
+        private final String displayName;
+
+        private JavaProcess(String pid, String displayName) {
+            this.pid = pid;
+            this.displayName = displayName;
         }
     }
 }

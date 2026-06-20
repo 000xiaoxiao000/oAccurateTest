@@ -28,12 +28,21 @@ public class JdbcCommonCollects extends AbstractByteTransformCollect implements 
     private final static Log logger = LogFactory.getLog(JdbcCommonCollects.class);
 
     public static JdbcCommonCollects INSTANCE;
-    private final TraceContext traceContext;
-    private final Set<String> jdbcDriverSet;
+    private TraceContext traceContext;
+    private Set<String> jdbcDriverSet;
     private static final SqlTraceNode.Results SQL_RESULTS = new SqlTraceNode.Results();
 
     public JdbcCommonCollects(TraceContext traceContext, Instrumentation instrumentation, String... jdbcDriver) {
         super(instrumentation);
+        init(traceContext, jdbcDriver);
+    }
+
+    public JdbcCommonCollects(TraceContext traceContext, String... jdbcDriver) {
+        super();
+        init(traceContext, jdbcDriver);
+    }
+
+    private void init(TraceContext traceContext, String... jdbcDriver) {
         INSTANCE = this;
         this.traceContext = traceContext;
         this.jdbcDriverSet = jdbcDriver == null ? java.util.Collections.<String>emptySet() :

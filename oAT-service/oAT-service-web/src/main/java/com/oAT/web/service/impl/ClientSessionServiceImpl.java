@@ -65,6 +65,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
     private RedisTemplate<String, Object> redisTemplate;
 
     private static final String SESSIONS_KEY_PREFIX = "oAT:sessions:";
+    private static final String SANDBOX_COMMAND_KEY_PREFIX = "oAT:sandbox-command:";
     private static final String STATIC_DATA_CACHE_KEY_PREFIX = "oAT:static-data:";
     private static final long STATIC_DATA_CACHE_VALIDITY_MILLIS = TimeUnit.MINUTES.toMillis(30);
 
@@ -229,6 +230,7 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         Assert.hasText(clientInfoVo.getPid(), "Client pid must be not null");
         Assert.hasText(clientInfoVo.getSystemDir(), "Client dir must be not null");
         Assert.hasText(clientInfoVo.getAgentVersion(), "Agent version must be not null");
+        disableDuplicateOnlineSessions(clientInfoVo);
 
         ClientSessionVo result = new ClientSessionVo();
         ClientSession session = new ClientSession();
@@ -267,6 +269,38 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
         redisTemplate.opsForValue().set(SESSIONS_KEY_PREFIX + result.getSessionId(), result, sessionClearValidity, TimeUnit.MILLISECONDS);
         probeStatusService.onLogin(result);
         return result;
+    }
+
+    private void disableDuplicateOnlineSessions(ClientInfoVo clientInfoVo) {
+        if (clientInfoVo == null) {
+            return;
+        }
+        List<ClientSessionVo> sessions = getOnlineSessions();
+        for (ClientSessionVo session : sessions) {
+            if (session == null || session.getClientInfo() == null || session.getSessionId() == null) {
+                continue;
+            }
+            ClientInfoVo existing = session.getClientInfo();
+            boolean sameRuntime = Objects.equals(existing.getAppKey(), clientInfoVo.getAppKey())
+                    && Objects.equals(existing.getPid(), clientInfoVo.getPid())
+                    && Objects.equals(existing.getSystemDir(), clientInfoVo.getSystemDir());
+            if (!sameRuntime) {
+                continue;
+            }
+            redisTemplate.delete(SESSIONS_KEY_PREFIX + session.getSessionId());
+            try {
+                clientRepository.findById(session.getSessionId()).ifPresent(clientIndex -> {
+                    ClientSession stored = clientIndex.getSession();
+                    if (stored != null) {
+                        stored.setStatus(ClientSession.Status.disable.toString());
+                        clientIndex.setUpdateTime(new Date());
+                        clientRepository.save(clientIndex);
+                    }
+                });
+            } catch (Exception e) {
+                logger.warn("[doLogin]禁用重复在线会话失败, sessionId={}", session.getSessionId(), e);
+            }
+        }
     }
 
     @Override
@@ -498,6 +532,61 @@ public class ClientSessionServiceImpl implements ClientSessionService, Initializ
             }
         }
         return latest != null && latest.getSession() != null ? latest.getSession().getPackageVerifyData() : null;
+    }
+
+    @Override
+    public void putSandboxStatus(String sessionId, String status) {
+        if (!StringUtils.hasText(sessionId)) {
+            logger.warn("[putSandboxStatus]sessionId 为空，跳过写入 sandbox 状态");
+            return;
+        }
+        try {
+            Optional<ClientIndex> optional = clientRepository.findById(sessionId);
+            if (optional.isPresent()) {
+                ClientIndex clientIndex = optional.get();
+                ClientSession session = clientIndex.getSession();
+                if (session == null) {
+                    logger.warn("[putSandboxStatus]Session 为空，无法写入 sandbox 状态");
+                    return;
+                }
+                session.setSandboxStatus(status);
+                clientIndex.setUpdateTime(new Date());
+                clientRepository.save(clientIndex);
+                ClientSessionVo onlineSession = getClientSession(sessionId);
+                if (onlineSession != null) {
+                    onlineSession.setSandboxStatus(status);
+                    redisTemplate.opsForValue().set(SESSIONS_KEY_PREFIX + sessionId, onlineSession,
+                            sessionClearValidity, TimeUnit.MILLISECONDS);
+                }
+            } else {
+                logger.warn("[putSandboxStatus]未找到对应的 ClientIndex，sessionId: {}", sessionId);
+            }
+        } catch (Exception e) {
+            logger.error("[putSandboxStatus]存储 sandbox 状态失败，sessionId: {}, err: {}",
+                    sessionId, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void putSandboxCommand(String sessionId, String command) {
+        if (!StringUtils.hasText(sessionId) || !StringUtils.hasText(command)) {
+            return;
+        }
+        redisTemplate.opsForValue().set(SANDBOX_COMMAND_KEY_PREFIX + sessionId, command,
+                60, TimeUnit.SECONDS);
+    }
+
+    @Override
+    public String pollSandboxCommand(String sessionId) {
+        if (!StringUtils.hasText(sessionId)) {
+            return "";
+        }
+        String key = SANDBOX_COMMAND_KEY_PREFIX + sessionId;
+        Object value = redisTemplate.opsForValue().get(key);
+        if (value != null) {
+            redisTemplate.delete(key);
+        }
+        return value == null ? "" : String.valueOf(value);
     }
 
     private static final class StaticDataPersistStats {

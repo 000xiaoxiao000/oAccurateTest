@@ -16,6 +16,9 @@ import java.util.concurrent.Callable;
 public abstract class AbstractByteTransformCollect {
     private final static Log logger = LogFactory.getLog(AbstractByteTransformCollect.class);
 
+    protected AbstractByteTransformCollect() {
+    }
+
     public AbstractByteTransformCollect(Instrumentation instrumentation) {
         instrumentation.addTransformer(new ClassFileTransformer() {
             @Override

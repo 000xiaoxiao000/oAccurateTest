@@ -26,7 +26,7 @@ mvn clean install
 
 `mvn install` 会将 `oAT-client-model` 安装到本地 Maven 仓库，`oAT-service-web` 依赖此包，必须先于服务端构建。
 
-产出物：`oAT-agnet-shaded/target/oAT-agent-core-1.0-SNAPSHOT.jar`
+产出物：`oAT-agent-core/target/oAT-agent-core-1.0-SNAPSHOT.jar`
 
 ---
 
@@ -40,6 +40,14 @@ java -javaagent:/path/to/oAT-agent-core-1.0-SNAPSHOT.jar=appKey=your-app-key \
 ```
 
 `appKey` 必须与平台中登记的应用标识一致。
+
+也可以在目标 JVM 已启动后使用 attach 方式加载探针：
+
+```bash
+java -jar /path/to/oAT-agent-core-1.0-SNAPSHOT.jar <pid> "appKey=your-app-key"
+```
+
+不传 `<pid>` 时会列出当前可附加的 Java 进程并提示选择。attach 方式使用 oAT 自己的 `agentmain` 启动链路，不再启动 Arthas。
 
 ---
 
@@ -110,14 +118,14 @@ conf_codeStack.excludeMethod=
 exclude.urls=
 ```
 
-**中间件采集开关**（默认全部开启，按需关闭）：
+**中间件采集开关**（按需关闭或显式开启；`systemLog`、`threadPool` 默认关闭）：
 
 ```properties
 # collect.HttpServlet=false
 # collect.httpRequestParams=false
 # collect.httpRequestBody=false
 # collect.httpResponseBody=false
-# collect.systemLog=false
+# collect.systemLog=true
 # collect.feignInvoker=false
 # collect.dubboInvoker=false
 # collect.dubboReceive=false
@@ -135,6 +143,28 @@ exclude.urls=
 # collect.kafkaMqReceive=false
 # collect.httpClientV3=false
 # collect.httpClientV4=false
+# collect.threadPool=true
+```
+
+**Sandbox 统一增强开关**（推荐优先试用；开启后对应旧 `collect.*` Transformer 会自动跳过）：
+
+```properties
+# sandbox.http-servlet.enabled=true
+# sandbox.service.enabled=true
+# sandbox.jdbc.enabled=true
+# sandbox.clickhouse-jdbc.enabled=true
+# sandbox.feign.enabled=true
+# sandbox.http-client-v3.enabled=true
+# sandbox.http-client-v4.enabled=true
+# sandbox.dubbo.enabled=true
+# sandbox.sofa-rpc.enabled=true
+# sandbox.mq-producer.enabled=true
+# sandbox.mq-consumer.enabled=true
+# sandbox.redis.enabled=true
+# sandbox.redisson.enabled=true
+# sandbox.coverage.enabled=true
+# sandbox.system-log.enabled=true
+# sandbox.thread-pool.enabled=true
 ```
 
 > 开启 `conf_service.include` 后，上述中间件采集会自动跟随 service 采集范围，一般无需单独开启，以避免冲突。
@@ -168,20 +198,21 @@ JVM 栈大小参考：
 
 | 协议 / 框架 | 配置开关 |
 |---|---|
-| HTTP Servlet（javax / jakarta） | `collect.HttpServlet` |
+| HTTP Servlet（javax / jakarta） | `sandbox.http-servlet.enabled` / `collect.HttpServlet` |
 | HTTP 请求参数 / 请求体 / 响应体 | `collect.httpRequestParams` 等 |
-| Apache HttpClient v3 / v4 | `collect.httpClientV3 / V4` |
-| Feign | `collect.feignInvoker` |
-| Dubbo（调用方 / 提供方） | `collect.dubboInvoker / dubboReceive` |
-| SOFA-RPC（Consumer / Provider） | `collect.sofaProviderInvoker` 等 |
-| JDBC（MySQL、通用） | `collect.jdbc` |
-| ClickHouse JDBC | `collect.clickHouseJdbc` |
-| Redis（Lettuce / Jedis） | `collect.redis` |
-| Redisson | `collect.redisson` |
-| RabbitMQ（发送 / 接收） | `collect.rabbitMq / rabbitMqReceive` |
-| RocketMQ（生产者 / 消费者） | `collect.rocketMq / rocketMqReceive` |
-| Kafka（生产者 / 消费者） | `collect.kafkaMq / kafkaMqReceive` |
-| 业务日志 | `collect.systemLog` |
+| Apache HttpClient v3 / v4 | `sandbox.http-client-v3.enabled / sandbox.http-client-v4.enabled` |
+| Feign | `sandbox.feign.enabled` / `collect.feignInvoker` |
+| Dubbo（调用方 / 提供方） | `sandbox.dubbo.enabled` |
+| SOFA-RPC（Consumer / Provider） | `sandbox.sofa-rpc.enabled` |
+| JDBC（MySQL、通用） | `sandbox.jdbc.enabled` / `collect.jdbc` |
+| ClickHouse JDBC | `sandbox.clickhouse-jdbc.enabled` / `collect.clickHouseJdbc` |
+| Redis（Lettuce / Jedis） | `sandbox.redis.enabled` / `collect.redis` |
+| Redisson | `sandbox.redisson.enabled` / `collect.redisson` |
+| RabbitMQ（发送 / 接收） | `sandbox.mq-producer.enabled / sandbox.mq-consumer.enabled` |
+| RocketMQ（生产者 / 消费者） | `sandbox.mq-producer.enabled / sandbox.mq-consumer.enabled` |
+| Kafka（生产者 / 消费者） | `sandbox.mq-producer.enabled / sandbox.mq-consumer.enabled` |
+| 业务日志 | `sandbox.system-log.enabled` / `collect.systemLog` |
+| 线程池上下文传播 | `sandbox.thread-pool.enabled` / `collect.threadPool` |
 
 ---
 

@@ -107,6 +107,7 @@ export interface OnlineSessionsPayload {
 }
 
 export interface OnlineSessionSummary {
+  sessionId?: string
   appId?: string
   addressIp?: string
   agentVersion?: string
@@ -117,6 +118,7 @@ export interface OnlineSessionSummary {
   onlineTime?: string
   appName?: string
   projectSrcName?: string
+  sandboxStatus?: string
 }
 
 export interface TraceItemSummary {

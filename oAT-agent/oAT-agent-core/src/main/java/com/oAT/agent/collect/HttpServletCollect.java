@@ -8,6 +8,7 @@ import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.context.AgentContext;
 import com.oAT.agent.jacoco.CoverageCollector;
+import com.oAT.agent.jacoco.data.CompactDataOutput;
 import com.oAT.agent.jacoco.data.StackNodeVoBuilder;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.StackNodeVo;
@@ -483,6 +484,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
                     StackNodeVo[] codeNodes = new StackNodeVoBuilder()
                             .buildCodeNodes(nodeWrapper.coverageCollector);
                     node.setCodeNodes(codeNodes);
+                    CompactDataOutput.trySendStaticInfo();
                 } catch (Throwable t) {
                     logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
                 }

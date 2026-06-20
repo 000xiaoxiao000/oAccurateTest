@@ -216,6 +216,14 @@ export function fetchOnlineSessions(projectId: string) {
   return apiGet<OnlineSessionsPayload>(`/api/projects/${projectId}/online-sessions`)
 }
 
+export function sendSandboxCommand(projectId: string, sessionId: string, command: 'start' | 'stop' | 'restart' | 'status') {
+  return apiPost<string>(
+    `/api/projects/${projectId}/online-sessions/${sessionId}/sandbox-command`,
+    JSON.stringify({ command }),
+    'application/json',
+  )
+}
+
 export function fetchAppSettings(projectId: string, appId: string) {
   return apiGet<AppSettingsPayload>(`/api/projects/${projectId}/apps/${appId}/settings`)
 }

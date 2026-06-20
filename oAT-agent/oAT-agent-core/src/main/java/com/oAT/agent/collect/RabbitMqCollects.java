@@ -28,6 +28,11 @@ public class RabbitMqCollects extends AbstractByteTransformCollect implements IC
         this.traceContext = context;
     }
 
+    public RabbitMqCollects(TraceContext context) {
+        super();
+        this.traceContext = context;
+    }
+
     static {
         BEGIN_SRC = RabbitMqCollects.class.getName() + " instance = " + RabbitMqCollects.class.getName() + ".INSTANCE;\r\n" +
                 RabbitMQTraceNode.class.getName() + " node = instance.begin($args);\r\n";

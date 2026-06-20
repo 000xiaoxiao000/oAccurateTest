@@ -37,6 +37,8 @@ public class ClientSession implements Serializable {
 
     private String packageVerifyData;
 
+    private String sandboxStatus;
+
     public String[] getUploadUrls() {
         return uploadUrls;
     }
@@ -103,6 +105,14 @@ public class ClientSession implements Serializable {
 
     public void setPackageVerifyData(String packageVerifyData) {
         this.packageVerifyData = packageVerifyData;
+    }
+
+    public String getSandboxStatus() {
+        return sandboxStatus;
+    }
+
+    public void setSandboxStatus(String sandboxStatus) {
+        this.sandboxStatus = sandboxStatus;
     }
 
     public enum Status {

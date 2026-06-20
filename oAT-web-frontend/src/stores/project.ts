@@ -56,6 +56,7 @@ import {
   renameUsecaseDirectory,
   saveAiSessionState,
   saveAppSettings,
+  sendSandboxCommand,
   saveRepositoryConfig,
   saveSystemSnapshotDirectory,
   saveUsecase,
@@ -254,6 +255,10 @@ export const useProjectStore = defineStore('project', () => {
 
   async function loadOnlineSessions(projectId: string) {
     return loadRecordByKey(onlineSessionsByProjectId, projectId, () => fetchOnlineSessions(projectId))
+  }
+
+  async function controlSandbox(projectId: string, sessionId: string, command: 'start' | 'stop' | 'restart' | 'status') {
+    return sendSandboxCommand(projectId, sessionId, command)
   }
 
   function appKey(projectId: string, appId: string) {
@@ -683,6 +688,7 @@ export const useProjectStore = defineStore('project', () => {
     saveProjectLabel,
     removeLabel,
     loadOnlineSessions,
+    controlSandbox,
     loadAppSettings,
     loadProbeAlerts,
     updateAppSettings,

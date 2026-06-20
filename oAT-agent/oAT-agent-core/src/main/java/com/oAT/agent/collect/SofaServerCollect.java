@@ -55,6 +55,11 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
         this.traceContext = traceContext;
     }
 
+    public SofaServerCollect(TraceContext traceContext) {
+        super();
+        this.traceContext = traceContext;
+    }
+
     public SofaRpcRemoteTraceNodeWrapper begin(Object[] args) {
         if (traceContext == null) {
             return null;

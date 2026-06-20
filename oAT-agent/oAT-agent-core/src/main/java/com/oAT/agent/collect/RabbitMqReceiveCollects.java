@@ -34,6 +34,11 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
         this.traceContext = context;
     }
 
+    public RabbitMqReceiveCollects(TraceContext context) {
+        super();
+        this.traceContext = context;
+    }
+
     static {
         BEGIN_SRC =
                 RabbitMqReceiveCollects.class.getName() + " instance = " + RabbitMqReceiveCollects.class.getName() +

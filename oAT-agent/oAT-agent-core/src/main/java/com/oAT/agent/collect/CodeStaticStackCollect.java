@@ -33,6 +33,7 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
     private final WildcardMatcher excludes;
     private final WildcardMatcher includes;
     private final WildcardMatcher excludeClassloader;
+    private final Instrumentation instrumentation;
 
     public CodeStaticStackCollect(TraceContext context, Instrumentation instrumentation) {
         try {
@@ -58,9 +59,10 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
                     "sun.reflect.DelegatingClassLoader" : excludeClassloaderExpr);
             //排除监听器跟踪内部代码堆栈
             excludeInner = new WildcardMatcher("com.oAT.agent.*");
+            this.instrumentation = instrumentation;
 
             //添加类转换器
-            instrumentation.addTransformer(this);
+            instrumentation.addTransformer(this, true);
 
             // 启动全量类扫描，确保未加载的类也能被采集
             scanClassPath();
@@ -71,7 +73,7 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
     }
 
     private void scanClassPath() {
-        new Thread(new Runnable() {
+        Thread scanner = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -92,7 +94,9 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
                     logger.warn("[Agent-StaticCode]Classpath scanning failed: " + t.getMessage());
                 }
             }
-        }).start();
+        }, "oAT-static-code-scan");
+        scanner.setDaemon(true);
+        scanner.start();
     }
 
     private void scanDirectory(File dir, String pkg) {
@@ -261,6 +265,14 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
             logger.error("[Agent-EXCError]transform 方法异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             // transform方法不能抛出异常，否则会影响JVM类加载，必须返回null
             return null;
+        }
+    }
+
+    public void close() {
+        try {
+            instrumentation.removeTransformer(this);
+        } catch (Throwable t) {
+            logger.warn("[Agent-StaticCode]remove transformer failed: " + t.getMessage());
         }
     }
 

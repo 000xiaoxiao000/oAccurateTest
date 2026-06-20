@@ -51,4 +51,10 @@ public interface ClientSessionService {
     String getPackageVerifyData(String sessionId);
 
     String getLatestPackageVerifyDataByAppId(String appId);
+
+    void putSandboxStatus(String sessionId, String status);
+
+    void putSandboxCommand(String sessionId, String command);
+
+    String pollSandboxCommand(String sessionId);
 }

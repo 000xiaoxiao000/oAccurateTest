@@ -38,6 +38,8 @@ public class TraceContext {
     private ThreadPoolExecutor scheduledPool;
     // 保存日志清理的调度器引用，便于在关闭时释放
     private ScheduledExecutorService logCleanupScheduler;
+    private volatile boolean running = true;
+    private volatile Thread heartbeatThread;
 
     private final Properties config;
     private TransferService transferService;
@@ -69,18 +71,14 @@ public class TraceContext {
 
         this.config = config;
         this.instrumentation = ins;
+        com.oAT.agent.Agent.traceContext = this;
 
         // 注册JVM关闭钩子，优雅关闭线程池
         Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    if (scheduledPool != null) {
-                        scheduledPool.shutdown();
-                    }
-                    if (logCleanupScheduler != null) {
-                        logCleanupScheduler.shutdown();
-                    }
+                    close();
                 } catch (Throwable ignore) {
                 }
             }
@@ -184,7 +182,7 @@ public class TraceContext {
         transferService = new HttpTransferServiceImpl(this);
         // 减少 corePoolSize，避免为大量短任务创建过多线程导致 GC 压力
         scheduledPool = new ThreadPoolExecutor(4, 20, 1L, TimeUnit.MILLISECONDS,
-                new LinkedBlockingQueue<Runnable>(1000));
+                new LinkedBlockingQueue<Runnable>(1000), daemonThreadFactory("oAT-transfer"));
         initHeartbeat();    // 初始化心跳任务
         initLogCleanup(); // 初始化日志清理任务
     }
@@ -211,11 +209,19 @@ public class TraceContext {
 
             @Override
             public void run() {
-                while (true) {
+                while (running) {
                     try {
                         TimeUnit.MILLISECONDS.sleep(initIntervalTime);
                     } catch (InterruptedException e) {
-                        logger.error("[Agent-EXCError]心跳线程被中断. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
+                        if (!running) {
+                            break;
+                        }
+                        Thread.currentThread().interrupt();
+                        logger.warn("[Agent-warn]心跳线程被中断，退出心跳循环");
+                        break;
+                    }
+                    if (!running) {
+                        break;
                     }
                     if (doHeartbeat()) {
                         intervalTime = initIntervalTime;
@@ -225,7 +231,7 @@ public class TraceContext {
                                     ((System.currentTimeMillis() - turnOffTime) / 1000 / 60)));
                         }
                         turnOffTime = -1;
-                    } else {
+                    } else if (running) {
                         //心跳失败则逐步延长心跳间隔，直至1分钟
                         synchronized (this) {
                             intervalTime = Math.min(intervalTime * 11 / 10, 60 * 1000);
@@ -249,11 +255,39 @@ public class TraceContext {
         });
         t.setDaemon(true);
         t.setName("oAT-heartbeat");
+        heartbeatThread = t;
         t.start();
     }
 
+    public void close() {
+        running = false;
+        Thread currentHeartbeat = heartbeatThread;
+        if (currentHeartbeat != null && currentHeartbeat != Thread.currentThread()) {
+            try {
+                currentHeartbeat.interrupt();
+            } catch (Throwable ignore) {
+            }
+        }
+        if (scheduledPool != null) {
+            try {
+                scheduledPool.shutdownNow();
+            } catch (Throwable ignore) {
+            }
+        }
+        if (logCleanupScheduler != null) {
+            try {
+                logCleanupScheduler.shutdownNow();
+            } catch (Throwable ignore) {
+            }
+        }
+    }
+
+    public boolean isRunning() {
+        return running;
+    }
+
     private void initLogCleanup() {
-        logCleanupScheduler = Executors.newScheduledThreadPool(1);
+        logCleanupScheduler = Executors.newScheduledThreadPool(1, daemonThreadFactory("oAT-log-cleanup"));
         logCleanupScheduler.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -262,11 +296,26 @@ public class TraceContext {
         }, 0, 1, TimeUnit.DAYS); // 每天执行一次
     }
 
+    private ThreadFactory daemonThreadFactory(final String namePrefix) {
+        return new ThreadFactory() {
+            private final java.util.concurrent.atomic.AtomicInteger index =
+                    new java.util.concurrent.atomic.AtomicInteger();
+
+            @Override
+            public Thread newThread(Runnable runnable) {
+                Thread thread = new Thread(runnable, namePrefix + "-" + index.incrementAndGet());
+                thread.setDaemon(true);
+                return thread;
+            }
+        };
+    }
+
     //初始化采集器
     private void initCollects(ConfigStatus codeStackIncludeStatus, ConfigStatus confCodeStackIncludeStatus) {
         //TODO 基础远程开关，控制采集器的打开与关闭
         // 根据配置决定是否开启 System.out/err 代理，默认关闭以避免性能影响
-        if (Boolean.parseBoolean(getConfig("collect.systemLog", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.system-log.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.systemLog", "false"))) {
             SystemLogCollect.INSTANCE = new SystemLogCollect(this, instrumentation);
         }
         if (Boolean.parseBoolean(getConfig("collect.HttpServlet", "true"))) {
@@ -274,70 +323,89 @@ public class TraceContext {
                     "javax.servlet.http.HttpServlet", "jakarta.servlet.http.HttpServlet"
             );
         }
-        if (Boolean.parseBoolean(getConfig("collect.feignInvoker", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.feign.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.feignInvoker", "true"))) {
             FeignClientCollect.INSTANCE = new FeignClientCollect(this, instrumentation, "feign.Client$Default",
                     "feign.httpclient.ApacheHttpClient");
         }
-        if (Boolean.parseBoolean(getConfig("collect.dubboInvoker", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.dubbo.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.dubboInvoker", "true"))) {
             DubboInvokerCollect.INSTANCE = new DubboInvokerCollect(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.dubboReceive", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.dubbo.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.dubboReceive", "true"))) {
             DubboReceiveCollect.INSTANCE = new DubboReceiveCollect(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.sofaProviderInvoker", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.sofa-rpc.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.sofaProviderInvoker", "true"))) {
             SofaServerCollect.INSTANCE = new SofaServerCollect(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.sofaConsumerInvoker", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.sofa-rpc.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.sofaConsumerInvoker", "true"))) {
             SofaClientCollect.INSTANCE = new SofaClientCollect(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.jdbc", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.jdbc.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.jdbc", "true"))) {
             JdbcCommonCollects.INSTANCE = new JdbcCommonCollects(this, instrumentation,
                     "com.mysql.cj.jdbc.NonRegisteringDriver", "com.mysql.jdbc.NonRegisteringDriver");
         }
-        if (Boolean.parseBoolean(getConfig("collect.clickHouseJdbc", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.clickhouse-jdbc.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.clickHouseJdbc", "true"))) {
             ClickHouseJdbcCollects.INSTANCE = new ClickHouseJdbcCollects(this, instrumentation, "ru.yandex.clickhouse" +
                     ".ClickHouseStatementImpl");
         }
-        if (Boolean.parseBoolean(getConfig("collect.redis", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.redis.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.redis", "true"))) {
             RedisCollects.INSTANCE = new RedisCollects(this, instrumentation, "io.lettuce.core.protocol" +
                     ".DefaultEndpoint");
         }
-        if (Boolean.parseBoolean(getConfig("collect.redisson", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.redisson.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.redisson", "true"))) {
             RedissonCollects.INSTANCE = new RedissonCollects(this, instrumentation, "org.redisson.command" +
                     ".RedisExecutor");
         }
-        if (Boolean.parseBoolean(getConfig("collect.rabbitMq", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.mq-producer.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.rabbitMq", "true"))) {
             RabbitMqCollects.INSTANCE = new RabbitMqCollects(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.rabbitMqReceive", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.mq-consumer.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.rabbitMqReceive", "true"))) {
             RabbitMqReceiveCollects.INSTANCE = new RabbitMqReceiveCollects(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.rocketMq", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.mq-producer.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.rocketMq", "true"))) {
             RocketMqCollects.INSTANCE = new RocketMqCollects(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.rocketMqReceive", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.mq-consumer.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.rocketMqReceive", "true"))) {
             RocketMqReceiveCollects.INSTANCE = new RocketMqReceiveCollects(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.kafkaMq", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.mq-producer.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.kafkaMq", "true"))) {
             KafkaMqCollects.INSTANCE = new KafkaMqCollects(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.kafkaMqReceive", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.mq-consumer.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.kafkaMqReceive", "true"))) {
             KafkaMqReceiveCollects.INSTANCE = new KafkaMqReceiveCollects(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.httpClientV3", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.http-client-v3.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.httpClientV3", "true"))) {
             HttpClientCollectV3.INSTANCE = new HttpClientCollectV3(this, instrumentation,
                     "org.apache.commons.httpclient.HttpClient",
                     "org.apache.commons.httpclient.HttpMethod",
                     "org.apache.commons.httpclient.HttpMethodBase");
         }
-        if (Boolean.parseBoolean(getConfig("collect.httpClientV4", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.http-client-v4.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.httpClientV4", "true"))) {
             HttpClientCollectV4.INSTANCE = new HttpClientCollectV4(this, instrumentation);
         }
-        if (Boolean.parseBoolean(getConfig("collect.threadPool", "true"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.thread-pool.enabled", "false"))
+                && Boolean.parseBoolean(getConfig("collect.threadPool", "false"))) {
             ThreadPoolCollect.INSTANCE = new ThreadPoolCollect(instrumentation);
         }
         //设置了 service.include 才开启服务类采集
-        if (StringUtils.hasText(getConfig("service.include"))) {
+        if (!Boolean.parseBoolean(getConfig("sandbox.service.enabled", "false"))
+                && StringUtils.hasText(getConfig("service.include"))) {
             ServiceCollect.INSTANCE = new ServiceCollect(this, instrumentation);
         }
         logJvmAndAsmInfo(); // 打印JVM和ASM信息
@@ -347,17 +415,21 @@ public class TraceContext {
         }
         switch (codeStackIncludeStatus) {
             case HAS_COLLECTION:
-                logger.info("[Agent-使用目标应用配置]正在开启 codeStack 初始化采集器.");
-                CodeStackCollect.INSTANCE = new CodeStackCollect(this, instrumentation);
-                CodeStaticStackCollect.INSTANCE = new CodeStaticStackCollect(this, instrumentation);
+                if (!Boolean.parseBoolean(getConfig("sandbox.coverage.enabled", "false"))) {
+                    logger.info("[Agent-使用目标应用配置]正在开启 codeStack 初始化采集器.");
+                    CodeStackCollect.INSTANCE = new CodeStackCollect(this, instrumentation);
+                    CodeStaticStackCollect.INSTANCE = new CodeStaticStackCollect(this, instrumentation);
+                }
                 break;
             case NO_COLLECTION:
                 // 检查另一个配置
                 switch (confCodeStackIncludeStatus) {
                     case HAS_COLLECTION:
-                        logger.info("[Agent-使用本地（.conf）配置]正在开启 codeStack 初始化采集器.");
-                        CodeStackCollect.INSTANCE = new CodeStackCollect(this, instrumentation);
-                        CodeStaticStackCollect.INSTANCE = new CodeStaticStackCollect(this, instrumentation);
+                        if (!Boolean.parseBoolean(getConfig("sandbox.coverage.enabled", "false"))) {
+                            logger.info("[Agent-使用本地（.conf）配置]正在开启 codeStack 初始化采集器.");
+                            CodeStackCollect.INSTANCE = new CodeStackCollect(this, instrumentation);
+                            CodeStaticStackCollect.INSTANCE = new CodeStaticStackCollect(this, instrumentation);
+                        }
                         break;
                     case NO_COLLECTION:
                         // 如果两个配置都没有，则不执行任何操作
@@ -412,7 +484,7 @@ public class TraceContext {
             clientSessionStr = HttpClient.execHttp(loginUrl, params).get(10, TimeUnit.SECONDS);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            logger.error("[Agent-EXCError]登录 server 被中断. " + ie);
+            logger.warn("[Agent-warn]登录 server 被中断");
             return false;
         } catch (ExecutionException | TimeoutException ee) {
             logger.error("[Agent-EXCError]登录 server 失败. " + ee); // 完整堆栈
@@ -451,12 +523,18 @@ public class TraceContext {
     }
 
     private boolean doHeartbeat() {
+        if (!running || Thread.currentThread().isInterrupted()) {
+            return false;
+        }
         int maxRetries = 5; // 最大重试次数
         int retryInterval = 5111; // 重试间隔时间，单位为毫秒
         int attempt = 0;    //尝试连接次数，初始从0开始计数
 
         // 服务可用且只发送启动前5分钟的日志，只发一次
         if (isServerAvailable()) {
+            if (!running || Thread.currentThread().isInterrupted()) {
+                return false;
+            }
             // 只在启动5-6分钟内且未发送过日志时发送
             if (!agentLogsSent
                     && (1 * 60 * 1000 < System.currentTimeMillis() - agentStartTime
@@ -468,9 +546,12 @@ public class TraceContext {
             }
         }
 
-        while (attempt < maxRetries) {
+        while (running && !Thread.currentThread().isInterrupted() && attempt < maxRetries) {
             if (isServerAvailable()) {
                 return true;
+            }
+            if (!running || Thread.currentThread().isInterrupted()) {
+                return false;
             }
             attempt++;
             logger.warn("[Agent-warn]server 不可用，尝试重新连接... 尝试次数: " + attempt);
@@ -478,7 +559,9 @@ public class TraceContext {
                 Thread.sleep(retryInterval); // 等待一段时间后重试
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.error("[Agent-EXCError]心跳重试过程中线程被中断. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
+                if (running) {
+                    logger.warn("[Agent-warn]心跳重试被中断，停止本轮重试");
+                }
                 return false;
             }
         }
@@ -486,6 +569,9 @@ public class TraceContext {
     }
 
     private boolean isServerAvailable() {
+        if (!running || Thread.currentThread().isInterrupted()) {
+            return false;
+        }
         if (getRemoteServer().isEmpty()) {
             logger.warn("[Agent-warn]<UNK>'server'<UNK>");
             return false;
@@ -502,7 +588,9 @@ public class TraceContext {
                 clientSession = JsonUtil.toObject(clientSessionStr, ClientSessionVo.class);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
-                logger.error("[Agent-EXCError]server 可用性失败，重新登录被中断. " + ie);
+                if (running) {
+                    logger.warn("[Agent-warn]server 可用性重新登录被中断");
+                }
                 return false;
             } catch (ExecutionException | TimeoutException e) {
                 logger.error("[Agent-EXCError]server 可用性失败，重新登录失败. " + e);
@@ -515,18 +603,35 @@ public class TraceContext {
                 + clientSession.getClientInfo().getTimesTamp();
         try {
             String result = HttpClient.execHttp(heartbeatUrl, new HashMap<String, String>()).get(10, TimeUnit.SECONDS);
-            if ("heartbeatOK".equalsIgnoreCase(result)) {
+            if (result != null && result.startsWith("heartbeatOK")) {
+                handleHeartbeatCommand(result);
                 return true;
             }
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
-            logger.error("[Agent-EXCError]server 可用性检查被中断. " + ie);
+            if (running) {
+                logger.warn("[Agent-warn]server 可用性检查被中断");
+            }
         } catch (ExecutionException e) {
             logger.error("[Agent-EXCError]server 可用性检查失败. " + e);
         } catch (TimeoutException e) {
             logger.error("[Agent-EXCError]server 可用性检查失败. " + e);
         }
         return false;
+    }
+
+    private void handleHeartbeatCommand(String result) {
+        int separator = result.indexOf(':');
+        if (separator < 0 || separator >= result.length() - 1) {
+            return;
+        }
+        String command = result.substring(separator + 1).trim();
+        try {
+            com.oAT.agent.Agent.handleSandboxCommand(command);
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError]执行 sandbox 命令失败 command=" + command + " "
+                    + StackTraceFormatter.formatExceptionWithAgentMark(t));
+        }
     }
 
     /**
@@ -732,7 +837,7 @@ public class TraceContext {
             logger.info("[Agent-info]发送日志文件成功，大小: " + String.format("%.2f MB", sizeMb));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            logger.error("[Agent-EXCError]发送日志被中断. error: " + e.getMessage());
+            logger.warn("[Agent-warn]发送日志被中断");
         } catch (ExecutionException | TimeoutException e) {
             logger.error("[Agent-EXCError]发送日志失败. error: " + e.getMessage());
         } catch (NoClassDefFoundError | Exception e) {

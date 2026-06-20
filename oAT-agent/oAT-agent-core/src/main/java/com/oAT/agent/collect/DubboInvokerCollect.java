@@ -43,6 +43,11 @@ public class DubboInvokerCollect extends AbstractByteTransformCollect implements
         this.traceContext = traceContext;
     }
 
+    public DubboInvokerCollect(TraceContext traceContext) {
+        super();
+        this.traceContext = traceContext;
+    }
+
     static {
         BEGIN_SRC = DubboInvokerCollect.class.getName() + " instance = " +
                 DubboInvokerCollect.class.getName() + ".INSTANCE;\r\n" +

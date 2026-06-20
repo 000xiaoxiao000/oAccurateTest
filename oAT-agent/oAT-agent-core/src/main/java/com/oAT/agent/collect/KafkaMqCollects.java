@@ -32,6 +32,11 @@ public class KafkaMqCollects extends AbstractByteTransformCollect implements ICo
         this.traceContext = context;
     }
 
+    public KafkaMqCollects(TraceContext context) {
+        super();
+        this.traceContext = context;
+    }
+
     static {
         BEGIN_SRC = KafkaMqCollects.class.getName() + " instance = " + KafkaMqCollects.class.getName() + ".INSTANCE;" +
                 "\r\n" +
