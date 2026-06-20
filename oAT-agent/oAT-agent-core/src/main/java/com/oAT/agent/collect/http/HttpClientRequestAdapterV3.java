@@ -36,7 +36,9 @@ public class HttpClientRequestAdapterV3 {
             _getResponseHeaders = HttpMethod.getClass().getMethod("getResponseHeaders");
             _getResponseHeaders = HttpMethod.getClass().getMethod("getResponseHeaders");
             _setRequestHeaders = HttpMethod.getClass().getMethod("setRequestHeader", String.class, String.class);
-        } catch (NoSuchMethodException | SecurityException e) {
+        } catch (NoSuchMethodException e) {
+            logger.error("[Agent-EXCError]HttpClientRequestAdapter HttpClientRequestAdapter error: "+ StackTraceFormatter.formatExceptionWithAgentMark(e));
+        } catch (SecurityException e) {
             logger.error("[Agent-EXCError]HttpClientRequestAdapter HttpClientRequestAdapter error: "+ StackTraceFormatter.formatExceptionWithAgentMark(e));
         }
     }
@@ -88,7 +90,7 @@ public class HttpClientRequestAdapterV3 {
     }
 
     protected Map<String, String> getHeaders(Method targetHeader){
-        Map<String, String> headers = new HashMap<>();
+        Map<String, String> headers = new HashMap();
         if(targetHeader == null || HttpMethod == null){
             return headers;
         }

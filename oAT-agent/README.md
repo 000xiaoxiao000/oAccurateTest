@@ -143,7 +143,6 @@ exclude.urls=
 # collect.kafkaMqReceive=false
 # collect.httpClientV3=false
 # collect.httpClientV4=false
-# collect.threadPool=true
 ```
 
 **Sandbox 统一增强开关**（推荐优先试用；开启后对应旧 `collect.*` Transformer 会自动跳过）：
@@ -164,7 +163,11 @@ exclude.urls=
 # sandbox.redisson.enabled=true
 # sandbox.coverage.enabled=true
 # sandbox.system-log.enabled=true
-# sandbox.thread-pool.enabled=true
+# sandbox.context-propagation.enabled=true
+# sandbox.context-propagation.executor=true
+# sandbox.context-propagation.scheduled=true
+# sandbox.context-propagation.forkjoin=false
+# sandbox.context-propagation.completable-future=false
 ```
 
 > 开启 `conf_service.include` 后，上述中间件采集会自动跟随 service 采集范围，一般无需单独开启，以避免冲突。
@@ -212,7 +215,7 @@ JVM 栈大小参考：
 | RocketMQ（生产者 / 消费者） | `sandbox.mq-producer.enabled / sandbox.mq-consumer.enabled` |
 | Kafka（生产者 / 消费者） | `sandbox.mq-producer.enabled / sandbox.mq-consumer.enabled` |
 | 业务日志 | `sandbox.system-log.enabled` / `collect.systemLog` |
-| 线程池上下文传播 | `sandbox.thread-pool.enabled` / `collect.threadPool` |
+| 线程池上下文传播 | `sandbox.context-propagation.enabled` |
 
 ---
 

@@ -473,49 +473,54 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
             Map<String, Set<String>> methodCoveredBranchTargetsMap = new HashMap<>();
             Map<String, Integer> methodComplexityMap = new HashMap<>();
 
-            for (TraceNode node : traceNodes) {
-                if (node instanceof HttpTraceNode) {
-                    StackNodeVo[] codeNodes = ((HttpTraceNode) node).getCodeNodes();
-                    if (codeNodes != null) {
-                        for (StackNodeVo sn : codeNodes) {
-                            String methodKey = sn.getMethodName() + "#" + sn.getMethodDescriptor();
-                            Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(sn.getClassName());
-                            if (classMethodMap == null) continue;
-
-                            StaticSourceMethodInfo staticMethod = classMethodMap.get(methodKey);
-                            if (staticMethod == null) continue;
-
-                            classMethods.add(sn.getClassName());
-
-                            // 从全量静态数据获取总数
-                            methodTotalLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
-                                    .addAll(staticMethod.getMethodLineNumberMap() != null ? staticMethod.getMethodLineNumberMap() : Collections.emptyList());
-                            if (sn.getDoLines() != null) {
-                                methodCoveredLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getDoLines());
-                            }
-
-                            methodComplexityMap.put(methodKey,
-                                    staticMethod.getCyclomaticComplexityMap() != null ? staticMethod.getCyclomaticComplexityMap() : 0);
-
-                            methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
-                                    .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
-                            addBranchTargetKeys(methodTotalBranchTargetsMap, methodKey,
-                                    normalizeStaticBranchTargets(staticMethod.getBranchLineAndTargetProbeMap(),
-                                            sn.getExecuteBranchTargetProbeMap()));
-                            if (sn.getExecuteBranch() != null) {
-                                methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
-                            }
-                            addBranchTargetKeys(methodCoveredBranchTargetsMap, methodKey, sn.getExecuteBranchTargetProbeMap());
-                            if (methodCoveredBranchTargetsMap.containsKey(methodKey)) {
-                                Set<String> normalizedKeys = new LinkedHashSet<>();
-                                Map<String, List<Integer>> normalizedStaticBranchTargets = normalizeStaticBranchTargets(
-                                        staticMethod.getBranchLineAndTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
-                                addBranchTargetKeysToSet(normalizedKeys, normalizedStaticBranchTargets,
-                                        decodeBranchTargetKeys(methodCoveredBranchTargetsMap.get(methodKey)));
-                                methodCoveredBranchTargetsMap.put(methodKey, normalizedKeys);
-                            }
+            List<StackNodeVo> snapshotCodeNodes = new ArrayList<>(coverageStorage.load(snapshot.getTraceId()));
+            if (snapshotCodeNodes.isEmpty()) {
+                for (TraceNode node : traceNodes) {
+                    if (node instanceof CodeNodeBean) {
+                        StackNodeVo[] codeNodes = ((CodeNodeBean) node).getCodeNodes();
+                        if (codeNodes != null && codeNodes.length > 0) {
+                            snapshotCodeNodes.addAll(Arrays.asList(codeNodes));
                         }
                     }
+                }
+            }
+
+            for (StackNodeVo sn : snapshotCodeNodes) {
+                String methodKey = sn.getMethodName() + "#" + sn.getMethodDescriptor();
+                Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(sn.getClassName());
+                if (classMethodMap == null) continue;
+
+                StaticSourceMethodInfo staticMethod = classMethodMap.get(methodKey);
+                if (staticMethod == null) continue;
+
+                classMethods.add(sn.getClassName());
+
+                // 从全量静态数据获取总数
+                methodTotalLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
+                        .addAll(staticMethod.getMethodLineNumberMap() != null ? staticMethod.getMethodLineNumberMap() : Collections.emptyList());
+                if (sn.getDoLines() != null) {
+                    methodCoveredLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getDoLines());
+                }
+
+                methodComplexityMap.put(methodKey,
+                        staticMethod.getCyclomaticComplexityMap() != null ? staticMethod.getCyclomaticComplexityMap() : 0);
+
+                methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
+                        .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
+                addBranchTargetKeys(methodTotalBranchTargetsMap, methodKey,
+                        normalizeStaticBranchTargets(staticMethod.getBranchLineAndTargetProbeMap(),
+                                sn.getExecuteBranchTargetProbeMap()));
+                if (sn.getExecuteBranch() != null) {
+                    methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
+                }
+                addBranchTargetKeys(methodCoveredBranchTargetsMap, methodKey, sn.getExecuteBranchTargetProbeMap());
+                if (methodCoveredBranchTargetsMap.containsKey(methodKey)) {
+                    Set<String> normalizedKeys = new LinkedHashSet<>();
+                    Map<String, List<Integer>> normalizedStaticBranchTargets = normalizeStaticBranchTargets(
+                            staticMethod.getBranchLineAndTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
+                    addBranchTargetKeysToSet(normalizedKeys, normalizedStaticBranchTargets,
+                            decodeBranchTargetKeys(methodCoveredBranchTargetsMap.get(methodKey)));
+                    methodCoveredBranchTargetsMap.put(methodKey, normalizedKeys);
                 }
             }
 

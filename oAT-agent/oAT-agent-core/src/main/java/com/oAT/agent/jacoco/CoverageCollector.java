@@ -23,7 +23,7 @@ public class CoverageCollector {
     /**
      * 当前线程绑定的 CoverageCollector
      */
-    private static final ThreadLocal<CoverageCollector> CURRENT = new ThreadLocal<>();
+    private static final ThreadLocal<CoverageCollector> CURRENT = new ThreadLocal<CoverageCollector>();
 
     /**
      * 快照开始时间（System.nanoTime）
@@ -38,18 +38,19 @@ public class CoverageCollector {
     /**
      * 请求结束时收集到的 classId -> 探针数组快照
      */
-    private final Map<Long, boolean[]> probeSnapshots = new LinkedHashMap<>();
+    private final Map<Long, boolean[]> probeSnapshots = new LinkedHashMap<Long, boolean[]>();
 
     /**
      * 在请求期间被触发的 classId 集合（用于增量收集）
      * 使用 ConcurrentHashMap 的 key set 特性来跟踪哪些类被新触发
      */
-    private final Set<Long> touchedClassIds = ConcurrentHashMap.newKeySet();
+    private final Set<Long> touchedClassIds =
+            Collections.newSetFromMap(new ConcurrentHashMap<Long, Boolean>());
 
     /**
      * 已知被触发的 classId（快照前已触发的），用于去重
      */
-    private final Set<Long> previousTouchedClassIds = new HashSet<>();
+    private final Set<Long> previousTouchedClassIds = new HashSet<Long>();
 
     public CoverageCollector() {
         this.beginNanoTime = System.nanoTime();
@@ -138,7 +139,12 @@ public class CoverageCollector {
      * 获取有覆盖率数据的 classId 列表。
      */
     public long[] getCoveredClassIds() {
-        return probeSnapshots.keySet().stream().mapToLong(Long::longValue).toArray();
+        long[] result = new long[probeSnapshots.size()];
+        int index = 0;
+        for (Long classId : probeSnapshots.keySet()) {
+            result[index++] = classId.longValue();
+        }
+        return result;
     }
 
     /**

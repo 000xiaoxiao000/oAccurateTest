@@ -9,6 +9,8 @@ import com.oAT.web.esDao.entity.Snapshot;
 import com.oAT.web.esDao.entity.TraceNodeIndex;
 import com.oAT.web.esDao.entity.TraceSummaryIndex;
 import com.oAT.web.service.SnapshotService;
+import com.oAT.web.service.TraceEntryDescriptor;
+import com.oAT.web.service.TraceEntryDescriptorBuilder;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.entity.SnapshotVo;
 import org.slf4j.Logger;
@@ -83,7 +85,7 @@ public class SnapshotServiceImpl implements SnapshotService{
     private TraceSummaryIndex buildTraceSummary(Collection<TraceNode> nodes, String projectId) {
         TraceSummaryIndex summary = new TraceSummaryIndex();
         
-        HttpTraceNode rootHttp = null;
+        TraceNode rootNode = null;
         int sqlCount = 0;
         int remoteCount = 0;
         int redisCount = 0;
@@ -91,8 +93,8 @@ public class SnapshotServiceImpl implements SnapshotService{
         int errorCount = 0;
         
         for (TraceNode node : nodes) {
-            if (node instanceof HttpTraceNode && "0".equals(node.getTraceNodeId())) {
-                rootHttp = (HttpTraceNode) node;
+            if ("0".equals(node.getTraceNodeId())) {
+                rootNode = node;
             }
             
             if (node instanceof SqlTraceNode || node instanceof CKSqlTraceNode) {
@@ -112,33 +114,46 @@ public class SnapshotServiceImpl implements SnapshotService{
             }
         }
         
-        if (rootHttp != null) {
-            summary.setTraceId(rootHttp.getTraceId());
+        if (rootNode != null) {
+            TraceEntryDescriptor entry = TraceEntryDescriptorBuilder.build(rootNode);
+            summary.setTraceId(rootNode.getTraceId());
             summary.setProjectId(projectId);
-            summary.setSessionId(rootHttp.getSessionId());
-            summary.setStatus(rootHttp.getStatus());
+            summary.setSessionId(rootNode.getSessionId());
+            summary.setStatus(rootNode.getStatus());
             summary.setHasError(errorCount > 0);
-            summary.setHttpMethod(rootHttp.getRequestMethod());
-            summary.setHttpUrl(rootHttp.getRequestUrl());
-            summary.setHttpResponseCode(rootHttp.getResponseCode());
-            summary.setHttpClientIp(rootHttp.getClientIp());
-            summary.setHttpServerIp(rootHttp.getServerIp());
-            summary.setHttpServerPort(rootHttp.getServerPort());
-            summary.setHttpAjax(rootHttp.getAjax());
-            summary.setBeginTime(rootHttp.getBeginTime());
-            summary.setEndTime(rootHttp.getEndTime());
-            summary.setUseTime(rootHttp.getUseTime());
+            summary.setEntryType(entry.getEntryType());
+            summary.setEntryName(entry.getEntryName());
+            summary.setEntryProtocol(entry.getEntryProtocol());
+            summary.setEntryAppId(entry.getEntryAppId());
+            summary.setEntryAppName(entry.getEntryAppName());
+            summary.setEntryClientIp(entry.getEntryClientIp());
+            summary.setEntryTopic(entry.getEntryTopic());
+            summary.setEntryInterface(entry.getEntryInterface());
+            summary.setEntryMethod(entry.getEntryMethod());
+            summary.setBeginTime(rootNode.getBeginTime());
+            summary.setEndTime(rootNode.getEndTime());
+            summary.setUseTime(rootNode.getUseTime());
             summary.setCreateTime(new Date());
             
-            if (rootHttp.getApp() != null) {
-                summary.setAppId(rootHttp.getApp().getAppId());
-                summary.setAppName(rootHttp.getApp().getAppName());
+            if (rootNode.getApp() != null) {
+                summary.setAppId(rootNode.getApp().getAppId());
+                summary.setAppName(rootNode.getApp().getAppName());
             }
-            
-            if (rootHttp.getRequestUrl() != null) {
-                String url = rootHttp.getRequestUrl();
-                int queryIndex = url.indexOf('?');
-                summary.setHttpUrlPath(queryIndex > 0 ? url.substring(0, queryIndex) : url);
+
+            if (rootNode instanceof HttpTraceNode) {
+                HttpTraceNode rootHttp = (HttpTraceNode) rootNode;
+                summary.setHttpMethod(rootHttp.getRequestMethod());
+                summary.setHttpUrl(rootHttp.getRequestUrl());
+                summary.setHttpResponseCode(rootHttp.getResponseCode());
+                summary.setHttpClientIp(rootHttp.getClientIp());
+                summary.setHttpServerIp(rootHttp.getServerIp());
+                summary.setHttpServerPort(rootHttp.getServerPort());
+                summary.setHttpAjax(rootHttp.getAjax());
+                if (rootHttp.getRequestUrl() != null) {
+                    String url = rootHttp.getRequestUrl();
+                    int queryIndex = url.indexOf('?');
+                    summary.setHttpUrlPath(queryIndex > 0 ? url.substring(0, queryIndex) : url);
+                }
             }
         }
         

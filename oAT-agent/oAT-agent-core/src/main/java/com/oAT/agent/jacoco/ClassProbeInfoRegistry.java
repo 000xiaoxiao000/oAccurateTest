@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class ClassProbeInfoRegistry {
 
-    private static final ConcurrentHashMap<Long, ClassProbeInfo> REGISTRY = new ConcurrentHashMap<>(1024);
+    private static final ConcurrentHashMap<Long, ClassProbeInfo> REGISTRY = new ConcurrentHashMap<Long, ClassProbeInfo>(1024);
 
     /**
      * 注册类的探针元信息。
@@ -31,7 +31,22 @@ public final class ClassProbeInfoRegistry {
      * 获取所有已注册的 classId。
      */
     public static long[] getRegisteredClassIds() {
-        return REGISTRY.keySet().stream().mapToLong(Long::longValue).toArray();
+        long[] result = new long[REGISTRY.size()];
+        int index = 0;
+        for (Long classId : REGISTRY.keySet()) {
+            if (index >= result.length) {
+                long[] expanded = new long[index + 16];
+                System.arraycopy(result, 0, expanded, 0, result.length);
+                result = expanded;
+            }
+            result[index++] = classId.longValue();
+        }
+        if (index == result.length) {
+            return result;
+        }
+        long[] trimmed = new long[index];
+        System.arraycopy(result, 0, trimmed, 0, index);
+        return trimmed;
     }
 
     /**

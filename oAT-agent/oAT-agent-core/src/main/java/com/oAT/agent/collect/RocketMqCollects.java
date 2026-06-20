@@ -22,7 +22,7 @@ public class RocketMqCollects extends AbstractByteTransformCollect implements IC
     private final static Log logger = LogFactory.getLog(RocketMqCollects.class);
     public static RocketMqCollects INSTANCE;
     private static final String PRODUCER_CLASS = "org.apache.rocketmq.client.producer.DefaultMQProducer";
-    private static final Map<String, List<String>> PRODUCER_METHOD_METHODDESCS = new HashMap<>();
+    private static final Map<String, List<String>> PRODUCER_METHOD_METHODDESCS = new HashMap();
 
     private final TraceContext traceContext;
     private static final String BEGIN_SRC;
@@ -190,18 +190,20 @@ public class RocketMqCollects extends AbstractByteTransformCollect implements IC
         if (properties == null) {
             return null;
         }
-        try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        try {
+            properties.store(stream, "");
+            return Base64.encodeBase64String(stream.toByteArray());
+        } catch (Throwable e) {
+            logger.error("[Agent-EXCError]" + Level.SEVERE + "DubboInvokerCollect properties encode fail. "
+                    + StackTraceFormatter.formatExceptionWithAgentMark(e));
+            return null;
+        } finally {
             try {
-                properties.store(stream, "");
-                return Base64.encodeBase64String(stream.toByteArray());
-            } catch (Throwable e) {
-                logger.error("[Agent-EXCError]" + Level.SEVERE + "DubboInvokerCollect properties encode fail. "
-                        + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                return null;
+                stream.close();
+            } catch (Throwable ignore) {
             }
-        } catch (Throwable ignore) {
         }
-        return "";
     }
 
     public void end(RocketMQProducerTraceNode node, Object[] parames) {

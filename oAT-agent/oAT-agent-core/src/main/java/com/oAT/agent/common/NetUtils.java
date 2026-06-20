@@ -52,11 +52,15 @@ public class NetUtils {
     }
 
     public static int getAvailablePort() {
-        try (ServerSocket ss = new ServerSocket()) {
+        ServerSocket ss = null;
+        try {
+            ss = new ServerSocket();
             ss.bind(null);
             return ss.getLocalPort();
         } catch (IOException e) {
             return getRandomPort();
+        } finally {
+            closeQuietly(ss);
         }
     }
 
@@ -68,13 +72,27 @@ public class NetUtils {
             return getAvailablePort();
         }
         for (int i = port; i < MAX_PORT; i++) {
-            try (ServerSocket ss = new ServerSocket(i)) {
+            ServerSocket ss = null;
+            try {
+                ss = new ServerSocket(i);
                 return i;
             } catch (IOException e) {
                 logger.error("[Agent-getAvailablePort]Port " + i + " is not available: " + e);
+            } finally {
+                closeQuietly(ss);
             }
         }
         return port;
+    }
+
+    private static void closeQuietly(ServerSocket socket) {
+        if (socket == null) {
+            return;
+        }
+        try {
+            socket.close();
+        } catch (IOException ignored) {
+        }
     }
 
     public static boolean isInvalidPort(int port) {

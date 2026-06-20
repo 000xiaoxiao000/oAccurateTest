@@ -21,7 +21,10 @@ public class InvocationAdapter {
         try {
             _headers = target.getClass().getDeclaredField("headers");
             _getHeaders = target.getClass().getMethod("getHeaders");
-        } catch (NoSuchFieldException | NoSuchMethodException e) {
+        } catch (NoSuchFieldException e) {
+            throw new IllegalArgumentException("[Agent-EXCError]error: " + e.getMessage() + ". "
+                    + "probable cause the target is not belong RabbitMQ.RabbitMQInvocation");
+        } catch (NoSuchMethodException e) {
             throw new IllegalArgumentException("[Agent-EXCError]error: " + e.getMessage() + ". "
                     + "probable cause the target is not belong RabbitMQ.RabbitMQInvocation");
         }
@@ -33,7 +36,7 @@ public class InvocationAdapter {
             _headers.setAccessible(true);
             Map<String, Object> headers = (Map<String, Object>) _headers.get(target);
             if (headers.getClass().getName().contains("Unmodifiable")) {
-                headers = new HashMap<>(headers);
+                headers = new HashMap(headers);
                 _headers.set(target, headers);
             }
             headers.put(key, value);

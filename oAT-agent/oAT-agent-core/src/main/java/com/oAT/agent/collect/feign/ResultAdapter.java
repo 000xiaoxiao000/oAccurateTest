@@ -45,7 +45,10 @@ public class ResultAdapter {
             while ((len = ais.read(bytes)) != -1) {
                 sb.append(new String(bytes, 0, len));
             }
-        } catch (NoSuchMethodException | IOException e) {
+        } catch (NoSuchMethodException e) {
+            logger.error("[Agent-getBodyString]error", e);
+            return "";
+        } catch (IOException e) {
             logger.error("[Agent-getBodyString]error", e);
             return "";
         }

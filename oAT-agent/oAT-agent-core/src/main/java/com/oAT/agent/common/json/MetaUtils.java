@@ -38,19 +38,19 @@ public class MetaUtils
 {
     private MetaUtils () {}
 
-    private static final Map<Class, Map<String, Field>> classMetaCache = new ConcurrentHashMap<>();
-    private static final Set<Class> prims = new HashSet<>();
-    private static final Map<String, Class> nameToClass = new HashMap<>();
+    private static final Map<Class, Map<String, Field>> classMetaCache = new ConcurrentHashMap();
+    private static final Set<Class> prims = new HashSet();
+    private static final Map<String, Class> nameToClass = new HashMap();
     private static final Byte[] byteCache = new Byte[256];
     private static final Character[] charCache = new Character[128];
     private static final Pattern extraQuotes = Pattern.compile("([\"]*)([^\"]*)([\"]*)");
     private static final Class[] emptyClassArray = new Class[]{};
-    private static final ConcurrentMap<Class, Object[]> constructors = new ConcurrentHashMap<>();
-    private static final Collection unmodifiableCollection = Collections.unmodifiableCollection(new ArrayList<>());
-    private static final Collection unmodifiableSet = Collections.unmodifiableSet(new HashSet<>());
-    private static final Collection unmodifiableSortedSet = Collections.unmodifiableSortedSet(new TreeSet<>());
-    private static final Map unmodifiableMap = Collections.unmodifiableMap(new HashMap<>());
-    private static final Map unmodifiableSortedMap = Collections.unmodifiableSortedMap(new TreeMap<>());
+    private static final ConcurrentMap<Class, Object[]> constructors = new ConcurrentHashMap();
+    private static final Collection unmodifiableCollection = Collections.unmodifiableCollection(new ArrayList());
+    private static final Collection unmodifiableSet = Collections.unmodifiableSet(new HashSet());
+    private static final Collection unmodifiableSortedSet = Collections.unmodifiableSortedSet(new TreeSet());
+    private static final Map unmodifiableMap = Collections.unmodifiableMap(new HashMap());
+    private static final Map unmodifiableSortedMap = Collections.unmodifiableSortedMap(new TreeMap());
     static final ThreadLocal<SimpleDateFormat> dateFormat = new ThreadLocal<SimpleDateFormat>() {
         @Override
         protected SimpleDateFormat initialValue() {
@@ -711,27 +711,27 @@ public class MetaUtils
                 }
                 else if (List.class.isAssignableFrom(argType))
                 {
-                    values[i] = new ArrayList<>();
+                    values[i] = new ArrayList();
                 }
                 else if (SortedSet.class.isAssignableFrom(argType))
                 {
-                    values[i] = new TreeSet<>();
+                    values[i] = new TreeSet();
                 }
                 else if (Set.class.isAssignableFrom(argType))
                 {
-                    values[i] = new LinkedHashSet<>();
+                    values[i] = new LinkedHashSet();
                 }
                 else if (SortedMap.class.isAssignableFrom(argType))
                 {
-                    values[i] = new TreeMap<>();
+                    values[i] = new TreeMap();
                 }
                 else if (Map.class.isAssignableFrom(argType))
                 {
-                    values[i] = new LinkedHashMap<>();
+                    values[i] = new LinkedHashMap();
                 }
                 else if (Collection.class.isAssignableFrom(argType))
                 {
-                    values[i] = new ArrayList<>();
+                    values[i] = new ArrayList();
                 }
                 else if (Calendar.class.isAssignableFrom(argType))
                 {

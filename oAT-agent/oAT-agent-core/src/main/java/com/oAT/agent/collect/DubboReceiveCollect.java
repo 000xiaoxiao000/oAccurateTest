@@ -5,6 +5,8 @@ import com.oAT.agent.collect.dubbo.ResultAdapter;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.context.AgentContext;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.model.DubboRemoteTraceNode;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
@@ -19,6 +21,7 @@ import java.io.ByteArrayInputStream;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DubboReceiveCollect extends AbstractByteTransformCollect implements ICollect {
     private final static Log logger = LogFactory.getLog(DubboReceiveCollect.class);
@@ -63,8 +66,10 @@ public class DubboReceiveCollect extends AbstractByteTransformCollect implements
             return null;
         }
         TraceRequest request = getTraceRequest(invocationAdapter);
+        boolean localRoot = false;
         if (request == null) {
-            return null;
+            request = createLocalRootRequest();
+            localRoot = true;
         }
         TraceSession session = traceContext.openTraceSession(TARGET_CLASS, TARGET_METHOD, request);
         if (session == null) {
@@ -76,13 +81,17 @@ public class DubboReceiveCollect extends AbstractByteTransformCollect implements
                 return null;
             }
             node.setTraceId(traceContext.getTraceSession().getTraceId());
-            node.setTraceNodeId(traceContext.getTraceSession().getParentNodeId() + ".remote");
+            node.setTraceNodeId(localRoot ? "0" : traceContext.getTraceSession().getParentNodeId() + ".remote");
             node.setBeginTime(System.currentTimeMillis());
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]set node info error. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             return null;
         }
-        return new DubboRemoteTraceNodeWrapper(session, node);
+        DubboRemoteTraceNodeWrapper wrapper = new DubboRemoteTraceNodeWrapper(session, node);
+        if (AsyncCoverageSupport.enabled(traceContext)) {
+            wrapper.coverageCollector = AsyncCoverageSupport.begin(wrapper);
+        }
+        return wrapper;
     }
 
     public void end(DubboRemoteTraceNodeWrapper nodeWrapper, Object[] params, Object result) {
@@ -95,6 +104,7 @@ public class DubboReceiveCollect extends AbstractByteTransformCollect implements
         if (nodeWrapper == null || session == null) {
             return;
         }
+        boolean deferred = false;
         DubboRemoteTraceNode node = nodeWrapper.node;
         try {
             node.setEndTime(System.currentTimeMillis());
@@ -116,12 +126,25 @@ public class DubboReceiveCollect extends AbstractByteTransformCollect implements
             } else {
                 node.setStatus(TraceNode.Status.succeed.toString());
             }
-            session.saveNode(node);
+            if (nodeWrapper.coverageCollector != null && AgentContext.hasPendingAsyncTasks()) {
+                deferred = true;
+                nodeWrapper.markDeferred();
+                AtomicInteger activeAsyncTaskCount = AgentContext.getActiveAsyncTaskCount();
+                int pendingAsyncTasks = activeAsyncTaskCount == null ? 0 : activeAsyncTaskCount.get();
+                nodeWrapper.detachCurrentThreadContext();
+                logger.info("[Agent-info]DubboReceiveCollect 检测到异步任务仍在执行，延迟覆盖率汇总，pendingAsyncTasks="
+                        + pendingAsyncTasks + ", traceId=" + node.getTraceId());
+            } else {
+                nodeWrapper.collectCoverage();
+                session.saveNode(node);
+            }
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]saveNode error. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         } finally {
             try {
-                nodeWrapper.doDestroy();
+                if (!deferred) {
+                    nodeWrapper.doDestroy();
+                }
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]doDestroy error. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
@@ -181,24 +204,74 @@ public class DubboReceiveCollect extends AbstractByteTransformCollect implements
         return null;
     }
 
-    public class DubboRemoteTraceNodeWrapper implements ISessionDestroy {
+    private TraceRequest createLocalRootRequest() {
+        TraceRequest request = new TraceRequest();
+        request.setTraceId(traceContext.createTraceId());
+        request.setParentNodeCallId("0");
+        request.setProperties(new Properties());
+        return request;
+    }
+
+    public class DubboRemoteTraceNodeWrapper implements ISessionDestroy, AgentContext.AsyncCompletionListener {
         private final TraceSession session;
         private final DubboRemoteTraceNode node;
+        private CoverageCollector coverageCollector;
+        private boolean deferred;
+        private boolean destroyed;
 
         public DubboRemoteTraceNodeWrapper(TraceSession session, DubboRemoteTraceNode node) {
             this.session = session;
             this.node = node;
         }
 
+        public void onAsyncComplete(TraceSession traceSession) {
+            if (traceSession == null || !traceSession.getTraceId().equals(this.session.getTraceId())) {
+                return;
+            }
+            if (!deferred) {
+                return;
+            }
+            try {
+                clearDeferred();
+                collectCoverage();
+                session.saveNode(node);
+            } catch (Throwable t) {
+                logger.error("[Agent-EXCError]DubboReceiveCollect 异步覆盖率补报失败: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            } finally {
+                doDestroy();
+            }
+        }
+
+        private void collectCoverage() {
+            AsyncCoverageSupport.collect(node, coverageCollector);
+        }
+
+        private void markDeferred() {
+            this.deferred = true;
+        }
+
+        private void clearDeferred() {
+            this.deferred = false;
+        }
+
         @Override
         public void doDestroy() {
+            if (destroyed || deferred) {
+                return;
+            }
+            destroyed = true;
             if (traceContext != null && session != null) {
                 try {
+                    detachCurrentThreadContext();
                     traceContext.closeTraceSession(session);
                 } catch (Throwable t) {
                     logger.error("[Agent-doDestroy] closeTraceSession error" + StackTraceFormatter.formatExceptionWithAgentMark(t));
                 }
             }
+        }
+
+        private void detachCurrentThreadContext() {
+            AsyncCoverageSupport.detach(coverageCollector);
         }
     }
 

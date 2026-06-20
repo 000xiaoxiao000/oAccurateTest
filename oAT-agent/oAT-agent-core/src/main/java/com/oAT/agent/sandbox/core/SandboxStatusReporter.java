@@ -8,7 +8,9 @@ import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.trace.TraceContext;
 
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -88,6 +90,7 @@ public class SandboxStatusReporter {
             payload.put("startMode", startMode == null ? "" : startMode.name());
             payload.put("sandboxVersion", runtime.properties().getProperty("agentVersion", "1.0-SNAPSHOT"));
             payload.put("modules", runtime.moduleManager().stateNames());
+            payload.put("bootstrapEnhancements", buildBootstrapEnhancementStatus(runtime));
 
             Map<String, String> params = new HashMap<String, String>();
             params.put("sessionId", sessionId);
@@ -105,5 +108,26 @@ public class SandboxStatusReporter {
         } catch (Throwable t) {
             logger.warn("[Sandbox] report status failed: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         }
+    }
+
+    private static List buildBootstrapEnhancementStatus(SandboxRuntime runtime) {
+        List result = new ArrayList();
+        if (runtime == null || runtime.bootstrapEnhanceManager() == null) {
+            return result;
+        }
+        List statuses = runtime.bootstrapEnhanceManager().statuses();
+        for (int i = 0; i < statuses.size(); i++) {
+            BootstrapEnhanceStatus status = (BootstrapEnhanceStatus) statuses.get(i);
+            Map item = new LinkedHashMap();
+            item.put("moduleId", status.moduleId());
+            item.put("className", status.className());
+            item.put("methodName", status.methodName());
+            item.put("descriptor", status.descriptor());
+            item.put("state", status.state());
+            item.put("errorMessage", status.errorMessage());
+            item.put("updatedAt", Long.valueOf(status.updatedAt()));
+            result.add(item);
+        }
+        return result;
     }
 }

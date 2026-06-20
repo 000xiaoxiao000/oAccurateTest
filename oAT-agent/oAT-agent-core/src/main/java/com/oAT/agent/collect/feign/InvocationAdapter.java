@@ -28,7 +28,10 @@ public class InvocationAdapter {
             _getBody = target.getClass().getMethod("body");
             _getHeaders = target.getClass().getMethod("headers");
             _headers = target.getClass().getDeclaredField("headers");
-        } catch (NoSuchMethodException | NoSuchFieldException e) {
+        } catch (NoSuchMethodException e) {
+            throw new IllegalArgumentException("[Agent-EXCError]error: " + e.getMessage() + ". "
+                    + "probable cause the target is not belong FeignHttpClient.FeignInvocation");
+        } catch (NoSuchFieldException e) {
             throw new IllegalArgumentException("[Agent-EXCError]error: " + e.getMessage() + ". "
                     + "probable cause the target is not belong FeignHttpClient.FeignInvocation");
         }

@@ -105,21 +105,23 @@ public class DubboInvokerCollect extends AbstractByteTransformCollect implements
         if (properties == null) {
             return null;
         }
-        try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        try {
+            properties.store(stream, "");
+            return Base64.encodeBase64String(stream.toByteArray());
+        } catch (IOException e) {
+            logger.error("[Agent-EXCError]" + Level.SEVERE + "DubboInvokerCollect properties encode fail"
+                    + StackTraceFormatter.formatExceptionWithAgentMark(e));
+            return null;
+        } catch (Throwable t) {
+            logger.error("[Agent-EXCError] DubboInvokerCollect properties unknown error"+ StackTraceFormatter.formatExceptionWithAgentMark(t));
+            return null;
+        } finally {
             try {
-                properties.store(stream, "");
-                return Base64.encodeBase64String(stream.toByteArray());
-            } catch (IOException e) {
-                logger.error("[Agent-EXCError]" + Level.SEVERE + "DubboInvokerCollect properties encode fail"
-                        + StackTraceFormatter.formatExceptionWithAgentMark(e));
-                return null;
-            } catch (Throwable t) {
-                logger.error("[Agent-EXCError] DubboInvokerCollect properties unknown error"+ StackTraceFormatter.formatExceptionWithAgentMark(t));
-                return null;
+                stream.close();
+            } catch (IOException ignore) {
             }
-        } catch (IOException ignore) {
         }
-        return null;
     }
 
     public void end(DubboTraceNode node, Object[] parames, Object result) {

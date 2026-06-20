@@ -71,6 +71,25 @@ public class TraceSummaryIndex implements StandardDate, Serializable {
     
     @Field(type = FieldType.Boolean)
     private Boolean httpAjax;
+
+    @Field(type = FieldType.Keyword)
+    private String entryType;
+    @Field(type = FieldType.Keyword)
+    private String entryName;
+    @Field(type = FieldType.Keyword)
+    private String entryProtocol;
+    @Field(type = FieldType.Keyword)
+    private String entryAppId;
+    @Field(type = FieldType.Keyword)
+    private String entryAppName;
+    @Field(type = FieldType.Keyword)
+    private String entryClientIp;
+    @Field(type = FieldType.Keyword)
+    private String entryTopic;
+    @Field(type = FieldType.Keyword)
+    private String entryInterface;
+    @Field(type = FieldType.Keyword)
+    private String entryMethod;
     
     @Field(type = FieldType.Integer)
     private Integer nodeCount;
@@ -246,6 +265,33 @@ public class TraceSummaryIndex implements StandardDate, Serializable {
     public void setHttpAjax(Boolean httpAjax) {
         this.httpAjax = httpAjax;
     }
+
+    public String getEntryType() { return entryType; }
+    public void setEntryType(String entryType) { this.entryType = entryType; }
+
+    public String getEntryName() { return entryName; }
+    public void setEntryName(String entryName) { this.entryName = entryName; }
+
+    public String getEntryProtocol() { return entryProtocol; }
+    public void setEntryProtocol(String entryProtocol) { this.entryProtocol = entryProtocol; }
+
+    public String getEntryAppId() { return entryAppId; }
+    public void setEntryAppId(String entryAppId) { this.entryAppId = entryAppId; }
+
+    public String getEntryAppName() { return entryAppName; }
+    public void setEntryAppName(String entryAppName) { this.entryAppName = entryAppName; }
+
+    public String getEntryClientIp() { return entryClientIp; }
+    public void setEntryClientIp(String entryClientIp) { this.entryClientIp = entryClientIp; }
+
+    public String getEntryTopic() { return entryTopic; }
+    public void setEntryTopic(String entryTopic) { this.entryTopic = entryTopic; }
+
+    public String getEntryInterface() { return entryInterface; }
+    public void setEntryInterface(String entryInterface) { this.entryInterface = entryInterface; }
+
+    public String getEntryMethod() { return entryMethod; }
+    public void setEntryMethod(String entryMethod) { this.entryMethod = entryMethod; }
 
     public Integer getNodeCount() {
         return nodeCount;

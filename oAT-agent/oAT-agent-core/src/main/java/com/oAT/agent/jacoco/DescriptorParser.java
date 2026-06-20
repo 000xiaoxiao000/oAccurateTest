@@ -14,7 +14,7 @@ public class DescriptorParser {
 
         // 提取参数类型描述符
         String parameterDescriptors = methodName.substring(methodName.indexOf('(') + 1, methodName.indexOf(')'));
-        List<Class<?>> parameterTypes = new ArrayList<>();
+        List<Class<?>> parameterTypes = new ArrayList();
 
         // 解析参数类型描述符
         if (!parameterDescriptors.isEmpty()) {
@@ -115,7 +115,7 @@ public class DescriptorParser {
         String[] paramList = params.split(",");
 
         // 第四步：取最后一个点的字符串
-        List<String> finalParams = new ArrayList<>();
+        List<String> finalParams = new ArrayList();
         for (String param : paramList) {
             String[] paramParts = param.split("\\.");
             finalParams.add(paramParts[paramParts.length - 1]);

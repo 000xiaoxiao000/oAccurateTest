@@ -97,7 +97,7 @@ public class ClassInfo {
         version = InstrSupport.getVersion(reader);
         final int asmApiVersion = InstrSupport.getAsmApiVersion(version);
         // 检查版本号是否在支持范围内
-        if (asmApiVersion < Opcodes.ASM5 || asmApiVersion > Opcodes.ASM9) {
+        if (asmApiVersion < InstrSupport.ASM5_API_VERSION || asmApiVersion > InstrSupport.ASM_API_VERSION) {
             throw new IllegalArgumentException("非法的 ASM 版本号: " + asmApiVersion);
         }
         byte[] classBytecode = reader.b; // 保存字节码
@@ -117,7 +117,7 @@ public class ClassInfo {
             this.totalBranchMap = probeCounter.getTotalBranchMap(); // 记录分支总数
         } else {
             count = 0;
-            this.totalBranchMap = new HashMap<>();
+            this.totalBranchMap = new HashMap();
             this.totalBranches = new HashMap<String, Integer>();
         }
         try {
@@ -196,7 +196,7 @@ public class ClassInfo {
                     return new MethodVisitor(asmApiVersion) {
                         private int currentLine = -1;   // 当前代码行
                         private int decisionPoints = 0; // 判定节点数
-                        private final Map<Integer, Integer> branchLineTargetCounters = new HashMap<>();
+                        private final Map<Integer, Integer> branchLineTargetCounters = new HashMap();
 
                         @Override
                         public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
@@ -324,11 +324,15 @@ public class ClassInfo {
                             if ((opcode >= Opcodes.IFEQ && opcode <= Opcodes.IF_ACMPNE) || opcode == Opcodes.IFNULL || opcode == Opcodes.IFNONNULL) {
                                 decisionPoints++;   // 每个跳转指令都是一个判定节点
                                 if (this.currentLine > 0) {
-                                    int nextTarget = branchLineTargetCounters.getOrDefault(this.currentLine, 0) + 1;
+                                    Integer currentTarget = branchLineTargetCounters.get(this.currentLine);
+                                    int nextTarget = (currentTarget == null ? 0 : currentTarget.intValue()) + 1;
                                     branchLineTargetCounters.put(this.currentLine, nextTarget);
-                                    branchLineAndTargetProbeMap
-                                            .computeIfAbsent(this.currentLine, key -> new LinkedHashSet<Integer>())
-                                            .add(nextTarget);
+                                    Set<Integer> targetProbeIds = branchLineAndTargetProbeMap.get(this.currentLine);
+                                    if (targetProbeIds == null) {
+                                        targetProbeIds = new LinkedHashSet<Integer>();
+                                        branchLineAndTargetProbeMap.put(this.currentLine, targetProbeIds);
+                                    }
+                                    targetProbeIds.add(nextTarget);
                                 }
                                 lineNumberSet.add(currentLine);
                             } else if (opcode != Opcodes.GOTO && opcode != Opcodes.JSR) {

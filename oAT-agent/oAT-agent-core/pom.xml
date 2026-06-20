@@ -10,8 +10,8 @@
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>1.7</maven.compiler.source>
+        <maven.compiler.target>1.7</maven.compiler.target>
     </properties>
 
     <dependencies>
@@ -24,8 +24,6 @@
             <groupId>com.oAT</groupId>
             <artifactId>oAT-agent-shaded</artifactId>
             <version>1.0.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/lib/oAT-agent-shaded-1.0.0.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>javax.servlet</groupId>
@@ -62,73 +60,37 @@
 
     <profiles>
         <profile>
-            <id>java8</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
+            <id>probe-jdk6</id>
             <properties>
-                <maven.compiler.source>8</maven.compiler.source>
-                <maven.compiler.target>8</maven.compiler.target>
+                <maven.compiler.source>1.6</maven.compiler.source>
+                <maven.compiler.target>1.6</maven.compiler.target>
             </properties>
         </profile>
         <profile>
-            <id>java9plus</id>
-            <activation>
-                <jdk>[9,)</jdk>
-            </activation>
+            <id>probe-jdk7</id>
             <properties>
-                <maven.compiler.source>8</maven.compiler.source>
-                <maven.compiler.target>8</maven.compiler.target>
-            </properties>
-            <!-- Note: add-modules cannot be used with target 8, removed -->
-        </profile>
-        <profile>
-            <id>java11</id>
-            <properties>
-                <maven.compiler.source>11</maven.compiler.source>
-                <maven.compiler.target>11</maven.compiler.target>
+                <maven.compiler.source>1.7</maven.compiler.source>
+                <maven.compiler.target>1.7</maven.compiler.target>
             </properties>
         </profile>
         <profile>
-            <id>java17</id>
+            <id>probe-jdk8</id>
             <properties>
-                <maven.compiler.source>17</maven.compiler.source>
-                <maven.compiler.target>17</maven.compiler.target>
-            </properties>
-        </profile>
-        <profile>
-            <id>java21</id>
-            <properties>
-                <maven.compiler.source>21</maven.compiler.source>
-                <maven.compiler.target>21</maven.compiler.target>
-            </properties>
-        </profile>
-        <profile>
-            <id>java23</id>
-            <properties>
-                <maven.compiler.source>23</maven.compiler.source>
-                <maven.compiler.target>23</maven.compiler.target>
+                <maven.compiler.source>1.8</maven.compiler.source>
+                <maven.compiler.target>1.8</maven.compiler.target>
             </properties>
         </profile>
     </profiles>
 
     <build>
-        <resources>
-            <resource>
-                <directory>${project.basedir}/lib</directory>
-                <includes>
-                    <include>oAT-agent-shaded-1.0.0.jar</include>
-                </includes>
-            </resource>
-        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <encoding>UTF-8</encoding>
-                    <source>1.8</source>
-                    <target>1.8</target>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
                 </configuration>
             </plugin>
             <plugin>
@@ -144,10 +106,6 @@
                         <configuration>
                             <!-- 确保依赖被包含 -->
                             <createDependencyReducedPom>false</createDependencyReducedPom>
-                            <extraJars>
-                                <extraJar>${project.basedir}/lib/oAT-agent-shaded-1.0.0.jar</extraJar>
-                            </extraJars>
-
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>

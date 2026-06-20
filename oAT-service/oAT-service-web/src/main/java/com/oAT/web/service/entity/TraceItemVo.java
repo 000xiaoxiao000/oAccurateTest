@@ -11,6 +11,10 @@ public class TraceItemVo implements Serializable {
     private String appId;
     private String addressIp;
     private String clientIp;// 客户端IP，即终端IP
+    private String entryType;
+    private String entryName;
+    private String displayName;
+    private String status;
 
     /**
      * @param traceId
@@ -93,5 +97,37 @@ public class TraceItemVo implements Serializable {
 
     public void setClientIp(String clientIp) {
         this.clientIp = clientIp;
+    }
+
+    public String getEntryType() {
+        return entryType;
+    }
+
+    public void setEntryType(String entryType) {
+        this.entryType = entryType;
+    }
+
+    public String getEntryName() {
+        return entryName;
+    }
+
+    public void setEntryName(String entryName) {
+        this.entryName = entryName;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 }

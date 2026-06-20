@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class AgentByteBuild {
     private final static Log logger = LogFactory.getLog(AgentByteBuild.class);
-    private static Map<Object, ClassPool> classPoolMap = new ConcurrentHashMap<>();
+    private static Map<Object, ClassPool> classPoolMap = new ConcurrentHashMap();
     private static final Object BOOTSTRAP_LOADER_KEY = new Object();
 
     private final CtClass ctClass;

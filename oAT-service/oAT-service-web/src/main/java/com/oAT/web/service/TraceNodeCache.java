@@ -1,6 +1,5 @@
 package com.oAT.web.service;
 
-import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.web.service.entity.TraceItemVo;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -29,12 +28,15 @@ public class TraceNodeCache {
         redisTemplate.opsForHash().put(nodesKey, node.getTraceNodeId(), node);
         redisTemplate.expire(nodesKey, validityTime, TimeUnit.SECONDS);
 
-        if ("0".equals(node.getTraceNodeId()) && node instanceof HttpTraceNode) {
-            TraceItemVo item = new TraceItemVo(node.getTraceId(),
-                    ((HttpTraceNode) node).getRequestUrl(),
-                    validityTime);
+        if ("0".equals(node.getTraceNodeId())) {
+            TraceEntryDescriptor descriptor = TraceEntryDescriptorBuilder.build(node);
+            TraceItemVo item = new TraceItemVo(node.getTraceId(), descriptor.getDisplayName(), validityTime);
             item.setAddressIp(node.getAddressIp());
-            item.setClientIp(((HttpTraceNode) node).getClientIp());
+            item.setClientIp(descriptor.getEntryClientIp());
+            item.setEntryType(descriptor.getEntryType());
+            item.setEntryName(descriptor.getEntryName());
+            item.setDisplayName(descriptor.getDisplayName());
+            item.setStatus(node.getStatus());
             if (node.getApp() != null) {
                 item.setAppId(node.getApp().getAppId());
             }
@@ -184,4 +186,3 @@ public class TraceNodeCache {
         boolean doFilter(TraceItemVo itemVo);
     }
 }
-

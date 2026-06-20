@@ -58,6 +58,24 @@
         "appName": {
           "type": "keyword"
         },
+        "entryType": {
+          "type": "keyword"
+        },
+        "entryName": {
+          "type": "keyword"
+        },
+        "entryProtocol": {
+          "type": "keyword"
+        },
+        "entryTopic": {
+          "type": "keyword"
+        },
+        "entryInterface": {
+          "type": "keyword"
+        },
+        "entryMethod": {
+          "type": "keyword"
+        },
         "httpClientIp": {
           "type": "keyword"
         },

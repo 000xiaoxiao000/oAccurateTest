@@ -18,7 +18,6 @@ import java.io.File;
 import java.io.InputStream;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
-import java.nio.file.Files;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
 import java.util.Enumeration;
@@ -109,7 +108,7 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
                 String className = pkg + f.getName().substring(0, f.getName().length() - 6);
                 if (isTarget(className)) {
                     try {
-                        byte[] bytes = Files.readAllBytes(f.toPath());
+                        byte[] bytes = readFile(f);
                         processClass(bytes, className);
                     } catch (Throwable t) {
                         // ignore
@@ -120,7 +119,9 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
     }
 
     private void scanJar(File jarFile) {
-        try (JarFile jar = new JarFile(jarFile)) {
+        JarFile jar = null;
+        try {
+            jar = new JarFile(jarFile);
             Enumeration<JarEntry> entries = jar.entries();
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
@@ -128,7 +129,9 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
                     String className = entry.getName().replace('/', '.');
                     className = className.substring(0, className.length() - 6);
                     if (isTarget(className)) {
-                        try (InputStream is = jar.getInputStream(entry)) {
+                        InputStream is = null;
+                        try {
+                            is = jar.getInputStream(entry);
                             ByteArrayOutputStream buffer = new ByteArrayOutputStream();
                             int nRead;
                             byte[] data = new byte[1024];
@@ -138,12 +141,47 @@ public class CodeStaticStackCollect implements ClassFileTransformer {
                             processClass(buffer.toByteArray(), className);
                         } catch (Throwable t) {
                             // ignore
+                        } finally {
+                            if (is != null) {
+                                try {
+                                    is.close();
+                                } catch (Throwable ignore) {
+                                }
+                            }
                         }
                     }
                 }
             }
         } catch (Throwable t) {
             // ignore
+        } finally {
+            if (jar != null) {
+                try {
+                    jar.close();
+                } catch (Throwable ignore) {
+                }
+            }
+        }
+    }
+
+    private byte[] readFile(File file) throws java.io.IOException {
+        InputStream input = null;
+        try {
+            input = new java.io.FileInputStream(file);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            return output.toByteArray();
+        } finally {
+            if (input != null) {
+                try {
+                    input.close();
+                } catch (Throwable ignore) {
+                }
+            }
         }
     }
 

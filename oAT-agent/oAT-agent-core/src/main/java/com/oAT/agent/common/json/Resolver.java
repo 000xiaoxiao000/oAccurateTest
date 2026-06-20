@@ -33,17 +33,17 @@ import java.util.*;
  */
 abstract class Resolver
 {
-    final Collection<UnresolvedReference> unresolvedRefs = new ArrayList<>();
+    final Collection<UnresolvedReference> unresolvedRefs = new ArrayList();
     protected final JsonReader reader;
     private static final NullClass nullReader = new NullClass();
-    final Map<Class, JsonReader.JsonClassReaderBase> readerCache = new HashMap<>();
+    final Map<Class, JsonReader.JsonClassReaderBase> readerCache = new HashMap();
     private final Collection<Object[]> prettyMaps = new ArrayList<Object[]>();
     private final boolean useMaps;
     private final Object unknownClass;
     private final boolean failOnUnknownType;
-    private final static Map<String, Class> coercedTypes = new LinkedHashMap<>();
+    private final static Map<String, Class> coercedTypes = new LinkedHashMap();
     // store the missing field found during deserialization to notify any client after the complete resolution is done
-    protected final Collection<Missingfields> missingFields = new ArrayList<>();
+    protected final Collection<Missingfields> missingFields = new ArrayList();
 
     static {
         coercedTypes.put("java.util.Arrays$ArrayList", ArrayList.class);
@@ -248,7 +248,7 @@ abstract class Resolver
 
     private static Object[] buildCollection(Deque<JsonObject<String, Object>> stack, Object[] items, int size)
     {
-        final JsonObject<String, Object> jsonCollection = new JsonObject<>();
+        final JsonObject<String, Object> jsonCollection = new JsonObject();
         jsonCollection.put("@items", items);
         final Object[] javaKeys = new Object[size];
         jsonCollection.target = javaKeys;

@@ -1,9 +1,7 @@
 package com.oAT.web.service.impl;
 
 import com.alibaba.excel.EasyExcel;
-import com.oAT.agent.model.HttpTraceNode;
-import com.oAT.agent.model.StackNodeVo;
-import com.oAT.agent.model.TraceNode;
+import com.oAT.agent.model.*;
 import com.oAT.web.common.CoverageMethodKeyUtil;
 import com.oAT.web.common.CoverageSourceClassUtil;
 import com.oAT.web.common.FriendlyErrorMessageUtil;
@@ -935,30 +933,16 @@ public class CoverageServiceImpl implements CoverageService, InitializingBean, S
         List<StackNodeVo> codeNodes = coverageStorage.load(traceId);
         
         if (codeNodes.isEmpty()) {
-            Optional<TraceNodeIndex> rootOptional = traceNodeRepository.findById(traceId + "_0");
-            TraceNode rootNode = rootOptional.map(TraceNodeIndex::toTraceNode).orElse(null);
-
-            if (!(rootNode instanceof HttpTraceNode)) {
-                List<TraceNodeIndex> traceNodes = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
-                for (TraceNodeIndex traceNodeIndex : traceNodes) {
-                    TraceNode node = traceNodeIndex.toTraceNode();
-                    if (node instanceof HttpTraceNode) {
-                        rootNode = node;
+            List<TraceNodeIndex> traceNodes = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 200));
+            for (TraceNodeIndex traceNodeIndex : traceNodes) {
+                TraceNode node = traceNodeIndex.toTraceNode();
+                if (node instanceof CodeNodeBean) {
+                    StackNodeVo[] legacyCodeNodes = ((CodeNodeBean) node).getCodeNodes();
+                    if (legacyCodeNodes != null && legacyCodeNodes.length > 0) {
+                        codeNodes = Arrays.asList(legacyCodeNodes);
                         break;
                     }
                 }
-            }
-
-            if (!(rootNode instanceof HttpTraceNode)) {
-                String nodeType = rootNode != null ? rootNode.getClass().getSimpleName() : "null";
-                logger.debug("跳过覆盖率合并：traceId={} 不是 HTTP 请求（节点类型: {}），仅 HTTP 请求包含代码覆盖率数据", traceId, nodeType);
-                return;
-            }
-
-            HttpTraceNode httpNode = (HttpTraceNode) rootNode;
-            StackNodeVo[] legacyCodeNodes = httpNode.getCodeNodes();
-            if (legacyCodeNodes != null && legacyCodeNodes.length > 0) {
-                codeNodes = Arrays.asList(legacyCodeNodes);
             }
         }
 

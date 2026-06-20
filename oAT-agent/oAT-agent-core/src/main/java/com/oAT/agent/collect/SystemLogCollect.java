@@ -91,8 +91,8 @@ public class SystemLogCollect {
         logger.info("[Agent-info]完成 SystemLog 采集器初始化.");
     }
 
-    private ThreadLocal<OutputStream> writersOut = new InheritableThreadLocal<>();
-    private ThreadLocal<OutputStream> writersErr = new InheritableThreadLocal<>();
+    private ThreadLocal<OutputStream> writersOut = new InheritableThreadLocal();
+    private ThreadLocal<OutputStream> writersErr = new InheritableThreadLocal();
 
     private OutputStream getOutPut() {
         return writersOut.get();

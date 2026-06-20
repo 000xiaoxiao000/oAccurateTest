@@ -46,7 +46,7 @@ public class TraceGraphParse {
         for (Map.Entry<String, TraceNode> m : nodes.entrySet()) {
             // 构建客户端根节点
             if ("0".equals(m.getValue().getTraceNodeId())) {
-                ClientGraphNode clientNode = new ClientGraphNode((HttpTraceNode) m.getValue());
+                ClientGraphNode clientNode = new ClientGraphNode(m.getValue());
                 graphNodesMap.put(clientNode.getId(), clientNode);
                 if (m.getValue() instanceof HttpTraceNode) {
                     clientNode.setIp(((HttpTraceNode) m.getValue()).getClientIp());
@@ -138,10 +138,12 @@ public class TraceGraphParse {
             // 关系起始节点
             String fromId = group.getId();
             if (group instanceof ClientGraphNode) {
-                HttpTraceNode traceNode = ((ClientGraphNode) group).getTraceNode();
+                TraceNode traceNode = ((ClientGraphNode) group).getTraceNode();
                 if (traceNode != null) {
-                    String toId = traceNode.getApp().getAppId();
-                    buildEdges(fromId, toId, traceNode);
+                    String toId = traceNode.getApp() != null ? traceNode.getApp().getAppId() : null;
+                    if (toId != null) {
+                        buildEdges(fromId, toId, traceNode);
+                    }
                 }
             } else if (group instanceof ApplicationGraphNode) {
                 for (DubboTraceNode dubboNode : ((ApplicationGraphNode) group).getDubboNodes()) {

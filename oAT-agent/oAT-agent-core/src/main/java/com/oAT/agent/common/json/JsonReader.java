@@ -232,19 +232,19 @@ public class JsonReader implements Closeable
         public Object newInstance(Class c) {
             if (List.class.isAssignableFrom(c))
             {
-                return new ArrayList<>();
+                return new ArrayList();
             }
             else if (SortedSet.class.isAssignableFrom(c))
             {
-                return new TreeSet<>();
+                return new TreeSet();
             }
             else if (Set.class.isAssignableFrom(c))
             {
-                return new LinkedHashSet<>();
+                return new LinkedHashSet();
             }
             else if (Collection.class.isAssignableFrom(c))
             {
-                return new ArrayList<>();
+                return new ArrayList();
             }
             throw new JsonIoException("CollectionFactory handed Class for which it was not expecting: " + c.getName());
         }
@@ -263,11 +263,11 @@ public class JsonReader implements Closeable
         public Object newInstance(Class c) {
             if (SortedMap.class.isAssignableFrom(c))
             {
-                return new TreeMap<>();
+                return new TreeMap();
             }
             else if (Map.class.isAssignableFrom(c))
             {
-                return new LinkedHashMap<>();
+                return new LinkedHashMap();
             }
             throw new JsonIoException("MapFactory handed Class for which it was not expecting: " + c.getName());
         }
@@ -387,7 +387,7 @@ public class JsonReader implements Closeable
         if (optionalArgs == null)
         {
             int initialCapacity = json == null ? 16 : Math.max(16, json.length() / 100);
-            optionalArgs = new HashMap<>((int) (initialCapacity / 0.75f) + 1);
+            optionalArgs = new HashMap((int) (initialCapacity / 0.75f) + 1);
             optionalArgs.put(USE_MAPS, false);
         }
         if (!optionalArgs.containsKey(USE_MAPS))
@@ -414,7 +414,7 @@ public class JsonReader implements Closeable
     {
         if (optionalArgs == null)
         {
-            optionalArgs = new HashMap<>(2);
+            optionalArgs = new HashMap(2);
             optionalArgs.put(USE_MAPS, false);
         }
         if (!optionalArgs.containsKey(USE_MAPS))
@@ -603,7 +603,7 @@ public class JsonReader implements Closeable
         if (typeNames != null)
         { // Reverse the Map (this allows the users to only have a Map from type to short-hand name,
             // and not keep a 2nd map from short-hand name to type.
-            Map<String, String> typeNameMap = new HashMap<>();
+            Map<String, String> typeNameMap = new HashMap();
             for (Map.Entry<String, String> entry : typeNames.entrySet())
             {
                 typeNameMap.put(entry.getValue(), entry.getKey());

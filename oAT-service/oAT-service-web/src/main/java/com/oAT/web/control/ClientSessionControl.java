@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.oAT.agent.model.*;
 import com.oAT.server.model.ClientInfoVo;
 import com.oAT.server.model.ClientSessionVo;
+import com.oAT.web.coverage.CoverageStorage;
 import com.oAT.web.service.ClientSessionService;
 import com.cedarsoftware.util.io.JsonWriter;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,6 +32,8 @@ public class ClientSessionControl {
     ClientSessionService sessionService;
     @Autowired
     private ObjectMapper objectMapper;
+    @Autowired
+    private CoverageStorage coverageStorage;
 
     @PostMapping("/upload")
     @ResponseBody
@@ -61,6 +64,38 @@ public class ClientSessionControl {
 
             sessionService.putTraceNode(node);
         } catch (IOException | ClassNotFoundException e) {
+            throw new IllegalArgumentException(e.getMessage());
+        }
+        return "succeed";
+    }
+
+    @PostMapping("/coverage/upload")
+    @ResponseBody
+    public String uploadCoverage(String sessionId, String data) {
+        Assert.notNull(sessionId, "param 'sessionId' must be not null");
+        Assert.notNull(data, "param 'data' must be not null");
+        ClientSessionVo session = sessionService.getClientSession(sessionId);
+        Assert.notNull(session, "非法的请求，找不到会话id=" + sessionId);
+        if (session.getApplication() == null) {
+            logger.warn("采集器未绑定应用，忽略覆盖率数据，sessionId={}", sessionId);
+            return "fail";
+        }
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        try {
+            CoverageUploadVo upload = objectMapper.readValue(data, CoverageUploadVo.class);
+            if (!sessionId.equals(upload.getSessionId())) {
+                logger.warn("覆盖率上报 sessionId 不一致，paramSessionId={}, bodySessionId={}", sessionId, upload.getSessionId());
+                upload.setSessionId(sessionId);
+            }
+            Assert.hasText(upload.getTraceId(), "param 'traceId' must be not blank");
+            StackNodeVo[] codeNodes = upload.getCodeNodes();
+            if (codeNodes == null || codeNodes.length == 0) {
+                return "succeed";
+            }
+            coverageStorage.asyncStore(upload.getTraceId(), codeNodes);
+            logger.debug("接收覆盖率数据成功，sessionId={}, traceId={}, entryType={}, entryName={}, nodes={}",
+                    sessionId, upload.getTraceId(), upload.getEntryType(), upload.getEntryName(), codeNodes.length);
+        } catch (IOException e) {
             throw new IllegalArgumentException(e.getMessage());
         }
         return "succeed";

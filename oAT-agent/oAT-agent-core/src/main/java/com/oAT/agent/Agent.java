@@ -12,10 +12,7 @@ import java.io.*;
 import java.lang.instrument.Instrumentation;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.nio.file.Files;
-import java.util.Arrays;
 import java.util.Properties;
-import java.util.stream.Collectors;
 
 public class Agent {
     private final static Log logger = LogFactory.getLog(Agent.class);
@@ -169,8 +166,11 @@ public class Agent {
             "sandbox.http-client-v3.enabled", "sandbox.http-client-v4.enabled", "sandbox.feign.enabled",
             "sandbox.dubbo.enabled", "sandbox.sofa-rpc.enabled", "sandbox.mq-producer.enabled",
             "sandbox.mq-consumer.enabled", "sandbox.redis.enabled", "sandbox.redisson.enabled",
-            "sandbox.coverage.enabled", "sandbox.system-log.enabled", "sandbox.thread-pool.enabled",
-            "collect.threadPool",
+            "sandbox.coverage.enabled", "sandbox.system-log.enabled",
+            "sandbox.context-propagation.enabled", "sandbox.context-propagation.executor",
+            "sandbox.context-propagation.scheduled", "sandbox.context-propagation.spring",
+            "sandbox.context-propagation.forkjoin",
+            "sandbox.context-propagation.completable-future",
             //HTTP 请求与响应采集
             "collect.HttpServlet",
             "collect.httpRequestParams", "collect.httpRequestBody", "collect.httpResponseBody",
@@ -215,7 +215,7 @@ public class Agent {
         }
 
         for (String s : properties.stringPropertyNames()) {
-            boolean containsKey = Arrays.stream(AGENT_CONFIG_KEYS).anyMatch(s::contains);
+            boolean containsKey = containsConfigKey(s);
             if (!containsKey) {
                 throw new IllegalArgumentException("[Agent-EXCError]配置文件中存在非法的参数: " + s);
             }
@@ -224,19 +224,47 @@ public class Agent {
         return properties;
     }
 
+    private static boolean containsConfigKey(String propertyName) {
+        if (propertyName == null) {
+            return false;
+        }
+        for (int i = 0; i < AGENT_CONFIG_KEYS.length; i++) {
+            if (propertyName.indexOf(AGENT_CONFIG_KEYS[i]) >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean loadPropertiesFromFile(File file, Properties properties, String encodingName) {
         if (!file.exists() || file.isDirectory()) {
             return false;
         } else {
-            try (InputStream inputStream = Files.newInputStream(file.toPath());
-                 Reader reader = new InputStreamReader(inputStream, safeCharset(encodingName))) {
+            InputStream inputStream = null;
+            Reader reader = null;
+            try {
+                inputStream = new FileInputStream(file);
+                reader = new InputStreamReader(inputStream, safeCharset(encodingName));
                 properties.load(reader);
                 logger.debug("[Agent-debug]已使用编码(" + safeCharset(encodingName).name() + ")加载配置文件: " + file.getPath());
                 return true;
             } catch (IOException ioException) {
                 logger.error("[Agent-EXCError]读取配置文件失败: " + file.getPath() + StackTraceFormatter.formatExceptionWithAgentMark(ioException));
                 return false;
+            } finally {
+                closeQuietly(reader);
+                closeQuietly(inputStream);
             }
+        }
+    }
+
+    private static void closeQuietly(Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (IOException ignored) {
         }
     }
 
@@ -316,9 +344,19 @@ public class Agent {
         if (arg == null || arg.trim().isEmpty()) {
             return arg;
         }
-        return Arrays.stream(arg.split(","))
-                .filter(item -> !item.trim().startsWith("action="))
-                .collect(Collectors.joining(","));
+        String[] parts = arg.split(",");
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            String item = parts[i];
+            if (item == null || item.trim().startsWith("action=")) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(',');
+            }
+            builder.append(item);
+        }
+        return builder.toString();
     }
 
     private static Properties parseArgProperties(String arg) {

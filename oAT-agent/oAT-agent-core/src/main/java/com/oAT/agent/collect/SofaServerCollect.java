@@ -5,10 +5,10 @@ import com.oAT.agent.collect.sofaRPC.SofaRequestAdapter;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.context.AgentContext;
 import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.jacoco.data.StackNodeVoBuilder;
 import com.oAT.agent.model.SofaRpcRemoteTraceNode;
-import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 拦截目标：Sofa RPC Server端 ProviderInvoker
@@ -70,10 +71,13 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
             TraceSession traceSession = traceContext.getTraceSession();
             String traceId;
             String traceNodeId = "0";
-            if (request != null && traceSession != null) {
+            if (request != null) {
                 traceSession = traceContext.openTraceSession(TARGET_CLASS, TARGET_METHOD, request);
-                traceId = traceSession.getTraceId();
-                traceNodeId = traceSession.getParentNodeId() + ".remote";
+                if (traceSession == null) {
+                    return null;
+                }
+                traceId = request.getTraceId();
+                traceNodeId = request.getParentNodeCallId() + ".remote";
             } else {
                 request = new TraceRequest();
                 request.setParentNodeCallId("0");
@@ -84,6 +88,9 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
                 request.setProperties(new Properties());
 
                 traceSession = traceContext.openTraceSession(TARGET_CLASS, TARGET_METHOD, request);
+                if (traceSession == null) {
+                    return null;
+                }
             }
             SofaRpcRemoteTraceNode node = new SofaRpcRemoteTraceNode();
             node.setTraceId(traceId);
@@ -101,9 +108,8 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
             SofaRpcRemoteTraceNodeWrapper wrapper = new SofaRpcRemoteTraceNodeWrapper(traceSession, node);
 
             // 仅在配置开启时采集代码堆栈
-            if (traceContext.getConfig("codeStack.include") != null
-                    || traceContext.getConfig("conf_codeStack.include") != null) {
-                wrapper.coverageCollector = CoverageCollector.begin();
+            if (AsyncCoverageSupport.enabled(traceContext) && AgentContext.getCoverageCollector() == null) {
+                wrapper.coverageCollector = AsyncCoverageSupport.begin(wrapper);
             }
             return wrapper;
         } catch (Throwable t) {
@@ -144,6 +150,7 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
     }
 
     public void end(SofaRpcRemoteTraceNodeWrapper nodeWrapper, Object[] parames, Object result) {
+        boolean deferred = false;
         try {
             TraceSession traceSession = traceContext.getTraceSession();
             if (nodeWrapper == null || traceSession == null) {
@@ -168,15 +175,16 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
             // 采集代码堆栈
             try {
                 if (nodeWrapper.coverageCollector != null) {
-                    nodeWrapper.coverageCollector = CoverageCollector.end();
-                    if (nodeWrapper.coverageCollector != null && !nodeWrapper.coverageCollector.getProbeSnapshots().isEmpty()) {
-                        try {
-                            StackNodeVo[] codeNodes = new StackNodeVoBuilder()
-                                    .buildCodeNodes(nodeWrapper.coverageCollector);
-                            node.setCodeNodes(codeNodes);
-                        } catch (Throwable t) {
-                            logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
-                        }
+                    if (AgentContext.hasPendingAsyncTasks()) {
+                        deferred = true;
+                        nodeWrapper.markDeferred();
+                        AtomicInteger activeAsyncTaskCount = AgentContext.getActiveAsyncTaskCount();
+                        int pendingAsyncTasks = activeAsyncTaskCount == null ? 0 : activeAsyncTaskCount.get();
+                        nodeWrapper.detachCurrentThreadContext();
+                        logger.info("[Agent-info]SofaServerCollect 检测到异步任务仍在执行，延迟覆盖率汇总，pendingAsyncTasks="
+                                + pendingAsyncTasks + ", traceId=" + node.getTraceId());
+                    } else {
+                        nodeWrapper.collectCoverage();
                     }
                 }
             } catch (Throwable t) {
@@ -189,7 +197,7 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
             logger.error("[Agent-EXCError]end failed: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         } finally {
             //关闭会话
-            if (nodeWrapper != null && "0".equals(nodeWrapper.getSofaRpcRemoteTraceNode().getTraceNodeId())) {
+            if (!deferred && nodeWrapper != null && "0".equals(nodeWrapper.getSofaRpcRemoteTraceNode().getTraceNodeId())) {
                 nodeWrapper.doDestroy();
             }
         }
@@ -206,27 +214,85 @@ public class SofaServerCollect extends AbstractByteTransformCollect implements I
         }
     }
 
-    public class SofaRpcRemoteTraceNodeWrapper implements ISessionDestroy {
+    public class SofaRpcRemoteTraceNodeWrapper implements ISessionDestroy, AgentContext.AsyncCompletionListener {
         private final TraceSession session;
         private final SofaRpcRemoteTraceNode node;
         // 覆盖率数据聚合器
         private CoverageCollector coverageCollector;
+        private boolean deferred;
+        private boolean destroyed;
 
         public SofaRpcRemoteTraceNodeWrapper(TraceSession session, SofaRpcRemoteTraceNode node) {
             this.session = session;
             this.node = node;
         }
 
+        public void onAsyncComplete(TraceSession traceSession) {
+            if (traceSession == null || !traceSession.getTraceId().equals(this.session.getTraceId())) {
+                return;
+            }
+            if (!deferred) {
+                return;
+            }
+            try {
+                clearDeferred();
+                collectCoverage();
+                if (node.getCodeNodes() != null && node.getCodeNodes().length > 0) {
+                    session.saveNode(node);
+                }
+            } catch (Throwable t) {
+                logger.error("[Agent-EXCError]SofaServerCollect 异步覆盖率补报失败: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            } finally {
+                if ("0".equals(node.getTraceNodeId())) {
+                    doDestroy();
+                }
+            }
+        }
+
+        private void collectCoverage() {
+            if (coverageCollector == null) {
+                return;
+            }
+            coverageCollector.collectSnapshots();
+            if (!coverageCollector.getProbeSnapshots().isEmpty()) {
+                try {
+                    StackNodeVo[] codeNodes = new StackNodeVoBuilder().buildCodeNodes(coverageCollector);
+                    node.setCodeNodes(codeNodes);
+                } catch (Throwable t) {
+                    logger.error("[Agent-EXCError]buildCodeNodes 异常: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                }
+            }
+        }
+
+        private void markDeferred() {
+            this.deferred = true;
+        }
+
+        private void clearDeferred() {
+            this.deferred = false;
+        }
+
         @Override
         public void doDestroy() {
+            if (destroyed || deferred) {
+                return;
+            }
+            destroyed = true;
             try {
-                if (coverageCollector != null) {
-                    CoverageCollector.remove();
-                }
+                detachCurrentThreadContext();
                 traceContext.closeTraceSession(session);
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]doDestroy error: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
+        }
+
+        private void detachCurrentThreadContext() {
+            if (coverageCollector != null) {
+                CoverageCollector.remove();
+            }
+            AgentContext.removeCoverageCollector();
+            AgentContext.removeActiveAsyncTaskCount();
+            AgentContext.removeAsyncCompletionListener();
         }
 
         public SofaRpcRemoteTraceNode getSofaRpcRemoteTraceNode() {

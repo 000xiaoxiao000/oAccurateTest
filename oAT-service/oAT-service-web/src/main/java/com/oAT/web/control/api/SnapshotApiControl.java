@@ -4,6 +4,7 @@ import com.oAT.web.common.DateUtil;
 import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.agent.model.Application;
 import com.oAT.agent.model.CKSqlTraceNode;
+import com.oAT.agent.model.CodeNodeBean;
 import com.oAT.agent.model.DubboTraceNode;
 import com.oAT.agent.model.FeignTraceNode;
 import com.oAT.agent.model.HttpClientTraceNode;
@@ -24,6 +25,7 @@ import com.oAT.web.control.entity.GraphNode;
 import com.oAT.web.control.entity.GraphView;
 import com.oAT.web.control.entity.RedisGraphNode;
 import com.oAT.web.control.entity.SqlTraceGroup;
+import com.oAT.web.coverage.CoverageStorage;
 import com.oAT.web.domain.RemoteCallResolver;
 import com.oAT.web.esDao.ApiEndpointRepository;
 import com.oAT.web.esDao.SnapshotCommitMappingRepository;
@@ -106,6 +108,7 @@ public class SnapshotApiControl {
     private final ApiEndpointRepository apiEndpointRepository;
     private final SnapshotCommitMappingRepository snapshotCommitMappingRepository;
     private final ClientSessionService clientSessionService;
+    private final CoverageStorage coverageStorage;
 
     public SnapshotApiControl(SnapshotService snapshotService,
                               SystemSnapshotService systemSnapshotService,
@@ -118,7 +121,8 @@ public class SnapshotApiControl {
                               ApiEndpointAnalysisService apiEndpointAnalysisService,
                               ApiEndpointRepository apiEndpointRepository,
                               SnapshotCommitMappingRepository snapshotCommitMappingRepository,
-                              ClientSessionService clientSessionService) {
+                              ClientSessionService clientSessionService,
+                              CoverageStorage coverageStorage) {
         this.snapshotService = snapshotService;
         this.systemSnapshotService = systemSnapshotService;
         this.projectService = projectService;
@@ -131,6 +135,7 @@ public class SnapshotApiControl {
         this.apiEndpointRepository = apiEndpointRepository;
         this.snapshotCommitMappingRepository = snapshotCommitMappingRepository;
         this.clientSessionService = clientSessionService;
+        this.coverageStorage = coverageStorage;
     }
 
 
@@ -1026,14 +1031,8 @@ public class SnapshotApiControl {
         Map<String, Set<String>> methodTotalBranchTargets = new HashMap<>();
         Map<String, Set<String>> methodCoveredBranchTargets = new HashMap<>();
 
-        for (com.oAT.agent.model.TraceNode node : snapshotService.getTraceNodes(snapshot.getTraceId())) {
-            if (!(node instanceof com.oAT.agent.model.HttpTraceNode)) {
-                continue;
-            }
-            com.oAT.agent.model.StackNodeVo[] codeNodes = ((com.oAT.agent.model.HttpTraceNode) node).getCodeNodes();
-            if (codeNodes == null) {
-                continue;
-            }
+        com.oAT.agent.model.StackNodeVo[] codeNodes = loadTraceCodeNodes(snapshot.getTraceId());
+        if (codeNodes != null) {
             for (com.oAT.agent.model.StackNodeVo codeNode : codeNodes) {
                 if (codeNode == null || !StringUtils.hasText(codeNode.getClassName())) {
                     continue;
@@ -1155,10 +1154,7 @@ public class SnapshotApiControl {
 
         Map<String, ClassCoverageIndex.MethodCoverageDetail> methodMap = new LinkedHashMap<>();
         for (com.oAT.agent.model.TraceNode node : snapshotService.getTraceNodes(snapshot.getTraceId())) {
-            if (!(node instanceof com.oAT.agent.model.HttpTraceNode)) {
-                continue;
-            }
-            com.oAT.agent.model.StackNodeVo[] codeNodes = ((com.oAT.agent.model.HttpTraceNode) node).getCodeNodes();
+            com.oAT.agent.model.StackNodeVo[] codeNodes = loadCodeNodes(snapshot.getTraceId(), node);
             if (codeNodes == null) {
                 continue;
             }
@@ -1263,10 +1259,8 @@ public class SnapshotApiControl {
             return;
         }
         TraceNode traceNode = snapshotService.getTraceNode(traceId, "0");
-        if (traceNode instanceof HttpTraceNode) {
-            StackNodeVo[] codeNodes = ((HttpTraceNode) traceNode).getCodeNodes();
-            graphView.setHasCodeLayer(codeNodes != null && codeNodes.length > 0);
-        }
+        StackNodeVo[] codeNodes = loadCodeNodes(traceId, traceNode);
+        graphView.setHasCodeLayer(codeNodes != null && codeNodes.length > 0);
     }
 
     private Map<String, com.oAT.agent.model.TraceNode> buildTraceNodeMap(String traceId) {
@@ -1277,6 +1271,56 @@ public class SnapshotApiControl {
             }
         }
         return nodeMap;
+    }
+
+    private StackNodeVo[] loadCodeNodes(String traceId, TraceNode node) {
+        if (StringUtils.hasText(traceId)) {
+            List<StackNodeVo> stored = coverageStorage.load(traceId);
+            if (stored != null && !stored.isEmpty()) {
+                if (node == null || "0".equals(node.getTraceNodeId())) {
+                    return stored.toArray(new StackNodeVo[0]);
+                }
+                return null;
+            }
+        }
+        if (node instanceof CodeNodeBean) {
+            return ((CodeNodeBean) node).getCodeNodes();
+        }
+        return null;
+    }
+
+    private StackNodeVo[] loadCodeNodes(TraceNode node) {
+        return node == null ? null : loadCodeNodes(node.getTraceId(), node);
+    }
+
+    private StackNodeVo[] loadTraceCodeNodes(String traceId) {
+        if (!StringUtils.hasText(traceId)) {
+            return null;
+        }
+        List<StackNodeVo> stored = coverageStorage.load(traceId);
+        if (stored != null && !stored.isEmpty()) {
+            return stored.toArray(new StackNodeVo[0]);
+        }
+        List<StackNodeVo> merged = new ArrayList<>();
+        for (TraceNode node : snapshotService.getTraceNodes(traceId)) {
+            if (node instanceof CodeNodeBean) {
+                StackNodeVo[] codeNodes = ((CodeNodeBean) node).getCodeNodes();
+                if (codeNodes != null && codeNodes.length > 0) {
+                    merged.addAll(Arrays.asList(codeNodes));
+                }
+            }
+        }
+        return merged.isEmpty() ? null : merged.toArray(new StackNodeVo[0]);
+    }
+
+    private String resolveEntryGroupName(TraceNode traceNode) {
+        if (traceNode instanceof HttpTraceNode) {
+            return ((HttpTraceNode) traceNode).getRequestUrl();
+        }
+        if (traceNode == null) {
+            return "unknown";
+        }
+        return traceNode.toType();
     }
 
     private String resolveSaveAsSystemAppId(SaveAsSystemSnapshotRequest request, SnapshotVo sourceSnapshot, SystemSnapshot sourceSystemSnapshot) {
@@ -1431,8 +1475,9 @@ public class SnapshotApiControl {
         if (graphNode instanceof ClientGraphNode) {
             ClientGraphNode clientNode = (ClientGraphNode) graphNode;
             payload.setTitle(clientNode.getTitle());
-            HttpTraceNode node = clientNode.getTraceNode();
-            if (node != null) {
+            TraceNode traceNode = clientNode.getTraceNode();
+            if (traceNode instanceof HttpTraceNode) {
+                HttpTraceNode node = (HttpTraceNode) traceNode;
                 payload.getStats().put("requestUrl", node.getRequestUrl());
                 payload.getStats().put("requestMethod", node.getRequestMethod());
                 payload.getStats().put("responseCode", node.getResponseCode());
@@ -1834,20 +1879,18 @@ public class SnapshotApiControl {
         String appId = resolveMySnapshotAppId(snapshot);
 
         com.oAT.agent.model.TraceNode rootNode = snapshotService.getTraceNode(snapshot.getTraceId(), "0");
-        if (rootNode instanceof com.oAT.agent.model.HttpTraceNode) {
-            com.oAT.agent.model.StackNodeVo[] codeNodes = ((com.oAT.agent.model.HttpTraceNode) rootNode).getCodeNodes();
-            if (codeNodes != null) {
-                for (com.oAT.agent.model.StackNodeVo codeNode : codeNodes) {
-                    String methodKey = codeNode.getMethodName() + "#" + codeNode.getMethodDescriptor();
-                    classMethods.computeIfAbsent(codeNode.getClassName(), key -> new LinkedHashSet<>()).add(methodKey);
-                    if (codeNode.getDoLines() != null) {
-                        methodCoveredLines.computeIfAbsent(methodKey, key -> new LinkedHashSet<>()).addAll(codeNode.getDoLines());
-                    }
-                    if (codeNode.getExecuteBranch() != null) {
-                        methodCoveredBranches.computeIfAbsent(methodKey, key -> new LinkedHashSet<>()).addAll(codeNode.getExecuteBranch());
-                    }
-                    addBranchTargetKeys(methodCoveredBranchTargets, methodKey, codeNode.getExecuteBranchTargetProbeMap(), null);
+        com.oAT.agent.model.StackNodeVo[] codeNodes = loadCodeNodes(snapshot.getTraceId(), rootNode);
+        if (codeNodes != null) {
+            for (com.oAT.agent.model.StackNodeVo codeNode : codeNodes) {
+                String methodKey = codeNode.getMethodName() + "#" + codeNode.getMethodDescriptor();
+                classMethods.computeIfAbsent(codeNode.getClassName(), key -> new LinkedHashSet<>()).add(methodKey);
+                if (codeNode.getDoLines() != null) {
+                    methodCoveredLines.computeIfAbsent(methodKey, key -> new LinkedHashSet<>()).addAll(codeNode.getDoLines());
                 }
+                if (codeNode.getExecuteBranch() != null) {
+                    methodCoveredBranches.computeIfAbsent(methodKey, key -> new LinkedHashSet<>()).addAll(codeNode.getExecuteBranch());
+                }
+                addBranchTargetKeys(methodCoveredBranchTargets, methodKey, codeNode.getExecuteBranchTargetProbeMap(), null);
             }
         }
 
@@ -1961,17 +2004,12 @@ public class SnapshotApiControl {
 
         for (SnapshotVo snapshot : snapshots) {
             TraceNode traceNode = snapshotService.getTraceNode(snapshot.getTraceId(), "0");
-            if (!(traceNode instanceof HttpTraceNode)) {
-                continue;
-            }
-
-            HttpTraceNode httpTraceNode = (HttpTraceNode) traceNode;
-            StackNodeVo[] codeNodes = httpTraceNode.getCodeNodes();
+            StackNodeVo[] codeNodes = loadCodeNodes(snapshot.getTraceId(), traceNode);
             if (codeNodes == null || codeNodes.length == 0) {
                 continue;
             }
 
-            String requestUrl = httpTraceNode.getRequestUrl();
+            String requestUrl = resolveEntryGroupName(traceNode);
             Map<String, List<MySnapshotCodeRelationshipMethodSummary>> childNodes =
                     codeRelationships.computeIfAbsent(requestUrl, key -> new LinkedHashMap<>());
 
@@ -2157,11 +2195,7 @@ public class SnapshotApiControl {
             return new ArrayList<>();
         }
         TraceNode traceNode = snapshotService.getTraceNode(traceId, "0");
-        if (!(traceNode instanceof HttpTraceNode)) {
-            return new ArrayList<>();
-        }
-        HttpTraceNode httpTraceNode = (HttpTraceNode) traceNode;
-        StackNodeVo[] codeNodes = httpTraceNode.getCodeNodes();
+        StackNodeVo[] codeNodes = loadCodeNodes(traceId, traceNode);
         if (codeNodes == null || codeNodes.length == 0) {
             return new ArrayList<>();
         }
@@ -2179,7 +2213,7 @@ public class SnapshotApiControl {
         Map<String, Set<String>> methodTotalBranchTargets = new HashMap<>();
         Map<String, Set<String>> methodCoveredBranchTargets = new HashMap<>();
 
-        String requestUrl = httpTraceNode.getRequestUrl();
+        String requestUrl = resolveEntryGroupName(traceNode);
         Map<String, List<MySnapshotCodeRelationshipMethodSummary>> childNodes =
                 codeRelationships.computeIfAbsent(requestUrl, key -> new LinkedHashMap<>());
 
@@ -2295,10 +2329,7 @@ public class SnapshotApiControl {
         Map<String, ClassCoverageIndex.MethodCoverageDetail> methodMap = new LinkedHashMap<>();
         for (SnapshotVo snapshot : snapshots) {
             TraceNode traceNode = snapshotService.getTraceNode(snapshot.getTraceId(), "0");
-            if (!(traceNode instanceof HttpTraceNode)) {
-                continue;
-            }
-            StackNodeVo[] codeNodes = ((HttpTraceNode) traceNode).getCodeNodes();
+            StackNodeVo[] codeNodes = loadCodeNodes(snapshot.getTraceId(), traceNode);
             if (codeNodes == null) {
                 continue;
             }
@@ -2431,10 +2462,7 @@ public class SnapshotApiControl {
 
         Map<String, ClassCoverageIndex.MethodCoverageDetail> methodMap = new LinkedHashMap<>();
         for (com.oAT.agent.model.TraceNode node : snapshotService.getTraceNodes(snapshot.getTraceId())) {
-            if (!(node instanceof com.oAT.agent.model.HttpTraceNode)) {
-                continue;
-            }
-            com.oAT.agent.model.StackNodeVo[] codeNodes = ((com.oAT.agent.model.HttpTraceNode) node).getCodeNodes();
+            com.oAT.agent.model.StackNodeVo[] codeNodes = loadCodeNodes(snapshot.getTraceId(), node);
             if (codeNodes == null) {
                 continue;
             }

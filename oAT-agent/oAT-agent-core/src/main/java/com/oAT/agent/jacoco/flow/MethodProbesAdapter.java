@@ -25,14 +25,14 @@ public final class MethodProbesAdapter extends MethodVisitor {
 
     private final Map<Label, Label> tryCatchProbeLabels;
     private int currentLine = -1;
-    private final Map<Integer, Integer> branchTargetCounterByLine = new HashMap<>();
+    private final Map<Integer, Integer> branchTargetCounterByLine = new HashMap();
 
     public MethodProbesAdapter(final MethodProbesVisitor probesVisitor,
                                final IProbeIdGenerator idGenerator) {
         super(InstrSupport.ASM_API_VERSION, probesVisitor);
         this.probesVisitor = probesVisitor;
         this.idGenerator = idGenerator;
-        this.tryCatchProbeLabels = new HashMap<>();
+        this.tryCatchProbeLabels = new HashMap();
     }
 
     public void setAnalyzer(final AnalyzerAdapter analyzer) {
@@ -155,7 +155,8 @@ public final class MethodProbesAdapter extends MethodVisitor {
         if (line <= 0) {
             return NO_BRANCH_TARGET;
         }
-        int nextId = branchTargetCounterByLine.getOrDefault(line, 0) + 1;
+        Integer current = branchTargetCounterByLine.get(line);
+        int nextId = (current == null ? 0 : current.intValue()) + 1;
         branchTargetCounterByLine.put(line, nextId);
         return nextId;
     }

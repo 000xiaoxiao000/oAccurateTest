@@ -3,6 +3,7 @@ package com.oAT.agent.common;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -86,16 +87,18 @@ public class PackageVerifier {
      * 从 Jar/War 包中读取 Git Commit ID
      */
     public static String getGitCommitIdFromPackage(String packagePath) {
-        try (ZipFile zipFile = new ZipFile(packagePath)) {
+        ZipFile zipFile = null;
+        InputStream is = null;
+        try {
+            zipFile = new ZipFile(packagePath);
             ZipEntry entry = findBuildInfoEntry(zipFile);
             if (entry == null) {
                 return null;
             }
 
             Properties props = new Properties();
-            try (InputStream is = zipFile.getInputStream(entry)) {
-                props.load(is);
-            }
+            is = zipFile.getInputStream(entry);
+            props.load(is);
 
             // 优先使用完整 Commit ID
             String commitId = props.getProperty("git.commit.id");
@@ -106,6 +109,19 @@ public class PackageVerifier {
         } catch (Exception e) {
             e.printStackTrace();
             return null;
+        } finally {
+            closeQuietly(is);
+            closeQuietly(zipFile);
+        }
+    }
+
+    private static void closeQuietly(Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (IOException ignored) {
         }
     }
 

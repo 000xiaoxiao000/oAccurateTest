@@ -70,6 +70,33 @@
         "httpAjax": {
           "type": "boolean"
         },
+        "entryType": {
+          "type": "keyword"
+        },
+        "entryName": {
+          "type": "keyword"
+        },
+        "entryProtocol": {
+          "type": "keyword"
+        },
+        "entryAppId": {
+          "type": "keyword"
+        },
+        "entryAppName": {
+          "type": "keyword"
+        },
+        "entryClientIp": {
+          "type": "keyword"
+        },
+        "entryTopic": {
+          "type": "keyword"
+        },
+        "entryInterface": {
+          "type": "keyword"
+        },
+        "entryMethod": {
+          "type": "keyword"
+        },
         "nodeCount": {
           "type": "integer"
         },

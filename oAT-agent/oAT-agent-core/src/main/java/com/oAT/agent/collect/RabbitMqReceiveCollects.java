@@ -4,6 +4,8 @@ import com.oAT.agent.collect.rabbitmq.InvocationAdapter;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.context.AgentContext;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.model.RabbitMQRemoteTraceNode;
 import com.oAT.agent.model.RabbitMQTraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
@@ -15,6 +17,7 @@ import com.oAT.shaded.javassist.*;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implements ICollect {
     private final static Log logger = LogFactory.getLog(RabbitMqReceiveCollects.class);
@@ -63,8 +66,10 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
                 return null;
             }
             TraceRequest request = getTraceRequest(invocation);
+            boolean localRoot = false;
             if (request == null) {
-                return null;
+                request = createLocalRootRequest();
+                localRoot = true;
             }
             final TraceSession session;
             try {
@@ -88,7 +93,7 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
                 return null;
             }
             node.setTraceId(currentSession.getTraceId());
-            node.setTraceNodeId(currentSession.getParentNodeId() + ".remote");
+            node.setTraceNodeId(localRoot ? "0" : currentSession.getParentNodeId() + ".remote");
             node.setBeginTime(System.currentTimeMillis());
             node.setConsumerTag(params[1] instanceof String ? (String) params[1] : String.valueOf(params[1]));
             node.setBody(params[4] instanceof byte[] ? new String((byte[]) params[4]) : String.valueOf(params[4]));
@@ -112,7 +117,11 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
             } catch (Throwable e) {
                 logger.error("[Agent-EXCError]RabbitMqReceiveCollects begin error. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
             }
-            return new RabbitMqReceiveTraceNodeWrapper(session, node);
+            RabbitMqReceiveTraceNodeWrapper wrapper = new RabbitMqReceiveTraceNodeWrapper(session, node);
+            if (AsyncCoverageSupport.enabled(traceContext)) {
+                wrapper.coverageCollector = AsyncCoverageSupport.begin(wrapper);
+            }
+            return wrapper;
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]RabbitMqReceiveCollects begin outer error. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             return null;
@@ -154,8 +163,16 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
         }
     }
 
+    private TraceRequest createLocalRootRequest() {
+        TraceRequest request = new TraceRequest();
+        request.setTraceId(traceContext.createTraceId());
+        request.setParentNodeCallId("0");
+        return request;
+    }
+
     public void end(RabbitMqReceiveTraceNodeWrapper nodeWrapper, Object[] params) {
         TraceSession session = null;
+        boolean deferred = false;
         try {
             try {
                 session = traceContext.getTraceSession();
@@ -174,15 +191,26 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
             } else {
                 node.setStatus(RabbitMQTraceNode.Status.succeed.toString());
             }
-            try {
-                session.saveNode(node);
-            } catch (Throwable t) {
-                logger.error("[Agent-EXCError]saveNode error. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            if (nodeWrapper.coverageCollector != null && AgentContext.hasPendingAsyncTasks()) {
+                deferred = true;
+                nodeWrapper.markDeferred();
+                AtomicInteger activeAsyncTaskCount = AgentContext.getActiveAsyncTaskCount();
+                int pendingAsyncTasks = activeAsyncTaskCount == null ? 0 : activeAsyncTaskCount.get();
+                nodeWrapper.detachCurrentThreadContext();
+                logger.info("[Agent-info]RabbitMqReceiveCollects 检测到异步任务仍在执行，延迟覆盖率汇总，pendingAsyncTasks="
+                        + pendingAsyncTasks + ", traceId=" + node.getTraceId());
+            } else {
+                nodeWrapper.collectCoverage();
+                try {
+                    session.saveNode(node);
+                } catch (Throwable t) {
+                    logger.error("[Agent-EXCError]saveNode error. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                }
             }
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]RabbitMqReceiveCollects end error. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         } finally {
-            if (nodeWrapper != null) {
+            if (!deferred && nodeWrapper != null) {
                 try {
                     nodeWrapper.doDestroy();
                 } catch (Throwable t) {
@@ -216,18 +244,56 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
         }
     }
 
-    public class RabbitMqReceiveTraceNodeWrapper implements ISessionDestroy {
+    public class RabbitMqReceiveTraceNodeWrapper implements ISessionDestroy, AgentContext.AsyncCompletionListener {
         private final TraceSession session;
         private final RabbitMQRemoteTraceNode node;
+        private CoverageCollector coverageCollector;
+        private boolean deferred;
+        private boolean destroyed;
 
         public RabbitMqReceiveTraceNodeWrapper(TraceSession session, RabbitMQRemoteTraceNode node) {
             this.session = session;
             this.node = node;
         }
 
+        public void onAsyncComplete(TraceSession traceSession) {
+            if (traceSession == null || !traceSession.getTraceId().equals(this.session.getTraceId())) {
+                return;
+            }
+            if (!deferred) {
+                return;
+            }
+            try {
+                clearDeferred();
+                collectCoverage();
+                session.saveNode(node);
+            } catch (Throwable t) {
+                logger.error("[Agent-EXCError]RabbitMqReceiveCollects 异步覆盖率补报失败. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            } finally {
+                doDestroy();
+            }
+        }
+
+        private void collectCoverage() {
+            AsyncCoverageSupport.collect(node, coverageCollector);
+        }
+
+        private void markDeferred() {
+            this.deferred = true;
+        }
+
+        private void clearDeferred() {
+            this.deferred = false;
+        }
+
         @Override
         public void doDestroy() {
+            if (destroyed || deferred) {
+                return;
+            }
+            destroyed = true;
             try {
+                detachCurrentThreadContext();
                 if (session != null) {
                     try {
                         traceContext.closeTraceSession(session);
@@ -239,6 +305,10 @@ public class RabbitMqReceiveCollects extends AbstractByteTransformCollect implem
                 logger.error("[Agent-EXCError]doDestroy error. "
                         + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
+        }
+
+        private void detachCurrentThreadContext() {
+            AsyncCoverageSupport.detach(coverageCollector);
         }
     }
 

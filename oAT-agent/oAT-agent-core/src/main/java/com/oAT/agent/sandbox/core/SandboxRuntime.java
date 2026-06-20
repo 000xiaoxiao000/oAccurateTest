@@ -13,6 +13,7 @@ public class SandboxRuntime {
     private final ListenerRegistry listenerRegistry;
     private final DefaultEventWatcher eventWatcher;
     private final SandboxTransformer transformer;
+    private final BootstrapEnhanceManager bootstrapEnhanceManager;
     private volatile boolean stopped;
 
     public SandboxRuntime(Instrumentation instrumentation, Properties properties, TraceContext traceContext) {
@@ -23,6 +24,7 @@ public class SandboxRuntime {
         this.listenerRegistry = new ListenerRegistry();
         this.eventWatcher = new DefaultEventWatcher(listenerRegistry);
         this.transformer = new SandboxTransformer(eventWatcher);
+        this.bootstrapEnhanceManager = new BootstrapEnhanceManager(instrumentation);
         this.instrumentation.addTransformer(transformer, true);
     }
 
@@ -43,7 +45,7 @@ public class SandboxRuntime {
     }
 
     public SandboxContext moduleContext() {
-        return new SandboxContext(instrumentation, properties, traceContext, eventWatcher);
+        return new SandboxContext(instrumentation, properties, traceContext, eventWatcher, bootstrapEnhanceManager);
     }
 
     public ListenerRegistry listenerRegistry() {
@@ -56,6 +58,10 @@ public class SandboxRuntime {
 
     public SandboxTransformer transformer() {
         return transformer;
+    }
+
+    public BootstrapEnhanceManager bootstrapEnhanceManager() {
+        return bootstrapEnhanceManager;
     }
 
     public void retransformMatchedLoadedClasses() {
@@ -89,6 +95,7 @@ public class SandboxRuntime {
             instrumentation.removeTransformer(transformer);
         } catch (Throwable ignored) {
         }
+        bootstrapEnhanceManager.stop();
         stopped = true;
     }
 

@@ -3,6 +3,8 @@ package com.oAT.web.control;
 import com.oAT.agent.model.*;
 import com.oAT.web.common.SqlStatParse;
 import com.oAT.web.control.entity.GraphView;
+import com.oAT.web.service.TraceEntryDescriptor;
+import com.oAT.web.service.TraceEntryDescriptorBuilder;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -30,20 +32,22 @@ public class GraphViewHelp {
 
         // 构建根节点
         TraceNode rootNode = getTraceNode("0");
-        // 根节点当前仅支持Http做为入口协议
-        Assert.isTrue(rootNode instanceof HttpTraceNode, "当前仅支持 HttpTraceNode 作为入口节点");
-        HttpTraceNode httpRootNode = (HttpTraceNode) rootNode;
+        TraceEntryDescriptor rootEntry = TraceEntryDescriptorBuilder.build(rootNode);
         GraphView.Nodes rootGraphNode = new GraphView.Nodes();
         rootGraphNode.setId("root");
-        rootGraphNode.setTitle("浏览器");
-        rootGraphNode.setSubTitle(httpRootNode.getClientIp() != null ? httpRootNode.getClientIp() : "unknown");
-        rootGraphNode.setType("browser");
-        rootGraphNode.setState(isSuccessfulResponseCode(httpRootNode.getResponseCode()) ? "ok" : "error");
-        rootGraphNode.setTips(httpRootNode.getRequestUrl());
-        rootGraphNode.setData(httpRootNode.getTraceNodeId());
+        rootGraphNode.setTitle(rootNode instanceof HttpTraceNode ? "浏览器" : rootEntry.getEntryType());
+        rootGraphNode.setSubTitle(StringUtils.hasText(rootEntry.getEntryClientIp()) ? rootEntry.getEntryClientIp() : "unknown");
+        rootGraphNode.setType(rootNode instanceof HttpTraceNode ? "browser" : rootEntry.getEntryProtocol());
+        if (rootNode instanceof HttpTraceNode) {
+            rootGraphNode.setState(isSuccessfulResponseCode(((HttpTraceNode) rootNode).getResponseCode()) ? "ok" : "error");
+        } else {
+            rootGraphNode.setState(rootNode instanceof StatementError && ((StatementError) rootNode).getError() != null ? "error" : "ok");
+        }
+        rootGraphNode.setTips(rootEntry.getDisplayName());
+        rootGraphNode.setData(rootNode.getTraceNodeId());
         nodes.add(rootGraphNode);
         graphView.setShowDefaultNode(rootGraphNode);
-        graphView.setTitle(httpRootNode.getRequestUrl());
+        graphView.setTitle(rootEntry.getDisplayName());
 
         // 构建 Node 节点
         Collection<GraphView.Nodes> normalNodes = traceNodes.stream()
@@ -94,11 +98,16 @@ public class GraphViewHelp {
 
     private GraphView.Edges buildEdge(TraceNode traceNode) {
         GraphView.Edges edge = new GraphView.Edges();
-        if (traceNode instanceof HttpTraceNode && "0".equals(traceNode.getTraceNodeId())) {
+        if ("0".equals(traceNode.getTraceNodeId())) {
             edge.setFrom("root");
-            edge.setTo(buildGraphNode(traceNode).getId());
-            edge.setLabel("http请求");
-            edge.setType("http request");
+            GraphView.Nodes toNode = buildGraphNode(traceNode);
+            if (toNode == null || toNode.getId() == null) {
+                return null;
+            }
+            edge.setTo(toNode.getId());
+            TraceEntryDescriptor entry = TraceEntryDescriptorBuilder.build(traceNode);
+            edge.setLabel(entry.getEntryType());
+            edge.setType(entry.getEntryProtocol());
             edge.setCount(1);
         } else if (traceNode instanceof DubboTraceNode) {
             // 获取父节点对应的Graph ID
@@ -251,6 +260,16 @@ public class GraphViewHelp {
             graphViewNode.setType("redis");
             graphViewNode.setState(((RedisTraceNode) traceNode).getError() == null ? "normal" : "error");
             graphViewNode.setTips(redisNode.getType());
+            graphViewNode.setData(traceNode.getTraceNodeId());
+        } else if (traceNode.getApp() != null) {
+            TraceEntryDescriptor entry = TraceEntryDescriptorBuilder.build(traceNode);
+            id = traceNode.getApp().getAppId();
+            graphViewNode.setId(id);
+            graphViewNode.setSubTitle(StringUtils.hasText(traceNode.getAddressIp()) ? traceNode.getAddressIp() : id);
+            graphViewNode.setTitle(traceNode.getApp().getAppName());
+            graphViewNode.setType(entry.getEntryType());
+            graphViewNode.setState(traceNode instanceof StatementError && ((StatementError) traceNode).getError() != null ? "error" : "normal");
+            graphViewNode.setTips(entry.getDisplayName());
             graphViewNode.setData(traceNode.getTraceNodeId());
         } else {
             graphViewNode = null;

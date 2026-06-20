@@ -83,7 +83,7 @@ public class FeignClientCollect extends AbstractByteTransformCollect implements 
 
     private Map<String, Collection<String>> traceHeader(FeignTraceNode node) {
         try {
-            Map<String, Collection<String>> map = new HashMap<>();
+            Map<String, Collection<String>> map = new HashMap();
             map.put("parentTraceId", Collections.singletonList(node.getTraceId() + "_" + node.getTraceNodeId()));
             map.put("parentTraceNodeId", Collections.singletonList(node.getTraceNodeId()));
             String userHeader = traceContext.getTraceSession().getTraceRequest().getUserHeader();

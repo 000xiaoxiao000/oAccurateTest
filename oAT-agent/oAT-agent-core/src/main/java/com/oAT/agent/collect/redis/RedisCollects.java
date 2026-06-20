@@ -14,9 +14,7 @@ import com.oAT.shaded.javassist.CtMethod;
 
 import java.lang.instrument.Instrumentation;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.security.ProtectionDomain;
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +25,7 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
     private static final int MAX_CMD_LENGTH = 1024; // 限制命令最大长度
 
     // 性能统计
-    private static final ConcurrentHashMap<String, AtomicLong> COMMAND_STATS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, AtomicLong> COMMAND_STATS = new ConcurrentHashMap();
     private static final AtomicLong TOTAL_COMMANDS = new AtomicLong(0);
 
     public static RedisCollects INSTANCE;
@@ -104,7 +102,7 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
         RedisTraceNode redisTraceNode = new RedisTraceNode();
         redisTraceNode.setHost(host);
         redisTraceNode.setPort(port);
-        redisTraceNode.setBeginTime(Instant.now().toEpochMilli());
+        redisTraceNode.setBeginTime(System.currentTimeMillis());
         redisTraceNode.setTraceId(session.getTraceId());
         redisTraceNode.setTraceNodeId(session.getNextNodeId());
         this.currentRedisInfo = redisTraceNode;
@@ -175,7 +173,7 @@ public class RedisCollects extends AbstractByteTransformCollect implements IColl
             if (cmd.length() > MAX_CMD_LENGTH) {
                 cmd = cmd.substring(0, MAX_CMD_LENGTH) + "...[truncated]";
             }
-            return new String(cmd.getBytes(Charset.defaultCharset()), StandardCharsets.UTF_8);
+            return com.oAT.agent.common.StringUtils.newStringUtf8(cmd.getBytes(Charset.defaultCharset()));
         } catch (Throwable e) {
             logger.warn("[Agent-EXCError]Failed to convert command string encoding" + StackTraceFormatter.formatExceptionWithAgentMark(e));
             return "[unreadable-cmd]";

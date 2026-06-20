@@ -19,7 +19,7 @@ public class JakartaHttpServletResponseWrapper extends HttpServletResponseWrappe
     private final ByteArrayOutputStream outputCopy = new ByteArrayOutputStream();
     private ServletOutputStream teeOutputStream;
     private PrintWriter teeWriter;
-    private final Map<String, String> headers = new HashMap<>();
+    private final Map<String, String> headers = new HashMap();
     private int status = 200;
     private boolean usingWriter = false;
     private boolean usingOutputStream = false;
@@ -168,7 +168,7 @@ public class JakartaHttpServletResponseWrapper extends HttpServletResponseWrappe
     public FullResponse getFullResponse() {
         FullResponse data = new FullResponse();
         data.setStatus(status);
-        data.setHeaders(new HashMap<>(headers));
+        data.setHeaders(new HashMap(headers));
         data.setBody(getResponseData());
         return data;
     }

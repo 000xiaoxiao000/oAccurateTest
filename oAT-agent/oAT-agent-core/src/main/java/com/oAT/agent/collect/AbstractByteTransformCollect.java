@@ -23,7 +23,7 @@ public abstract class AbstractByteTransformCollect {
             @Override
             public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined, ProtectionDomain protectionDomain, byte[] classfileBuffer) {
                 if (className == null
-                        || (loader == null && !isBootstrapTarget(className))
+                        || loader == null
                         || className.startsWith("sun/")
                         || className.startsWith("jdk/")
                         || className.startsWith("com/sun/")
@@ -50,14 +50,6 @@ public abstract class AbstractByteTransformCollect {
                 return null;
             }
         }, true);
-    }
-
-    private boolean isBootstrapTarget(String className) {
-        if (className == null) {
-            return false;
-        }
-        return "java/util/concurrent/ThreadPoolExecutor".equals(className)
-                || "java/util/concurrent/ScheduledThreadPoolExecutor".equals(className);
     }
 
     protected Error buildError(Throwable e) {

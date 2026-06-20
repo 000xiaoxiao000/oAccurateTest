@@ -31,13 +31,16 @@ import com.oAT.agent.trace.TraceSession;
 import java.lang.reflect.Method;
 import java.util.EnumSet;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 public class HttpServletSandboxModule implements OatModule, EventListener {
     private static final Log logger = LogFactory.getLog(HttpServletSandboxModule.class);
+    private static volatile HttpServletSandboxModule INSTANCE;
 
     private final ConcurrentMap<Long, HttpWrapper> wrappers = new ConcurrentHashMap<Long, HttpWrapper>();
+    private final ConcurrentMap<String, HttpWrapper> deferredWrappers = new ConcurrentHashMap<String, HttpWrapper>();
     private ModuleContext context;
     private TraceContext traceContext;
     private WatchId javaxWatchId;
@@ -50,6 +53,7 @@ public class HttpServletSandboxModule implements OatModule, EventListener {
 
     @Override
     public void load(ModuleContext context) {
+        INSTANCE = this;
         this.context = context;
         this.traceContext = context.traceContext() instanceof TraceContext ? (TraceContext) context.traceContext() : null;
         if (HttpServletCollect.INSTANCE != null) {
@@ -80,10 +84,25 @@ public class HttpServletSandboxModule implements OatModule, EventListener {
 
     @Override
     public void unload() {
+        if (INSTANCE == this) {
+            INSTANCE = null;
+        }
         if (context != null) {
             context.eventWatcher().delete(javaxWatchId);
             context.eventWatcher().delete(jakartaWatchId);
         }
+    }
+
+    public static void tryFinalizeDeferredNode() {
+        HttpServletSandboxModule module = INSTANCE;
+        if (module == null) {
+            return;
+        }
+        TraceSession traceSession = AgentContext.getTraceSession();
+        if (traceSession == null || AgentContext.hasPendingAsyncTasks()) {
+            return;
+        }
+        module.finalizeDeferredNode(traceSession);
     }
 
     @Override
@@ -135,6 +154,8 @@ public class HttpServletSandboxModule implements OatModule, EventListener {
             if (coverageEnabled()) {
                 wrapper.coverageCollector = CoverageCollector.begin();
                 AgentContext.setCoverageCollector(wrapper.coverageCollector);
+                AgentContext.setActiveAsyncTaskCount(new AtomicInteger(0));
+                AgentContext.setAsyncCompletionListener(wrapper);
             } else if (logger.isDebugEnabled()) {
                 logger.debug("[Sandbox-HTTP] coverage collector skipped, codeStack.include/conf_codeStack.include is blank");
             }
@@ -149,6 +170,7 @@ public class HttpServletSandboxModule implements OatModule, EventListener {
         if (wrapper == null) {
             return;
         }
+        boolean deferred = false;
         try {
             HttpTraceNode node = wrapper.node;
             node.setEndTime(System.currentTimeMillis());
@@ -161,21 +183,44 @@ public class HttpServletSandboxModule implements OatModule, EventListener {
                 error.setErrorStack(StackTraceFormatter.formatExceptionWithAgentMark(throwable));
                 node.setError(error);
             }
-            collectCoverage(wrapper);
-            wrapper.traceSession.saveNode(node);
+            if (wrapper.coverageCollector != null && AgentContext.hasPendingAsyncTasks()) {
+                deferred = true;
+                wrapper.markDeferred();
+                deferredWrappers.put(wrapper.traceSession.getTraceId(), wrapper);
+                AtomicInteger activeAsyncTaskCount = AgentContext.getActiveAsyncTaskCount();
+                int pendingAsyncTasks = activeAsyncTaskCount == null ? 0 : activeAsyncTaskCount.get();
+                wrapper.detachCurrentThreadContext();
+                logger.info("[Sandbox-HTTP] detected pending async tasks, defer coverage flush, pendingAsyncTasks="
+                        + pendingAsyncTasks + ", traceId=" + wrapper.traceSession.getTraceId());
+            } else {
+                collectCoverage(wrapper);
+                wrapper.traceSession.saveNode(node);
+            }
         } catch (Throwable t) {
             logger.error("[Sandbox-HTTP] end failed: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         } finally {
-            try {
-                traceContext.closeTraceSession(wrapper.traceSession);
-            } catch (Throwable t) {
-                logger.error("[Sandbox-HTTP] close session failed: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
-            } finally {
-                if (wrapper.coverageCollector != null) {
-                    CoverageCollector.remove();
-                    AgentContext.removeCoverageCollector();
-                }
+            if (!deferred) {
+                wrapper.destroy(traceContext);
             }
+        }
+    }
+
+    private void finalizeDeferredNode(TraceSession traceSession) {
+        HttpWrapper wrapper = traceSession == null ? null : deferredWrappers.remove(traceSession.getTraceId());
+        if (wrapper == null) {
+            return;
+        }
+        try {
+            wrapper.clearDeferred();
+            collectCoverage(wrapper);
+            wrapper.traceSession.saveNode(wrapper.node);
+            if (logger.isDebugEnabled()) {
+                logger.debug("[Sandbox-HTTP] finalized deferred coverage, traceId=" + wrapper.traceSession.getTraceId());
+            }
+        } catch (Throwable t) {
+            logger.error("[Sandbox-HTTP] finalize deferred coverage failed: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+        } finally {
+            wrapper.destroy(traceContext);
         }
     }
 
@@ -240,14 +285,60 @@ public class HttpServletSandboxModule implements OatModule, EventListener {
         return value == null ? null : String.valueOf(value);
     }
 
-    private static class HttpWrapper {
+    private static class HttpWrapper implements AgentContext.AsyncCompletionListener {
         private final TraceSession traceSession;
         private final HttpTraceNode node;
         private CoverageCollector coverageCollector;
+        private boolean deferred;
+        private boolean destroyed;
 
         private HttpWrapper(TraceSession traceSession, HttpTraceNode node) {
             this.traceSession = traceSession;
             this.node = node;
+        }
+
+        @Override
+        public void onAsyncComplete(TraceSession traceSession) {
+            if (!deferred) {
+                return;
+            }
+            HttpServletSandboxModule module = INSTANCE;
+            if (module != null) {
+                module.finalizeDeferredNode(traceSession);
+            }
+        }
+
+        private void markDeferred() {
+            this.deferred = true;
+        }
+
+        private void clearDeferred() {
+            this.deferred = false;
+        }
+
+        private synchronized void destroy(TraceContext traceContext) {
+            if (destroyed || deferred) {
+                return;
+            }
+            destroyed = true;
+            try {
+                if (traceContext != null) {
+                    traceContext.closeTraceSession(traceSession);
+                }
+            } catch (Throwable t) {
+                logger.error("[Sandbox-HTTP] close session failed: " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            } finally {
+                detachCurrentThreadContext();
+            }
+        }
+
+        private void detachCurrentThreadContext() {
+            if (coverageCollector != null) {
+                CoverageCollector.remove();
+            }
+            AgentContext.removeCoverageCollector();
+            AgentContext.removeActiveAsyncTaskCount();
+            AgentContext.removeAsyncCompletionListener();
         }
     }
 }

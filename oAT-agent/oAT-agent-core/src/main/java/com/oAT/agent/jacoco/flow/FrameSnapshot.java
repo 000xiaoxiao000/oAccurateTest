@@ -58,7 +58,7 @@ class FrameSnapshot implements IFrame {
 	 * method.
 	 */
 	private static Object[] reduce(final List<Object> source, final int popCount) {
-		final List<Object> copy = new ArrayList<>(source);
+		final List<Object> copy = new ArrayList(source);
 		final int size = source.size() - popCount;
 		copy.subList(size, source.size()).clear();
 		for (int i = size; --i >= 0;) {

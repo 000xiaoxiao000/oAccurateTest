@@ -31,8 +31,8 @@ import java.util.*;
  */
 public class JsonObject<K, V> extends LinkedHashMap<K, V>
 {
-    static Set<String> primitives = new HashSet<>();
-    static Set<String> primitiveWrappers = new HashSet<>();
+    static Set<String> primitives = new HashSet();
+    static Set<String> primitiveWrappers = new HashSet();
 
     Object target;
     boolean isMap = false;

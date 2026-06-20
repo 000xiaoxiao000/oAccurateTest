@@ -26,7 +26,7 @@ public class StackNodeVoBuilder {
             }
 
             ILanguageNames javaNames = new JavaNames();
-            List<StackNodeVo> resultList = new ArrayList<>();
+            List<StackNodeVo> resultList = new ArrayList<StackNodeVo>();
 
             int nodeIdx = 0;
             for (Map.Entry<Long, boolean[]> entry : snapshots.entrySet()) {
@@ -71,13 +71,18 @@ public class StackNodeVoBuilder {
     }
 
     private Map<Integer, List<Integer>> groupExecutedProbesByMethod(boolean[] probes, ClassProbeInfo probeInfo) {
-        Map<Integer, List<Integer>> methodEntryToProbeIndices = new LinkedHashMap<>();
+        Map<Integer, List<Integer>> methodEntryToProbeIndices = new LinkedHashMap<Integer, List<Integer>>();
         for (int i = 0; i < probes.length; i++) {
             if (!probes[i]) {
                 continue;
             }
             int methodEntryIdx = probeInfo.getProbeMethodEntryIndex()[i];
-            methodEntryToProbeIndices.computeIfAbsent(methodEntryIdx, k -> new ArrayList<>()).add(i);
+            List<Integer> probeIndices = methodEntryToProbeIndices.get(methodEntryIdx);
+            if (probeIndices == null) {
+                probeIndices = new ArrayList<Integer>();
+                methodEntryToProbeIndices.put(methodEntryIdx, probeIndices);
+            }
+            probeIndices.add(i);
         }
         return methodEntryToProbeIndices;
     }
@@ -104,9 +109,9 @@ public class StackNodeVoBuilder {
         nodeVo.setClassName(CoverageNamingSupport.toOwnerQualifiedClassName(originClassName));
         nodeVo.setMethodName(displayMethodName);
         nodeVo.setMethodDescriptor(methodSignature.methodDesc);
-        nodeVo.setDoLines(new ArrayList<>(coverageLines.executedLines));
+        nodeVo.setDoLines(new ArrayList<Integer>(coverageLines.executedLines));
         nodeVo.setExecuteMethodTotal(buildExecutedMethodEntries(methodEntryIdx, probeInfo));
-        nodeVo.setExecuteBranch(new ArrayList<>(coverageLines.executedBranchLines));
+        nodeVo.setExecuteBranch(new ArrayList<Integer>(coverageLines.executedBranchLines));
         nodeVo.setExecuteBranchTargetProbeMap(coverageLines.executedBranchTargetProbeMap);
         nodeVo.setExecCyclo(String.valueOf(coverageLines.executedBranchLines.size()));
         nodeVo.setRecursive(Boolean.TRUE.equals(probeInfo.getMethodEntryToRecursive().get(methodEntryIdx)));
@@ -117,7 +122,7 @@ public class StackNodeVoBuilder {
     }
 
     private ArrayList<Integer> buildExecutedMethodEntries(int methodEntryIdx, ClassProbeInfo probeInfo) {
-        ArrayList<Integer> execMethodList = new ArrayList<>(1);
+        ArrayList<Integer> execMethodList = new ArrayList<Integer>(1);
         int methodEntryLine = probeInfo.getProbeLineNumbers()[methodEntryIdx];
         if (methodEntryLine > 0) {
             execMethodList.add(methodEntryLine);
@@ -126,9 +131,9 @@ public class StackNodeVoBuilder {
     }
 
     private CoverageLines collectCoverageLines(List<Integer> executedProbeIndices, ClassProbeInfo probeInfo) {
-        LinkedHashSet<Integer> executedLines = new LinkedHashSet<>();
-        LinkedHashSet<Integer> executedBranchLines = new LinkedHashSet<>();
-        Map<String, LinkedHashSet<Integer>> executedBranchTargetProbeSets = new LinkedHashMap<>();
+        LinkedHashSet<Integer> executedLines = new LinkedHashSet<Integer>();
+        LinkedHashSet<Integer> executedBranchLines = new LinkedHashSet<Integer>();
+        Map<String, LinkedHashSet<Integer>> executedBranchTargetProbeSets = new LinkedHashMap<String, LinkedHashSet<Integer>>();
         boolean[] branchFlags = probeInfo.getProbeIsBranch();
         int[] probeLineNumbers = probeInfo.getProbeLineNumbers();
 
@@ -141,9 +146,13 @@ public class StackNodeVoBuilder {
                     executedBranchLines.add(branchLine);
                     executedLines.add(branchLine);
                     if (branchTargetId != null && branchTargetId > 0) {
-                        executedBranchTargetProbeSets
-                                .computeIfAbsent(String.valueOf(branchLine), key -> new LinkedHashSet<>())
-                                .add(branchTargetId);
+                        String branchLineKey = String.valueOf(branchLine);
+                        LinkedHashSet<Integer> targetProbeIds = executedBranchTargetProbeSets.get(branchLineKey);
+                        if (targetProbeIds == null) {
+                            targetProbeIds = new LinkedHashSet<Integer>();
+                            executedBranchTargetProbeSets.put(branchLineKey, targetProbeIds);
+                        }
+                        targetProbeIds.add(branchTargetId);
                     }
                 }
                 continue;
@@ -163,10 +172,10 @@ public class StackNodeVoBuilder {
         if (source == null || source.isEmpty()) {
             return null;
         }
-        Map<String, List<Integer>> result = new LinkedHashMap<>();
+        Map<String, List<Integer>> result = new LinkedHashMap();
         for (Map.Entry<String, LinkedHashSet<Integer>> entry : source.entrySet()) {
             if (!entry.getValue().isEmpty()) {
-                result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+                result.put(entry.getKey(), new ArrayList(entry.getValue()));
             }
         }
         return result.isEmpty() ? null : result;

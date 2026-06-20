@@ -14,7 +14,7 @@ public class JavaxServletResponseWrapper extends HttpServletResponseWrapper {
     private final ByteArrayOutputStream outputCopy = new ByteArrayOutputStream();
     private ServletOutputStream teeOutputStream;
     private PrintWriter teeWriter;
-    private final Map<String, String> headers = new HashMap<>();
+    private final Map<String, String> headers = new HashMap();
     private int status = 200;
     private boolean usingWriter = false;
     private boolean usingOutputStream = false;
@@ -45,8 +45,8 @@ public class JavaxServletResponseWrapper extends HttpServletResponseWrapper {
         }
         usingWriter = true;
         if (teeWriter == null) {
-            Writer originalWriter = original.getWriter();
-            OutputStreamWriter outputCopyWriter = new OutputStreamWriter(outputCopy, getCharacterEncoding());
+            final Writer originalWriter = original.getWriter();
+            final OutputStreamWriter outputCopyWriter = new OutputStreamWriter(outputCopy, getCharacterEncoding());
             teeWriter = new PrintWriter(new Writer() {
                 @Override
                 public void write(char[] cbuf, int off, int len) throws IOException {

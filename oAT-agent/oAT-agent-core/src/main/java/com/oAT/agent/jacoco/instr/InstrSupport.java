@@ -31,48 +31,85 @@ public final class InstrSupport {
     /**
      * ASM API version
      */
-    public static final int ASM_API_VERSION = Opcodes.ASM8;
+    public static final int ASM5_API_VERSION = getAsmApiConstant("ASM5", 327680);
+    public static final int ASM6_API_VERSION = getAsmApiConstant("ASM6", 393216);
+    public static final int ASM7_API_VERSION = getAsmApiConstant("ASM7", 458752);
+    public static final int ASM8_API_VERSION = getAsmApiConstant("ASM8", 524288);
+    public static final int ASM9_API_VERSION = getAsmApiConstant("ASM9", 589824);
+    public static final int ASM_API_VERSION = getMaxSupportedAsmApiVersion();
 
     public static int getAsmApiVersion(int version) {
-        switch (version) {
-            case Opcodes.V1_5:
-                return Opcodes.ASM5;
-            case Opcodes.V1_6:
-                return Opcodes.ASM6;
-            case Opcodes.V1_7:
-                return Opcodes.ASM7;
-            case Opcodes.V1_8:
-                return Opcodes.ASM8;
-            case Opcodes.V9:
-            case Opcodes.V10:
-            case Opcodes.V11:
-            case Opcodes.V12:
-            case Opcodes.V13:
-            case Opcodes.V14:
-            case Opcodes.V15:
-            case Opcodes.V16:
-            case Opcodes.V17:
-            case Opcodes.V18:
-            case Opcodes.V19:
-            case Opcodes.V20:
-            case Opcodes.V21:
-                return Opcodes.ASM9;
-            default:
-                logger.warn("[Agent-warn]未知的 class 版本号: " + version + "，默认使用 ASM8");
-                return ASM_API_VERSION;
+        if (version <= Opcodes.V1_6) {
+            return minSupported(ASM6_API_VERSION);
         }
+        if (version == Opcodes.V1_7) {
+            return minSupported(ASM7_API_VERSION);
+        }
+        if (version == Opcodes.V1_8) {
+            return minSupported(ASM8_API_VERSION);
+        }
+        if (version >= 53) {
+            return ASM_API_VERSION;
+        }
+        logger.warn("[Agent-warn]未知的 class 版本号: " + version + "，默认使用当前 ASM API");
+        return ASM_API_VERSION;
     }
 
     public static String getAsmApiVersionString(int version) {
         int asmApi = getAsmApiVersion(version);
-        switch (asmApi) {
-            case Opcodes.ASM5: return "ASM5";
-            case Opcodes.ASM6: return "ASM6";
-            case Opcodes.ASM7: return "ASM7";
-            case Opcodes.ASM8: return "ASM8";
-            case Opcodes.ASM9: return "ASM9";
-            default: return "UNKNOWN";
+        if (asmApi == ASM9_API_VERSION) {
+            return "ASM9";
         }
+        if (asmApi == ASM8_API_VERSION) {
+            return "ASM8";
+        }
+        if (asmApi == ASM7_API_VERSION) {
+            return "ASM7";
+        }
+        if (asmApi == ASM6_API_VERSION) {
+            return "ASM6";
+        }
+        if (asmApi == ASM5_API_VERSION) {
+            return "ASM5";
+        }
+        return "UNKNOWN";
+    }
+
+    private static int getAsmApiConstant(String fieldName, int fallback) {
+        try {
+            return Opcodes.class.getField(fieldName).getInt(null);
+        } catch (Throwable ignore) {
+            return fallback;
+        }
+    }
+
+    private static int getMaxSupportedAsmApiVersion() {
+        if (hasAsmApi("ASM9")) {
+            return ASM9_API_VERSION;
+        }
+        if (hasAsmApi("ASM8")) {
+            return ASM8_API_VERSION;
+        }
+        if (hasAsmApi("ASM7")) {
+            return ASM7_API_VERSION;
+        }
+        if (hasAsmApi("ASM6")) {
+            return ASM6_API_VERSION;
+        }
+        return ASM5_API_VERSION;
+    }
+
+    private static boolean hasAsmApi(String fieldName) {
+        try {
+            Opcodes.class.getField(fieldName);
+            return true;
+        } catch (Throwable ignore) {
+            return false;
+        }
+    }
+
+    private static int minSupported(int desired) {
+        return desired <= ASM_API_VERSION ? desired : ASM_API_VERSION;
     }
 
     // === Data Field ===

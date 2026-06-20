@@ -41,12 +41,12 @@ public class CompactDataInput {
             this.mergeKey = mergeKey;
             this.methodName = methodName;
             this.methodDesc = methodDesc;
-            this.methodLineNumberMap = (lineNumbers == null ? Collections.emptySet() : Collections.unmodifiableSet(filterLines(lineNumbers)));
+            this.methodLineNumberMap = (lineNumbers == null ? Collections.<Integer>emptySet() : Collections.unmodifiableSet(filterLines(lineNumbers)));
             this.branchLineNumberSet = branchLineNumberSet == null
-                    ? Collections.emptySet()
+                    ? Collections.<Integer>emptySet()
                     : Collections.unmodifiableSet(filterBranchLines(branchLineNumberSet));
             this.branchLineAndTargetProbeMap = branchLineAndTargetProbeMap == null
-                    ? Collections.emptyMap()
+                    ? Collections.<Integer, Set<Integer>>emptyMap()
                     : Collections.unmodifiableMap(filterBranchLineTargetMap(branchLineAndTargetProbeMap));
             this.totalBranchCount = countBranchTargets(this.branchLineAndTargetProbeMap, this.branchLineNumberSet);
             this.cyclomaticComplexityMap = cyclomaticComplexity;
@@ -54,12 +54,12 @@ public class CompactDataInput {
             this.asyncMethodMap = async;
         }
         private static Set<Integer> filterLines(Set<Integer> src) {
-            Set<Integer> r = new HashSet<>();
+            Set<Integer> r = new HashSet<Integer>();
             for (Integer i : src) { if (i != null && i >= 0) r.add(i); }
             return r;
         }
         private static Set<Integer> filterBranchLines(Set<Integer> src) {
-            Set<Integer> r = new LinkedHashSet<>();
+            Set<Integer> r = new LinkedHashSet<Integer>();
             for (Integer i : src) {
                 if (i != null && i > 0) {
                     r.add(i);
@@ -68,11 +68,11 @@ public class CompactDataInput {
             return r;
         }
         private static Map<Integer, Set<Integer>> filterBranchLineTargetMap(Map<Integer, Set<Integer>> src) {
-            Map<Integer, Set<Integer>> filtered = new LinkedHashMap<>();
+            Map<Integer, Set<Integer>> filtered = new LinkedHashMap<Integer, Set<Integer>>();
             for (Map.Entry<Integer, Set<Integer>> entry : src.entrySet()) {
                 Integer branchLine = entry.getKey();
                 if (branchLine != null && branchLine > 0) {
-                    Set<Integer> targetProbeIds = new LinkedHashSet<>();
+                    Set<Integer> targetProbeIds = new LinkedHashSet<Integer>();
                     if (entry.getValue() != null) {
                         for (Integer targetProbeId : entry.getValue()) {
                             if (targetProbeId != null && targetProbeId >= 0) {
@@ -99,12 +99,12 @@ public class CompactDataInput {
             return total;
         }
         public Map<String, Object> toMap() {
-            Map<String, Object> m = new LinkedHashMap<>();
+            Map<String, Object> m = new LinkedHashMap<String, Object>();
             m.put("methodName", methodName);
             m.put("methodDesc", methodDesc);
             m.put("methodLineNumberMap", methodLineNumberMap);
             m.put("branchLineNumberSet", branchLineNumberSet);
-            Map<String, Set<Integer>> branchMapStr = new LinkedHashMap<>();
+            Map<String, Set<Integer>> branchMapStr = new LinkedHashMap<String, Set<Integer>>();
             if (branchLineAndTargetProbeMap != null) {
                 for (Map.Entry<Integer, Set<Integer>> entry : branchLineAndTargetProbeMap.entrySet()) {
                     branchMapStr.put(String.valueOf(entry.getKey()), entry.getValue());
@@ -119,16 +119,22 @@ public class CompactDataInput {
         }
         public MethodStaticInfo merge(MethodStaticInfo other) {
             if (other == null) return this;
-            Set<Integer> mergedLines = new HashSet<>(methodLineNumberMap);
+            Set<Integer> mergedLines = new HashSet<Integer>(methodLineNumberMap);
             mergedLines.addAll(other.methodLineNumberMap);
-            Set<Integer> mergedBranchLines = new LinkedHashSet<>(branchLineNumberSet);
+            Set<Integer> mergedBranchLines = new LinkedHashSet<Integer>(branchLineNumberSet);
             mergedBranchLines.addAll(other.branchLineNumberSet);
-            Map<Integer, Set<Integer>> mergedBranch = new LinkedHashMap<>(branchLineAndTargetProbeMap);
-            other.branchLineAndTargetProbeMap.forEach((k, v) -> mergedBranch.merge(k, v, (a, b) -> {
-                Set<Integer> c = new LinkedHashSet<>(a);
-                c.addAll(b);
-                return c;
-            }));
+            Map<Integer, Set<Integer>> mergedBranch = new LinkedHashMap<Integer, Set<Integer>>(branchLineAndTargetProbeMap);
+            for (Map.Entry<Integer, Set<Integer>> entry : other.branchLineAndTargetProbeMap.entrySet()) {
+                Integer branchLine = entry.getKey();
+                Set<Integer> existing = mergedBranch.get(branchLine);
+                if (existing == null) {
+                    mergedBranch.put(branchLine, new LinkedHashSet<Integer>(entry.getValue()));
+                } else {
+                    Set<Integer> mergedTargets = new LinkedHashSet<Integer>(existing);
+                    mergedTargets.addAll(entry.getValue());
+                    mergedBranch.put(branchLine, mergedTargets);
+                }
+            }
             int complexity = Math.max(cyclomaticComplexityMap, other.cyclomaticComplexityMap);
             boolean recursive = recursiveMap || other.recursiveMap;
             boolean async = asyncMethodMap || other.asyncMethodMap;
@@ -139,7 +145,7 @@ public class CompactDataInput {
     public static class ClassStaticInfo {
         public final long classId;
         public final String className;
-        private final Map<String, MethodStaticInfo> methods = new LinkedHashMap<>();
+        private final Map<String, MethodStaticInfo> methods = new LinkedHashMap<String, MethodStaticInfo>();
         private final AtomicInteger methodIndex = new AtomicInteger();
         public ClassStaticInfo(long classId, String className) {
             this.classId = classId;
@@ -158,10 +164,10 @@ public class CompactDataInput {
         }
         public Map<String, MethodStaticInfo> getMethods() { return methods; }
         public Map<String, Object> toMap() {
-            Map<String, Object> m = new LinkedHashMap<>();
+            Map<String, Object> m = new LinkedHashMap<String, Object>();
             m.put("classId", String.valueOf(classId));
             m.put("className", className);
-            Map<String, Object> methodMaps = new LinkedHashMap<>();
+            Map<String, Object> methodMaps = new LinkedHashMap<String, Object>();
             for (Map.Entry<String, MethodStaticInfo> e : methods.entrySet()) {
                 methodMaps.put(e.getKey(), e.getValue().toMap());
             }
@@ -170,7 +176,7 @@ public class CompactDataInput {
         }
     }
 
-    private static final Map<String, ClassStaticInfo> CLASS_STATIC_INFO = new ConcurrentHashMap<>();
+    private static final Map<String, ClassStaticInfo> CLASS_STATIC_INFO = new ConcurrentHashMap<String, ClassStaticInfo>();
 
     public static void collectClassStaticInfo(ClassInfo info) {
         if (info == null) return;
@@ -185,8 +191,13 @@ public class CompactDataInput {
         Map<String, Boolean> recursiveMap = info.getRecursiveMap();
         Map<String, Boolean> asyncMap = info.getAsyncMethodMap();
 
-        CLASS_STATIC_INFO.computeIfAbsent(finalClassName,
-                k -> new ClassStaticInfo(info.getClassId(), finalClassName));
+        ClassStaticInfo classStaticInfo = CLASS_STATIC_INFO.get(finalClassName);
+        if (classStaticInfo == null) {
+            ClassStaticInfo newInfo = new ClassStaticInfo(info.getClassId(), finalClassName);
+            ClassStaticInfo existing = ((ConcurrentHashMap<String, ClassStaticInfo>) CLASS_STATIC_INFO)
+                    .putIfAbsent(finalClassName, newInfo);
+            classStaticInfo = existing == null ? newInfo : existing;
+        }
 
         for (Map.Entry<String, Set<Integer>> entry : methodLineNumberMap.entrySet()) {
             String fullKey = entry.getKey();
@@ -206,26 +217,27 @@ public class CompactDataInput {
             }
             String shortMethodKey = methodName + " " + methodDesc;
 
-            int cyclo = cycloMap.getOrDefault(shortMethodKey, 1);
-            boolean recursive = recursiveMap.getOrDefault(fullKey, false);
-            boolean async = asyncMap.getOrDefault(fullKey, false);
+            Integer cycloValue = cycloMap.get(shortMethodKey);
+            Boolean recursiveValue = recursiveMap.get(fullKey);
+            Boolean asyncValue = asyncMap.get(fullKey);
+            int cyclo = cycloValue == null ? 1 : cycloValue.intValue();
+            boolean recursive = recursiveValue != null && recursiveValue.booleanValue();
+            boolean async = asyncValue != null && asyncValue.booleanValue();
 
             String displayMethodName = javaNames.getMethodName(originClassName, methodName, methodDesc, null);
             if (CoverageNamingSupport.shouldIgnoreMethod(methodName, displayMethodName)) {
                 continue;
             }
 
-            ClassStaticInfo cInfo = CLASS_STATIC_INFO.get(finalClassName);
-
             Map<Integer, Set<Integer>> methodBranchTargets = buildMethodBranchTargets(
                     shortMethodKey, lineNums, branchMap, branchTargetMap, info);
 
-            Set<Integer> methodBranchLines = new LinkedHashSet<>(methodBranchTargets.keySet());
+            Set<Integer> methodBranchLines = new LinkedHashSet<Integer>(methodBranchTargets.keySet());
 
             String mergeKey = CoverageNamingSupport.buildMethodMergeKey(originClassName, methodName, methodDesc);
             MethodStaticInfo mInfo = new MethodStaticInfo(mergeKey, displayMethodName, methodDesc, lineNums,
                     methodBranchTargets, methodBranchLines, cyclo, recursive, async);
-            cInfo.addOrMergeMethod(mInfo);
+            classStaticInfo.addOrMergeMethod(mInfo);
         }
     }
 
@@ -234,7 +246,7 @@ public class CompactDataInput {
                                                                         Map<String, Integer> branchMap,
                                                                         Map<Integer, Set<Integer>> branchTargetMap,
                                                                         ClassInfo info) {
-        Map<Integer, Set<Integer>> methodBranchTargets = new LinkedHashMap<>();
+        Map<Integer, Set<Integer>> methodBranchTargets = new LinkedHashMap();
         if (branchMap != null && !branchMap.isEmpty()) {
             for (Map.Entry<String, Integer> bEntry : branchMap.entrySet()) {
                 String key = bEntry.getKey();
@@ -252,7 +264,7 @@ public class CompactDataInput {
                 }
                 int inferredTargetCount = inferBranchTargetCount(shortMethodKey, branchLine, info);
                 if (inferredTargetCount > 0) {
-                    LinkedHashSet<Integer> inferredTargets = new LinkedHashSet<>();
+                    LinkedHashSet<Integer> inferredTargets = new LinkedHashSet();
                     for (int i = 1; i <= inferredTargetCount; i++) {
                         inferredTargets.add(i);
                     }
@@ -261,7 +273,7 @@ public class CompactDataInput {
                 }
                 Set<Integer> targets = branchTargetMap.get(branchLine);
                 if (targets != null && !targets.isEmpty()) {
-                    methodBranchTargets.put(branchLine, new LinkedHashSet<>(targets));
+                    methodBranchTargets.put(branchLine, new LinkedHashSet(targets));
                 }
             }
         }
@@ -309,7 +321,7 @@ public class CompactDataInput {
     }
 
     public static String exportAsJson() {
-        Map<String, Object> root = new LinkedHashMap<>();
+        Map<String, Object> root = new LinkedHashMap();
         for (Map.Entry<String, ClassStaticInfo> ce : CLASS_STATIC_INFO.entrySet()) {
             root.put(ce.getKey(), ce.getValue().toMap());
         }

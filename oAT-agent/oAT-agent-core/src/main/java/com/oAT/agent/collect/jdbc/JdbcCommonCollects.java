@@ -46,7 +46,7 @@ public class JdbcCommonCollects extends AbstractByteTransformCollect implements 
         INSTANCE = this;
         this.traceContext = traceContext;
         this.jdbcDriverSet = jdbcDriver == null ? java.util.Collections.<String>emptySet() :
-                new HashSet<>(Arrays.asList(jdbcDriver));
+                new HashSet(Arrays.asList(jdbcDriver));
     }
 
     private static final String[] CONNECTION_AGENT_METHODS = new String[]{"prepareStatement"};

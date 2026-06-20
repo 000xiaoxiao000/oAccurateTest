@@ -117,20 +117,36 @@ public abstract class StringUtils {
 
     public static List<String> toLines(String text) {
         List<String> result = new ArrayList<String>();
-        try (BufferedReader reader = new BufferedReader(new StringReader(text))) {
-            try {
-                String line = reader.readLine();
-                while (line != null) {
-                    result.add(line);
-                    line = reader.readLine();
-                }
-            } catch (IOException exc) {
-                // quit
+        BufferedReader reader = null;
+        try {
+            reader = new BufferedReader(new StringReader(text));
+            String line = reader.readLine();
+            while (line != null) {
+                result.add(line);
+                line = reader.readLine();
             }
         } catch (IOException e) {
             // ignore
+        } finally {
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (IOException ignored) {
+                }
+            }
         }
         return result;
+    }
+
+    public static String newStringUtf8(byte[] bytes) {
+        if (bytes == null) {
+            return null;
+        }
+        try {
+            return new String(bytes, "UTF-8");
+        } catch (java.io.UnsupportedEncodingException e) {
+            return new String(bytes);
+        }
     }
 
     /**
@@ -852,7 +868,7 @@ public abstract class StringUtils {
             return null;
         }
         StringTokenizer st = new StringTokenizer(str, delimiters);
-        List<String> tokens = new ArrayList<>();
+        List<String> tokens = new ArrayList();
         while (st.hasMoreTokens()) {
             String token = st.nextToken();
             if (trimTokens) {
@@ -902,7 +918,7 @@ public abstract class StringUtils {
         if (delimiter == null) {
             return new String[]{str};
         }
-        List<String> result = new ArrayList<>();
+        List<String> result = new ArrayList();
         if (delimiter.isEmpty()) {
             for (int i = 0; i < str.length(); i++) {
                 result.add(deleteAny(str.substring(i, i + 1), charsToDelete));

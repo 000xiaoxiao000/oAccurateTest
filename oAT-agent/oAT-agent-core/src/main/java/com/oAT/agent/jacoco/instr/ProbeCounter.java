@@ -41,7 +41,7 @@ public class ProbeCounter extends ClassProbesVisitor {
 
     @Override
     public MethodProbesVisitor visitMethod(final int access, final String name, final String desc, final String signature, final String[] exceptions) {
-        Set<String> skipMethods = new HashSet<>(Arrays.asList("<init>", InstrSupport.CLINIT_NAME, "equals", "canEqual", "hashCode", "toString"));
+        Set<String> skipMethods = new HashSet(Arrays.asList("<init>", InstrSupport.CLINIT_NAME, "equals", "canEqual", "hashCode", "toString"));
         if (!skipMethods.contains(name) && (access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE | Opcodes.ACC_INTERFACE))  == 0) {
             this.methods = true;
         }

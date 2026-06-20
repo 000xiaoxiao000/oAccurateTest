@@ -72,15 +72,31 @@ class DirectJDKLog implements Log {
         }
         Properties prop = new Properties();
         if (selectedFile != null && selectedFile.exists() && selectedFile.isFile()) {
-            try (FileInputStream input = new FileInputStream(selectedFile);
-                 InputStreamReader reader = new InputStreamReader(input, Charset.defaultCharset())) { // 跟随系统默认编码
+            FileInputStream input = null;
+            InputStreamReader reader = null;
+            try {
+                input = new FileInputStream(selectedFile);
+                reader = new InputStreamReader(input, Charset.defaultCharset()); // 跟随系统默认编码
                 prop.load(reader);
             } catch (IOException e) {
                 Logger.getLogger(DirectJDKLog.class.getName()).log(Level.SEVERE, "Failed to load configuration file",
                         e);
+            } finally {
+                closeQuietly(reader);
+                closeQuietly(input);
             }
         }
         init(prop);
+    }
+
+    private static void closeQuietly(java.io.Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (IOException ignored) {
+        }
     }
 
     protected static void init(Properties properties) {

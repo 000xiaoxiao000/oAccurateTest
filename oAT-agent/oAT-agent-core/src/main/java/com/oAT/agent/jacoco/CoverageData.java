@@ -16,7 +16,7 @@ public final class CoverageData {
      * key: 类的唯一标识（CRC64）
      * value: boolean[]，索引为探针ID，值为true表示该探针已被执行
      */
-    private static final ConcurrentHashMap<Long, boolean[]> PROBE_REGISTRY = new ConcurrentHashMap<>(1024);
+    private static final ConcurrentHashMap<Long, boolean[]> PROBE_REGISTRY = new ConcurrentHashMap<Long, boolean[]>(1024);
 
     /**
      * 注册探针数组。由插桩类的 $jacocoInit() 方法调用。
@@ -62,7 +62,22 @@ public final class CoverageData {
      * @return 所有已注册的 classId
      */
     public static long[] getRegisteredClassIds() {
-        return PROBE_REGISTRY.keySet().stream().mapToLong(Long::longValue).toArray();
+        long[] result = new long[PROBE_REGISTRY.size()];
+        int index = 0;
+        for (Long classId : PROBE_REGISTRY.keySet()) {
+            if (index >= result.length) {
+                long[] expanded = new long[index + 16];
+                System.arraycopy(result, 0, expanded, 0, result.length);
+                result = expanded;
+            }
+            result[index++] = classId.longValue();
+        }
+        if (index == result.length) {
+            return result;
+        }
+        long[] trimmed = new long[index];
+        System.arraycopy(result, 0, trimmed, 0, index);
+        return trimmed;
     }
 
     /**

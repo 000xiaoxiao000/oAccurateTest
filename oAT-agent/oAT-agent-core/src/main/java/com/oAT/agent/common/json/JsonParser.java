@@ -103,7 +103,7 @@ class JsonParser {
     private Object readJsonObject() throws IOException {
         boolean done = false;
         String field = null;
-        JsonObject<String, Object> object = new JsonObject<>();
+        JsonObject<String, Object> object = new JsonObject();
         int state = STATE_READ_START_OBJECT;
         final FastPushbackReader in = input;
 

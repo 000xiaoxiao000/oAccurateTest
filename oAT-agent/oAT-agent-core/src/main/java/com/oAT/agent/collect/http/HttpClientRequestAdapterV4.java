@@ -7,7 +7,6 @@ import com.oAT.agent.common.logger.LogFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -125,15 +124,21 @@ public class HttpClientRequestAdapterV4 {
                 return null;
             }
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            try (InputStream inputStream = (InputStream) content) {
+            InputStream inputStream = (InputStream) content;
+            try {
                 byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = inputStream.read(buffer)) != -1 && outputStream.size() < 8192) {
                     int writable = Math.min(bytesRead, 8192 - outputStream.size());
                     outputStream.write(buffer, 0, writable);
                 }
+            } finally {
+                try {
+                    inputStream.close();
+                } catch (Exception ignore) {
+                }
             }
-            String body = new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+            String body = com.oAT.agent.common.StringUtils.newStringUtf8(outputStream.toByteArray());
             if (body.length() >= 8192) {
                 return body + "...";
             }
@@ -147,7 +152,7 @@ public class HttpClientRequestAdapterV4 {
     }
 
     public Map<String, String> getRequestHeaders() {
-        Map<String, String> headers = new HashMap<>();
+        Map<String, String> headers = new HashMap();
         if (httpRequest == null) {
             return headers;
         }

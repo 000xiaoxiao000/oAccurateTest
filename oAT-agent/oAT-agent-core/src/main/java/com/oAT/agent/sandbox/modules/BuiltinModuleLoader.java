@@ -4,6 +4,7 @@ import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
 import com.oAT.agent.sandbox.core.SandboxRuntime;
 import com.oAT.agent.sandbox.modules.feign.FeignSandboxModule;
+import com.oAT.agent.sandbox.modules.context.ContextPropagationSandboxModule;
 import com.oAT.agent.sandbox.modules.coverage.CoverageSandboxModule;
 import com.oAT.agent.sandbox.modules.http.HttpServletSandboxModule;
 import com.oAT.agent.sandbox.modules.http.HttpClientV3SandboxModule;
@@ -18,7 +19,6 @@ import com.oAT.agent.sandbox.modules.redis.RedisSandboxModule;
 import com.oAT.agent.sandbox.modules.rpc.DubboSandboxModule;
 import com.oAT.agent.sandbox.modules.rpc.SofaRpcSandboxModule;
 import com.oAT.agent.sandbox.modules.service.ServiceSandboxModule;
-import com.oAT.agent.sandbox.modules.thread.ThreadPoolSandboxModule;
 
 import java.util.Properties;
 
@@ -105,10 +105,10 @@ public class BuiltinModuleLoader {
         } else {
             logger.info("[Sandbox] builtin system-log module disabled");
         }
-        if (Boolean.parseBoolean(properties.getProperty("sandbox.thread-pool.enabled", "false"))) {
-            runtime.moduleManager().register(new ThreadPoolSandboxModule(), runtime.moduleContext());
+        if (Boolean.parseBoolean(properties.getProperty("sandbox.context-propagation.enabled", "false"))) {
+            runtime.moduleManager().register(new ContextPropagationSandboxModule(), runtime.moduleContext());
         } else {
-            logger.info("[Sandbox] builtin thread-pool module disabled");
+            logger.info("[Sandbox] builtin context-propagation module disabled");
         }
         runtime.retransformMatchedLoadedClasses();
     }

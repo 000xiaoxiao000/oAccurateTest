@@ -9,7 +9,7 @@ import java.util.Map;
 
 public class JsonUtil {
     public static String toJson(Object obj) {
-        Map<String, Object> item = new HashMap<>();
+        Map<String, Object> item = new HashMap();
         item.put("TYPE", false); // 生成@type属性
         item.put(JsonWriter.SKIP_NULL_FIELDS, true);
         return JsonWriter.objectToJson(obj, item);

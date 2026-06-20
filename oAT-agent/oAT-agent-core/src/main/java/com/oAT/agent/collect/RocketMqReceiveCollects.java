@@ -4,6 +4,8 @@ import com.oAT.agent.collect.rocketmq.InvocationAdapter;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.context.AgentContext;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.model.RocketMQConsumerTraceNode;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
@@ -20,6 +22,7 @@ import java.security.ProtectionDomain;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class RocketMqReceiveCollects extends AbstractByteTransformCollect implements ICollect {
     private final static Log logger = LogFactory.getLog(RocketMqReceiveCollects.class);
@@ -83,8 +86,10 @@ public class RocketMqReceiveCollects extends AbstractByteTransformCollect implem
                     continue;
                 }
                 TraceRequest request = getTraceRequest(invocationAdapter);
+                boolean localRoot = false;
                 if (request == null) {
-                    continue;
+                    request = createLocalRootRequest();
+                    localRoot = true;
                 }
                 final TraceSession session = traceContext.openTraceSession(CONSUMER_CLASS, CONSUMER_METHOD, request);
                 if (session == null) {
@@ -94,7 +99,7 @@ public class RocketMqReceiveCollects extends AbstractByteTransformCollect implem
                 RocketMQConsumerTraceNode node = new RocketMQConsumerTraceNode();
                 try {
                     node.setTraceId(traceContext.getTraceSession().getTraceId());
-                    node.setTraceNodeId(traceContext.getTraceSession().getParentNodeId() + ".remote");
+                    node.setTraceNodeId(localRoot ? "0" : traceContext.getTraceSession().getParentNodeId() + ".remote");
                 } catch (Throwable t) {
                     logger.error("[Agent-EXCError]TraceSession属性获取异常. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
                 }
@@ -108,7 +113,11 @@ public class RocketMqReceiveCollects extends AbstractByteTransformCollect implem
                 }
                 node.setConsumer(messageExtStr);
                 node.setMessage(messageExtStr);
-                return new RocketMqReceiveTraceNodeWrapper(session, node);
+                RocketMqReceiveTraceNodeWrapper wrapper = new RocketMqReceiveTraceNodeWrapper(session, node);
+                if (AsyncCoverageSupport.enabled(traceContext)) {
+                    wrapper.coverageCollector = AsyncCoverageSupport.begin(wrapper);
+                }
+                return wrapper;
             }
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]begin error. "
@@ -146,6 +155,7 @@ public class RocketMqReceiveCollects extends AbstractByteTransformCollect implem
     }
 
     public void end(RocketMqReceiveTraceNodeWrapper nodeWrapper, Object[] params) {
+        boolean deferred = false;
         try {
             if (nodeWrapper == null) {
                 logger.warn("[Agent-warn]end nodeWrapper为空");
@@ -166,13 +176,26 @@ public class RocketMqReceiveCollects extends AbstractByteTransformCollect implem
                 } else {
                     node.setStatus(TraceNode.Status.succeed.toString());
                 }
-                session.saveNode(node);
+                if (nodeWrapper.coverageCollector != null && AgentContext.hasPendingAsyncTasks()) {
+                    deferred = true;
+                    nodeWrapper.markDeferred();
+                    AtomicInteger activeAsyncTaskCount = AgentContext.getActiveAsyncTaskCount();
+                    int pendingAsyncTasks = activeAsyncTaskCount == null ? 0 : activeAsyncTaskCount.get();
+                    nodeWrapper.detachCurrentThreadContext();
+                    logger.info("[Agent-info]RocketMqReceiveCollects 检测到异步任务仍在执行，延迟覆盖率汇总，pendingAsyncTasks="
+                            + pendingAsyncTasks + ", traceId=" + node.getTraceId());
+                } else {
+                    nodeWrapper.collectCoverage();
+                    session.saveNode(node);
+                }
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]end 节点处理异常. "
                         + StackTraceFormatter.formatExceptionWithAgentMark(t));
             } finally {
                 try {
-                    nodeWrapper.doDestroy();
+                    if (!deferred) {
+                        nodeWrapper.doDestroy();
+                    }
                 } catch (Throwable t) {
                     logger.error("[Agent-EXCError]end doDestroy异常. "
                             + StackTraceFormatter.formatExceptionWithAgentMark(t));
@@ -233,23 +256,74 @@ public class RocketMqReceiveCollects extends AbstractByteTransformCollect implem
         return null;
     }
 
-    public class RocketMqReceiveTraceNodeWrapper implements ISessionDestroy {
+    private TraceRequest createLocalRootRequest() {
+        TraceRequest request = new TraceRequest();
+        request.setTraceId(traceContext.createTraceId());
+        request.setParentNodeCallId("0");
+        request.setProperties(new Properties());
+        return request;
+    }
+
+    public class RocketMqReceiveTraceNodeWrapper implements ISessionDestroy, AgentContext.AsyncCompletionListener {
         private final TraceSession session;
         private final RocketMQConsumerTraceNode node;
+        private CoverageCollector coverageCollector;
+        private boolean deferred;
+        private boolean destroyed;
 
         public RocketMqReceiveTraceNodeWrapper(TraceSession session, RocketMQConsumerTraceNode node) {
             this.session = session;
             this.node = node;
         }
 
+        public void onAsyncComplete(TraceSession traceSession) {
+            if (traceSession == null || !traceSession.getTraceId().equals(this.session.getTraceId())) {
+                return;
+            }
+            if (!deferred) {
+                return;
+            }
+            try {
+                clearDeferred();
+                collectCoverage();
+                session.saveNode(node);
+            } catch (Throwable t) {
+                logger.error("[Agent-EXCError]RocketMqReceiveCollects 异步覆盖率补报失败. "
+                        + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            } finally {
+                doDestroy();
+            }
+        }
+
+        private void collectCoverage() {
+            AsyncCoverageSupport.collect(node, coverageCollector);
+        }
+
+        private void markDeferred() {
+            this.deferred = true;
+        }
+
+        private void clearDeferred() {
+            this.deferred = false;
+        }
+
         @Override
         public void doDestroy() {
+            if (destroyed || deferred) {
+                return;
+            }
+            destroyed = true;
             try {
+                detachCurrentThreadContext();
                 traceContext.closeTraceSession(session);
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]doDestroy异常. "
                         + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
+        }
+
+        private void detachCurrentThreadContext() {
+            AsyncCoverageSupport.detach(coverageCollector);
         }
     }
 

@@ -7,9 +7,9 @@ public class TypeConvert {
     // int[] 转 ArrayList<Integer>
     public static ArrayList<Integer> toArrayList(int[] array) {
         if (array == null || array.length == 0) {
-            return new ArrayList<>(0);
+            return new ArrayList(0);
         }
-        ArrayList<Integer> list = new ArrayList<>(array.length);
+        ArrayList<Integer> list = new ArrayList(array.length);
         for (int value : array) {
             list.add(value);
         }
@@ -19,7 +19,7 @@ public class TypeConvert {
     // int[] 转 List<Integer>
     public static List<Integer> toList(int[] array) {
         if (array == null || array.length == 0) return Collections.emptyList();
-        List<Integer> list = new ArrayList<>(array.length);
+        List<Integer> list = new ArrayList(array.length);
         for (int value : array) {
             list.add(value);
         }
@@ -28,7 +28,7 @@ public class TypeConvert {
 
     //String 转 ArrayList<Integer>
     public static ArrayList<Integer> parseToIntList(String str) {
-        ArrayList<Integer> result = new ArrayList<>();
+        ArrayList<Integer> result = new ArrayList();
         if (str == null || str.length() < 2) {
             return result;
         }
@@ -60,7 +60,7 @@ public class TypeConvert {
 
     //String 转 Map<String, List<String>>
     public static Map<String, List<String>> convertStringToMap(String input) {
-        Map<String, List<String>> map = new HashMap<>();
+        Map<String, List<String>> map = new HashMap();
         if (input == null || !input.startsWith("{") || !input.endsWith("}")) {
             return map;
         }

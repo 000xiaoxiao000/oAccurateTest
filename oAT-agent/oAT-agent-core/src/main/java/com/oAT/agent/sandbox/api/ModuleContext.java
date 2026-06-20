@@ -11,4 +11,6 @@ public interface ModuleContext {
     Object traceContext();
 
     EventWatcher eventWatcher();
+
+    Object bootstrapEnhanceManager();
 }

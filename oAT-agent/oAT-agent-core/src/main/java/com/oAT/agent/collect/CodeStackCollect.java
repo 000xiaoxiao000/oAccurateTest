@@ -173,7 +173,7 @@ public class CodeStackCollect implements ClassFileTransformer {
     private boolean isAlreadyInstrumented(ClassReader reader) {
         final boolean[] instrumented = new boolean[]{false};
         try {
-            reader.accept(new ClassVisitor(Opcodes.ASM9) {
+            reader.accept(new ClassVisitor(InstrSupport.ASM_API_VERSION) {
                 @Override
                 public FieldVisitor visitField(int access, String name, String desc, String signature, Object value) {
                     if (InstrSupport.DATAFIELD_NAME.equals(name)) {

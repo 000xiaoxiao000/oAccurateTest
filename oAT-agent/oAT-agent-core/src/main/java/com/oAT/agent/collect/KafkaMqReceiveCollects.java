@@ -4,6 +4,8 @@ import com.oAT.agent.collect.kafka.InvocationConsumerAdapter;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.context.AgentContext;
+import com.oAT.agent.jacoco.CoverageCollector;
 import com.oAT.agent.model.KafkaMQRemoteTraceNode;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.trace.ISessionDestroy;
@@ -16,6 +18,7 @@ import com.oAT.shaded.javassist.CtMethod;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class KafkaMqReceiveCollects extends AbstractByteTransformCollect implements ICollect {
     private final static Log logger = LogFactory.getLog(KafkaMqReceiveCollects.class);
@@ -68,8 +71,10 @@ public class KafkaMqReceiveCollects extends AbstractByteTransformCollect impleme
             logger.error("[Agent-EXCError]getTraceRequest failed. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             return null;
         }
+        boolean localRoot = false;
         if (request == null) {
-            return null;
+            request = createLocalRootRequest();
+            localRoot = true;
         }
         TraceSession session;
         try {
@@ -84,12 +89,16 @@ public class KafkaMqReceiveCollects extends AbstractByteTransformCollect impleme
         KafkaMQRemoteTraceNode node = new KafkaMQRemoteTraceNode();
         try {
             node.setTraceId(traceContext.getTraceSession().getTraceId());
-            node.setTraceNodeId(traceContext.getTraceSession().getParentNodeId() + ".remote");
+            node.setTraceNodeId(localRoot ? "0" : traceContext.getTraceSession().getParentNodeId() + ".remote");
         } catch (Throwable t) {
             logger.error("[Agent-EXCError]set traceId/traceNodeId failed. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
         }
         node.setBeginTime(System.currentTimeMillis());
-        return new KafkaMqReceiveTraceNodeWrapper(session, node);
+        KafkaMqReceiveTraceNodeWrapper wrapper = new KafkaMqReceiveTraceNodeWrapper(session, node);
+        if (AsyncCoverageSupport.enabled(traceContext)) {
+            wrapper.coverageCollector = AsyncCoverageSupport.begin(wrapper);
+        }
+        return wrapper;
     }
 
     private TraceRequest getTraceRequest(InvocationConsumerAdapter invocationAdapter) {
@@ -131,6 +140,14 @@ public class KafkaMqReceiveCollects extends AbstractByteTransformCollect impleme
         return null;
     }
 
+    private TraceRequest createLocalRootRequest() {
+        TraceRequest request = new TraceRequest();
+        request.setTraceId(traceContext.createTraceId());
+        request.setParentNodeCallId("0");
+        request.setProperties(new java.util.Properties());
+        return request;
+    }
+
     public void end(KafkaMqReceiveTraceNodeWrapper nodeWrapper, Object[] params) {
         if (nodeWrapper == null || params == null || params.length == 0 || params[0] == null) {
             return;
@@ -145,6 +162,7 @@ public class KafkaMqReceiveCollects extends AbstractByteTransformCollect impleme
         if (session == null) {
             return;
         }
+        boolean deferred = false;
         KafkaMQRemoteTraceNode node = nodeWrapper.node;
         try {
             node.setEndTime(System.currentTimeMillis());
@@ -187,14 +205,27 @@ public class KafkaMqReceiveCollects extends AbstractByteTransformCollect impleme
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]setConsumerRecords failed. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
-            try {
-                traceContext.getTraceSession().saveNode(node);
-            } catch (Throwable t) {
-                logger.error("[Agent-EXCError]saveNode failed. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            if (nodeWrapper.coverageCollector != null && AgentContext.hasPendingAsyncTasks()) {
+                deferred = true;
+                nodeWrapper.markDeferred();
+                AtomicInteger activeAsyncTaskCount = AgentContext.getActiveAsyncTaskCount();
+                int pendingAsyncTasks = activeAsyncTaskCount == null ? 0 : activeAsyncTaskCount.get();
+                nodeWrapper.detachCurrentThreadContext();
+                logger.info("[Agent-info]KafkaMqReceiveCollects 检测到异步任务仍在执行，延迟覆盖率汇总，pendingAsyncTasks="
+                        + pendingAsyncTasks + ", traceId=" + node.getTraceId());
+            } else {
+                nodeWrapper.collectCoverage();
+                try {
+                    traceContext.getTraceSession().saveNode(node);
+                } catch (Throwable t) {
+                    logger.error("[Agent-EXCError]saveNode failed. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+                }
             }
         } finally {
             try {
-                nodeWrapper.doDestroy();
+                if (!deferred) {
+                    nodeWrapper.doDestroy();
+                }
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]doDestroy failed. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
@@ -220,25 +251,67 @@ public class KafkaMqReceiveCollects extends AbstractByteTransformCollect impleme
         }
     }
 
-    public class KafkaMqReceiveTraceNodeWrapper implements ISessionDestroy {
+    public class KafkaMqReceiveTraceNodeWrapper implements ISessionDestroy, AgentContext.AsyncCompletionListener {
         private final TraceSession session;
         private final KafkaMQRemoteTraceNode node;
+        private CoverageCollector coverageCollector;
+        private boolean deferred;
+        private boolean destroyed;
 
         public KafkaMqReceiveTraceNodeWrapper(TraceSession session, KafkaMQRemoteTraceNode node) {
             this.session = session;
             this.node = node;
         }
 
+        public void onAsyncComplete(TraceSession traceSession) {
+            if (traceSession == null || !traceSession.getTraceId().equals(this.session.getTraceId())) {
+                return;
+            }
+            if (!deferred) {
+                return;
+            }
+            try {
+                clearDeferred();
+                collectCoverage();
+                session.saveNode(node);
+            } catch (Throwable t) {
+                logger.error("[Agent-EXCError]KafkaMqReceiveCollects 异步覆盖率补报失败. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
+            } finally {
+                doDestroy();
+            }
+        }
+
+        private void collectCoverage() {
+            AsyncCoverageSupport.collect(node, coverageCollector);
+        }
+
+        private void markDeferred() {
+            this.deferred = true;
+        }
+
+        private void clearDeferred() {
+            this.deferred = false;
+        }
+
         @Override
         public void doDestroy() {
+            if (destroyed || deferred) {
+                return;
+            }
+            destroyed = true;
             if (traceContext == null || session == null) {
                 return;
             }
             try {
+                detachCurrentThreadContext();
                 traceContext.closeTraceSession(session);
             } catch (Throwable t) {
                 logger.error("[Agent-EXCError]closeTraceSession failed. " + StackTraceFormatter.formatExceptionWithAgentMark(t));
             }
+        }
+
+        private void detachCurrentThreadContext() {
+            AsyncCoverageSupport.detach(coverageCollector);
         }
     }
 

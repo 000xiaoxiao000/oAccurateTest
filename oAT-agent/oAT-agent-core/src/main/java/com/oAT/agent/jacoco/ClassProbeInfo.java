@@ -28,14 +28,14 @@ public class ClassProbeInfo {
         this.probeLineNumbers = new int[probeCount];
         this.probeIsBranch = new boolean[probeCount];
         this.probeMethodEntryIndex = new int[probeCount];
-        this.methodEntryToName = new HashMap<>();
-        this.methodEntryToLineTotals = new HashMap<>();
-        this.methodEntryToBranchTotals = new HashMap<>();
-        this.methodEntryToCyclo = new HashMap<>();
-        this.branchProbeToLine = new HashMap<>();
-        this.branchProbeToPathId = new HashMap<>();
-        this.methodEntryToRecursive = new HashMap<>();
-        this.methodEntryToAsync = new HashMap<>();
+        this.methodEntryToName = new HashMap();
+        this.methodEntryToLineTotals = new HashMap();
+        this.methodEntryToBranchTotals = new HashMap();
+        this.methodEntryToCyclo = new HashMap();
+        this.branchProbeToLine = new HashMap();
+        this.branchProbeToPathId = new HashMap();
+        this.methodEntryToRecursive = new HashMap();
+        this.methodEntryToAsync = new HashMap();
     }
 
     public void setProbeLineNumber(int probeIdx, int line) {

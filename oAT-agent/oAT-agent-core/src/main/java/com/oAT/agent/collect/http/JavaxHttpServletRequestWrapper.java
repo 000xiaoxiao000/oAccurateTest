@@ -9,7 +9,6 @@ import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
@@ -22,9 +21,12 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
     public JavaxHttpServletRequestWrapper(HttpServletRequest request) {
         super(request);
         logger.debug("[Agent-JavaxHttpServletRequestWrapper]" + request.getClass().getName());
-        this.headers = new HashMap<>();
-        Collections.list(request.getHeaderNames())
-                .forEach(name -> headers.put(name, request.getHeader(name)));
+        this.headers = new HashMap<String, String>();
+        Enumeration headerNames = request.getHeaderNames();
+        while (headerNames != null && headerNames.hasMoreElements()) {
+            String name = String.valueOf(headerNames.nextElement());
+            headers.put(name, request.getHeader(name));
+        }
         // 不在构造时直接cache，延迟到真正需要时
     }
 
@@ -37,13 +39,13 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
         }
         try {
             String s = new String(cachedBody, getCharacterEncoding() != null ? getCharacterEncoding() :
-                    StandardCharsets.UTF_8.name());
+                    "UTF-8");
             if (s.length() > 8192) {
                 return s.substring(0, 8192) + "...";
             }
             return s;
         } catch (Throwable e) {
-            String s = new String(cachedBody, StandardCharsets.UTF_8);
+            String s = com.oAT.agent.common.StringUtils.newStringUtf8(cachedBody);
             if (s.length() > 8192) {
                 return s.substring(0, 8192) + "...";
             }
@@ -81,7 +83,7 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
             cachedBody = new byte[0];
         }
         return new BufferedReader(new InputStreamReader(new ByteArrayInputStream(cachedBody),
-                getCharacterEncoding() != null ? getCharacterEncoding() : StandardCharsets.UTF_8.name()));
+                getCharacterEncoding() != null ? getCharacterEncoding() : "UTF-8"));
     }
 
     private synchronized void cacheRequestBody() {
@@ -91,12 +93,14 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
         try {
             String contentType = getContentType();
             if (contentType != null && contentType.toLowerCase().startsWith("multipart/")) {
-                cachedBody = "[multipart omitted]".getBytes(StandardCharsets.UTF_8);
+                cachedBody = "[multipart omitted]".getBytes("UTF-8");
                 return;
             }
 
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            try (InputStream inputStream = super.getInputStream()) {
+            InputStream inputStream = null;
+            try {
+                inputStream = super.getInputStream();
                 byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = inputStream.read(buffer)) != -1) {
@@ -110,6 +114,8 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
                 // 其他异常也降级
                 logger.error("[Agent-EXCError]Unexpected error, fallback to empty body. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
                 cachedBody = new byte[0];
+            } finally {
+                closeQuietly(inputStream);
             }
             // 如果 cachedBody 还未赋值，正常赋值
             if (cachedBody == null) {
@@ -127,12 +133,24 @@ public class JavaxHttpServletRequestWrapper extends HttpServletRequestWrapper {
 
     @Override
     public String getHeader(String name) {
-        return headers.getOrDefault(name, super.getHeader(name));
+        String value = headers.get(name);
+        return value == null ? super.getHeader(name) : value;
     }
 
     @Override
     public String getContentType() {
-        return headers.getOrDefault("Content-Type", super.getContentType());
+        String value = headers.get("Content-Type");
+        return value == null ? super.getContentType() : value;
+    }
+
+    private static void closeQuietly(Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (IOException ignored) {
+        }
     }
 
     private static class CachedBodyServletInputStream extends ServletInputStream {

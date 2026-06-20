@@ -7,7 +7,6 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -78,7 +77,7 @@ public class HttpClient {
      */
     public static Future<String> execHttpRawBody(final String url, final String contentType,
                                                  final byte[] body) {
-        final FutureTask<String> task = new FutureTask<>(new Callable<String>() {
+        final FutureTask<String> task = new FutureTask(new Callable<String>() {
             @Override
             public String call() throws Exception {
                 return executeHttpRequestRawBody(url, contentType, body);
@@ -167,9 +166,13 @@ public class HttpClient {
             conn.setConnectTimeout(timeout);
             conn.setReadTimeout(timeout);
 
-            try (OutputStream out = new BufferedOutputStream(conn.getOutputStream())) {
+            OutputStream out = null;
+            try {
+                out = new BufferedOutputStream(conn.getOutputStream());
                 out.write(body);
                 out.flush();
+            } finally {
+                closeQuietly(out);
             }
 
             int responseCode = conn.getResponseCode();
@@ -195,9 +198,13 @@ public class HttpClient {
             conn = getHttpURLConnection(url, params);
             String postData = buildPostData(params);
 
-            try (OutputStream out = new BufferedOutputStream(conn.getOutputStream())) {
-                out.write(postData.getBytes(StandardCharsets.UTF_8));
+            OutputStream out = null;
+            try {
+                out = new BufferedOutputStream(conn.getOutputStream());
+                out.write(postData.getBytes("UTF-8"));
                 out.flush();
+            } finally {
+                closeQuietly(out);
             }
 
             int responseCode = conn.getResponseCode();
@@ -259,7 +266,9 @@ public class HttpClient {
     }
 
     private static String readResponse(HttpURLConnection conn, int responseCode) throws IOException {
-        try (InputStream in = responseCode < 400 ? conn.getInputStream() : conn.getErrorStream()) {
+        InputStream in = null;
+        try {
+            in = responseCode < 400 ? conn.getInputStream() : conn.getErrorStream();
             if (in == null) {
                 return "";
             }
@@ -270,6 +279,18 @@ public class HttpClient {
                 baos.write(buf, 0, r);
             }
             return baos.toString("UTF-8");
+        } finally {
+            closeQuietly(in);
+        }
+    }
+
+    private static void closeQuietly(Closeable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (IOException ignored) {
         }
     }
 

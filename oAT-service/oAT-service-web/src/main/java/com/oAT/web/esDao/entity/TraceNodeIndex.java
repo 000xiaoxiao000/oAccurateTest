@@ -1,6 +1,8 @@
 package com.oAT.web.esDao.entity;
 
 import com.oAT.agent.model.*;
+import com.oAT.web.service.TraceEntryDescriptor;
+import com.oAT.web.service.TraceEntryDescriptorBuilder;
 import com.oAT.web.exceptions.DirtyDataException;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.elasticsearch.annotations.Document;
@@ -49,6 +51,19 @@ public class TraceNodeIndex implements StandardDate, Serializable {
     private Long useTime;
     @Field(type = FieldType.Keyword)
     private String appName;
+
+    @Field(type = FieldType.Keyword)
+    private String entryType;
+    @Field(type = FieldType.Keyword)
+    private String entryName;
+    @Field(type = FieldType.Keyword)
+    private String entryProtocol;
+    @Field(type = FieldType.Keyword)
+    private String entryTopic;
+    @Field(type = FieldType.Keyword)
+    private String entryInterface;
+    @Field(type = FieldType.Keyword)
+    private String entryMethod;
 
     // ===== HTTP flattened fields =====
     @Field(type = FieldType.Keyword)
@@ -285,6 +300,15 @@ public class TraceNodeIndex implements StandardDate, Serializable {
         endTime = node.getEndTime();
         useTime = node.getUseTime();
         hasError = (node instanceof StatementError) && ((StatementError) node).getError() != null;
+        if (root) {
+            TraceEntryDescriptor entry = TraceEntryDescriptorBuilder.build(node);
+            entryType = entry.getEntryType();
+            entryName = entry.getEntryName();
+            entryProtocol = entry.getEntryProtocol();
+            entryTopic = entry.getEntryTopic();
+            entryInterface = entry.getEntryInterface();
+            entryMethod = entry.getEntryMethod();
+        }
     }
 
     private void extractFlattenedFields(TraceNode node) {
@@ -444,6 +468,24 @@ public class TraceNodeIndex implements StandardDate, Serializable {
 
     public String getAppName() { return appName; }
     public void setAppName(String appName) { this.appName = appName; }
+
+    public String getEntryType() { return entryType; }
+    public void setEntryType(String entryType) { this.entryType = entryType; }
+
+    public String getEntryName() { return entryName; }
+    public void setEntryName(String entryName) { this.entryName = entryName; }
+
+    public String getEntryProtocol() { return entryProtocol; }
+    public void setEntryProtocol(String entryProtocol) { this.entryProtocol = entryProtocol; }
+
+    public String getEntryTopic() { return entryTopic; }
+    public void setEntryTopic(String entryTopic) { this.entryTopic = entryTopic; }
+
+    public String getEntryInterface() { return entryInterface; }
+    public void setEntryInterface(String entryInterface) { this.entryInterface = entryInterface; }
+
+    public String getEntryMethod() { return entryMethod; }
+    public void setEntryMethod(String entryMethod) { this.entryMethod = entryMethod; }
 
     public String getHttpClientIp() { return httpClientIp; }
     public void setHttpClientIp(String httpClientIp) { this.httpClientIp = httpClientIp; }

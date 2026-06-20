@@ -12,15 +12,18 @@ public class SandboxContext implements ModuleContext {
     private final Properties properties;
     private final TraceContext traceContext;
     private final EventWatcher eventWatcher;
+    private final BootstrapEnhanceManager bootstrapEnhanceManager;
 
     public SandboxContext(Instrumentation instrumentation,
                           Properties properties,
                           TraceContext traceContext,
-                          EventWatcher eventWatcher) {
+                          EventWatcher eventWatcher,
+                          BootstrapEnhanceManager bootstrapEnhanceManager) {
         this.instrumentation = instrumentation;
         this.properties = properties;
         this.traceContext = traceContext;
         this.eventWatcher = eventWatcher;
+        this.bootstrapEnhanceManager = bootstrapEnhanceManager;
     }
 
     @Override
@@ -41,5 +44,10 @@ public class SandboxContext implements ModuleContext {
     @Override
     public EventWatcher eventWatcher() {
         return eventWatcher;
+    }
+
+    @Override
+    public Object bootstrapEnhanceManager() {
+        return bootstrapEnhanceManager;
     }
 }

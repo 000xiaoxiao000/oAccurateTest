@@ -5,7 +5,6 @@ import com.oAT.agent.collect.ckjdbc.ClickHouseJdbcCollects;
 import com.oAT.agent.collect.jdbc.JdbcCommonCollects;
 import com.oAT.agent.collect.redis.RedisCollects;
 import com.oAT.agent.collect.redis.RedissonCollects;
-import com.oAT.agent.collect.thread.ThreadPoolCollect;
 import com.oAT.agent.common.*;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
@@ -75,8 +74,8 @@ public class TraceContext {
             }
         }));
 
-        AtomicReference<ConfigStatus> codeStackIncludeStatus = new AtomicReference<>();
-        AtomicReference<ConfigStatus> confCodeStackIncludeStatus = new AtomicReference<>();
+        AtomicReference<ConfigStatus> codeStackIncludeStatus = new AtomicReference();
+        AtomicReference<ConfigStatus> confCodeStackIncludeStatus = new AtomicReference();
 
         // 客户端未登录或客户端未启动时，代码采集的配置处理
         if (doLogin()) {
@@ -390,10 +389,6 @@ public class TraceContext {
                 && Boolean.parseBoolean(getConfig("collect.httpClientV4", "true"))) {
             HttpClientCollectV4.INSTANCE = new HttpClientCollectV4(this, instrumentation);
         }
-        if (!Boolean.parseBoolean(getConfig("sandbox.thread-pool.enabled", "false"))
-                && Boolean.parseBoolean(getConfig("collect.threadPool", "false"))) {
-            ThreadPoolCollect.INSTANCE = new ThreadPoolCollect(instrumentation);
-        }
         //设置了 service.include 才开启服务类采集
         if (!Boolean.parseBoolean(getConfig("sandbox.service.enabled", "false"))
                 && StringUtils.hasText(getConfig("service.include"))) {
@@ -467,7 +462,7 @@ public class TraceContext {
         ClientInfoHelp clientInfoHelp = new ClientInfoHelp(this);
         ClientInfoVo clientInfoVo = clientInfoHelp.buildClientInfo(loginTimestamp);
         String clientInfoStr = JsonUtil.toJson(clientInfoVo);
-        Map<String, String> params = new HashMap<>();
+        Map<String, String> params = new HashMap();
         params.put("clientInfo", clientInfoStr);
         //获取本机信息
         String clientSessionStr;
@@ -477,7 +472,10 @@ public class TraceContext {
             Thread.currentThread().interrupt();
             logger.warn("[Agent-warn]登录 server 被中断");
             return false;
-        } catch (ExecutionException | TimeoutException ee) {
+        } catch (ExecutionException ee) {
+            logger.error("[Agent-EXCError]登录 server 失败. " + ee); // 完整堆栈
+            return false;
+        } catch (TimeoutException ee) {
             logger.error("[Agent-EXCError]登录 server 失败. " + ee); // 完整堆栈
             return false;
         }
@@ -566,7 +564,7 @@ public class TraceContext {
             ClientInfoHelp clientInfoHelp = new ClientInfoHelp(this);
             // 复用doLogin时的时间戳
             ClientInfoVo clientInfoVo = clientInfoHelp.buildClientInfo(loginTimestamp);
-            Map<String, String> params = new HashMap<>();
+            Map<String, String> params = new HashMap();
             params.put("clientInfo", JsonUtil.toJson(clientInfoVo));
             try {
                 String clientSessionStr = HttpClient.execHttp(loginUrl, params).get(10, TimeUnit.SECONDS);
@@ -577,7 +575,10 @@ public class TraceContext {
                     logger.warn("[Agent-warn]server 可用性重新登录被中断");
                 }
                 return false;
-            } catch (ExecutionException | TimeoutException e) {
+            } catch (ExecutionException e) {
+                logger.error("[Agent-EXCError]server 可用性失败，重新登录失败. " + e);
+                return false;
+            } catch (TimeoutException e) {
                 logger.error("[Agent-EXCError]server 可用性失败，重新登录失败. " + e);
                 return false;
             }

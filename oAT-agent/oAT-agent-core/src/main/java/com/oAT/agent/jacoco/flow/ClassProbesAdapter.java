@@ -37,7 +37,7 @@ public class ClassProbesAdapter extends ClassVisitor implements IProbeIdGenerato
 
     private String name;
 
-    public Map<String, Integer> totalBranchMap = new HashMap<>(); // 分支总数，用于分支覆盖率统计
+    public Map<String, Integer> totalBranchMap = new HashMap(); // 分支总数，用于分支覆盖率统计
 
     /**
      * Creates a new adapter that delegates to the given visitor.

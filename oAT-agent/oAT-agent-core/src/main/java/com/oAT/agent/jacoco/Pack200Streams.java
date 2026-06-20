@@ -41,7 +41,13 @@ public final class Pack200Streams {
                     .getMethod("unpack", InputStream.class,
                             JarOutputStream.class)
                     .invoke(unpacker, new NoCloseInput(input), jar);
-        } catch (ClassNotFoundException | InvocationTargetException | NoSuchMethodException | IllegalAccessException e) {
+        } catch (ClassNotFoundException e) {
+            throw new IOException(e.getMessage());
+        } catch (InvocationTargetException e) {
+            throw new IOException(e.getMessage());
+        } catch (NoSuchMethodException e) {
+            throw new IOException(e.getMessage());
+        } catch (IllegalAccessException e) {
             throw new IOException(e.getMessage());
         }
         jar.finish();
@@ -69,7 +75,13 @@ public final class Pack200Streams {
             Class.forName("java.util.jar.Pack200$Packer")
                     .getMethod("pack", JarInputStream.class, OutputStream.class)
                     .invoke(packer, jar, output);
-        } catch (ClassNotFoundException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+        } catch (ClassNotFoundException e) {
+            throw newIOException(e);
+        } catch (IllegalAccessException e) {
+            throw newIOException(e);
+        } catch (InvocationTargetException e) {
+            throw newIOException(e);
+        } catch (NoSuchMethodException e) {
             throw newIOException(e);
         }
     }

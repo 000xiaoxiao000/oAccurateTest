@@ -3,6 +3,7 @@ package com.oAT.agent.sandbox.core;
 import com.oAT.agent.common.StackTraceFormatter;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.jacoco.instr.InstrSupport;
 import com.oAT.agent.sandbox.api.EventType;
 import com.oAT.agent.sandbox.spy.OatSpy;
 import com.oAT.shaded.asm97.ClassReader;
@@ -90,7 +91,7 @@ public class SandboxTransformer implements ClassFileTransformer {
                             ClassLoader loader,
                             String className,
                             List<WatchDefinition> classWatches) {
-            super(Opcodes.ASM9, cv);
+            super(InstrSupport.ASM_API_VERSION, cv);
             this.loader = loader;
             this.className = className;
             this.classWatches = classWatches;
@@ -152,7 +153,7 @@ public class SandboxTransformer implements ClassFileTransformer {
                              String className,
                              String internalClassName,
                              List<WatchDefinition> methodWatches) {
-            super(Opcodes.ASM9, mv, access, methodName, descriptor);
+            super(InstrSupport.ASM_API_VERSION, mv, access, methodName, descriptor);
             this.loader = loader;
             this.className = className;
             this.internalClassName = internalClassName;

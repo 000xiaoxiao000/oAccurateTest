@@ -79,7 +79,7 @@ public class HttpClientCollectV3 extends AbstractByteTransformCollect implements
 
     private Map<String, String> traceHeader(HttpClientTraceNode node) {
         try {
-            Map<String, String> map = new HashMap<>();
+            Map<String, String> map = new HashMap();
 //            map.put("parentTraceId", node.getTraceId() + "_" + node.getTraceNodeId());
             String userHeader = traceContext.getTraceSession().getTraceRequest().getUserHeader();
             if (StringUtils.hasText(userHeader)) {

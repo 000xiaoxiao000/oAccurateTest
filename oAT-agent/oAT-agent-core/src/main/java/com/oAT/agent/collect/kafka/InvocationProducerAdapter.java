@@ -33,7 +33,11 @@ public class InvocationProducerAdapter {
             for (byte[] value : values) {
                 addMethod.invoke(headers, key, value);
             }
-        } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
+        } catch (IllegalAccessException e) {
+            logger.error("[Agent-EXCError]addHeader error. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
+        } catch (NoSuchMethodException e) {
+            logger.error("[Agent-EXCError]addHeader error. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
+        } catch (InvocationTargetException e) {
             logger.error("[Agent-EXCError]addHeader error. " + StackTraceFormatter.formatExceptionWithAgentMark(e));
         } finally {
             _headers.setAccessible(old);

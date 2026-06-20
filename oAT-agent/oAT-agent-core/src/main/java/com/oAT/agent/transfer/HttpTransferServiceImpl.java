@@ -5,6 +5,7 @@ import com.oAT.agent.common.JsonUtil;
 import com.oAT.agent.common.StringUtils;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.model.CoverageUploadVo;
 import com.oAT.agent.trace.TraceContext;
 import com.oAT.server.model.ClientSessionVo;
 
@@ -17,6 +18,7 @@ public class HttpTransferServiceImpl implements TransferService {
     private static final String JSON_ERROR_PLACEHOLDER = "[JsonError]";
 
     private final String[] uploadPaths;
+    private final String coverageUploadPath;
     private final TraceContext traceContext;
     private final String clientSessionId;
 
@@ -26,6 +28,7 @@ public class HttpTransferServiceImpl implements TransferService {
             this.traceContext = null;
             this.clientSessionId = null;
             this.uploadPaths = null;
+            this.coverageUploadPath = null;
             return;
         }
 
@@ -35,11 +38,13 @@ public class HttpTransferServiceImpl implements TransferService {
             logger.warn("[Agent-warn] ClientSession or sessionId is null");
             this.clientSessionId = null;
             this.uploadPaths = new String[]{traceContext.getRemoteServer() + "/client/upload"};
+            this.coverageUploadPath = traceContext.getRemoteServer() + "/client/coverage/upload";
             return;
         }
 
         this.clientSessionId = clientSession.getSessionId();
         this.uploadPaths = new String[]{traceContext.getRemoteServer() + "/client/upload"};
+        this.coverageUploadPath = traceContext.getRemoteServer() + "/client/coverage/upload";
     }
 
     @Override
@@ -110,6 +115,62 @@ public class HttpTransferServiceImpl implements TransferService {
         } catch (Throwable e) {
             logger.error(String.format("[Agent-EXCError]上传时处理异常: traceId=%s, sessionId=%s, type=%s, url=%s, 异常: %s",
                     traceId, sessionId, type, uploadPath, e.getMessage()));
+        }
+    }
+
+    @Override
+    public void uploadCoverage(final CoverageUploadVo coverage) {
+        if (coverageUploadPath == null) {
+            logger.warn("[Agent-warn]不可上传覆盖率数据，上传路径未配置");
+            return;
+        }
+        if (coverage == null || coverage.getCodeNodes() == null || coverage.getCodeNodes().length == 0) {
+            return;
+        }
+
+        String sessionId = coverage.getSessionId();
+        if (StringUtils.isEmpty(sessionId)) {
+            sessionId = StringUtils.isEmpty(this.clientSessionId)
+                    ? traceContext.getClientSession().getSessionId()
+                    : this.clientSessionId;
+            coverage.setSessionId(sessionId);
+        }
+        if (StringUtils.isEmpty(sessionId)) {
+            logger.warn("[Agent-warn]不可上传覆盖率数据，sessionId 为空，traceId: " + coverage.getTraceId());
+            return;
+        }
+
+        String dataJson;
+        try {
+            dataJson = JsonUtil.toJson(coverage);
+        } catch (Throwable jsonEx) {
+            logger.error(String.format("[Agent-EXCError]覆盖率对象转JSON失败，traceId=%s, sessionId=%s, 异常: %s",
+                    coverage.getTraceId(), sessionId, jsonEx));
+            return;
+        }
+
+        try {
+            Map<String, String> params = new HashMap<String, String>(2);
+            params.put("sessionId", sessionId);
+            params.put("data", dataJson);
+
+            final String traceId = coverage.getTraceId();
+            final int nodeCount = coverage.getCodeNodes().length;
+            HttpClient.execHttp(coverageUploadPath, params, new HttpClient.HttpCallback() {
+                @Override
+                public void onComplete(String resp, Throwable err) {
+                    if (err != null) {
+                        logger.error(String.format("[Agent-EXCError]上传覆盖率数据失败: url=%s, traceId=%s, nodes=%s, 异常: %s",
+                                coverageUploadPath, traceId, String.valueOf(nodeCount), err.getMessage()));
+                    } else if (logger.isDebugEnabled()) {
+                        logger.debug(String.format("[Agent-succeed]上传覆盖率数据成功: resp=%s, traceId=%s, nodes=%s, url=%s",
+                                resp, traceId, String.valueOf(nodeCount), coverageUploadPath));
+                    }
+                }
+            });
+        } catch (Throwable e) {
+            logger.error(String.format("[Agent-EXCError]上传覆盖率时处理异常: traceId=%s, sessionId=%s, url=%s, 异常: %s",
+                    coverage.getTraceId(), sessionId, coverageUploadPath, e.getMessage()));
         }
     }
 }

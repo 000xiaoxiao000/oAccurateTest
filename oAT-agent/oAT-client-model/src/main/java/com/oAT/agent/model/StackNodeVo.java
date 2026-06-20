@@ -16,14 +16,14 @@ public class StackNodeVo implements java.io.Serializable {
     /**
      * 执行到的代码行数
      */
-    private ArrayList<Integer> doLines = new ArrayList<>(8);
+    private ArrayList<Integer> doLines = new ArrayList(8);
 
-    private ArrayList<Integer> executeMethodTotal = new ArrayList<>(1);
+    private ArrayList<Integer> executeMethodTotal = new ArrayList(1);
 
     /**
      * 已命中的分支行
      */
-    private ArrayList<Integer> executeBranch = new ArrayList<>(4);
+    private ArrayList<Integer> executeBranch = new ArrayList(4);
     /**
      * JaCoCo 风格分支命中：分支行 -> 已命中的目标探针编号集合
      */

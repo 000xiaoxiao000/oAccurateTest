@@ -4,6 +4,12 @@ import com.oAT.agent.common.Assert;
 import com.oAT.agent.common.NetUtils;
 import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
+import com.oAT.agent.model.CodeNodeBean;
+import com.oAT.agent.model.CoverageUploadVo;
+import com.oAT.agent.model.HttpTraceNode;
+import com.oAT.agent.model.ServiceTraceNode;
+import com.oAT.agent.model.SofaRpcRemoteTraceNode;
+import com.oAT.agent.model.StackNodeVo;
 import com.oAT.agent.model.TraceNode;
 import com.oAT.agent.transfer.TransferService;
 
@@ -123,10 +129,65 @@ public class TraceSession {
         if (traceNode.getAddressIp() == null) {
             traceNode.setAddressIp(NetUtils.getLocalHost());
         }
+        uploadCoverageIfPresent(traceNode);
         transferService.uploadNode(traceNode.getTraceId(), traceNode.getClass().getName(), traceNode);
     }
 
     public TransferService getTransferService() {
         return transferService;
+    }
+
+    private void uploadCoverageIfPresent(TraceNode traceNode) {
+        if (!(traceNode instanceof CodeNodeBean)) {
+            return;
+        }
+        StackNodeVo[] codeNodes = ((CodeNodeBean) traceNode).getCodeNodes();
+        if (codeNodes == null || codeNodes.length == 0) {
+            return;
+        }
+        try {
+            CoverageUploadVo coverage = new CoverageUploadVo();
+            coverage.setSessionId(traceContext.getClientSessionId());
+            coverage.setTraceId(traceNode.getTraceId());
+            coverage.setTraceNodeId(traceNode.getTraceNodeId());
+            coverage.setEntryType(traceNode.toType());
+            coverage.setEntryName(resolveEntryName(traceNode));
+            if (traceNode.getApp() != null) {
+                coverage.setAppId(traceNode.getApp().getAppId());
+            }
+            coverage.setCodeNodes(codeNodes);
+            transferService.uploadCoverage(coverage);
+        } catch (Throwable t) {
+            logger.warn("[Agent-warn]覆盖率独立上传失败，保留 TraceNode 内 codeNodes 兼容上报，traceId="
+                    + traceNode.getTraceId() + ", error=" + t.getMessage());
+        }
+    }
+
+    private String resolveEntryName(TraceNode traceNode) {
+        if (traceNode instanceof HttpTraceNode) {
+            return ((HttpTraceNode) traceNode).getRequestUrl();
+        }
+        if (traceNode instanceof ServiceTraceNode) {
+            ServiceTraceNode node = (ServiceTraceNode) traceNode;
+            String serviceName = node.getServiceName() != null ? node.getServiceName() : node.getSimpleName();
+            if (serviceName == null) {
+                return node.getMethodName();
+            }
+            if (node.getMethodName() == null) {
+                return serviceName;
+            }
+            return serviceName + "#" + node.getMethodName();
+        }
+        if (traceNode instanceof SofaRpcRemoteTraceNode) {
+            SofaRpcRemoteTraceNode node = (SofaRpcRemoteTraceNode) traceNode;
+            if (node.getInterfaceName() == null) {
+                return node.getMethodName();
+            }
+            if (node.getMethodName() == null) {
+                return node.getInterfaceName();
+            }
+            return node.getInterfaceName() + "#" + node.getMethodName();
+        }
+        return traceNode.toType();
     }
 }

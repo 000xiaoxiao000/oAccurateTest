@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DeferredHttpTraceNodeRegistry {
     private static final Log logger = LogFactory.getLog(DeferredHttpTraceNodeRegistry.class);
 
-    private final Map<String, HttpServletCollect.HttpServletTraceNodeWrapper> deferredNodes = new ConcurrentHashMap<>();
+    private final Map<String, HttpServletCollect.HttpServletTraceNodeWrapper> deferredNodes = new ConcurrentHashMap();
 
     public void register(TraceSession traceSession, HttpServletCollect.HttpServletTraceNodeWrapper nodeWrapper) {
         if (traceSession == null || nodeWrapper == null) {

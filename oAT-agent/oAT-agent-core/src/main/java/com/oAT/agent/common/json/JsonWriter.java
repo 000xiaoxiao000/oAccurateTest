@@ -6,7 +6,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.Map.Entry;
@@ -121,7 +120,7 @@ public class JsonWriter implements Closeable, Flushable
             byteStrings[i + 128] = chars;
         }
 
-        Map<Class, JsonClassWriterBase> temp = new HashMap<>();
+        Map<Class, JsonClassWriterBase> temp = new HashMap();
         temp.put(String.class, new Writers.JsonStringWriter());
         temp.put(Date.class, new Writers.DateWriter());
         temp.put(AtomicBoolean.class, new Writers.AtomicBooleanWriter());
@@ -292,7 +291,7 @@ public class JsonWriter implements Closeable, Flushable
             JsonWriter writer = new JsonWriter(stream, optionalArgs);
             writer.write(item);
             writer.close();
-            return new String(stream.toByteArray(), "UTF-8");
+            return com.oAT.agent.common.StringUtils.newStringUtf8(stream.toByteArray());
         }
         catch (Exception e)
         {
@@ -319,7 +318,7 @@ public class JsonWriter implements Closeable, Flushable
      */
     public static String formatJson(String json, Map readingArgs, Map writingArgs)
     {
-        Map args = new HashMap<>();
+        Map args = new HashMap();
         if (readingArgs != null)
         {
             args.putAll(readingArgs);
@@ -358,7 +357,7 @@ public class JsonWriter implements Closeable, Flushable
     {
         if (optionalArgs == null)
         {
-            optionalArgs = new HashMap<>();
+            optionalArgs = new HashMap();
         }
         args.putAll(optionalArgs);
         args.put(JsonClassWriterEx.JSON_WRITER, this);
@@ -397,12 +396,12 @@ public class JsonWriter implements Closeable, Flushable
         if (optionalArgs.containsKey(FIELD_SPECIFIERS))
         {   // Convert String field names to Java Field instances (makes it easier for user to set this up)
             Map<Class, List<String>> specifiers = (Map<Class, List<String>>) args.get(FIELD_SPECIFIERS);
-            Map<Class, List<Field>> copy = new HashMap<>();
+            Map<Class, List<Field>> copy = new HashMap();
             for (Entry<Class, List<String>> entry : specifiers.entrySet())
             {
                 Class c = entry.getKey();
                 List<String> fields = entry.getValue();
-                List<Field> newList = new ArrayList<>(fields.size());
+                List<Field> newList = new ArrayList(fields.size());
 
                 Map<String, Field> classFields = MetaUtils.getDeepDeclaredFields(c);
 
@@ -426,12 +425,12 @@ public class JsonWriter implements Closeable, Flushable
         if (optionalArgs.containsKey(FIELD_NAME_BLACK_LIST))
         {   // Convert String field names to Java Field instances (makes it easier for user to set this up)
             Map<Class, List<String>> blackList = (Map<Class, List<String>>) args.get(FIELD_NAME_BLACK_LIST);
-            Map<Class, List<Field>> copy = new HashMap<>();
+            Map<Class, List<Field>> copy = new HashMap();
             for (Entry<Class, List<String>> entry : blackList.entrySet())
             {
                 Class c = entry.getKey();
                 List<String> fields = entry.getValue();
-                List<Field> newList = new ArrayList<>(fields.size());
+                List<Field> newList = new ArrayList(fields.size());
 
                 Map<String, Field> classFields = MetaUtils.getDeepDeclaredFields(c);
 
@@ -450,10 +449,14 @@ public class JsonWriter implements Closeable, Flushable
         }
         else
         {   // Ensure that at least an empty Map is in the FIELD_SPECIFIERS entry
-            args.put(FIELD_BLACK_LIST, new HashMap<>());
+            args.put(FIELD_BLACK_LIST, new HashMap<Object, Object>());
         }
 
-        this.out = new BufferedWriter(new OutputStreamWriter(out, StandardCharsets.UTF_8));
+        try {
+            this.out = new BufferedWriter(new OutputStreamWriter(out, "UTF-8"));
+        } catch (UnsupportedEncodingException e) {
+            throw new JsonIoException("UTF-8 encoding is not available", e);
+        }
     }
 
     /**
@@ -802,7 +805,7 @@ public class JsonWriter implements Closeable, Flushable
             return;
         }
         Map<Class, List<Field>> fieldSpecifiers = (Map) args.get(FIELD_SPECIFIERS);
-        final Deque<Object> stack = new ArrayDeque<>();
+        final Deque<Object> stack = new ArrayDeque<Object>();
         stack.addFirst(root);
         final Map<Object, Long> visited = objVisited;
 

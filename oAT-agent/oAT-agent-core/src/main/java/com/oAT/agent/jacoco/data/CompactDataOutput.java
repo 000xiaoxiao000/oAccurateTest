@@ -9,7 +9,6 @@ import com.oAT.agent.trace.TraceContext;
 import com.oAT.server.model.ClientSessionVo;
 
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -46,7 +45,7 @@ public class CompactDataOutput {
                 STATIC_UPLOAD_STARTED.set(false);
                 return;
             }
-            int byteSize = json.getBytes(StandardCharsets.UTF_8).length;
+            int byteSize = json.getBytes("UTF-8").length;
             final double mbSize = byteSize / (1024.0 * 1024.0);
 
             TraceContext ctx = Agent.traceContext;
@@ -69,7 +68,7 @@ public class CompactDataOutput {
             }
 
             String uploadUrl = remote + "/client/uploadStaticData?appId=" + URLEncoder.encode(appId, "UTF-8");
-            byte[] bodyBytes = json.getBytes(StandardCharsets.UTF_8);
+            byte[] bodyBytes = json.getBytes("UTF-8");
 
             logger.info(String.format("[Agent-info]开始上报静态代码信息: dataSize=%.4f MB, classCount=%d, url=%s",
                     mbSize, CompactDataInput.getAllClassStaticInfo().size(), uploadUrl));

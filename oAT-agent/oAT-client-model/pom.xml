@@ -12,11 +12,34 @@
     <description>接口模型</description>
 
     <properties>
-        <!-- oAT-client-model must be Java 8 compatible for oAT-agent-core -->
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>1.7</maven.compiler.source>
+        <maven.compiler.target>1.7</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <profiles>
+        <profile>
+            <id>probe-jdk6</id>
+            <properties>
+                <maven.compiler.source>1.6</maven.compiler.source>
+                <maven.compiler.target>1.6</maven.compiler.target>
+            </properties>
+        </profile>
+        <profile>
+            <id>probe-jdk7</id>
+            <properties>
+                <maven.compiler.source>1.7</maven.compiler.source>
+                <maven.compiler.target>1.7</maven.compiler.target>
+            </properties>
+        </profile>
+        <profile>
+            <id>probe-jdk8</id>
+            <properties>
+                <maven.compiler.source>1.8</maven.compiler.source>
+                <maven.compiler.target>1.8</maven.compiler.target>
+            </properties>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>
@@ -25,8 +48,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>8</source>
-                    <target>8</target>
+                    <source>${maven.compiler.source}</source>
+                    <target>${maven.compiler.target}</target>
                 </configuration>
             </plugin>
         </plugins>

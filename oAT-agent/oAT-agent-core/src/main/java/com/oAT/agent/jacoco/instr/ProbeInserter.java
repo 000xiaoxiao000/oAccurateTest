@@ -32,7 +32,7 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     private final Map<String, Integer> cyclomaticComplexity;
     private int currentLine = -1;
     private int methodEntryProbeIdx = -1;
-    private final Map<Integer, Integer> branchLinePathOrdinalCounter = new HashMap<>();
+    private final Map<Integer, Integer> branchLinePathOrdinalCounter = new HashMap<Integer, Integer>();
     private int[] lineTotals;
     private int[] branchTotals;
     private int cyclo;
@@ -40,7 +40,12 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     private boolean isAsync;
     private int execMethodLineNumber = -1;
 
-    private static final ThreadLocal<ProbeAssignment> PROBE_ASSIGNMENT = ThreadLocal.withInitial(ProbeAssignment::new);
+    private static final ThreadLocal<ProbeAssignment> PROBE_ASSIGNMENT = new ThreadLocal<ProbeAssignment>() {
+        @Override
+        protected ProbeAssignment initialValue() {
+            return new ProbeAssignment();
+        }
+    };
 
     static class MethodMeta {
         final String methodNameDesc;
@@ -71,11 +76,11 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
     }
 
     static class ProbeAssignment {
-        final Map<Integer, Integer> probeToLineNumber = new LinkedHashMap<>();
-        final Map<Integer, Boolean> probeIsBranch = new LinkedHashMap<>();
-        final Map<Integer, Integer> probeToMethodEntry = new LinkedHashMap<>();
-        final Map<Integer, MethodMeta> methodMetaMap = new LinkedHashMap<>();
-        final Map<Integer, BranchMeta> branchMetaMap = new LinkedHashMap<>();
+        final Map<Integer, Integer> probeToLineNumber = new LinkedHashMap<Integer, Integer>();
+        final Map<Integer, Boolean> probeIsBranch = new LinkedHashMap<Integer, Boolean>();
+        final Map<Integer, Integer> probeToMethodEntry = new LinkedHashMap<Integer, Integer>();
+        final Map<Integer, MethodMeta> methodMetaMap = new LinkedHashMap<Integer, MethodMeta>();
+        final Map<Integer, BranchMeta> branchMetaMap = new LinkedHashMap<Integer, BranchMeta>();
     }
 
     static ProbeAssignment getAndClearProbeAssignment() {
@@ -158,7 +163,8 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
         if (branchProbe && branchLine > 0) {
             int effectiveBranchTargetId = branchTargetId;
             if (effectiveBranchTargetId <= 0) {
-                effectiveBranchTargetId = branchLinePathOrdinalCounter.getOrDefault(branchLine, 0) + 1;
+                Integer currentTargetId = branchLinePathOrdinalCounter.get(branchLine);
+                effectiveBranchTargetId = (currentTargetId == null ? 0 : currentTargetId.intValue()) + 1;
             }
             branchLinePathOrdinalCounter.put(branchLine, effectiveBranchTargetId);
             assignment.branchMetaMap.put(id, new BranchMeta(branchLine, effectiveBranchTargetId));
@@ -182,17 +188,15 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
             ProbeAssignment assignment = PROBE_ASSIGNMENT.get();
             String targetMethodNameDesc = this.clazzName + " " + this.methodNameDescCombined;
 
-            Set<Integer> tempSet = new HashSet<>();
-            methodLineNumberMap.forEach((key, value) -> {
-                String[] split = key.split(" ");
-                String methodNameDescStr = String.join(" ", Arrays.copyOfRange(split, 0, split.length));
-                if (targetMethodNameDesc.equals(methodNameDescStr)) {
-                    tempSet.addAll(value);
+            Set<Integer> tempSet = new HashSet<Integer>();
+            for (Map.Entry<String, Set<Integer>> entry : methodLineNumberMap.entrySet()) {
+                if (targetMethodNameDesc.equals(entry.getKey()) && entry.getValue() != null) {
+                    tempSet.addAll(entry.getValue());
                 }
-            });
-            lineTotals = tempSet.stream().mapToInt(Integer::intValue).toArray();
+            }
+            lineTotals = toIntArray(tempSet);
 
-            List<Integer> totalBranchList = new ArrayList<>();
+            List<Integer> totalBranchList = new ArrayList<Integer>();
             for (Map.Entry<String, Integer> entry : this.clazzInfo.getTotalBranchMap().entrySet()) {
                 String[] split = entry.getKey().split(" ");
                 StringBuilder sb = new StringBuilder();
@@ -204,12 +208,14 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
                     totalBranchList.add(entry.getValue());
                 }
             }
-            branchTotals = totalBranchList.stream().mapToInt(Integer::intValue).toArray();
+            branchTotals = toIntArray(totalBranchList);
 
             cyclo = cyclomaticComplexity.containsKey(this.methodNameDescCombined) ?
                     cyclomaticComplexity.get(this.methodNameDescCombined) : 0;
-            isRecursive = recursiveMap.getOrDefault(targetMethodNameDesc, false);
-            isAsync = asyncMethodMap.getOrDefault(this.clazzName + " " + this.methodNameDescCombined, false);
+            Boolean recursiveValue = recursiveMap.get(targetMethodNameDesc);
+            Boolean asyncValue = asyncMethodMap.get(this.clazzName + " " + this.methodNameDescCombined);
+            isRecursive = recursiveValue != null && recursiveValue.booleanValue();
+            isAsync = asyncValue != null && asyncValue.booleanValue();
 
             for (Map.Entry<String, Set<Integer>> entry : methodLineNumberMap.entrySet()) {
                 if (targetMethodNameDesc.equals(entry.getKey()) && entry.getValue() != null && !entry.getValue().isEmpty()) {
@@ -230,6 +236,25 @@ class ProbeInserter extends MethodVisitor implements IProbeInserter {
             mv.visitVarInsn(Opcodes.ASTORE, variable);
         }
         super.visitCode();
+    }
+
+    private static int[] toIntArray(Collection<Integer> values) {
+        if (values == null || values.isEmpty()) {
+            return new int[0];
+        }
+        int[] result = new int[values.size()];
+        int index = 0;
+        for (Integer value : values) {
+            if (value != null) {
+                result[index++] = value.intValue();
+            }
+        }
+        if (index == result.length) {
+            return result;
+        }
+        int[] trimmed = new int[index];
+        System.arraycopy(result, 0, trimmed, 0, index);
+        return trimmed;
     }
 
     @Override

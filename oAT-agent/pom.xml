@@ -11,16 +11,40 @@
 
     <modules>
         <module>oAT-client-model</module>
-        <module>oAT-agent-core</module>
         <module>oAT-agnet-shaded</module>
+        <module>oAT-agent-core</module>
     </modules>
 
     <!-- 定义系统属性 -->
     <properties>
-        <maven.compiler.source>8</maven.compiler.source><!-- compile插件 -->
-        <maven.compiler.target>8</maven.compiler.target><!-- compile插件 -->
+        <maven.compiler.source>1.7</maven.compiler.source><!-- compile插件 -->
+        <maven.compiler.target>1.7</maven.compiler.target><!-- compile插件 -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <profiles>
+        <profile>
+            <id>probe-jdk6</id>
+            <properties>
+                <maven.compiler.source>1.6</maven.compiler.source>
+                <maven.compiler.target>1.6</maven.compiler.target>
+            </properties>
+        </profile>
+        <profile>
+            <id>probe-jdk7</id>
+            <properties>
+                <maven.compiler.source>1.7</maven.compiler.source>
+                <maven.compiler.target>1.7</maven.compiler.target>
+            </properties>
+        </profile>
+        <profile>
+            <id>probe-jdk8</id>
+            <properties>
+                <maven.compiler.source>1.8</maven.compiler.source>
+                <maven.compiler.target>1.8</maven.compiler.target>
+            </properties>
+        </profile>
+    </profiles>
 
     <build>
         <plugins>

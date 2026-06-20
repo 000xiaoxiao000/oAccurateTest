@@ -6,7 +6,6 @@ import com.oAT.agent.common.logger.Log;
 import com.oAT.agent.common.logger.LogFactory;
 
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -57,29 +56,29 @@ public class InvocationConsumerAdapter {
             Method iteratorMethod = recordes.getClass().getMethod("iterator");
             Object iterator = ReflectUtil.invoker(iteratorMethod, recordes);
             if (iterator == null) {
-                return new HashMap<>();
+                return new HashMap();
             }
             Method nextMethod = iterator.getClass().getMethod("next");
             Object iteratorHasNex = ReflectUtil.invoker(nextMethod, iterator);
             if (iteratorHasNex == null) {
-                return new HashMap<>();
+                return new HashMap();
             }
             Method headersMethod = iteratorHasNex.getClass().getMethod("headers");
             Object iteratorHasNexObj = ReflectUtil.invoker(headersMethod, iteratorHasNex);
             if (iteratorHasNexObj == null) {
-                return new HashMap<>();
+                return new HashMap();
             }
             return extractValue(iteratorHasNexObj.toString());
         } catch (NoSuchMethodException e) {
             logger.error("[Agent-EXCError]getHeaders error: "  + StackTraceFormatter.formatExceptionWithAgentMark(e));
-            return new HashMap<>();
+            return new HashMap();
         }
     }
 
     private Map<String, String> extractValue(String recordHeader) {
         Pattern pattern = Pattern.compile("RecordHeader\\(key = (.*?), value = \\[(.*?)]\\)");
         Matcher matcher = pattern.matcher(recordHeader);
-        Map<String, String> keyValueMap = new HashMap<>();
+        Map<String, String> keyValueMap = new HashMap();
         while (matcher.find()) {
             String key = matcher.group(1);
             String[] byteValues = matcher.group(2).split(", ");
@@ -87,7 +86,7 @@ public class InvocationConsumerAdapter {
             for (int i = 0; i < byteValues.length; i++) {
                 values[i] = Byte.parseByte(byteValues[i]);
             }
-            String value = new String(values, StandardCharsets.UTF_8);
+            String value = com.oAT.agent.common.StringUtils.newStringUtf8(values);
             keyValueMap.put(key, value);
         }
         return keyValueMap;

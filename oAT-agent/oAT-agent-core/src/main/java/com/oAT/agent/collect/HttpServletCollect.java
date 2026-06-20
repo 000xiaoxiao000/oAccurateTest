@@ -309,7 +309,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         Object[] cookies = requestAdapter.getCookies();
         StringBuilder cookieStr = new StringBuilder();
         if (cookies != null) {
-            Set<Object> cookieset = new HashSet<>();
+            Set<Object> cookieset = new HashSet();
             Collections.addAll(cookieset, cookies);
             for (Object cookie : cookieset) {
                 String k;
@@ -341,6 +341,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             nodeWrapper.coverageCollector = CoverageCollector.begin();
             AgentContext.setCoverageCollector(nodeWrapper.coverageCollector);
             AgentContext.setActiveAsyncTaskCount(new java.util.concurrent.atomic.AtomicInteger(0));
+            AgentContext.setAsyncCompletionListener(nodeWrapper);
         }
 
         if (Boolean.parseBoolean(this.traceContext.getConfig("collect.systemLog", "true"))) {
@@ -493,7 +494,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
         traceSession.saveNode(node);
     }
 
-    public class HttpServletTraceNodeWrapper implements ISessionDestroy {
+    public class HttpServletTraceNodeWrapper implements ISessionDestroy, AgentContext.AsyncCompletionListener {
         private final TraceSession traceSession;
         private final HttpTraceNode node;
         private CoverageCollector coverageCollector;
@@ -512,6 +513,16 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
 
         public void clearDeferred() {
             this.deferred = false;
+        }
+
+        public void onAsyncComplete(TraceSession traceSession) {
+            if (!deferred) {
+                return;
+            }
+            if (traceSession == null || !traceSession.getTraceId().equals(this.traceSession.getTraceId())) {
+                return;
+            }
+            deferredNodeRegistry.finalizeIfReady(traceSession, HttpServletCollect.this);
         }
 
         @Override
@@ -540,6 +551,7 @@ public class HttpServletCollect extends AbstractByteTransformCollect {
             }
             AgentContext.removeCoverageCollector();
             AgentContext.removeActiveAsyncTaskCount();
+            AgentContext.removeAsyncCompletionListener();
         }
 
         public HttpTraceNode getHttpTraceNode() {
