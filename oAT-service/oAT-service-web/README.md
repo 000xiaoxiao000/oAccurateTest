@@ -17,6 +17,7 @@ oAT-service-web/src/main/java/com/oAT/web/
 ├── domain/           # 图谱视图领域模型
 ├── common/           # 工具类（ClassStructure、Zip、Compare 等）
 ├── config/           # Spring 配置（异步、Redis、ES 初始化等）
+├── coverage/         # 覆盖率存储、前端覆盖率和多语言覆盖率解析
 ├── security/         # 登录拦截器
 ├── exceptions/       # 业务异常类
 └── dto/              # 数据传输对象
@@ -24,7 +25,8 @@ oAT-service-web/src/main/java/com/oAT/web/
 src/main/resources/
 ├── application.properties       # 应用配置
 ├── db/mysql/                    # MySQL 初始化 SQL（按阶段分文件）
-└── elasticsearch/               # ES 索引模板 JSON
+├── db/elasticsearch/            # 旧版 ES 模板路径
+└── elasticsearch/               # ES ILM 与索引模板 JSON
 ```
 
 ---
@@ -59,11 +61,13 @@ phase3_system_snapshot.sql     # 系统快照
 phase4_class_coverage.sql      # 类覆盖率明细
 phase4_static_source_info.sql  # 静态源码信息
 phase5_normalized_core.sql     # 核心表规范化
+phase6_frontend_coverage.sql   # 前端 Istanbul 覆盖率原始数据与报告
+phase7_universal_coverage.sql  # Go / Python / C/C++ 通用覆盖率原始数据
 ```
 
 ### Elasticsearch
 
-ES 索引模板在服务启动时由 `ElasticsearchTemplateInitializer` 自动创建，无需手动执行。对应模板文件位于 `src/main/resources/elasticsearch/`。
+ES 索引模板在服务启动时由 `ElasticsearchTemplateInitializer` 自动创建，无需手动执行。当前模板文件主要位于 `src/main/resources/elasticsearch/`，兼容保留的模板位于 `src/main/resources/db/elasticsearch/`。
 
 ---
 
@@ -129,7 +133,7 @@ traceNode.monitor.maxSize=200
 traceNode.cache.capacity=5000
 
 # 缓存有效期（秒）
-traceNode.cache.validityTime=300
+traceNode.cache.validityTime=1800
 ```
 
 ### 覆盖率数据存储（MinIO）
@@ -168,6 +172,19 @@ oat.usecase.prd-link-template=https://prd.example.com/doc/{id}
 
 详见 [oAT-ai README](../oAT-ai/README.md)，所有 `ai.*` 前缀的配置均在本文件中统一设置。
 
+### 前端与多语言覆盖率
+
+```text
+POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/report
+POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/generate
+POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
+POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/generate
+```
+
+- 前端覆盖率接收 Istanbul `window.__coverage__` JSON，由 `FrontendCoverageService` 落库并生成报告。
+- 通用覆盖率支持 Go cover profile、coverage.py JSON、gcov JSON / JSON.GZ，由 `UniversalCoverageIngestService` 和 `coverage/universal` 下的解析器处理。
+- 上送 SDK 与本地中继见 `oAT-traffic-capture/sdk/coverage/` 和 `oAT-traffic-capture/sdk/oat-coverage-reporter.ts`。
+
 ---
 
 ## 启动
@@ -205,6 +222,8 @@ nohup java -jar target/oAT-service-web-1.0.0-SNAPSHOT.war > oat.log 2>&1 &
 | `AIInteractiveService` | AI 对话会话管理，上下文路由，流式输出 |
 | `ClientSessionService` | Agent 连接会话管理，心跳处理 |
 | `ProbeAlertEventService` | 探针告警事件存储与推送 |
+| `FrontendCoverageService` | 前端 Istanbul 覆盖率上报与报告生成 |
+| `UniversalCoverageIngestService` | Go / Python / C/C++ 覆盖率上报与报告生成 |
 
 ---
 

@@ -8,7 +8,7 @@ oAccurateTest 是一个面向 Java 应用的智能测试分析平台。通过 Ja
 
 ```
 oAccurateTest/
-├── oAT-agent/            # 探针模块（Java 8）
+├── oAT-agent/            # 探针模块（默认 Java 7 字节码，支持 JDK6/7/8 profile）
 │   ├── oAT-client-model/ # Agent 与服务端共用的数据模型
 │   ├── oAT-agent-core/   # 字节码增强、链路采集、数据上报
 │   └── oAT-agnet-shaded/ # 依赖 shaded 打包
@@ -16,6 +16,7 @@ oAccurateTest/
 │   ├── oAT-ai/           # AI 分析模块（LangChain4j）
 │   └── oAT-service-web/  # Web 平台主服务（Spring Boot 3）
 ├── oAT-web-frontend/     # 前端界面（Vue 3 + TypeScript）
+├── oAT-traffic-capture/  # 桌面流量采集器与覆盖率上送 SDK（Electron + Vue 3）
 └── README.md
 ```
 
@@ -36,6 +37,9 @@ oAccurateTest/
             │
             ▼
   oAT-web-frontend（Vue 3）
+       ▲
+       │ 前端 / 多语言覆盖率上送
+  oAT-traffic-capture / sdk
 ```
 
 ---
@@ -44,7 +48,7 @@ oAccurateTest/
 
 | 层 | 技术 | 版本 |
 |---|---|---|
-| 探针 | Java、ASM 字节码增强 | Java 8 |
+| 探针 | Java、ASM 字节码增强 | 默认 Java 7 字节码，支持 JDK6/7/8 profile |
 | 服务端框架 | Spring Boot | 3.3.6 |
 | 服务端语言 | Java | 17 |
 | AI 框架 | LangChain4j | 1.12.2 |
@@ -57,6 +61,7 @@ oAccurateTest/
 | 前端框架 | Vue 3 + TypeScript | Vue 3.5 |
 | 前端构建 | Vite | 7.x |
 | 前端状态 | Pinia | 3.x |
+| 桌面采集器 | Electron、Vue 3、Vite | Electron 30 / Vite 5.x |
 
 ---
 
@@ -69,7 +74,7 @@ Agent 通过字节码增强拦截 HTTP、SQL、Redis、Dubbo、SOFA-RPC、Feign�
 每次测试场景执行后，平台将该次请求的完整调用链路沉淀为系统快照，支持场景目录管理、版本归档、图谱可视化。
 
 **覆盖率分析**
-基于快照和静态源码结构生成全量或增量覆盖率报告，支持类 / 方法 / 行 / 分支四个维度，提供源码着色视图和 Excel 导出。
+基于快照和静态源码结构生成全量或增量覆盖率报告，支持类 / 方法 / 行 / 分支四个维度，提供源码着色视图和 Excel 导出；同时支持前端 Istanbul 覆盖率和 Go / Python / C/C++ 原生覆盖率上报。
 
 **版本管理**
 接入 Git 仓库，管理应用的分支、Commit 与版本号，支持跨版本 Diff 和代码变更影响分析。
@@ -82,6 +87,9 @@ Agent 通过字节码增强拦截 HTTP、SQL、Redis、Dubbo、SOFA-RPC、Feign�
 
 **探针监控**
 实时监控在线 Agent 实例状态，支持探针下线告警和 Webhook 通知。
+
+**桌面流量采集**
+`oAT-traffic-capture` 提供 HTTP/HTTPS、WebSocket、MQTT 流量捕获、过滤、重放、导出和历史会话管理，并内置覆盖率上送中继能力，方便前端和多语言测试产物接入平台。
 
 **AI 智能分析**
 基于 LangChain4j 的对话式 AI 助手，内置覆盖率分析、缺陷检测、性能分析、调用链比较、测试推荐等专用工具，支持 OpenAI / Ollama / DeepSeek 等多种模型。
@@ -96,6 +104,8 @@ Agent 通过字节码增强拦截 HTTP、SQL、Redis、Dubbo、SOFA-RPC、Feign�
 - `oAT-service/oAT-ai/` → [oAT-ai README](oAT-service/oAT-ai/README.md)
 - `oAT-service/oAT-service-web/` → [oAT-service-web README](oAT-service/oAT-service-web/README.md)
 - `oAT-web-frontend/` → [oAT-web-frontend README](oAT-web-frontend/README.md)
+- `oAT-traffic-capture/` → [oAT-traffic-capture README](oAT-traffic-capture/README.md)
+- `oAT-traffic-capture/sdk/coverage/` → [多语言覆盖率上送 SDK README](oAT-traffic-capture/sdk/coverage/README.md)
 
 ---
 
@@ -120,6 +130,11 @@ mvn clean package
 cd ../../oAT-web-frontend
 npm install
 npm run build
+
+# 5. 构建桌面流量采集器（可选）
+cd ../oAT-traffic-capture
+npm install
+npm run build
 ```
 
 ---
@@ -132,6 +147,7 @@ npm run build
 4. 启动 MinIO（启用覆盖率对象存储时需要）
 5. 启动 `oAT-service-web`
 6. 启动挂载了 Agent 的目标应用
+7. 按需启动 `oAT-traffic-capture` 进行桌面流量采集或覆盖率中继
 
 详细配置和启动参数见各模块 README。
 
@@ -161,6 +177,19 @@ coverage.storage.secret-key=<your-secret-key>
 
 MinIO 的 Bucket 会在服务启动时自动创建，无需手动初始化。如不需要 MinIO，将 `coverage.storage.enabled` 设为 `false` 即可保持原有行为。
 
+## 前端与多语言覆盖率上送
+
+服务端提供两类非 Java 覆盖率入口：
+
+```text
+POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/report
+POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
+POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/generate
+POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/generate
+```
+
+`oAT-traffic-capture` 可作为本地覆盖率中继，默认接收 `http://localhost:8889/oat/coverage/report`，再转发到平台；多语言上送脚本见 `oAT-traffic-capture/sdk/coverage/`。
+
 ---
 
 ## 环境要求
@@ -175,3 +204,4 @@ MinIO 的 Bucket 会在服务启动时自动创建，无需手动初始化。如
 | MySQL | 5.7+ / 8.x | — |
 | Redis | 5.x+ | — |
 | MinIO | RELEASE.2023+ | 用于覆盖率 codeNodes 对象存储 |
+| Electron 构建链 | Node.js 18+ | 桌面采集器开发/构建 |

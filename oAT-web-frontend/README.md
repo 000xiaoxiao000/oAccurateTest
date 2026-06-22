@@ -104,6 +104,8 @@ oAT-web-frontend/src/
 | `CoverageCodePage` | 覆盖率源码着色 |
 | `VersionReportDetailPage` | 版本覆盖率报告详情 |
 
+覆盖率中心可展示 Java Agent 快照覆盖率、前端 Istanbul 覆盖率以及 Go / Python / C/C++ 通用覆盖率报告；非 Java 覆盖率由后端 `/coverage/frontend` 与 `/coverage/universal/{CPP|GO|PYTHON}` 接口生成。
+
 ### 版本管理
 
 | 页面 | 功能 |
@@ -131,7 +133,7 @@ oAT-web-frontend/src/
 | `MapHomePage` / `MapAppPage` / `MapCodePage` | 代码调用关系图谱 |
 | `ProjectAiPage` | AI 智能分析对话页 |
 | `AccountSettingsPage` | 账号设置 |
-| `LoginPage` | 登录页 |
+| `LoginPage` | 登录 / 注册页（`/login` 与 `/register` 共用） |
 
 ---
 

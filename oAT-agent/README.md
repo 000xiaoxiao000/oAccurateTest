@@ -8,8 +8,8 @@ oAT-agent 是 oAccurateTest 平台的探针模块，以 JavaAgent 方式无侵�
 
 ```
 oAT-agent/
-├── oAT-client-model/   # Agent 与服务端共用的数据模型（Java 8）
-├── oAT-agent-core/     # 字节码增强、链路采集、数据上报（Java 8）
+├── oAT-client-model/   # Agent 与服务端共用的数据模型
+├── oAT-agent-core/     # 字节码增强、链路采集、数据上报
 │   └── conf/
 │       └── oAT.conf    # Agent 本地配置文件
 └── oAT-agnet-shaded/   # 依赖 shaded 打包，产出独立可用的 jar
@@ -25,6 +25,12 @@ mvn clean install
 ```
 
 `mvn install` 会将 `oAT-client-model` 安装到本地 Maven 仓库，`oAT-service-web` 依赖此包，必须先于服务端构建。
+
+父 POM 默认以 Java 7 字节码编译，并提供 `probe-jdk6`、`probe-jdk7`、`probe-jdk8` profile：
+
+```bash
+mvn clean install -Pprobe-jdk8
+```
 
 产出物：`oAT-agent-core/target/oAT-agent-core-1.0-SNAPSHOT.jar`
 

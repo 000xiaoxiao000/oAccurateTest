@@ -102,6 +102,13 @@ ai.llm.temperature=0.7
 
 # 请求超时（秒）
 ai.llm.timeout=300
+
+# 调试日志（生产环境建议关闭）
+ai.llm.log-requests=false
+ai.llm.log-responses=false
+
+# 系统提示词前缀
+ai.llm.system-prompt-prefix=你是一个专业的代码覆盖率分析助手...
 ```
 
 ### 增强功能配置
@@ -123,6 +130,18 @@ ai.enhanced.self-learning.dynamic-guide-enabled=true
 
 # 反馈数据保留天数
 ai.enhanced.feedback.retention-days=30
+```
+
+### 页面上下文路由配置
+
+AI 对话会根据前端页面上下文自动补充分析范围，关键字可在 `application.properties` 中调整：
+
+```properties
+ai.interactive.route.coverage.keywords=覆盖率页,coverage,覆盖率详情,覆盖率报告
+ai.interactive.route.trace.keywords=监控页,monitor,调用链页,链路页
+ai.interactive.route.snapshot.keywords=快照页,snapshot,我的快照,快照列表
+ai.interactive.route.app.keywords=应用页,应用中心,app/list,app/online
+ai.interactive.route.code-relation.keywords=代码关系,类关系,callgraph,关系图
 ```
 
 ### 支持的模型

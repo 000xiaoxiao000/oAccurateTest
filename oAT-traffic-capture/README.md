@@ -1,6 +1,6 @@
 # oAT 流量采集器
 
-`oAT-traffic-capture` 是一个基于 Electron + Vue 3 的桌面流量采集工具，用于测试过程中捕获、查看、过滤、重放和导出接口流量。
+`oAT-traffic-capture` 是一个基于 Electron + Vue 3 的桌面流量采集工具，用于测试过程中捕获、查看、过滤、重放和导出接口流量，也可作为前端与多语言覆盖率的本地上送中继。
 
 ## 功能
 
@@ -13,6 +13,7 @@
 - 历史会话：使用 SQLite 保存采集会话和记录，可加载或删除历史会话。
 - 数据导出：支持 Excel、CSV、JSON。
 - 插件扩展：支持本地插件在捕获后、保存前处理流量记录。
+- 覆盖率中继：内置 `oat-coverage-relay` 插件和本地接收端口，支持前端 Istanbul、Go、Python、C/C++ 覆盖率转发到 oAT 服务端。
 - 悬浮窗口：采集过程中可切换为小窗，减少桌面占用。
 
 ## 技术栈
@@ -20,7 +21,7 @@
 - Electron 30
 - Vue 3 + TypeScript
 - Pinia
-- Vite
+- Vite 5
 - http-mitm-proxy
 - better-sqlite3
 - ws
@@ -153,13 +154,35 @@ HTTPS/WSS 捕获依赖 MITM 证书。首次使用需要生成并信任证书：
 - CSV：基础字段，适合表格工具处理。
 - JSON：完整结构，适合程序处理或归档。
 
+## 覆盖率中继
+
+采集器内置覆盖率中心，默认使用：
+
+- HTTP/HTTPS 代理端口：`8888`
+- 覆盖率接收端口：`8889`
+- 本地接收地址：`http://localhost:8889/oat/coverage/report`
+
+在“覆盖率中心”中配置 oAT 服务地址、项目 ID、应用 ID 和上送间隔后，启用 `oat-coverage-relay` 插件即可转发覆盖率数据到：
+
+```text
+POST {serviceBaseUrl}/api/projects/{projectId}/apps/{appId}/coverage/frontend/report
+POST {serviceBaseUrl}/api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
+```
+
+前端项目可在 Istanbul 插桩后引入 `sdk/oat-coverage-reporter.ts`，将 `window.__coverage__` 周期性 POST 到本地中继。Go / Python / C/C++ 上送脚本见 `sdk/coverage/README.md`。
+
 ## 插件扩展
 
 插件是 oAT 应用内部的流量处理插件，不是 Chrome、Safari 或其他浏览器插件。插件只处理本工具捕获到的流量记录。
 
 插件目录位于应用数据目录下的 `plugins` 文件夹。可在“插件扩展”面板中查看实际路径，也可以在界面中打开目录。
 
-点击“安装内置插件”会安装一个真实可用的流量清洗插件：
+点击“安装内置插件”会安装内置插件。当前内置插件包括：
+
+- `traffic-cleanup-plugin`：流量清洗插件。
+- `oat-coverage-relay`：覆盖率中继插件。
+
+`traffic-cleanup-plugin` 的行为：
 
 - 过滤 OPTIONS 预检请求。
 - 过滤图片、CSS、JS、字体、source map 等静态资源。
@@ -167,7 +190,7 @@ HTTPS/WSS 捕获依赖 MITM 证书。首次使用需要生成并信任证书：
 - 给 4xx/5xx 响应打 `错误` 标签。
 - 给耗时超过 1000ms 的请求打 `慢请求` 标签。
 
-点击“卸载内置插件”会删除 `traffic-cleanup-plugin` 目录并重新加载插件列表。
+点击“卸载内置插件”会删除对应内置插件目录并重新加载插件列表。
 
 每个插件一个子目录：
 
@@ -229,6 +252,7 @@ oAT-traffic-capture/
 │   ├── proxy.ts                # HTTP/HTTPS/WS/WSS 代理捕获
 │   ├── replay.ts               # 流量重放
 │   ├── filterRules.ts          # 捕获规则匹配
+│   ├── coverageRelayServer.ts  # 覆盖率本地接收服务
 │   ├── database.ts             # SQLite 会话、记录、规则存储
 │   ├── certificate.ts          # 证书生成与安装辅助
 │   ├── systemProxy.ts          # 系统代理开关
