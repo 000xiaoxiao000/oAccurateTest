@@ -6,6 +6,17 @@ oAccurateTest 是一个面向 Java 应用的智能测试分析平台。通过 Ja
 
 ---
 
+## 交流与反馈
+
+如果你正在关注 AI + 精准测试、覆盖率分析、链路追踪、流量采集或测试平台工程化实践，欢迎扫码交流。
+
+| 添加作者微信 | 微信交流入口 | AI + 精准测试实战交流群 |
+|---|---|---|
+| 扫码添加好友，备注 `oAT` / `精准测试`，方便通过验证。 | 扫码添加微信，交流项目使用、部署问题与二次开发思路。 | 扫码加入实战交流群，一起讨论 AI 测试分析、覆盖率治理和工程落地经验。 |
+| <img src="docs/assets/wechat-friend.png" alt="添加作者微信二维码" width="220"> | <img src="docs/assets/wechat-contact.jpg" alt="微信交流二维码" width="220"> | <img src="docs/assets/ai-testing-group.png" alt="AI + 精准测试实战交流群二维码" width="220"> |
+
+---
+
 ## 整体架构
 
 ```
