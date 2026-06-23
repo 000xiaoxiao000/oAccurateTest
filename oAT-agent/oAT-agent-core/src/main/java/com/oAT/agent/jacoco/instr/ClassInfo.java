@@ -90,6 +90,12 @@ public class ClassInfo {
         return (access & (Opcodes.ACC_BRIDGE | Opcodes.ACC_SYNTHETIC)) != 0;
     }
 
+    private static <K, V> void putIfAbsent(Map<K, V> map, K key, V value) {
+        if (map.get(key) == null) {
+            map.put(key, value);
+        }
+    }
+
     public ClassInfo(final ClassReader reader) {
         className = reader.getClassName();
         methodName = "";
@@ -176,16 +182,16 @@ public class ClassInfo {
                             methodName = name;
                             methodDesc = descriptor;
 
-                            methodLineNumberMap.putIfAbsent(className + " " + name + " " + descriptor, lineNumberSet);
-                            recursiveMap.putIfAbsent(className + " " + name + " " + descriptor, false);
-                            asyncMethodMap.putIfAbsent(className + " " + name + " " + descriptor, false);
+                            putIfAbsent(methodLineNumberMap, className + " " + name + " " + descriptor, lineNumberSet);
+                            putIfAbsent(recursiveMap, className + " " + name + " " + descriptor, false);
+                            putIfAbsent(asyncMethodMap, className + " " + name + " " + descriptor, false);
                         } else {
                             methodName = name;
                             methodDesc = signature;
 
-                            methodLineNumberMap.putIfAbsent(className + " " + name + " " + signature, lineNumberSet);
-                            recursiveMap.putIfAbsent(className + " " + name + " " + signature, false);
-                            asyncMethodMap.putIfAbsent(className + " " + name + " " + signature, false);
+                            putIfAbsent(methodLineNumberMap, className + " " + name + " " + signature, lineNumberSet);
+                            putIfAbsent(recursiveMap, className + " " + name + " " + signature, false);
+                            putIfAbsent(asyncMethodMap, className + " " + name + " " + signature, false);
                         }
                     }
 
