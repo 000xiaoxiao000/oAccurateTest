@@ -1,5 +1,7 @@
 # oAT 流量采集器
 
+中文 | [English](#english)
+
 `oAT-traffic-capture` 是一个基于 Electron + Vue 3 的桌面流量采集工具，用于测试过程中捕获、查看、过滤、重放和导出接口流量，也可作为前端与多语言覆盖率的本地上送中继。
 
 ## 功能
@@ -309,3 +311,180 @@ WSS 依赖 HTTPS 证书信任。确认证书已安装，并重启浏览器或被
 ### 大量流量导致界面变慢
 
 建议按用例分批采集，定期清空当前列表或加载历史会话查看。
+
+---
+
+## English
+
+[中文](#oat-流量采集器) | English
+
+# oAT Traffic Capture
+
+`oAT-traffic-capture` is an Electron + Vue 3 desktop tool for capturing, viewing, filtering, replaying, and exporting API traffic during testing. It can also act as a local relay for frontend and multi-language coverage uploads.
+
+## Features
+
+- HTTP/HTTPS capture through a local proxy, including request, response, status code, duration, and headers.
+- WebSocket capture for WS/WSS connections and send/receive messages.
+- MQTT collection and manual MQ record entry for AMQP, MQTT, Kafka, and similar messages.
+- HTTP/HTTPS single and batch replay; WebSocket replay for captured outbound messages.
+- Custom include, exclude, and mark rules based on URL, method, protocol, status code, headers, or body.
+- Statistics for protocol distribution, status distribution, top hosts, minute trends, and basic counters.
+- SQLite-backed session history.
+- Export to Excel, CSV, or JSON.
+- Local plugin hooks for processing captured records.
+- Built-in `oat-coverage-relay` plugin and local coverage receiver for Istanbul, Go, Python, and C/C++ coverage.
+- Floating window mode during capture.
+
+## Technology Stack
+
+- Electron 30
+- Vue 3 + TypeScript
+- Pinia
+- Vite 5
+- http-mitm-proxy
+- better-sqlite3
+- ws
+- mqtt
+- ExcelJS
+
+## Install
+
+```bash
+cd oAT-traffic-capture
+npm install
+```
+
+If the current npm registry is unavailable:
+
+```bash
+npm config set registry https://registry.npmjs.org/
+npm install
+```
+
+## Development
+
+```bash
+npm run dev
+```
+
+You can also start Vite and Electron separately:
+
+```bash
+npm run dev:vite
+npm run dev:electron
+```
+
+## Build
+
+```bash
+npm run build
+npm run pack
+npm run dist
+```
+
+## Usage
+
+### Start Capture
+
+1. Enter a case name or traffic description.
+2. Click "Start Capture".
+3. Configure the system or browser HTTP/HTTPS proxy as `127.0.0.1:8888`.
+4. Send requests from the system under test. Captured traffic appears in the list in real time.
+
+The app also provides a system proxy switch to route system HTTP/HTTPS traffic through the local proxy.
+
+### HTTPS and WSS
+
+HTTPS/WSS capture depends on a trusted MITM certificate. On first use:
+
+1. Generate the certificate from the HTTPS certificate area.
+2. Install and trust it. macOS may require an administrator password.
+3. If automatic installation fails, open the certificate directory, import `ca.pem` into Keychain, and set it to always trust.
+4. Stop and restart capture.
+5. Restart the browser or client under test.
+
+HTTP/WS can be captured without trusting the certificate, but HTTPS/WSS may not be decrypted.
+
+### Replay
+
+- Use replay on one record for single replay.
+- Select multiple records and replay selected for batch replay.
+- HTTP/HTTPS uses the original method, URL, headers, and body.
+- WebSocket reconnects and resends captured outbound messages.
+- Protocols that cannot be replayed automatically produce failed records with the failure reason.
+
+### Filter Rules
+
+Rules support:
+
+- `target`: `url`, `method`, `protocol`, `statusCode`, `header`, `body`
+- `operator`: `contains`, `equals`, `regex`, `startsWith`, `endsWith`
+- `action`: `include`, `exclude`, `mark`
+
+`exclude` drops matching records. `include` keeps only matching records when enabled include rules exist. `mark` adds tags. Rules are stored in the local SQLite database.
+
+### Coverage Relay
+
+Default ports:
+
+- HTTP/HTTPS proxy: `8888`
+- Coverage receiver: `8889`
+- Local receiver URL: `http://localhost:8889/oat/coverage/report`
+
+Configure the oAT service URL, project ID, app ID, and upload interval in the coverage center, then enable the `oat-coverage-relay` plugin. Reports are forwarded to:
+
+```text
+POST {serviceBaseUrl}/api/projects/{projectId}/apps/{appId}/coverage/frontend/report
+POST {serviceBaseUrl}/api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
+```
+
+Frontend projects can import `sdk/oat-coverage-reporter.ts` after Istanbul instrumentation to upload `window.__coverage__`. Go / Python / C/C++ scripts are documented in `sdk/coverage/README.md`.
+
+## Plugins
+
+Plugins are traffic-processing plugins inside this desktop app, not browser extensions. Each plugin lives under the app data `plugins` directory and can export hooks:
+
+- `onRecordCaptured(record)`: runs after a record is captured.
+- `beforeSave(record)`: runs before the record is written to SQLite.
+
+Returning a modified record continues processing. Returning `null` drops the record.
+
+Built-in plugins:
+
+- `traffic-cleanup-plugin`: filters static resources and OPTIONS preflight requests, and marks API, error, and slow requests.
+- `oat-coverage-relay`: forwards coverage reports.
+
+## Project Structure
+
+```text
+oAT-traffic-capture/
+├── electron/              # Main process, proxy, replay, filters, certificates, plugins, MQTT
+├── src/                   # Vue components, Pinia store, types, and app entry
+├── package.json
+├── vite.config.ts
+├── tsconfig.json
+└── tsconfig.electron.json
+```
+
+## FAQ
+
+### Cannot capture HTTP/HTTPS traffic
+
+Check that capture has started, the proxy points to `127.0.0.1:8888`, the HTTPS certificate is trusted, and the client under test is not bypassing the system proxy.
+
+### Replay fails with "Failed to parse URL"
+
+Old records may contain only relative paths. The current version tries to complete the URL with the `Host` header. If `Host` is missing, capture the record again.
+
+### WSS capture fails
+
+WSS depends on the HTTPS certificate trust. Install and trust the certificate, then restart the browser or client.
+
+### Port 8888 is already in use
+
+The proxy port is defined by `PROXY_PORT` in `electron/main.ts`. Change it and rebuild.
+
+### The UI slows down with heavy traffic
+
+Capture by test case in batches, clear the current list regularly, or load historical sessions for later review.

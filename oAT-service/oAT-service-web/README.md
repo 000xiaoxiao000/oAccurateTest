@@ -1,5 +1,7 @@
 # oAT-service-web
 
+中文 | [English](#english)
+
 oAT-service-web 是 oAccurateTest 平台的 Web 主服务，负责接收 Agent 上报的链路数据、管理系统快照、生成覆盖率报告、提供版本管理和用例中心，并对接 `oAT-ai` 模块提供 AI 对话能力。
 
 ---
@@ -248,3 +250,218 @@ nohup java -jar target/oAT-service-web-1.0.0-SNAPSHOT.war > oat.log 2>&1 &
 - 首次部署时按顺序执行全部 MySQL DDL 脚本；升级时只执行新增的阶段脚本。
 - MacOS 下已声明 Netty 本地 DNS 依赖（`netty-resolver-dns-native-macos`），Linux 部署时无需此依赖，也不影响运行。
 - AI 功能依赖 `oAT-ai` jar，若未提前构建 `oAT-ai` 则编译失败。
+
+---
+
+## English
+
+[中文](#oat-service-web) | English
+
+`oAT-service-web` is the main Web service of oAccurateTest. It receives Agent trace uploads, manages system snapshots, generates coverage reports, provides version management and the use case center, and integrates with `oAT-ai` for AI chat.
+
+## Module Structure
+
+```text
+oAT-service-web/src/main/java/com/oAT/web/
+├── control/     # Controllers and /api/* frontend APIs
+├── service/     # Service interfaces and implementations
+├── esDao/       # Elasticsearch repositories and index entities
+├── domain/      # Graph view domain models
+├── common/      # Utilities such as class structure, zip, compare
+├── config/      # Spring configuration, async, Redis, ES initialization
+├── coverage/    # Coverage storage, frontend coverage, universal coverage parsing
+├── security/    # Login interceptor
+├── exceptions/  # Business exceptions
+└── dto/         # Data transfer objects
+
+src/main/resources/
+├── application.properties
+├── db/mysql/          # MySQL initialization SQL by phase
+├── db/elasticsearch/  # Legacy ES template path
+└── elasticsearch/     # ES ILM and index template JSON
+```
+
+## Build
+
+Build `oAT-agent` and `oAT-ai` first, then build this module:
+
+```bash
+cd oAT-service/oAT-service-web
+mvn clean package
+```
+
+Output: `target/oAT-service-web-1.0.0-SNAPSHOT.war`
+
+## Database Initialization
+
+### MySQL
+
+Run SQL files under `src/main/resources/db/mysql/` in order:
+
+```text
+phase1_snapshot_probe.sql
+phase2_api_endpoint.sql
+phase2_coverage_report.sql
+phase2_probe_alert_event.sql
+phase2_version_center.sql
+phase3_case_center.sql
+phase3_system_snapshot.sql
+phase4_class_coverage.sql
+phase4_static_source_info.sql
+phase5_normalized_core.sql
+phase6_frontend_coverage.sql
+phase7_universal_coverage.sql
+```
+
+### Elasticsearch
+
+Elasticsearch index templates are created automatically at service startup by `ElasticsearchTemplateInitializer`. Current templates mainly live under `src/main/resources/elasticsearch/`; compatible legacy templates remain under `src/main/resources/db/elasticsearch/`.
+
+## Configuration
+
+Configuration file: `src/main/resources/application.properties`
+
+### Service Port
+
+```properties
+server.port=8899
+```
+
+### Elasticsearch
+
+```properties
+elasticsearch.gatewayIpPorts=localhost:9200
+elasticsearch.username=
+elasticsearch.password=
+```
+
+### MySQL
+
+```properties
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/oaccurate_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+spring.datasource.username=root
+spring.datasource.password=123456
+```
+
+### Redis
+
+```properties
+spring.data.redis.host=127.0.0.1
+spring.data.redis.port=6379
+spring.data.redis.database=0
+```
+
+### Local Data Directory
+
+```properties
+oat.data.path=${user.home}/oAT/codeData/
+```
+
+This directory is used for Git source cache, large payload storage, and static source archives. The service process needs read/write permission.
+
+### Upload Size
+
+```properties
+spring.servlet.multipart.max-file-size=2048MB
+spring.servlet.multipart.max-request-size=2048MB
+```
+
+If deployed behind Nginx or an external Tomcat, adjust `client_max_body_size` or `LimitRequestBody` accordingly.
+
+### Trace Monitor Cache
+
+```properties
+traceNode.monitor.maxSize=200
+traceNode.cache.capacity=5000
+traceNode.cache.validityTime=1800
+```
+
+### Coverage Storage with MinIO
+
+```properties
+coverage.storage.enabled=true
+coverage.storage.type=minIO
+coverage.storage.endpoint=http://localhost:9000
+coverage.storage.bucket=oat-coverage
+coverage.storage.access-key=root
+coverage.storage.secret-key=12345678
+```
+
+MinIO stores coverage `codeNodes` extracted from trace nodes. Data is serialized as MessagePack and written asynchronously to object storage, reducing Elasticsearch storage pressure. Report generation loads `codeNodes` by `traceId`; if MinIO is unavailable or an object is missing, the service falls back to legacy Elasticsearch trace data.
+
+Set `coverage.storage.enabled=false` to disable MinIO and use the old Elasticsearch-only mode. The service creates the bucket automatically at startup.
+
+### Use Case Link Templates
+
+```properties
+oat.usecase.defect-link-template=https://jira.example.com/browse/{id}
+oat.usecase.prd-link-template=https://prd.example.com/doc/{id}
+```
+
+### AI
+
+See [oAT-ai README](../oAT-ai/README.md). All `ai.*` properties are configured in this module.
+
+### Frontend and Multi-language Coverage
+
+```text
+POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/report
+POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/generate
+POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
+POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/generate
+```
+
+Frontend coverage accepts Istanbul `window.__coverage__` JSON. Universal coverage supports Go cover profiles, coverage.py JSON, and gcov JSON / JSON.GZ. Upload SDKs and the local relay are documented in `oAT-traffic-capture/sdk/coverage/` and `oAT-traffic-capture/sdk/oat-coverage-reporter.ts`.
+
+## Startup
+
+### Direct Startup
+
+```bash
+java -jar target/oAT-service-web-1.0.0-SNAPSHOT.war
+nohup java -jar target/oAT-service-web-1.0.0-SNAPSHOT.war > oat.log 2>&1 &
+```
+
+### External Tomcat
+
+Place the WAR under Tomcat `webapps/`. Use Tomcat 10+ to match Spring Boot 3.x Servlet requirements.
+
+## Main Services
+
+| Service | Responsibility |
+|---|---|
+| `CoverageService` | Full/incremental coverage reports, source highlighting, Excel export |
+| `SystemSnapshotService` | System snapshot management, directories, version archive |
+| `SnapshotService` | Personal snapshot management |
+| `VersionService` | Versions, Git branches/commits, diff comparison |
+| `AppService` | Application configuration |
+| `ProjectService` | Project and member management |
+| `GitService` | JGit integration, source pull, diff, archive download |
+| `ResourceService` | Local cache, zip parsing, source lookup |
+| `UsecaseService` | Use case directories, details, snapshot links, defect/PRD links |
+| `ApiEndpointAnalysisService` | HTTP endpoint detection and coverage analysis |
+| `AIInteractiveService` | AI chat sessions, context routing, streaming output |
+| `ClientSessionService` | Agent sessions and heartbeat processing |
+| `ProbeAlertEventService` | Probe alert persistence and push |
+| `FrontendCoverageService` | Frontend Istanbul coverage report ingestion and generation |
+| `UniversalCoverageIngestService` | Go / Python / C/C++ coverage ingestion and generation |
+
+## Coverage Generation Flow
+
+1. The frontend selects application, version, branch, and target commit. Incremental reports also require a baseline commit.
+2. The controller starts an asynchronous task through Spring `@Async`.
+3. `CoverageService` reads app configuration, static source structure, and version data.
+4. Incremental reports use `GitService` to get the diff between two commits.
+5. The service queries snapshots for the selected version.
+6. For each `traceId`, it loads `codeNodes` from MinIO first and falls back to Elasticsearch if needed.
+7. It aggregates class, method, line, and branch coverage into `ClassCoverageIndex`.
+8. It saves the report header and class details.
+9. The frontend can show overview, details, tree structure, source highlighting, and Excel export.
+
+## Notes
+
+- Start Elasticsearch, MySQL, and Redis before this service.
+- `oat.data.path` is created automatically if missing, but the disk must have enough space.
+- On first deployment, run all MySQL DDL scripts in order. For upgrades, run only newly added phase scripts.
+- The Netty native DNS dependency for macOS is declared. It is not required on Linux and does not affect runtime.
+- AI features depend on the `oAT-ai` jar. The build fails if `oAT-ai` has not been built first.

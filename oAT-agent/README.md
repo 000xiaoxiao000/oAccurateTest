@@ -1,5 +1,7 @@
 # oAT-agent
 
+中文 | [English](#english)
+
 oAT-agent 是 oAccurateTest 平台的探针模块，以 JavaAgent 方式无侵入地注入目标 Java 应用，采集运行时链路数据并上报到 oAT-service-web。
 
 ---
@@ -233,3 +235,167 @@ JVM 栈大小参考：
 - 若目标容器（如 Kubernetes、PaaS 平台）不允许自定义 JVM 参数，则无法接入 Agent。
 - 平台服务（`oAT-service-web`）需先于目标应用启动，否则 Agent 在建立会话阶段会重试连接。
 - Tomcat 默认 POST 限制为 2MB，数据量较大时需在平台侧配置 `server.tomcat.max-http-post-size=100MB`。
+
+---
+
+## English
+
+[中文](#oat-agent) | English
+
+`oAT-agent` is the probe module for oAccurateTest. It is injected into target Java applications as a JavaAgent, collects runtime trace data without application code changes, and reports data to `oAT-service-web`.
+
+## Module Structure
+
+```text
+oAT-agent/
+├── oAT-client-model/   # Shared data model for Agent and server
+├── oAT-agent-core/     # Bytecode enhancement, trace collection, data upload
+│   └── conf/
+│       └── oAT.conf    # Local Agent configuration
+└── oAT-agnet-shaded/   # Shaded packaging for standalone jar output
+```
+
+## Build
+
+```bash
+cd oAT-agent
+mvn clean install
+```
+
+`mvn install` installs `oAT-client-model` into the local Maven repository. `oAT-service-web` depends on this package, so build the Agent before building the server.
+
+The parent POM compiles to Java 7 bytecode by default and provides `probe-jdk6`, `probe-jdk7`, and `probe-jdk8` profiles:
+
+```bash
+mvn clean install -Pprobe-jdk8
+```
+
+Output: `oAT-agent-core/target/oAT-agent-core-1.0-SNAPSHOT.jar`
+
+## Attach to a Target Application
+
+Add `-javaagent` to the target JVM startup parameters:
+
+```bash
+java -javaagent:/path/to/oAT-agent-core-1.0-SNAPSHOT.jar=appKey=your-app-key \
+     -jar your-application.jar
+```
+
+`appKey` must match the application identifier registered in the platform.
+
+You can also attach the probe to an already running JVM:
+
+```bash
+java -jar /path/to/oAT-agent-core-1.0-SNAPSHOT.jar <pid> "appKey=your-app-key"
+```
+
+When `<pid>` is omitted, the Agent lists attachable Java processes and prompts for selection. The attach mode uses oAT's own `agentmain` startup path and does not start Arthas.
+
+## Configuration
+
+Agent configuration files live under the probe installation `conf/` directory:
+
+- `oAT.conf`: common configuration for all applications
+- `oAT_<appKey>.conf`: app-specific configuration with higher priority
+
+### Connection
+
+```properties
+server=127.0.0.1:8899
+heartbeatTime=20
+sessionTimeout=60
+log.level=info
+# log.path=/your/path/logs/
+```
+
+### Collection Scope
+
+Keep the collection scope precise because it directly affects overhead.
+
+```properties
+conf_service.include=com.example.order.*&com.example.payment.*
+conf_service.exclude=com.example.*.test.*
+conf_service.includeMethod=
+conf_service.excludeMethod=
+
+conf_codeStack.include=com.example.*
+conf_codeStack.includeMethod=
+conf_codeStack.exclude=
+conf_codeStack.excludeMethod=
+
+exclude.urls=
+```
+
+`conf_service.include` traces service methods and is the main collection entry. `conf_codeStack.include` traces classes and can trace methods only when `conf_codeStack.includeMethod` is enabled. `exclude.urls` supports exact match, prefix match with `*`, and regex match with the `regex:` prefix.
+
+### Middleware Switches
+
+Middleware collection can be disabled or explicitly enabled through `collect.*` switches. `systemLog` and `threadPool` are disabled by default. The newer sandbox switches are recommended for unified enhancement:
+
+```properties
+# sandbox.http-servlet.enabled=true
+# sandbox.service.enabled=true
+# sandbox.jdbc.enabled=true
+# sandbox.clickhouse-jdbc.enabled=true
+# sandbox.feign.enabled=true
+# sandbox.http-client-v3.enabled=true
+# sandbox.http-client-v4.enabled=true
+# sandbox.dubbo.enabled=true
+# sandbox.sofa-rpc.enabled=true
+# sandbox.mq-producer.enabled=true
+# sandbox.mq-consumer.enabled=true
+# sandbox.redis.enabled=true
+# sandbox.redisson.enabled=true
+# sandbox.coverage.enabled=true
+# sandbox.system-log.enabled=true
+# sandbox.context-propagation.enabled=true
+```
+
+When `conf_service.include` is enabled, middleware collection usually follows the service scope automatically, so separate enabling is normally unnecessary.
+
+### Performance Tuning JVM Parameters
+
+| Parameter | Default | Suggested Range | Description |
+|---|---|---|---|
+| `oAT.jacoco.stack.maxrecursiondepth` | 1 | 1-5 | Maximum recursion depth |
+| `oAT.jacoco.stack.maxsize` | Auto | 10000-100000 | Maximum stack node count |
+| `oAT.agent.http.max.queue.size` | 8192 | Adjust by concurrency | HTTP upload queue size |
+| `oAT.agent.http.core.pool.size` | 20 | Adjust by concurrency | HTTP core pool size |
+| `oAT.agent.http.max.pool.size` | 160 | Adjust by concurrency | HTTP max pool size |
+| `oAT.agent.http.keep.alive.time` | 60 | — | Thread keep-alive seconds |
+| `oAT.agent.http.base.timeout.ms` | 10000 | — | Base timeout in milliseconds |
+| `oAT.agent.http.read.timeout.extra.ms` | 5000 | — | Extra read timeout in milliseconds |
+
+Typical JVM stack sizes:
+
+```bash
+-Xss1m
+-Xss2m
+```
+
+Use larger stack sizes such as `-Xss2m` to `-Xss4m` for deep recursion or very large methods.
+
+## Supported Protocols and Frameworks
+
+| Protocol / Framework | Switch |
+|---|---|
+| HTTP Servlet (`javax` / `jakarta`) | `sandbox.http-servlet.enabled` / `collect.HttpServlet` |
+| HTTP request params / body / response body | `collect.httpRequestParams` and related switches |
+| Apache HttpClient v3 / v4 | `sandbox.http-client-v3.enabled` / `sandbox.http-client-v4.enabled` |
+| Feign | `sandbox.feign.enabled` / `collect.feignInvoker` |
+| Dubbo provider / consumer | `sandbox.dubbo.enabled` |
+| SOFA-RPC consumer / provider | `sandbox.sofa-rpc.enabled` |
+| JDBC and ClickHouse JDBC | `sandbox.jdbc.enabled`, `sandbox.clickhouse-jdbc.enabled` |
+| Redis and Redisson | `sandbox.redis.enabled`, `sandbox.redisson.enabled` |
+| RabbitMQ, RocketMQ, Kafka | `sandbox.mq-producer.enabled`, `sandbox.mq-consumer.enabled` |
+| Business logs | `sandbox.system-log.enabled` / `collect.systemLog` |
+| Thread pool context propagation | `sandbox.context-propagation.enabled` |
+
+## Notes
+
+- Restart the target application after changing the configuration file.
+- `appKey` must exactly match the platform app key and is case-sensitive.
+- Avoid broad collection scopes such as `com.*`; they significantly increase latency and data volume.
+- If the target environment does not allow custom JVM parameters, the Agent cannot be attached through startup arguments.
+- Start `oAT-service-web` before the target application. Otherwise, the Agent retries during session creation.
+- If payloads are large, configure the platform side with `server.tomcat.max-http-post-size=100MB` or an equivalent limit.

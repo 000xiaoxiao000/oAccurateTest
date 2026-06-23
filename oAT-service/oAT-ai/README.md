@@ -1,5 +1,7 @@
 # oAT-ai
 
+中文 | [English](#english)
+
 oAT-ai 是 oAccurateTest 平台的 AI 智能分析模块，基于 LangChain4j 框架构建，提供对话式 AI 助手、多工具编排、语义缓存、对话记忆管理等能力，作为 `oAT-service-web` 的依赖模块运行。
 
 ---
@@ -183,3 +185,135 @@ public class MyCustomTool {
 - AI 分析质量高度依赖基础数据完整性：快照、链路、静态源码均需完整入库。
 - 本地 Ollama 模型响应较慢，`ai.llm.timeout` 建议设为 300 秒或更高。
 - 语义缓存依赖 Redis，Redis 不可用时缓存会降级跳过，不影响正常功能。
+
+---
+
+## English
+
+[中文](#oat-ai) | English
+
+`oAT-ai` is the AI analysis module of oAccurateTest. It is built on LangChain4j and provides a conversational AI assistant, tool orchestration, semantic cache, and conversation memory. It runs as a dependency of `oAT-service-web`.
+
+## Module Structure
+
+```text
+oAT-ai/src/main/java/com/oAT/
+├── ai/
+│   ├── agent/      # Tools, cache, parallel executor, Agent services, memory, feedback
+│   ├── config/     # Spring Boot auto-configuration and AI properties
+│   └── service/    # LLM service interface and implementation
+└── agent/          # Self-learning service based on feedback data
+```
+
+## Build
+
+`oAT-ai` is packaged as a jar and used by `oAT-service-web`, so build it before the Web service:
+
+```bash
+cd oAT-service/oAT-ai
+mvn clean install
+```
+
+## Built-in AI Tools
+
+Tools are registered by `AIAgent` and are selected automatically based on user questions.
+
+| Tool Class | Capability |
+|---|---|
+| `CoverageTool` | Coverage report query and analysis |
+| `CoverageWorkflowTool` | Coverage generation workflow guidance |
+| `BugDetectTool` | Defect detection and localization |
+| `DefectStatisticsTool` | Defect statistics and trends |
+| `PerformanceAnalysisTool` | Performance bottleneck detection |
+| `CallChainAnalysisTool` | Call-chain analysis |
+| `CallChainCompareTool` | Cross-version call-chain comparison |
+| `CodeQualityTool` | Code quality evaluation |
+| `CodeRelationTool` | Code relation analysis |
+| `SnapshotTool` | System snapshot query |
+| `TraceQueryTool` | Trace node query |
+| `TestcaseRecommendationTool` | Test case recommendation |
+| `AppStatusTool` | Application online status |
+| `ProjectInfoTool` | Project information |
+
+## Configuration
+
+All configuration is set in `oAT-service-web` `application.properties`.
+
+### Basic LLM Configuration
+
+```properties
+ai.llm.enabled=true
+ai.llm.provider=deepseek
+ai.llm.base-url=https://api.deepseek.com
+ai.llm.api-key=your-api-key
+ai.llm.model=deepseek-chat
+ai.llm.max-tokens=8192
+ai.llm.temperature=0.7
+ai.llm.timeout=300
+ai.llm.log-requests=false
+ai.llm.log-responses=false
+ai.llm.system-prompt-prefix=You are a professional code coverage analysis assistant...
+```
+
+Supported providers include `ollama`, `openai`, `deepseek`, and `custom`. Custom providers must be compatible with the OpenAI protocol.
+
+### Enhanced Features
+
+```properties
+ai.enhanced.semantic-cache.enabled=true
+ai.enhanced.semantic-cache.threshold=0.85
+ai.enhanced.conversation.max-rounds=20
+ai.enhanced.self-learning.enabled=true
+ai.enhanced.self-learning.interval-hours=6
+ai.enhanced.self-learning.knowledge-hit-enabled=true
+ai.enhanced.self-learning.knowledge-hit-threshold=0.7
+ai.enhanced.self-learning.dynamic-guide-enabled=true
+ai.enhanced.feedback.retention-days=30
+```
+
+### Page Context Routing
+
+The AI chat can enrich analysis scope based on frontend page context. Keywords can be adjusted in `application.properties`:
+
+```properties
+ai.interactive.route.coverage.keywords=coverage,coverage detail,coverage report
+ai.interactive.route.trace.keywords=monitor,trace,call chain
+ai.interactive.route.snapshot.keywords=snapshot,my snapshots,snapshot list
+ai.interactive.route.app.keywords=app,app center,app/list,app/online
+ai.interactive.route.code-relation.keywords=code relation,class relation,callgraph
+```
+
+## Supported Models
+
+| Provider | `ai.llm.provider` | Recommended Models | Notes |
+|---|---|---|---|
+| OpenAI | `openai` | `gpt-4o`, `gpt-4-turbo` | API key required |
+| DeepSeek | `deepseek` | `deepseek-chat`, `deepseek-v3` | API key required |
+| Ollama | `ollama` | `qwen2.5-coder:7b`, `qwen2.5:7b` | Local Ollama required, no API key |
+| Custom | `custom` | — | Any OpenAI-compatible endpoint |
+
+Models must support Function Calling / Tools. Otherwise, tool routing is unavailable.
+
+## Extend Tools
+
+Create a Spring Bean in `oAT-service-web` and annotate methods with LangChain4j `@Tool`:
+
+```java
+@Component
+public class MyCustomTool {
+
+    @Tool("Describe this tool so AI knows when to call it")
+    public String analyze(@P("Parameter description") String input) {
+        return "analysis result";
+    }
+}
+```
+
+Inject and register the Bean in `AIAgent` to participate in routing.
+
+## Notes
+
+- `oAT-ai` is a Spring Boot AutoConfiguration module. Actual data access is implemented by `AgentDataProviderImpl` in `oAT-service-web`.
+- AI quality depends on complete platform data: snapshots, traces, and static source metadata must be available.
+- Local Ollama models can be slow. Set `ai.llm.timeout` to 300 seconds or higher.
+- Semantic cache depends on Redis. If Redis is unavailable, cache is skipped without affecting normal AI calls.
