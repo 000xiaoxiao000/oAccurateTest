@@ -38,6 +38,7 @@ public class ClassProbesAdapter extends ClassVisitor implements IProbeIdGenerato
     private String name;
 
     public Map<String, Integer> totalBranchMap = new HashMap(); // 分支总数，用于分支覆盖率统计
+    public Map<String, int[]> totalBranchTargetMap = new HashMap<String, int[]>();
 
     /**
      * Creates a new adapter that delegates to the given visitor.
@@ -75,6 +76,8 @@ public class ClassProbesAdapter extends ClassVisitor implements IProbeIdGenerato
         return new MethodSanitizer(null, access, name, desc, signature,
                 exceptions) {
             int currentLine = -1;
+            final Map<Integer, Integer> branchTargetCounterByLine = new HashMap<Integer, Integer>();
+            final Map<Integer, Integer> branchSiteCounterByLine = new HashMap<Integer, Integer>();
 
             @Override
             public void visitLineNumber(final int line, final Label start) {
@@ -85,13 +88,59 @@ public class ClassProbesAdapter extends ClassVisitor implements IProbeIdGenerato
             @Override
             public void visitJumpInsn(final int opcode, final Label label) {
                 if ((opcode >= Opcodes.IFEQ && opcode <= Opcodes.IF_ACMPNE) || opcode == Opcodes.IFNULL || opcode == Opcodes.IFNONNULL) {
-                    if (signature == null || desc != null) {
-                        totalBranchMap.put(name + " " + desc + " " + currentLine, currentLine);
-                    } else {
-                        totalBranchMap.put(name + " " + signature + " " + currentLine, currentLine);
-                    }
+                    recordBranchTargets(2);
                 }
                 super.visitJumpInsn(opcode, label);
+            }
+
+            @Override
+            public void visitLookupSwitchInsn(final Label dflt, final int[] keys,
+                                              final Label[] labels) {
+                recordBranchTargets(labels.length + 1);
+                super.visitLookupSwitchInsn(dflt, keys, labels);
+            }
+
+            @Override
+            public void visitTableSwitchInsn(final int min, final int max,
+                                             final Label dflt, final Label... labels) {
+                recordBranchTargets(labels.length + 1);
+                super.visitTableSwitchInsn(min, max, dflt, labels);
+            }
+
+            private void recordBranchTargets(final int targetCount) {
+                if (currentLine <= 0 || targetCount <= 0) {
+                    return;
+                }
+                String methodKey;
+                if (signature == null || desc != null) {
+                    methodKey = name + " " + desc;
+                } else {
+                    methodKey = name + " " + signature;
+                }
+                String lineKey = methodKey + " " + currentLine;
+                totalBranchMap.put(lineKey, currentLine);
+                int[] targetIds = new int[targetCount];
+                for (int i = 0; i < targetCount; i++) {
+                    targetIds[i] = nextBranchTargetId(currentLine);
+                }
+                int siteId = nextBranchSiteId(currentLine);
+                totalBranchTargetMap.put(lineKey + " " + siteId, targetIds);
+            }
+
+            private int nextBranchTargetId(final int line) {
+                Integer key = Integer.valueOf(line);
+                Integer current = branchTargetCounterByLine.get(key);
+                int next = (current == null ? 0 : current.intValue()) + 1;
+                branchTargetCounterByLine.put(key, Integer.valueOf(next));
+                return next;
+            }
+
+            private int nextBranchSiteId(final int line) {
+                Integer key = Integer.valueOf(line);
+                Integer current = branchSiteCounterByLine.get(key);
+                int next = (current == null ? 0 : current.intValue()) + 1;
+                branchSiteCounterByLine.put(key, Integer.valueOf(next));
+                return next;
             }
 
             @Override

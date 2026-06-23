@@ -27,6 +27,7 @@ public class ProbeCounter extends ClassProbesVisitor {
     private int count;
     private boolean methods;
     private Map<String, Integer> totalBranchMap; // 分支总数，用于分支覆盖率统计
+    private Map<String, int[]> totalBranchTargetMap;
 
     ProbeCounter() {
         this.count = 0;
@@ -77,6 +78,14 @@ public class ProbeCounter extends ClassProbesVisitor {
 
     public void setTotalBranchMap(Map<String, Integer> totalBranchMap) {
         this.totalBranchMap = totalBranchMap;
+    }
+
+    public Map<String, int[]> getTotalBranchTargetMap() {
+        return totalBranchTargetMap;
+    }
+
+    public void setTotalBranchTargetMap(Map<String, int[]> totalBranchTargetMap) {
+        this.totalBranchTargetMap = totalBranchTargetMap;
     }
 
     // 按需分配探针数组

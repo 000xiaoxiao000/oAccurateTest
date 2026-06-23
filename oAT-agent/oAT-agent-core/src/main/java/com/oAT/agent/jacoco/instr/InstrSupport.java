@@ -303,6 +303,7 @@ public final class InstrSupport {
         ClassProbesAdapter classProbesAdapter = new ClassProbesAdapter(counter, false);
         reader.accept(classProbesAdapter, ClassReader.EXPAND_FRAMES);
         counter.setTotalBranchMap(classProbesAdapter.totalBranchMap);
+        counter.setTotalBranchTargetMap(classProbesAdapter.totalBranchTargetMap);
         return counter;
     }
 }

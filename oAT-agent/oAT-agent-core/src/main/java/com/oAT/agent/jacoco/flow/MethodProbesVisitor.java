@@ -30,6 +30,13 @@ public abstract class MethodProbesVisitor extends MethodVisitor {
 	}
 
 	@SuppressWarnings("unused")
+	public void visitJumpInsnWithProbes(final int opcode, final Label label,
+			final int takenProbeId, final int fallthroughProbeId,
+			final IFrame frame, final int branchLine,
+			final int takenBranchTargetId, final int fallthroughBranchTargetId) {
+	}
+
+	@SuppressWarnings("unused")
 	public void visitInsnWithProbe(final int opcode, final int probeId,
 			final int branchLine, final int branchTargetId) {
 	}
@@ -41,8 +48,22 @@ public abstract class MethodProbesVisitor extends MethodVisitor {
 	}
 
 	@SuppressWarnings("unused")
+	public void visitTableSwitchInsnWithProbes(final int min, final int max,
+			final Label dflt, final Label[] labels, final IFrame frame,
+			final int branchLine, final int dfltProbeId,
+			final int[] labelProbeIds, final int[] branchTargetIds) {
+	}
+
+	@SuppressWarnings("unused")
 	public void visitLookupSwitchInsnWithProbes(final Label dflt,
 			final int[] keys, final Label[] labels, final IFrame frame,
 			final int branchLine, final int[] branchTargetIds) {
+	}
+
+	@SuppressWarnings("unused")
+	public void visitLookupSwitchInsnWithProbes(final Label dflt,
+			final int[] keys, final Label[] labels, final IFrame frame,
+			final int branchLine, final int dfltProbeId,
+			final int[] labelProbeIds, final int[] branchTargetIds) {
 	}
 }

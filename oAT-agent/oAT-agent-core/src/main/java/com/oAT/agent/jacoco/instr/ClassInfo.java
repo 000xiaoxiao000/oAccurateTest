@@ -48,6 +48,7 @@ public class ClassInfo {
      * Map<方法+desc+行号（分支行号）, 行号（分支行号）>
      */
     public Map<String, Integer> totalBranchMap;
+    public Map<String, int[]> totalBranchTargetMap;
     /*
      * 每个方法的行号，可统计出方法的总数，用于方法覆盖率统计
      * 分支总数，用于分支覆盖率统计
@@ -115,10 +116,15 @@ public class ClassInfo {
         if (probeCounter != null) {
             count = probeCounter.getCount();    // 类中所有探针数
             this.totalBranchMap = probeCounter.getTotalBranchMap(); // 记录分支总数
+            this.totalBranchTargetMap = probeCounter.getTotalBranchTargetMap();
         } else {
             count = 0;
             this.totalBranchMap = new HashMap();
+            this.totalBranchTargetMap = new HashMap<String, int[]>();
             this.totalBranches = new HashMap<String, Integer>();
+        }
+        if (this.totalBranchTargetMap == null) {
+            this.totalBranchTargetMap = new HashMap<String, int[]>();
         }
         try {
             reader.accept(new ClassVisitor(asmApiVersion) {
@@ -197,6 +203,7 @@ public class ClassInfo {
                         private int currentLine = -1;   // 当前代码行
                         private int decisionPoints = 0; // 判定节点数
                         private final Map<Integer, Integer> branchLineTargetCounters = new HashMap();
+                        private final Map<Integer, Integer> branchLineSiteCounters = new HashMap();
 
                         @Override
                         public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
@@ -323,17 +330,7 @@ public class ClassInfo {
                         public void visitJumpInsn(final int opcode, final Label label) {
                             if ((opcode >= Opcodes.IFEQ && opcode <= Opcodes.IF_ACMPNE) || opcode == Opcodes.IFNULL || opcode == Opcodes.IFNONNULL) {
                                 decisionPoints++;   // 每个跳转指令都是一个判定节点
-                                if (this.currentLine > 0) {
-                                    Integer currentTarget = branchLineTargetCounters.get(this.currentLine);
-                                    int nextTarget = (currentTarget == null ? 0 : currentTarget.intValue()) + 1;
-                                    branchLineTargetCounters.put(this.currentLine, nextTarget);
-                                    Set<Integer> targetProbeIds = branchLineAndTargetProbeMap.get(this.currentLine);
-                                    if (targetProbeIds == null) {
-                                        targetProbeIds = new LinkedHashSet<Integer>();
-                                        branchLineAndTargetProbeMap.put(this.currentLine, targetProbeIds);
-                                    }
-                                    targetProbeIds.add(nextTarget);
-                                }
+                                recordBranchTargets(2);
                                 lineNumberSet.add(currentLine);
                             } else if (opcode != Opcodes.GOTO && opcode != Opcodes.JSR) {
                                 decisionPoints++;
@@ -341,6 +338,52 @@ public class ClassInfo {
                                 lineNumberSet.add(currentLine);
                             }
                             super.visitJumpInsn(opcode, label);
+                        }
+
+                        @Override
+                        public void visitLookupSwitchInsn(Label dflt, int[] keys, Label[] labels) {
+                            decisionPoints++;
+                            recordBranchTargets(labels.length + 1);
+                            lineNumberSet.add(currentLine);
+                            super.visitLookupSwitchInsn(dflt, keys, labels);
+                        }
+
+                        @Override
+                        public void visitTableSwitchInsn(int min, int max, Label dflt, Label... labels) {
+                            decisionPoints++;
+                            recordBranchTargets(labels.length + 1);
+                            lineNumberSet.add(currentLine);
+                            super.visitTableSwitchInsn(min, max, dflt, labels);
+                        }
+
+                        private void recordBranchTargets(int targetCount) {
+                            if (this.currentLine <= 0 || targetCount <= 0) {
+                                return;
+                            }
+                            Set<Integer> targetProbeIds = branchLineAndTargetProbeMap.get(this.currentLine);
+                            if (targetProbeIds == null) {
+                                targetProbeIds = new LinkedHashSet<Integer>();
+                                branchLineAndTargetProbeMap.put(this.currentLine, targetProbeIds);
+                            }
+                            int[] targetIds = new int[targetCount];
+                            for (int i = 0; i < targetCount; i++) {
+                                Integer currentTarget = branchLineTargetCounters.get(this.currentLine);
+                                int nextTarget = (currentTarget == null ? 0 : currentTarget.intValue()) + 1;
+                                branchLineTargetCounters.put(this.currentLine, nextTarget);
+                                targetProbeIds.add(nextTarget);
+                                targetIds[i] = nextTarget;
+                            }
+                            Integer currentSite = branchLineSiteCounters.get(this.currentLine);
+                            int nextSite = (currentSite == null ? 0 : currentSite.intValue()) + 1;
+                            branchLineSiteCounters.put(this.currentLine, nextSite);
+                            String currentMethodDesc;
+                            if (signature == null || descriptor != null) {
+                                currentMethodDesc = descriptor;
+                            } else {
+                                currentMethodDesc = signature;
+                            }
+                            totalBranchTargetMap.put(name + " " + currentMethodDesc + " " + this.currentLine
+                                    + " " + nextSite, targetIds);
                         }
 
                         @Override
@@ -409,6 +452,10 @@ public class ClassInfo {
 
     public Map<String, Integer> getTotalBranchMap() {
         return totalBranchMap;
+    }
+
+    public Map<String, int[]> getTotalBranchTargetMap() {
+        return totalBranchTargetMap;
     }
 
     public Map<Integer, Set<Integer>> getBranchLineAndTargetProbeMap() {

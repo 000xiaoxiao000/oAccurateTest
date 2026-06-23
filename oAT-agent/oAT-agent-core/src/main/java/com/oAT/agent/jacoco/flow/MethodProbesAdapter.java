@@ -94,19 +94,23 @@ public final class MethodProbesAdapter extends MethodVisitor {
 
     @Override
     public void visitJumpInsn(final int opcode, final Label label) {
-        if (LabelInfo.isMultiTarget(label)) {
-            if (opcode == Opcodes.GOTO) {
-                probesVisitor.visitJumpInsnWithProbe(opcode, label,
-                        idGenerator.nextId(), frame(jumpPopCount(opcode)), -1,
-                        NO_BRANCH_TARGET);
-            } else {
-                probesVisitor.visitJumpInsnWithProbe(opcode, label,
-                        idGenerator.nextId(), frame(jumpPopCount(opcode)), currentLine,
-                        nextBranchTargetId(currentLine));
-            }
+        if (isConditionalJump(opcode)) {
+            probesVisitor.visitJumpInsnWithProbes(opcode, label,
+                    idGenerator.nextId(), idGenerator.nextId(),
+                    frame(jumpPopCount(opcode)), currentLine,
+                    nextBranchTargetId(currentLine), nextBranchTargetId(currentLine));
+        } else if (opcode == Opcodes.GOTO && LabelInfo.isMultiTarget(label)) {
+            probesVisitor.visitJumpInsnWithProbe(opcode, label,
+                    idGenerator.nextId(), frame(jumpPopCount(opcode)), -1,
+                    NO_BRANCH_TARGET);
         } else {
             probesVisitor.visitJumpInsn(opcode, label);
         }
+    }
+
+    private boolean isConditionalJump(final int opcode) {
+        return (opcode >= Opcodes.IFEQ && opcode <= Opcodes.IF_ACMPNE)
+                || opcode == Opcodes.IFNULL || opcode == Opcodes.IFNONNULL;
     }
 
     private int jumpPopCount(final int opcode) {
@@ -131,24 +135,29 @@ public final class MethodProbesAdapter extends MethodVisitor {
     public void visitLookupSwitchInsn(final Label dflt, final int[] keys,
                                       final Label[] labels) {
         int[] branchTargetIds = allocateBranchTargetIds(labels.length + 1);
-        if (markLabels(dflt, labels)) {
-            probesVisitor.visitLookupSwitchInsnWithProbes(dflt, keys, labels,
-                    frame(1), currentLine, branchTargetIds);
-        } else {
-            probesVisitor.visitLookupSwitchInsn(dflt, keys, labels);
-        }
+        probesVisitor.visitLookupSwitchInsnWithProbes(dflt, keys, labels,
+                frame(1), currentLine, idGenerator.nextId(),
+                allocateProbeIds(labels.length), branchTargetIds);
     }
 
     @Override
     public void visitTableSwitchInsn(final int min, final int max,
                                      final Label dflt, final Label... labels) {
         int[] branchTargetIds = allocateBranchTargetIds(labels.length + 1);
-        if (markLabels(dflt, labels)) {
-            probesVisitor.visitTableSwitchInsnWithProbes(min, max, dflt,
-                    labels, frame(1), currentLine, branchTargetIds);
-        } else {
-            probesVisitor.visitTableSwitchInsn(min, max, dflt, labels);
+        probesVisitor.visitTableSwitchInsnWithProbes(min, max, dflt,
+                labels, frame(1), currentLine, idGenerator.nextId(),
+                allocateProbeIds(labels.length), branchTargetIds);
+    }
+
+    private int[] allocateProbeIds(final int count) {
+        if (count <= 0) {
+            return new int[0];
         }
+        int[] ids = new int[count];
+        for (int i = 0; i < count; i++) {
+            ids[i] = idGenerator.nextId();
+        }
+        return ids;
     }
 
     private int nextBranchTargetId(final int line) {

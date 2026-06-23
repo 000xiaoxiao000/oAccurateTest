@@ -51,6 +51,24 @@ class MethodInstrumenter extends MethodProbesVisitor {
         }
     }
 
+    @Override
+    public void visitJumpInsnWithProbes(final int opcode, final Label label,
+                                        final int takenProbeId, final int fallthroughProbeId,
+                                        final IFrame frame, final int branchLine,
+                                        final int takenBranchTargetId, final int fallthroughBranchTargetId) {
+        final Label takenProbe = new Label();
+        final Label fallthrough = new Label();
+        mv.visitJumpInsn(opcode, takenProbe);
+        probeInserter.insertProbe(fallthroughProbeId, true, branchLine, fallthroughBranchTargetId);
+        mv.visitJumpInsn(Opcodes.GOTO, fallthrough);
+        mv.visitLabel(takenProbe);
+        frame.accept(mv);
+        probeInserter.insertProbe(takenProbeId, true, branchLine, takenBranchTargetId);
+        mv.visitJumpInsn(Opcodes.GOTO, label);
+        mv.visitLabel(fallthrough);
+        frame.accept(mv);
+    }
+
     private int getInverted(final int opcode) {
         switch (opcode) {
             case Opcodes.IFEQ:
@@ -102,6 +120,22 @@ class MethodInstrumenter extends MethodProbesVisitor {
     }
 
     @Override
+    public void visitTableSwitchInsnWithProbes(final int min, final int max,
+                                               final Label dflt, final Label[] labels, final IFrame frame,
+                                               final int branchLine, final int dfltProbeId,
+                                               final int[] labelProbeIds, final int[] branchTargetIds) {
+        final Label newDflt = new Label();
+        final Label[] newLabels = createProbeLabels(labels.length);
+        mv.visitTableSwitchInsn(min, max, newDflt, newLabels);
+        insertSwitchProbe(newDflt, dflt, frame, dfltProbeId, branchLine,
+                targetIdAt(branchTargetIds, 0));
+        for (int i = 0; i < labels.length; i++) {
+            insertSwitchProbe(newLabels[i], labels[i], frame, probeIdAt(labelProbeIds, i),
+                    branchLine, targetIdAt(branchTargetIds, i + 1));
+        }
+    }
+
+    @Override
     public void visitLookupSwitchInsnWithProbes(final Label dflt,
                                                 final int[] keys, final Label[] labels, final IFrame frame,
                                                 final int branchLine, final int[] branchTargetIds) {
@@ -111,6 +145,49 @@ class MethodInstrumenter extends MethodProbesVisitor {
         final Label[] newLabels = createIntermediates(labels);
         mv.visitLookupSwitchInsn(newDflt, keys, newLabels);
         insertIntermediateProbes(dflt, labels, frame, branchLine, branchTargetIds);
+    }
+
+    @Override
+    public void visitLookupSwitchInsnWithProbes(final Label dflt,
+                                                final int[] keys, final Label[] labels, final IFrame frame,
+                                                final int branchLine, final int dfltProbeId,
+                                                final int[] labelProbeIds, final int[] branchTargetIds) {
+        final Label newDflt = new Label();
+        final Label[] newLabels = createProbeLabels(labels.length);
+        mv.visitLookupSwitchInsn(newDflt, keys, newLabels);
+        insertSwitchProbe(newDflt, dflt, frame, dfltProbeId, branchLine,
+                targetIdAt(branchTargetIds, 0));
+        for (int i = 0; i < labels.length; i++) {
+            insertSwitchProbe(newLabels[i], labels[i], frame, probeIdAt(labelProbeIds, i),
+                    branchLine, targetIdAt(branchTargetIds, i + 1));
+        }
+    }
+
+    private Label[] createProbeLabels(final int count) {
+        final Label[] probeLabels = new Label[count];
+        for (int i = 0; i < count; i++) {
+            probeLabels[i] = new Label();
+        }
+        return probeLabels;
+    }
+
+    private int probeIdAt(final int[] probeIds, final int index) {
+        return probeIds != null && index >= 0 && index < probeIds.length ? probeIds[index] : LabelInfo.NO_PROBE;
+    }
+
+    private int targetIdAt(final int[] targetIds, final int index) {
+        return targetIds != null && index >= 0 && index < targetIds.length ? targetIds[index] : -1;
+    }
+
+    private void insertSwitchProbe(final Label probeLabel, final Label targetLabel, final IFrame frame,
+                                   final int probeId, final int branchLine, final int branchTargetId) {
+        if (probeId == LabelInfo.NO_PROBE) {
+            return;
+        }
+        mv.visitLabel(probeLabel);
+        frame.accept(mv);
+        probeInserter.insertProbe(probeId, true, branchLine, branchTargetId);
+        mv.visitJumpInsn(Opcodes.GOTO, targetLabel);
     }
 
     private Label[] createIntermediates(final Label[] labels) {

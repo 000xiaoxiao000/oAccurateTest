@@ -247,6 +247,34 @@ public class CompactDataInput {
                                                                         Map<Integer, Set<Integer>> branchTargetMap,
                                                                         ClassInfo info) {
         Map<Integer, Set<Integer>> methodBranchTargets = new LinkedHashMap();
+        Map<String, int[]> branchTargetSiteMap = info == null ? null : info.getTotalBranchTargetMap();
+        if (branchTargetSiteMap != null && !branchTargetSiteMap.isEmpty()) {
+            for (Map.Entry<String, int[]> entry : branchTargetSiteMap.entrySet()) {
+                BranchSiteKey siteKey = parseBranchSiteKey(entry.getKey());
+                if (siteKey == null || !shortMethodKey.equals(siteKey.methodNameDesc)) {
+                    continue;
+                }
+                if (siteKey.line <= 0 || !lineNums.contains(Integer.valueOf(siteKey.line))) {
+                    continue;
+                }
+                Set<Integer> targets = methodBranchTargets.get(Integer.valueOf(siteKey.line));
+                if (targets == null) {
+                    targets = new LinkedHashSet<Integer>();
+                    methodBranchTargets.put(Integer.valueOf(siteKey.line), targets);
+                }
+                int[] targetIds = entry.getValue();
+                if (targetIds != null) {
+                    for (int i = 0; i < targetIds.length; i++) {
+                        if (targetIds[i] > 0) {
+                            targets.add(Integer.valueOf(targetIds[i]));
+                        }
+                    }
+                }
+            }
+            if (!methodBranchTargets.isEmpty()) {
+                return methodBranchTargets;
+            }
+        }
         if (branchMap != null && !branchMap.isEmpty()) {
             for (Map.Entry<String, Integer> bEntry : branchMap.entrySet()) {
                 String key = bEntry.getKey();
@@ -278,6 +306,37 @@ public class CompactDataInput {
             }
         }
         return methodBranchTargets;
+    }
+
+    private static BranchSiteKey parseBranchSiteKey(String key) {
+        if (key == null) {
+            return null;
+        }
+        int lastSpace = key.lastIndexOf(' ');
+        if (lastSpace <= 0) {
+            return null;
+        }
+        int secondLastSpace = key.lastIndexOf(' ', lastSpace - 1);
+        if (secondLastSpace <= 0) {
+            return null;
+        }
+        try {
+            int line = Integer.parseInt(key.substring(secondLastSpace + 1, lastSpace));
+            String methodNameDesc = key.substring(0, secondLastSpace);
+            return new BranchSiteKey(methodNameDesc, line);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static final class BranchSiteKey {
+        private final String methodNameDesc;
+        private final int line;
+
+        private BranchSiteKey(String methodNameDesc, int line) {
+            this.methodNameDesc = methodNameDesc;
+            this.line = line;
+        }
     }
 
     private static int inferBranchTargetCount(String shortMethodKey, int branchLine, ClassInfo info) {
