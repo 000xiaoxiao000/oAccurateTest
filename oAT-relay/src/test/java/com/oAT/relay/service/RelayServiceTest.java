@@ -2,11 +2,17 @@ package com.oAT.relay.service;
 
 import com.oAT.relay.config.RelayProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpMethod;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 class RelayServiceTest {
 
@@ -49,5 +55,25 @@ class RelayServiceTest {
         params.add("data", "trace");
 
         assertFalse(relayService.isPayloadTooLarge(params, null));
+    }
+
+    @Test
+    void shouldForwardApiSynchronouslyEvenWhenAsyncModeEnabled() {
+        RelayProperties properties = new RelayProperties();
+        properties.setForwardMode(RelayProperties.ForwardMode.ASYNC);
+        RelayForwardClient forwardClient = mock(RelayForwardClient.class);
+        RelayQueueService queueService = mock(RelayQueueService.class);
+        when(forwardClient.forward(any())).thenReturn(org.springframework.http.ResponseEntity.ok("ok"));
+        RelayService relayService = new RelayService(properties, forwardClient, queueService, new RelayMetrics());
+
+        relayService.handle(new com.oAT.relay.model.RelayRequest(
+                HttpMethod.POST,
+                "/api/projects/p1/apps/a1/coverage/frontend/report",
+                null,
+                "{}",
+                null));
+
+        verify(forwardClient).forward(any());
+        verifyNoInteractions(queueService);
     }
 }

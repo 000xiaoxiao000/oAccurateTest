@@ -302,9 +302,10 @@ async function saveCoverageRelayConfig() {
     appId: coverageAppId.value
   })
   syncCoverageRelayForm()
+  const activeTargetBaseUrl = coverageTargetType.value === 'relay' ? coverageRelayBaseUrl.value : coverageServiceBaseUrl.value
   relayNotice.value = {
     status: 'success',
-    text: `覆盖率上送已${coverageRelayEnabled.value ? '启用' : '停用'}，接收端口 ${coveragePort.value}，目标 ${coverageRelayBaseUrl.value || coverageServiceBaseUrl.value || '-'} / ${coverageProjectId.value || '-'} / ${coverageAppId.value || '-'}`
+    text: `覆盖率上送已${coverageRelayEnabled.value ? '启用' : '停用'}，接收端口 ${coveragePort.value}，目标 ${activeTargetBaseUrl || '-'} / ${coverageProjectId.value || '-'} / ${coverageAppId.value || '-'}`
   }
   if (relayNoticeTimer) window.clearTimeout(relayNoticeTimer)
   relayNoticeTimer = window.setTimeout(() => {

@@ -671,7 +671,7 @@ ipcMain.handle('test-coverage-report', async (_event, targetUrl: string, body: u
       success: response.ok,
       status: response.status,
       body: responseBody,
-      error: response.ok ? undefined : `HTTP ${response.status}`
+      error: response.ok ? undefined : `HTTP ${response.status}${responseBody ? `: ${responseBody.slice(0, 300)}` : ''}`
     }
   } catch (error: any) {
     return { success: false, error: error?.message ?? String(error) }

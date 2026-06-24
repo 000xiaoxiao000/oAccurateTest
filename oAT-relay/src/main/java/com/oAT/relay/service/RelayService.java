@@ -70,6 +70,9 @@ public class RelayService {
     }
 
     private boolean shouldForwardAsync(String path) {
+        if (path != null && path.startsWith("/api/")) {
+            return false;
+        }
         RelayProperties.ForwardMode mode = properties.getForwardMode();
         if (mode == RelayProperties.ForwardMode.SYNC) {
             return false;
