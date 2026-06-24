@@ -56,5 +56,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   uninstallBuiltinPlugin: () => ipcRenderer.invoke('uninstall-builtin-plugin'),
   uninstallPlugin: (pluginId) => ipcRenderer.invoke('uninstall-plugin', pluginId),
   getCoverageRelayConfig: () => ipcRenderer.invoke('get-coverage-relay-config'),
-  setCoverageRelayConfig: (config) => ipcRenderer.invoke('set-coverage-relay-config', config)
+  setCoverageRelayConfig: (config) => ipcRenderer.invoke('set-coverage-relay-config', config),
+  testCoverageReport: (targetUrl, body) => ipcRenderer.invoke('test-coverage-report', targetUrl, body)
 })

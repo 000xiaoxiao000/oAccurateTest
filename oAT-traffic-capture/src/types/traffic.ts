@@ -40,6 +40,8 @@ export interface CoverageRelayConfig {
   intervalMs: number
   coveragePort?: number
   proxyPort?: number
+  targetType?: 'relay' | 'service'
+  relayBaseUrl?: string
   serviceBaseUrl?: string
   projectId?: string
   appId?: string

@@ -659,6 +659,25 @@ ipcMain.handle('uninstall-plugin', async (_event, pluginId: string) => uninstall
 
 ipcMain.handle('get-coverage-relay-config', async () => loadCoverageRelayConfig())
 
+ipcMain.handle('test-coverage-report', async (_event, targetUrl: string, body: unknown) => {
+  try {
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+    const responseBody = await response.text().catch(() => '')
+    return {
+      success: response.ok,
+      status: response.status,
+      body: responseBody,
+      error: response.ok ? undefined : `HTTP ${response.status}`
+    }
+  } catch (error: any) {
+    return { success: false, error: error?.message ?? String(error) }
+  }
+})
+
 ipcMain.handle('set-coverage-relay-config', async (_event, config) => {
   const previousConfig = getCoverageRelayConfig()
   const nextConfig = setCoverageRelayConfig(config)

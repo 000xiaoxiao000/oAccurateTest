@@ -71,6 +71,7 @@ declare global {
       uninstallPlugin: (pluginId: string) => Promise<PluginInfo[]>
       getCoverageRelayConfig: () => Promise<CoverageRelayConfig>
       setCoverageRelayConfig: (config: CoverageRelayConfig) => Promise<CoverageRelayConfig>
+      testCoverageReport: (targetUrl: string, body: unknown) => Promise<{ success: boolean; status?: number; body?: string; error?: string }>
     }
   }
 }

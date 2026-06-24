@@ -26,7 +26,12 @@ let coverageRelayConfig: CoverageRelayConfig = {
   enabled: false,
   intervalMs: 30000,
   coveragePort: 8889,
-  proxyPort: 8888
+  proxyPort: 8888,
+  targetType: 'relay',
+  relayBaseUrl: '',
+  serviceBaseUrl: '',
+  projectId: '',
+  appId: ''
 }
 
 function pluginsRoot(): string {
@@ -271,13 +276,16 @@ function coveragePayload(body) {
 }
 
 function resolveConfiguredApiUrl(record, body, context) {
+  const relayBaseUrl = body?.relayBaseUrl || context?.coverageRelay?.relayBaseUrl || ''
   const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || context?.coverageRelay?.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
+  const targetType = body?.targetType || context?.coverageRelay?.targetType || (relayBaseUrl ? 'relay' : 'service')
+  const targetBaseUrl = targetType === 'relay' ? relayBaseUrl : serviceBaseUrl
   const projectId = body?.projectId || context?.coverageRelay?.projectId
   const appId = body?.appId || body?.appKey || context?.coverageRelay?.appId
-  if (!serviceBaseUrl || !projectId || !appId) return ''
+  if (!targetBaseUrl || !projectId || !appId) return ''
   const sourceType = normalizeSourceType(body, record.url)
   const path = sourceType === 'FRONTEND' ? '/coverage/frontend/report' : '/coverage/universal/' + sourceType + '/report'
-  return String(serviceBaseUrl).replace(/\\/$/, '') + '/api/projects/' + encodeURIComponent(projectId) + '/apps/' + encodeURIComponent(appId) + path
+  return String(targetBaseUrl).replace(/\\/$/, '') + '/api/projects/' + encodeURIComponent(projectId) + '/apps/' + encodeURIComponent(appId) + path
 }
 
 function resolveTargetApiUrl(record, body, context) {
@@ -446,12 +454,16 @@ export function setCoverageRelayConfig(config: Partial<CoverageRelayConfig>, per
   const intervalMs = Number(config.intervalMs)
   const coveragePort = Number(config.coveragePort)
   const proxyPort = Number(config.proxyPort)
+  const relayBaseUrl = normalizeBaseUrl(config.relayBaseUrl, coverageRelayConfig.relayBaseUrl)
+  const serviceBaseUrl = normalizeBaseUrl(config.serviceBaseUrl, coverageRelayConfig.serviceBaseUrl)
   coverageRelayConfig = {
     enabled: typeof config.enabled === 'boolean' ? config.enabled : coverageRelayConfig.enabled,
     intervalMs: Number.isFinite(intervalMs) && intervalMs >= 1000 ? Math.round(intervalMs) : coverageRelayConfig.intervalMs,
     coveragePort: Number.isInteger(coveragePort) && coveragePort > 0 && coveragePort <= 65535 ? coveragePort : coverageRelayConfig.coveragePort,
     proxyPort: Number.isInteger(proxyPort) && proxyPort > 0 && proxyPort <= 65535 ? proxyPort : coverageRelayConfig.proxyPort,
-    serviceBaseUrl: typeof config.serviceBaseUrl === 'string' ? config.serviceBaseUrl.trim() : coverageRelayConfig.serviceBaseUrl,
+    targetType: config.targetType === 'service' ? 'service' : config.targetType === 'relay' ? 'relay' : coverageRelayConfig.targetType,
+    relayBaseUrl,
+    serviceBaseUrl,
     projectId: typeof config.projectId === 'string' ? config.projectId.trim() : coverageRelayConfig.projectId,
     appId: typeof config.appId === 'string' ? config.appId.trim() : coverageRelayConfig.appId
   }
@@ -459,6 +471,13 @@ export function setCoverageRelayConfig(config: Partial<CoverageRelayConfig>, per
     persistCoverageRelayConfig()
   }
   return getCoverageRelayConfig()
+}
+
+function normalizeBaseUrl(value: unknown, fallback: string | undefined): string {
+  if (typeof value !== 'string') {
+    return fallback ?? ''
+  }
+  return value.trim().replace(/\/+$/, '')
 }
 
 export async function runRecordCapturedHooks(record: TrafficRecord): Promise<TrafficRecord | null> {

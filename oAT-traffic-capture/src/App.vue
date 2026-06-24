@@ -23,6 +23,8 @@ const activePanel = ref<'none' | 'stats' | 'rules' | 'plugins'>('none')
 const activeSection = ref<'capture' | 'coverage' | 'requests' | 'sessions' | 'settings'>('capture')
 const pluginsPath = ref('')
 const coverageIntervalSeconds = ref(30)
+const coverageTargetType = ref<'relay' | 'service'>('relay')
+const coverageRelayBaseUrl = ref('')
 const coverageServiceBaseUrl = ref('')
 const coverageProjectId = ref('')
 const coverageAppId = ref('')
@@ -251,11 +253,17 @@ function showCoverageRelayNotice(record: TrafficRecord) {
 function syncCoverageRelayForm() {
   coverageRelayEnabled.value = store.coverageRelayConfig.enabled
   coverageIntervalSeconds.value = Math.round(store.coverageRelayConfig.intervalMs / 1000)
+  coverageRelayBaseUrl.value = store.coverageRelayConfig.relayBaseUrl ?? ''
   coverageServiceBaseUrl.value = store.coverageRelayConfig.serviceBaseUrl ?? ''
+  coverageTargetType.value = store.coverageRelayConfig.targetType ?? (coverageRelayBaseUrl.value ? 'relay' : 'service')
   coverageProjectId.value = store.coverageRelayConfig.projectId ?? ''
   coverageAppId.value = store.coverageRelayConfig.appId ?? ''
   coveragePort.value = store.coverageRelayConfig.coveragePort ?? store.coveragePort
   proxyPort.value = store.coverageRelayConfig.proxyPort ?? store.proxyPort
+}
+
+function setCoverageTargetType(type: 'relay' | 'service') {
+  coverageTargetType.value = type
 }
 
 async function saveCoverageRelayConfig() {
@@ -287,6 +295,8 @@ async function saveCoverageRelayConfig() {
     intervalMs: Math.round(seconds * 1000),
     coveragePort: nextCoveragePort,
     proxyPort: nextProxyPort,
+    targetType: coverageTargetType.value,
+    relayBaseUrl: coverageRelayBaseUrl.value,
     serviceBaseUrl: coverageServiceBaseUrl.value,
     projectId: coverageProjectId.value,
     appId: coverageAppId.value
@@ -294,7 +304,7 @@ async function saveCoverageRelayConfig() {
   syncCoverageRelayForm()
   relayNotice.value = {
     status: 'success',
-    text: `覆盖率上送已${coverageRelayEnabled.value ? '启用' : '停用'}，接收端口 ${coveragePort.value}，默认目标 ${coverageServiceBaseUrl.value || '-'} / ${coverageProjectId.value || '-'} / ${coverageAppId.value || '-'}`
+    text: `覆盖率上送已${coverageRelayEnabled.value ? '启用' : '停用'}，接收端口 ${coveragePort.value}，目标 ${coverageRelayBaseUrl.value || coverageServiceBaseUrl.value || '-'} / ${coverageProjectId.value || '-'} / ${coverageAppId.value || '-'}`
   }
   if (relayNoticeTimer) window.clearTimeout(relayNoticeTimer)
   relayNoticeTimer = window.setTimeout(() => {
@@ -305,13 +315,16 @@ async function saveCoverageRelayConfig() {
 }
 
 function buildCoverageTestUrl() {
-  const serviceBaseUrl = coverageServiceBaseUrl.value.replace(/\/$/, '')
-  return `${serviceBaseUrl}/api/projects/${encodeURIComponent(coverageProjectId.value)}/apps/${encodeURIComponent(coverageAppId.value)}/coverage/frontend/report`
+  const targetBaseUrl = (coverageTargetType.value === 'relay' ? coverageRelayBaseUrl.value : coverageServiceBaseUrl.value).replace(/\/$/, '')
+  return `${targetBaseUrl}/api/projects/${encodeURIComponent(coverageProjectId.value)}/apps/${encodeURIComponent(coverageAppId.value)}/coverage/frontend/report`
 }
 
 function buildCoverageTestBody() {
   const testFile = '/oat-coverage-test.js'
   return {
+    targetType: coverageTargetType.value,
+    relayBaseUrl: coverageRelayBaseUrl.value,
+    serviceBaseUrl: coverageServiceBaseUrl.value,
     projectId: coverageProjectId.value,
     appId: coverageAppId.value,
     caseName: 'oAT traffic capture coverage test',
@@ -349,10 +362,11 @@ function buildCoverageTestBody() {
 
 async function testCoverageServiceWebReport() {
   coverageTestResult.value = null
-  if (!coverageServiceBaseUrl.value || !coverageProjectId.value || !coverageAppId.value) {
+  const targetBaseUrl = coverageTargetType.value === 'relay' ? coverageRelayBaseUrl.value : coverageServiceBaseUrl.value
+  if (!targetBaseUrl || !coverageProjectId.value || !coverageAppId.value) {
     coverageTestResult.value = {
       status: 'failed',
-      text: '请先填写服务、项目、应用'
+      text: `请先填写${coverageTargetType.value === 'relay' ? '中继器' : '平台服务'}地址、项目、应用`
     }
     return
   }
@@ -361,18 +375,13 @@ async function testCoverageServiceWebReport() {
     const saved = await saveCoverageRelayConfig()
     if (!saved) return
     const targetUrl = buildCoverageTestUrl()
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildCoverageTestBody())
-    })
-    const responseText = await response.text()
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}${responseText ? `：${responseText.slice(0, 300)}` : ''}`)
+    const result = await window.electronAPI?.testCoverageReport(targetUrl, buildCoverageTestBody())
+    if (!result?.success) {
+      throw new Error(result?.error || `HTTP ${result?.status ?? 'unknown'}${result?.body ? `：${result.body.slice(0, 300)}` : ''}`)
     }
     relayNotice.value = {
       status: 'success',
-      text: `oAT-service-web 测试上报成功：${targetUrl}`
+      text: `覆盖率测试上报成功：${targetUrl}`
     }
     coverageTestResult.value = {
       status: 'success',
@@ -697,7 +706,33 @@ function handleFloatingClick() {
                 {{ coverageRelayEnabled ? '停用' : '启用' }}
               </button>
             </div>
-            <label><span>服务</span><input v-model.trim="coverageServiceBaseUrl" type="text" placeholder="http://localhost:8080" /></label>
+            <div class="coverage-target-field">
+              <span>上送目标</span>
+              <div class="coverage-target-options">
+                <label>
+                  <input
+                    type="radio"
+                    name="coverageTargetType"
+                    value="relay"
+                    :checked="coverageTargetType === 'relay'"
+                    @change="setCoverageTargetType('relay')"
+                  />
+                  中继器
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="coverageTargetType"
+                    value="service"
+                    :checked="coverageTargetType === 'service'"
+                    @change="setCoverageTargetType('service')"
+                  />
+                  平台服务
+                </label>
+              </div>
+            </div>
+            <label v-if="coverageTargetType === 'relay'" class="coverage-target-url"><span>中继器地址</span><input v-model.trim="coverageRelayBaseUrl" type="text" placeholder="http://localhost:18089" /></label>
+            <label v-else class="coverage-target-url"><span>平台服务</span><input v-model.trim="coverageServiceBaseUrl" type="text" placeholder="http://localhost:8080" /></label>
             <label><span>项目</span><input v-model.trim="coverageProjectId" type="text" placeholder="projectId" /></label>
             <label><span>应用</span><input v-model.trim="coverageAppId" type="text" placeholder="appId" /></label>
           </div>
@@ -1178,7 +1213,8 @@ function handleFloatingClick() {
 
 .input-group span,
 .coverage-form-grid span,
-.coverage-toggle-field > span {
+.coverage-toggle-field > span,
+.coverage-target-field > span {
   color: #475569;
   font-size: 12px;
   font-weight: 600;
@@ -1440,15 +1476,36 @@ button.metric-card {
 }
 
 .coverage-form-grid label,
-.coverage-toggle-field {
+.coverage-toggle-field,
+.coverage-target-field {
   display: grid;
   gap: 5px;
 }
 
-.coverage-form-grid label:nth-child(4),
-.coverage-form-grid label:nth-child(5),
-.coverage-form-grid label:nth-child(6) {
+.coverage-target-field,
+.coverage-target-url {
   grid-column: span 2;
+}
+
+.coverage-target-options {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.coverage-target-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.coverage-target-options input {
+  width: 14px;
+  height: 14px;
+  padding: 0;
 }
 
 .coverage-toggle-btn {
@@ -1671,9 +1728,8 @@ button.metric-card {
     grid-template-columns: repeat(3, minmax(150px, 1fr));
   }
 
-  .coverage-form-grid label:nth-child(4),
-  .coverage-form-grid label:nth-child(5),
-  .coverage-form-grid label:nth-child(6) {
+  .coverage-target-field,
+  .coverage-target-url {
     grid-column: span 1;
   }
 }

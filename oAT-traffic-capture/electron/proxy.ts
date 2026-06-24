@@ -16,6 +16,8 @@ export type CoverageReporterOptions = {
 export type CoverageReportBody = {
   serviceBaseUrl?: string
   endpointBaseUrl?: string
+  relayBaseUrl?: string
+  targetType?: 'relay' | 'service'
   projectId?: string
   appId?: string
   appKey?: string
@@ -64,15 +66,18 @@ function buildCoverageRelayTarget(
   coverageReporter?: CoverageReporterOptions
 ): string {
   const config = coverageReporter?.getConfig() ?? { enabled: false, intervalMs: 30000, coveragePort: 8889, proxyPort: 8888 }
+  const relayBaseUrl = body?.relayBaseUrl || config.relayBaseUrl || ''
   const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || config.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
+  const targetType = body?.targetType || config.targetType || (relayBaseUrl ? 'relay' : 'service')
+  const targetBaseUrl = targetType === 'relay' ? relayBaseUrl : serviceBaseUrl
   const projectId = body?.projectId || config.projectId
   const appId = body?.appId || body?.appKey || config.appId
   const sourceType = normalizeCoverageSourceType(body, record.url)
   const reportPath = sourceType === 'FRONTEND'
     ? 'coverage/frontend/report'
     : `coverage/universal/${sourceType}/report`
-  if (serviceBaseUrl && projectId && appId) {
-    return `${String(serviceBaseUrl).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}/${reportPath}`
+  if (targetBaseUrl && projectId && appId) {
+    return `${String(targetBaseUrl).replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/apps/${encodeURIComponent(appId)}/${reportPath}`
   }
   const match = String(record.url || '').match(/\/api\/projects\/[^/]+\/apps\/[^/]+\/coverage\/(?:frontend|universal\/(?:CPP|GO|PYTHON))\/report/i)
   if (!match) return ''
@@ -398,7 +403,9 @@ export function createProxyServer(
       : 30000
     const endpoint = buildCoverageEndpoint(config)
     const meta = {
+      targetType: config.targetType,
       serviceBaseUrl: config.serviceBaseUrl,
+      relayBaseUrl: config.relayBaseUrl,
       projectId: config.projectId,
       appId: config.appId
     }

@@ -13,7 +13,17 @@ export const useTrafficStore = defineStore('traffic', () => {
   const capturedCount = ref(0)
   const filterRules = ref<TrafficFilterRule[]>([])
   const plugins = ref<PluginInfo[]>([])
-  const coverageRelayConfig = ref<CoverageRelayConfig>({ enabled: false, intervalMs: 30000, coveragePort: 8889, proxyPort: 8888 })
+  const coverageRelayConfig = ref<CoverageRelayConfig>({
+    enabled: false,
+    intervalMs: 30000,
+    coveragePort: 8889,
+    proxyPort: 8888,
+    targetType: 'relay',
+    relayBaseUrl: '',
+    serviceBaseUrl: '',
+    projectId: '',
+    appId: ''
+  })
 
   function isSuccessRecord(record: TrafficRecord): boolean {
     if (record.coverageRelay) {
