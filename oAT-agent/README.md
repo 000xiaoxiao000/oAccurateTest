@@ -85,6 +85,12 @@ log.level=info
 # log.path=/your/path/logs/
 ```
 
+如果目标应用所在网络无法直连 `oAT-service-web`，可先部署 `oAT-relay`，再将 `server` 指向 relay 地址：
+
+```properties
+server=127.0.0.1:18089
+```
+
 ### 采集范围配置
 
 > 采集范围直接影响性能开销，建议精准配置，只覆盖核心业务包。
@@ -234,6 +240,7 @@ JVM 栈大小参考：
 - 采集范围不宜过大，整包采集（如 `com.*`）会显著增加请求耗时和数据量。
 - 若目标容器（如 Kubernetes、PaaS 平台）不允许自定义 JVM 参数，则无法接入 Agent。
 - 平台服务（`oAT-service-web`）需先于目标应用启动，否则 Agent 在建立会话阶段会重试连接。
+- 使用 `oAT-relay` 时，需先启动 `oAT-service-web` 和 `oAT-relay`，并确认 relay 的 `oat.relay.target-base-url` 指向正确的平台地址。
 - Tomcat 默认 POST 限制为 2MB，数据量较大时需在平台侧配置 `server.tomcat.max-http-post-size=100MB`。
 
 ---
@@ -306,6 +313,12 @@ heartbeatTime=20
 sessionTimeout=60
 log.level=info
 # log.path=/your/path/logs/
+```
+
+If the target application cannot access `oAT-service-web` directly, deploy `oAT-relay` first and point the Agent to the relay:
+
+```properties
+server=127.0.0.1:18089
 ```
 
 ### Collection Scope
@@ -398,4 +411,5 @@ Use larger stack sizes such as `-Xss2m` to `-Xss4m` for deep recursion or very l
 - Avoid broad collection scopes such as `com.*`; they significantly increase latency and data volume.
 - If the target environment does not allow custom JVM parameters, the Agent cannot be attached through startup arguments.
 - Start `oAT-service-web` before the target application. Otherwise, the Agent retries during session creation.
+- When using `oAT-relay`, start both `oAT-service-web` and `oAT-relay`, and make sure the relay `oat.relay.target-base-url` points to the correct platform address.
 - If payloads are large, configure the platform side with `server.tomcat.max-http-post-size=100MB` or an equivalent limit.

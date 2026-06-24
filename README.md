@@ -30,6 +30,7 @@ oAccurateTest/
 ├── oAT-service/          # 服务端模块（Java 17）
 │   ├── oAT-ai/           # AI 分析模块（LangChain4j）
 │   └── oAT-service-web/  # Web 平台主服务（Spring Boot 3）
+├── oAT-relay/            # HTTP 转发中继服务（Spring Boot 3）
 ├── oAT-web-frontend/     # 前端界面（Vue 3 + TypeScript）
 ├── oAT-traffic-capture/  # 桌面流量采集器与覆盖率上送 SDK（Electron + Vue 3）
 └── README.md
@@ -56,6 +57,8 @@ oAccurateTest/
        │ 前端 / 多语言覆盖率上送
   oAT-traffic-capture / sdk
 ```
+
+`oAT-relay` 可按需部署在测试网络、隔离网络或边缘节点，接收 Agent、覆盖率 SDK、桌面采集器等客户端请求，并按原始路径转发到 `oAT-service-web`。
 
 ---
 
@@ -106,6 +109,9 @@ Agent 通过字节码增强拦截 HTTP、SQL、Redis、Dubbo、SOFA-RPC、Feign�
 **桌面流量采集**
 `oAT-traffic-capture` 提供 HTTP/HTTPS、WebSocket、MQTT 流量捕获、过滤、重放、导出和历史会话管理，并内置覆盖率上送中继能力，方便前端和多语言测试产物接入平台。
 
+**HTTP 中继**
+`oAT-relay` 提供独立的轻量级 HTTP 转发服务，默认监听 `18089` 并转发到 `oAT-service-web` 的 `8899` 端口，适用于客户端无法直接访问平台服务或需要统一代理出口的场景。
+
 **AI 智能分析**
 基于 LangChain4j 的对话式 AI 助手，内置覆盖率分析、缺陷检测、性能分析、调用链比较、测试推荐等专用工具，支持 OpenAI / Ollama / DeepSeek 等多种模型。
 
@@ -118,6 +124,7 @@ Agent 通过字节码增强拦截 HTTP、SQL、Redis、Dubbo、SOFA-RPC、Feign�
 - `oAT-agent/` → [oAT-agent README](oAT-agent/README.md)
 - `oAT-service/oAT-ai/` → [oAT-ai README](oAT-service/oAT-ai/README.md)
 - `oAT-service/oAT-service-web/` → [oAT-service-web README](oAT-service/oAT-service-web/README.md)
+- `oAT-relay/` → [oAT-relay README](oAT-relay/README.md)
 - `oAT-web-frontend/` → [oAT-web-frontend README](oAT-web-frontend/README.md)
 - `oAT-traffic-capture/` → [oAT-traffic-capture README](oAT-traffic-capture/README.md)
 - `oAT-traffic-capture/sdk/coverage/` → [多语言覆盖率上送 SDK README](oAT-traffic-capture/sdk/coverage/README.md)
@@ -141,12 +148,16 @@ mvn clean install
 cd ../oAT-service-web
 mvn clean package
 
-# 4. 构建前端（可选，生产部署时需要）
-cd ../../oAT-web-frontend
+# 4. 构建 HTTP 中继（可选，需要代理转发时使用）
+cd ../../oAT-relay
+mvn clean package
+
+# 5. 构建前端（可选，生产部署时需要）
+cd ../oAT-web-frontend
 npm install
 npm run build
 
-# 5. 构建桌面流量采集器（可选）
+# 6. 构建桌面流量采集器（可选）
 cd ../oAT-traffic-capture
 npm install
 npm run build
@@ -161,8 +172,9 @@ npm run build
 3. 启动 Redis
 4. 启动 MinIO（启用覆盖率对象存储时需要）
 5. 启动 `oAT-service-web`
-6. 启动挂载了 Agent 的目标应用
-7. 按需启动 `oAT-traffic-capture` 进行桌面流量采集或覆盖率中继
+6. 按需启动 `oAT-relay` 作为 HTTP 转发中继
+7. 启动挂载了 Agent 的目标应用
+8. 按需启动 `oAT-traffic-capture` 进行桌面流量采集或覆盖率中继
 
 详细配置和启动参数见各模块 README。
 
@@ -205,6 +217,8 @@ POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/g
 
 `oAT-traffic-capture` 可作为本地覆盖率中继，默认接收 `http://localhost:8889/oat/coverage/report`，再转发到平台；多语言上送脚本见 `oAT-traffic-capture/sdk/coverage/`。
 
+如果客户端无法直接访问 `oAT-service-web`，也可以将 Agent、SDK 或采集器的服务地址配置为 `oAT-relay`，例如 `http://localhost:18089`。
+
 ---
 
 ## 环境要求
@@ -242,12 +256,15 @@ oAccurateTest/
 ├── oAT-service/          # Server modules (Java 17)
 │   ├── oAT-ai/           # AI analysis module (LangChain4j)
 │   └── oAT-service-web/  # Main Web service (Spring Boot 3)
+├── oAT-relay/            # HTTP forwarding relay service (Spring Boot 3)
 ├── oAT-web-frontend/     # Web UI (Vue 3 + TypeScript)
 ├── oAT-traffic-capture/  # Desktop traffic capture and coverage relay SDK
 └── README.md
 ```
 
 Runtime data flows from the target Java application through `oAT-agent` to `oAT-service-web`. The server stores traces, snapshots, source metadata, coverage objects, project data, and cache data in Elasticsearch, MinIO, MySQL, and Redis, then exposes the results through `oAT-web-frontend`. `oAT-traffic-capture` can capture desktop traffic and relay frontend or multi-language coverage reports.
+
+`oAT-relay` can be deployed in test networks, isolated networks, or edge nodes. It receives requests from the Agent, coverage SDKs, or the desktop capture app and forwards them to `oAT-service-web` with the original path.
 
 ### Technology Stack
 
@@ -278,6 +295,7 @@ Runtime data flows from the target Java application through `oAT-agent` to `oAT-
 - **API endpoint analysis**: automatic HTTP endpoint detection and coverage analysis.
 - **Probe monitoring**: online Agent status monitoring, offline alerts, and Webhook notifications.
 - **Desktop traffic capture**: HTTP/HTTPS, WebSocket, MQTT capture, filtering, replay, export, session history, and coverage relay.
+- **HTTP relay**: lightweight forwarding service for clients that cannot access `oAT-service-web` directly or need a unified proxy endpoint.
 - **AI analysis**: LangChain4j-based assistant with tools for coverage analysis, defect detection, performance analysis, call-chain comparison, and test recommendation. OpenAI, Ollama, DeepSeek, and compatible providers are supported.
 
 ### Module READMEs
@@ -285,6 +303,7 @@ Runtime data flows from the target Java application through `oAT-agent` to `oAT-
 - `oAT-agent/` -> [oAT-agent README](oAT-agent/README.md)
 - `oAT-service/oAT-ai/` -> [oAT-ai README](oAT-service/oAT-ai/README.md)
 - `oAT-service/oAT-service-web/` -> [oAT-service-web README](oAT-service/oAT-service-web/README.md)
+- `oAT-relay/` -> [oAT-relay README](oAT-relay/README.md)
 - `oAT-web-frontend/` -> [oAT-web-frontend README](oAT-web-frontend/README.md)
 - `oAT-traffic-capture/` -> [oAT-traffic-capture README](oAT-traffic-capture/README.md)
 - `oAT-traffic-capture/sdk/coverage/` -> [Multi-language coverage SDK README](oAT-traffic-capture/sdk/coverage/README.md)
@@ -304,12 +323,16 @@ mvn clean install
 cd ../oAT-service-web
 mvn clean package
 
-# 4. Build frontend when needed for production deployment
-cd ../../oAT-web-frontend
+# 4. Build HTTP relay when proxy forwarding is needed
+cd ../../oAT-relay
+mvn clean package
+
+# 5. Build frontend when needed for production deployment
+cd ../oAT-web-frontend
 npm install
 npm run build
 
-# 5. Build desktop traffic capture when needed
+# 6. Build desktop traffic capture when needed
 cd ../oAT-traffic-capture
 npm install
 npm run build
@@ -322,8 +345,9 @@ npm run build
 3. Start Redis.
 4. Start MinIO when coverage object storage is enabled.
 5. Start `oAT-service-web`.
-6. Start the target application with the Agent attached.
-7. Start `oAT-traffic-capture` when desktop traffic capture or coverage relay is needed.
+6. Start `oAT-relay` when HTTP forwarding is needed.
+7. Start the target application with the Agent attached.
+8. Start `oAT-traffic-capture` when desktop traffic capture or coverage relay is needed.
 
 ### Coverage Object Storage
 
@@ -348,6 +372,8 @@ POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/g
 ```
 
 `oAT-traffic-capture` can work as a local relay. It receives reports at `http://localhost:8889/oat/coverage/report` and forwards them to the platform. Multi-language upload scripts are documented in `oAT-traffic-capture/sdk/coverage/`.
+
+If clients cannot access `oAT-service-web` directly, point the Agent, SDKs, or desktop capture app to `oAT-relay`, for example `http://localhost:18089`.
 
 ### Requirements
 

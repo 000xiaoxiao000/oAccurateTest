@@ -35,7 +35,7 @@ src/main/resources/
 
 ## 构建
 
-需要先完成 `oAT-agent` 和 `oAT-ai` 的构建，再构建本模块：
+需要先完成 `oAT-agent` 和 `oAT-ai` 的构建，再构建本模块。`oAT-relay` 不被本模块依赖，可在需要 HTTP 转发时单独构建和部署：
 
 ```bash
 cd oAT-service/oAT-service-web
@@ -81,6 +81,12 @@ ES 索引模板在服务启动时由 `ElasticsearchTemplateInitializer` 自动�
 
 ```properties
 server.port=8899
+```
+
+如果通过 `oAT-relay` 暴露服务，保持本服务端口不变，在 relay 中配置：
+
+```properties
+oat.relay.target-base-url=http://127.0.0.1:8899
 ```
 
 ### Elasticsearch
@@ -250,6 +256,7 @@ nohup java -jar target/oAT-service-web-1.0.0-SNAPSHOT.war > oat.log 2>&1 &
 - 首次部署时按顺序执行全部 MySQL DDL 脚本；升级时只执行新增的阶段脚本。
 - MacOS 下已声明 Netty 本地 DNS 依赖（`netty-resolver-dns-native-macos`），Linux 部署时无需此依赖，也不影响运行。
 - AI 功能依赖 `oAT-ai` jar，若未提前构建 `oAT-ai` 则编译失败。
+- `oAT-relay` 只是独立 HTTP 转发层，不替代本服务的数据库、ES、Redis、MinIO 或 AI 配置。
 
 ---
 
@@ -258,6 +265,8 @@ nohup java -jar target/oAT-service-web-1.0.0-SNAPSHOT.war > oat.log 2>&1 &
 [中文](#oat-service-web) | English
 
 `oAT-service-web` is the main Web service of oAccurateTest. It receives Agent trace uploads, manages system snapshots, generates coverage reports, provides version management and the use case center, and integrates with `oAT-ai` for AI chat.
+
+`oAT-relay` is optional and can be deployed in front of this service when HTTP forwarding is needed. The relay should target this service through `oat.relay.target-base-url`, for example `http://127.0.0.1:8899`.
 
 ## Module Structure
 
@@ -283,7 +292,7 @@ src/main/resources/
 
 ## Build
 
-Build `oAT-agent` and `oAT-ai` first, then build this module:
+Build `oAT-agent` and `oAT-ai` first, then build this module. `oAT-relay` is not a dependency of this module and can be built separately when HTTP forwarding is needed:
 
 ```bash
 cd oAT-service/oAT-service-web
@@ -325,6 +334,12 @@ Configuration file: `src/main/resources/application.properties`
 
 ```properties
 server.port=8899
+```
+
+If this service is exposed through `oAT-relay`, keep this port unchanged and configure the relay:
+
+```properties
+oat.relay.target-base-url=http://127.0.0.1:8899
 ```
 
 ### Elasticsearch
@@ -465,3 +480,4 @@ Place the WAR under Tomcat `webapps/`. Use Tomcat 10+ to match Spring Boot 3.x S
 - On first deployment, run all MySQL DDL scripts in order. For upgrades, run only newly added phase scripts.
 - The Netty native DNS dependency for macOS is declared. It is not required on Linux and does not affect runtime.
 - AI features depend on the `oAT-ai` jar. The build fails if `oAT-ai` has not been built first.
+- `oAT-relay` is only an independent HTTP forwarding layer. It does not replace this service's database, Elasticsearch, Redis, MinIO, or AI configuration.

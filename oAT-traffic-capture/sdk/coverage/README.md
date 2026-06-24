@@ -12,6 +12,8 @@ POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/r
 
 默认服务端端口是 `8899`。如果通过 `oAT-traffic-capture` 中继上送，也可以先 POST 到 `http://localhost:8889/oat/coverage/report`，由采集器转发到服务端。
 
+如果测试环境无法直连 `oAT-service-web`，也可以将 `endpoint` 设置为 `oAT-relay` 地址，例如 `http://localhost:18089`。relay 会按原路径转发到平台。
+
 ## Go
 
 先生成 Go cover profile，再上送：
@@ -80,6 +82,8 @@ POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/r
 After upload, generate a report in the oAT coverage center with the same version number and commit.
 
 The default server port is `8899`. If you upload through the `oAT-traffic-capture` relay, POST to `http://localhost:8889/oat/coverage/report` first, and the desktop capture app forwards the report to the server.
+
+If the test environment cannot access `oAT-service-web` directly, set `endpoint` to the `oAT-relay` address, for example `http://localhost:18089`. The relay forwards requests to the platform with the original path.
 
 ## Go
 

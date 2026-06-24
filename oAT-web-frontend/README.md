@@ -191,6 +191,8 @@ npm run preview
 - **开发环境**：`vite.config.ts` 中的 `server.proxy`
 - **生产环境**：由部署时的反向代理（Nginx 等）或 `oAT-service-web` 的静态托管配置决定
 
+如果前端请求需经过 `oAT-relay`，将开发代理或生产反向代理的后端目标改为 relay 地址，例如 `http://127.0.0.1:18089`。
+
 ---
 
 ## 注意事项
@@ -258,6 +260,8 @@ npm run dev
 ```
 
 The default URL is `http://localhost:5173`. API requests are forwarded by the Vite proxy to `http://localhost:8899`.
+
+If frontend API requests need to go through `oAT-relay`, point the Vite proxy or production reverse proxy to the relay address, for example `http://127.0.0.1:18089`.
 
 ### Type Check
 

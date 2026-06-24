@@ -182,6 +182,7 @@ public class MyCustomTool {
 ## 注意事项
 
 - `oAT-ai` 作为 Spring Boot AutoConfiguration 模块，仅提供接口和配置类，实际数据查询由 `oAT-service-web` 中的 `AgentDataProviderImpl` 实现。
+- `oAT-relay` 只转发 HTTP 请求，不直接依赖或配置 `oAT-ai`；AI 能力仍由 `oAT-service-web` 加载本模块后提供。
 - AI 分析质量高度依赖基础数据完整性：快照、链路、静态源码均需完整入库。
 - 本地 Ollama 模型响应较慢，`ai.llm.timeout` 建议设为 300 秒或更高。
 - 语义缓存依赖 Redis，Redis 不可用时缓存会降级跳过，不影响正常功能。
@@ -314,6 +315,7 @@ Inject and register the Bean in `AIAgent` to participate in routing.
 ## Notes
 
 - `oAT-ai` is a Spring Boot AutoConfiguration module. Actual data access is implemented by `AgentDataProviderImpl` in `oAT-service-web`.
+- `oAT-relay` only forwards HTTP requests and does not directly depend on or configure `oAT-ai`; AI capabilities are still provided by `oAT-service-web` after it loads this module.
 - AI quality depends on complete platform data: snapshots, traces, and static source metadata must be available.
 - Local Ollama models can be slow. Set `ai.llm.timeout` to 300 seconds or higher.
 - Semantic cache depends on Redis. If Redis is unavailable, cache is skipped without affecting normal AI calls.

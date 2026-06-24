@@ -173,6 +173,8 @@ POST {serviceBaseUrl}/api/projects/{projectId}/apps/{appId}/coverage/universal/{
 
 前端项目可在 Istanbul 插桩后引入 `sdk/oat-coverage-reporter.ts`，将 `window.__coverage__` 周期性 POST 到本地中继。Go / Python / C/C++ 上送脚本见 `sdk/coverage/README.md`。
 
+如果采集器所在网络无法直连 `oAT-service-web`，可将覆盖率中心里的 oAT 服务地址配置为 `oAT-relay` 地址，例如 `http://127.0.0.1:18089`，由 relay 继续转发到平台。
+
 ## 插件扩展
 
 插件是 oAT 应用内部的流量处理插件，不是 Chrome、Safari 或其他浏览器插件。插件只处理本工具捕获到的流量记录。
@@ -440,6 +442,8 @@ POST {serviceBaseUrl}/api/projects/{projectId}/apps/{appId}/coverage/universal/{
 ```
 
 Frontend projects can import `sdk/oat-coverage-reporter.ts` after Istanbul instrumentation to upload `window.__coverage__`. Go / Python / C/C++ scripts are documented in `sdk/coverage/README.md`.
+
+If the desktop app cannot access `oAT-service-web` directly, set the oAT service URL in the coverage center to the `oAT-relay` address, for example `http://127.0.0.1:18089`. The relay then forwards requests to the platform.
 
 ## Plugins
 
