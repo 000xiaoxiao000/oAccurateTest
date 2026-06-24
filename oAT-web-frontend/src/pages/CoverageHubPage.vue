@@ -99,7 +99,7 @@
               <button
                 class="ghost-button small-button generate-button"
                 type="button"
-                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :disabled="!canGenerateVersionType(version, 'full') || Boolean(generatingVersionKey)"
                 :title="generateDisabledTitle(version, 'full')"
                 @click="generateVersionFull(version)"
               >
@@ -108,7 +108,7 @@
               <button
                 class="ghost-button small-button generate-button frontend-generate-button"
                 type="button"
-                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :disabled="!canGenerateVersionType(version, 'frontend') || Boolean(generatingVersionKey)"
                 :title="generateDisabledTitle(version, 'frontend')"
                 @click="generateFrontendCoverage(version)"
               >
@@ -119,7 +119,7 @@
                 :key="coverageSource.type"
                 class="ghost-button small-button generate-button universal-generate-button"
                 type="button"
-                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :disabled="!canGenerateVersionType(version, coverageSource.type) || Boolean(generatingVersionKey)"
                 :title="generateDisabledTitle(version, coverageSource.type)"
                 @click="generateUniversalCoverage(version, coverageSource.type)"
               >
@@ -128,7 +128,7 @@
               <button
                 class="ghost-button small-button generate-button"
                 type="button"
-                :disabled="!canGenerateVersion(version) || Boolean(generatingVersionKey)"
+                :disabled="!canGenerateVersionType(version, 'incremental') || Boolean(generatingVersionKey)"
                 :title="generateDisabledTitle(version, 'incremental')"
                 @click="openIncrementalDialog(version)"
               >
@@ -381,7 +381,9 @@ const keywordTerm = computed(() => keyword.value.toLowerCase())
 const visibleVersions = computed(() => compactVersionEntries(selectedCenter.value?.versions || []))
 const sourceTypeMatches = (value?: string) => selectedSourceType.value === 'ALL' || normalizeSourceType(value) === selectedSourceType.value
 const versionSourceTypeMatches = (version: VersionItemSummary) =>
-  sourceTypeMatches(version.sourceType || 'JAVA') || reportsForVersion(version).some((report) => sourceTypeMatches(report.sourceType))
+  sourceTypeMatches(version.sourceType || 'JAVA')
+  || reportsForVersion(version).some((report) => sourceTypeMatches(report.sourceType))
+  || rawCoverageSourceTypes(version).some((sourceType) => sourceTypeMatches(sourceType))
 const filteredVersions = computed(() => {
   const versions = visibleVersions.value.filter((version) => versionSourceTypeMatches(version))
   const term = keywordTerm.value
@@ -478,9 +480,18 @@ function reportsForVersion(version: VersionItemSummary) {
   )
 }
 
+function rawCoverageSourceTypes(version: VersionItemSummary) {
+  return (version.rawCoverageSourceTypes || []).map((sourceType) => normalizeSourceType(sourceType))
+}
+
+function hasRawCoverageSource(version: VersionItemSummary, sourceType: string) {
+  return rawCoverageSourceTypes(version).includes(normalizeSourceType(sourceType))
+}
+
 function coverageDataStatus(version: VersionItemSummary) {
   const reports = reportsForVersion(version)
-  if (!reports.length && !version.hasReport) {
+  const rawSourceTypes = new Set(rawCoverageSourceTypes(version))
+  if (!reports.length && !version.hasReport && !rawSourceTypes.size) {
     return [{ key: 'none', label: '暂无覆盖率数据', tone: 'empty' }]
   }
   const sourceTypes = new Set(reports.map((report) => normalizeSourceType(report.sourceType)))
@@ -489,19 +500,29 @@ function coverageDataStatus(version: VersionItemSummary) {
   if (sourceTypes.has('JAVA') || (version.hasReport && sourceTypes.size === 0)) {
     statuses.push({ key: 'java', label: 'Java 覆盖率', tone: 'ok' })
   }
-  if (sourceTypes.has('FRONTEND')) {
-    statuses.push({ key: 'frontend', label: '前端覆盖率', tone: 'ok' })
+  if (sourceTypes.has('FRONTEND') || rawSourceTypes.has('FRONTEND')) {
+    statuses.push({
+      key: 'frontend',
+      label: sourceTypes.has('FRONTEND') ? '前端覆盖率' : '前端待生成',
+      tone: sourceTypes.has('FRONTEND') ? 'ok' : 'info',
+    })
   }
   for (const coverageSource of universalGenerateSources) {
-    if (sourceTypes.has(coverageSource.type)) {
-      statuses.push({ key: coverageSource.type.toLowerCase(), label: `${coverageSource.shortLabel} 覆盖率`, tone: 'ok' })
+    if (sourceTypes.has(coverageSource.type) || rawSourceTypes.has(coverageSource.type)) {
+      statuses.push({
+        key: coverageSource.type.toLowerCase(),
+        label: sourceTypes.has(coverageSource.type) ? `${coverageSource.shortLabel} 覆盖率` : `${coverageSource.shortLabel} 待生成`,
+        tone: sourceTypes.has(coverageSource.type) ? 'ok' : 'info',
+      })
     }
   }
-  statuses.push({
-    key: 'traffic',
-    label: snapshotCount > 0 ? `流量数据 ${snapshotCount} 条` : '已生成报告',
-    tone: snapshotCount > 0 ? 'info' : 'neutral',
-  })
+  if (reports.length) {
+    statuses.push({
+      key: 'traffic',
+      label: snapshotCount > 0 ? `流量数据 ${snapshotCount} 条` : '已生成报告',
+      tone: snapshotCount > 0 ? 'info' : 'neutral',
+    })
+  }
   return statuses
 }
 
@@ -601,6 +622,13 @@ function canGenerateVersion(version: VersionItemSummary) {
   return Boolean(version.current)
 }
 
+function canGenerateVersionType(version: VersionItemSummary, type: VersionGenerateType) {
+  if (!canGenerateVersion(version)) return false
+  if (type === 'full' || type === 'incremental') return Boolean(version.hasReport)
+  if (type === 'frontend') return hasRawCoverageSource(version, 'FRONTEND')
+  return hasRawCoverageSource(version, type)
+}
+
 function isGeneratingVersion(version: VersionItemSummary, type: VersionGenerateType) {
   return generatingVersionKey.value === versionActionKey(version, type)
 }
@@ -608,6 +636,13 @@ function isGeneratingVersion(version: VersionItemSummary, type: VersionGenerateT
 function generateDisabledTitle(version: VersionItemSummary, type: VersionGenerateType) {
   if (!version.current) return '非当前版本仅支持查看覆盖率，不能生成报告'
   if (generatingVersionKey.value && !isGeneratingVersion(version, type)) return '已有覆盖率生成任务处理中，请稍后再试'
+  if (!canGenerateVersionType(version, type)) {
+    if (type === 'frontend') return '没有可生成的前端覆盖率上报数据'
+    if (type === 'GO') return '没有可生成的 Go 覆盖率上报数据'
+    if (type === 'PYTHON') return '没有可生成的 Python 覆盖率上报数据'
+    if (type === 'CPP') return '没有可生成的 C/C++ 覆盖率上报数据'
+    return '没有可生成的 Java 覆盖率数据'
+  }
   if (type === 'frontend') return '合并已上报的 Istanbul 前端覆盖率数据，生成前端覆盖率报告'
   if (type === 'GO') return '合并已上报的 Go cover profile 数据，生成 Go 覆盖率报告'
   if (type === 'PYTHON') return '合并已上报的 coverage.py JSON 数据，生成 Python 覆盖率报告'
@@ -632,7 +667,7 @@ function closeIncrementalDialog() {
 }
 
 function openIncrementalDialog(version: VersionItemSummary) {
-  if (!canGenerateVersion(version)) return
+  if (!canGenerateVersionType(version, 'incremental')) return
   incrementalDialogVersion.value = version
   incrementalForm.value = { baseVersionNumber: '', baseCommitId: '', baseReportId: '' }
   incrementalError.value = ''
@@ -664,7 +699,7 @@ async function pollCoverageJob(jobId: string, label: string) {
 }
 
 async function generateVersionFull(version: VersionItemSummary) {
-  if (!canGenerateVersion(version) || generatingVersionKey.value) return
+  if (!canGenerateVersionType(version, 'full') || generatingVersionKey.value) return
   generatingVersionKey.value = versionActionKey(version, 'full')
   generationFailed.value = false
   generationNotice.value = ''
@@ -686,7 +721,7 @@ async function generateVersionFull(version: VersionItemSummary) {
 }
 
 async function generateFrontendCoverage(version: VersionItemSummary) {
-  if (!canGenerateVersion(version) || generatingVersionKey.value || !selectedAppId.value) return
+  if (!canGenerateVersionType(version, 'frontend') || generatingVersionKey.value || !selectedAppId.value) return
   generatingVersionKey.value = versionActionKey(version, 'frontend')
   generationFailed.value = false
   generationNotice.value = ''
@@ -708,7 +743,7 @@ async function generateFrontendCoverage(version: VersionItemSummary) {
 }
 
 async function generateUniversalCoverage(version: VersionItemSummary, sourceType: UniversalGenerateType) {
-  if (!canGenerateVersion(version) || generatingVersionKey.value || !selectedAppId.value) return
+  if (!canGenerateVersionType(version, sourceType) || generatingVersionKey.value || !selectedAppId.value) return
   generatingVersionKey.value = versionActionKey(version, sourceType)
   generationFailed.value = false
   generationNotice.value = ''
@@ -731,7 +766,7 @@ async function generateUniversalCoverage(version: VersionItemSummary, sourceType
 
 async function generateVersionIncremental() {
   const version = incrementalDialogVersion.value
-  if (!version || !canGenerateVersion(version) || generatingVersionKey.value) return
+  if (!version || !canGenerateVersionType(version, 'incremental') || generatingVersionKey.value) return
   if (!incrementalForm.value.baseVersionNumber) {
     incrementalError.value = '请填写基准版本号'
     return

@@ -11,6 +11,8 @@ import com.oAT.web.coverage.universal.UniversalCoverageService;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.entity.AppVo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -24,6 +26,7 @@ import java.util.UUID;
 
 @Service
 public class FrontendCoverageService {
+    private static final Logger logger = LoggerFactory.getLogger(FrontendCoverageService.class);
     public static final String SOURCE_TYPE_FRONTEND = "FRONTEND";
 
     private final FrontendCoverageReportRepository frontendCoverageReportRepository;
@@ -41,7 +44,7 @@ public class FrontendCoverageService {
         this.universalCoverageService = universalCoverageService;
     }
 
-    public String saveReport(String projectId, String appId, FrontendCoverageReportRequest request) {
+    public FrontendCoverageIngestResult saveReport(String projectId, String appId, FrontendCoverageReportRequest request) {
         Assert.hasText(projectId, "projectId不能为空");
         Assert.hasText(appId, "appId不能为空");
         Assert.notNull(request, "请求体不能为空");
@@ -51,6 +54,7 @@ public class FrontendCoverageService {
         Assert.notNull(app, "应用不存在");
 
         FrontendCoverageReport report = new FrontendCoverageReport();
+        report.requestId = request.getRequestId();
         report.projectId = projectId;
         report.appId = appId;
         report.commitId = firstText(request.getCommitId(), app.getCurrentCommitId());
@@ -59,7 +63,11 @@ public class FrontendCoverageService {
         report.caseName = request.getCaseName();
         report.timestamp = request.getTimestamp();
         report.coverageJson = UtilJson.writeValueAsString(request.getCoverage());
-        return frontendCoverageReportRepository.save(report);
+        String reportId = frontendCoverageReportRepository.save(report);
+        logger.info("frontend coverage raw report received, rawReportId={}, requestId={}, projectId={}, appId={}, version={}, commitId={}, branch={}, caseName={}, bytes={}",
+                reportId, report.requestId, projectId, appId, report.versionNumber, report.commitId, report.branch, report.caseName,
+                report.coverageJson == null ? 0 : report.coverageJson.length());
+        return new FrontendCoverageIngestResult(reportId, report.requestId, projectId, appId, report.versionNumber, report.commitId, report.branch);
     }
 
     @Transactional
@@ -76,6 +84,8 @@ public class FrontendCoverageService {
 
         List<FrontendCoverageReport> rawReports = frontendCoverageReportRepository.findByAppAndVersion(appId, versionNumber, commitId);
         Assert.isTrue(!rawReports.isEmpty(), "没有可生成的前端覆盖率上报数据");
+        logger.info("frontend coverage report generation matched raw reports, projectId={}, appId={}, version={}, commitId={}, rawCount={}",
+                projectId, appId, versionNumber, commitId, rawReports.size());
 
         Map<String, UniversalCoverageFile> coverageMap = new LinkedHashMap<>();
         CoverageParser parser = coverageParserRegistry.get(SourceType.FRONTEND);
@@ -117,6 +127,7 @@ public class FrontendCoverageService {
     }
 
     public static class FrontendCoverageReportRequest {
+        private String requestId;
         private String commitId;
         private String versionNumber;
         private String branch;
@@ -124,6 +135,8 @@ public class FrontendCoverageService {
         private Long timestamp;
         private JsonNode coverage;
 
+        public String getRequestId() { return requestId; }
+        public void setRequestId(String requestId) { this.requestId = requestId; }
         public String getCommitId() { return commitId; }
         public void setCommitId(String commitId) { this.commitId = commitId; }
         public String getVersionNumber() { return versionNumber; }
@@ -136,6 +149,45 @@ public class FrontendCoverageService {
         public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
         public JsonNode getCoverage() { return coverage; }
         public void setCoverage(JsonNode coverage) { this.coverage = coverage; }
+    }
+
+    public static class FrontendCoverageIngestResult {
+        private String rawReportId;
+        private String requestId;
+        private String projectId;
+        private String appId;
+        private String versionNumber;
+        private String commitId;
+        private String branch;
+
+        public FrontendCoverageIngestResult() {
+        }
+
+        public FrontendCoverageIngestResult(String rawReportId, String requestId, String projectId, String appId,
+                                            String versionNumber, String commitId, String branch) {
+            this.rawReportId = rawReportId;
+            this.requestId = requestId;
+            this.projectId = projectId;
+            this.appId = appId;
+            this.versionNumber = versionNumber;
+            this.commitId = commitId;
+            this.branch = branch;
+        }
+
+        public String getRawReportId() { return rawReportId; }
+        public void setRawReportId(String rawReportId) { this.rawReportId = rawReportId; }
+        public String getRequestId() { return requestId; }
+        public void setRequestId(String requestId) { this.requestId = requestId; }
+        public String getProjectId() { return projectId; }
+        public void setProjectId(String projectId) { this.projectId = projectId; }
+        public String getAppId() { return appId; }
+        public void setAppId(String appId) { this.appId = appId; }
+        public String getVersionNumber() { return versionNumber; }
+        public void setVersionNumber(String versionNumber) { this.versionNumber = versionNumber; }
+        public String getCommitId() { return commitId; }
+        public void setCommitId(String commitId) { this.commitId = commitId; }
+        public String getBranch() { return branch; }
+        public void setBranch(String branch) { this.branch = branch; }
     }
 
     public static class FrontendCoverageGenerateRequest {

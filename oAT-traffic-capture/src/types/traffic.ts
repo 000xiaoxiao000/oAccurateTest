@@ -29,6 +29,7 @@ export interface CoverageRelayInfo {
   error?: string
   intervalMs?: number
   nextReportAt?: number
+  requestId?: string
   projectId?: string
   appId?: string
   versionNumber?: string

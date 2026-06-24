@@ -323,6 +323,7 @@ function buildCoverageTestUrl() {
 function buildCoverageTestBody() {
   const testFile = '/oat-coverage-test.js'
   return {
+    requestId: `coverage-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     targetType: coverageTargetType.value,
     relayBaseUrl: coverageRelayBaseUrl.value,
     serviceBaseUrl: coverageServiceBaseUrl.value,
@@ -361,6 +362,20 @@ function buildCoverageTestBody() {
   }
 }
 
+function formatCoverageTestSuccess(body?: string) {
+  if (!body) return '测试上报成功'
+  try {
+    const parsed = JSON.parse(body)
+    const rawReportId = parsed?.data?.rawReportId || parsed?.data
+    if (rawReportId) {
+      return `测试上报成功，平台已接收 rawReportId=${rawReportId}`
+    }
+    return parsed?.message ? `测试上报成功：${parsed.message}` : '测试上报成功'
+  } catch {
+    return '测试上报成功'
+  }
+}
+
 async function testCoverageServiceWebReport() {
   coverageTestResult.value = null
   const targetBaseUrl = coverageTargetType.value === 'relay' ? coverageRelayBaseUrl.value : coverageServiceBaseUrl.value
@@ -386,7 +401,7 @@ async function testCoverageServiceWebReport() {
     }
     coverageTestResult.value = {
       status: 'success',
-      text: '测试上报成功'
+      text: formatCoverageTestSuccess(result.body)
     }
     if (relayNoticeTimer) window.clearTimeout(relayNoticeTimer)
     relayNoticeTimer = window.setTimeout(() => {

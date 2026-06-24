@@ -2,6 +2,8 @@ package com.oAT.web.control.api;
 
 import com.oAT.web.common.DateUtil;
 import com.oAT.web.control.entity.ResultNotified;
+import com.oAT.web.coverage.FrontendCoverageReportRepository;
+import com.oAT.web.coverage.UniversalCoverageRawRepository;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
 import com.oAT.web.esDao.entity.SystemLog;
@@ -77,6 +79,8 @@ public class VersionApiControl {
     private final ResourceService resourceService;
     private final ClientSessionService clientSessionService;
     private final SystemLogService systemLogService;
+    private final FrontendCoverageReportRepository frontendCoverageReportRepository;
+    private final UniversalCoverageRawRepository universalCoverageRawRepository;
 
     public VersionApiControl(VersionService versionService,
                              AppService appService,
@@ -87,7 +91,9 @@ public class VersionApiControl {
                              ApiEndpointAnalysisService apiEndpointAnalysisService,
                              ResourceService resourceService,
                              ClientSessionService clientSessionService,
-                             SystemLogService systemLogService) {
+                             SystemLogService systemLogService,
+                             FrontendCoverageReportRepository frontendCoverageReportRepository,
+                             UniversalCoverageRawRepository universalCoverageRawRepository) {
         this.versionService = versionService;
         this.appService = appService;
         this.projectService = projectService;
@@ -98,6 +104,8 @@ public class VersionApiControl {
         this.resourceService = resourceService;
         this.clientSessionService = clientSessionService;
         this.systemLogService = systemLogService;
+        this.frontendCoverageReportRepository = frontendCoverageReportRepository;
+        this.universalCoverageRawRepository = universalCoverageRawRepository;
     }
 
     @GetMapping("/apps/{appId}/version-center")
@@ -121,7 +129,7 @@ public class VersionApiControl {
         payload.setApp(toAppSummary(app));
         payload.setApps(toAppSummaries(appService.getAppList(projectId)));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
-        payload.setVersions(versions.stream().map(item -> toVersionItemSummary(item, app)).collect(Collectors.toList()));
+        payload.setVersions(versions.stream().map(item -> toVersionItemSummary(item, app, appId)).collect(Collectors.toList()));
         payload.setPackageVersions(versions.stream()
                 .filter(item -> {
                     String file = item.getProgramFile();
@@ -131,7 +139,7 @@ public class VersionApiControl {
                     String lower = file.toLowerCase(Locale.ROOT);
                     return lower.endsWith(".jar") || lower.endsWith(".war");
                 })
-                .map(item -> toVersionItemSummary(item, app))
+                .map(item -> toVersionItemSummary(item, app, appId))
                 .collect(Collectors.toList()));
         payload.setCompareReports(compareReports.stream().map(this::toCompareReportSummary).collect(Collectors.toList()));
         payload.setCoverageReports(coverageReports.stream()
@@ -924,7 +932,7 @@ public class VersionApiControl {
         return apps.stream().map(this::toAppSummary).collect(Collectors.toList());
     }
 
-    private VersionItemSummary toVersionItemSummary(VersionItemVo item, AppVo app) {
+    private VersionItemSummary toVersionItemSummary(VersionItemVo item, AppVo app, String appId) {
         VersionItemSummary summary = new VersionItemSummary();
         summary.setId(item.getId());
         summary.setVersionNumber(item.getVersionNumber());
@@ -939,7 +947,24 @@ public class VersionApiControl {
         summary.setFileExist(item.isFileExist());
         summary.setHasReport(item.isHasReport());
         summary.setCurrent(matchesCurrentVersion(item, app));
+        summary.setRawCoverageSourceTypes(resolveRawCoverageSourceTypes(appId, summary));
         return summary;
+    }
+
+    private List<String> resolveRawCoverageSourceTypes(String appId, VersionItemSummary summary) {
+        LinkedHashSet<String> sourceTypes = new LinkedHashSet<>();
+        String versionNumber = summary.getVersionNumber();
+        String commitId = summary.getRepoCommitId();
+        if (frontendCoverageReportRepository.existsByAppAndVersionOrCommit(appId, versionNumber, commitId)
+                || (summary.isCurrent() && frontendCoverageReportRepository.existsByApp(appId))) {
+            sourceTypes.add("FRONTEND");
+        }
+        for (String sourceType : Arrays.asList("GO", "PYTHON", "CPP")) {
+            if (universalCoverageRawRepository.existsByAppTypeAndVersionOrCommit(appId, sourceType, versionNumber, commitId)) {
+                sourceTypes.add(sourceType);
+            }
+        }
+        return new ArrayList<>(sourceTypes);
     }
 
     private boolean matchesCurrentVersion(VersionItemVo item, AppVo app) {
@@ -1339,6 +1364,7 @@ public class VersionApiControl {
         private boolean fileExist;
         private boolean hasReport;
         private boolean current;
+        private List<String> rawCoverageSourceTypes = new ArrayList<>();
 
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
@@ -1366,6 +1392,8 @@ public class VersionApiControl {
         public void setHasReport(boolean hasReport) { this.hasReport = hasReport; }
         public boolean isCurrent() { return current; }
         public void setCurrent(boolean current) { this.current = current; }
+        public List<String> getRawCoverageSourceTypes() { return rawCoverageSourceTypes; }
+        public void setRawCoverageSourceTypes(List<String> rawCoverageSourceTypes) { this.rawCoverageSourceTypes = rawCoverageSourceTypes; }
     }
 
     public static class CompareReportSummary {

@@ -59,6 +59,27 @@ public class UniversalCoverageRawRepository {
                 this::mapRow, appId, sourceType, versionNumber);
     }
 
+    public boolean existsByAppTypeAndVersionOrCommit(String appId, String sourceType, String versionNumber, String commitId) {
+        if (!StringUtils.hasText(appId) || !StringUtils.hasText(sourceType)) {
+            return false;
+        }
+        if (StringUtils.hasText(commitId)) {
+            return count("""
+                    SELECT COUNT(1) FROM oat_universal_coverage_report
+                    WHERE app_id = ? AND source_type = ? AND commit_id = ?
+                    """, appId, sourceType, commitId) > 0;
+        }
+        return StringUtils.hasText(versionNumber) && count("""
+                SELECT COUNT(1) FROM oat_universal_coverage_report
+                WHERE app_id = ? AND source_type = ? AND version_number = ?
+                """, appId, sourceType, versionNumber) > 0;
+    }
+
+    private int count(String sql, Object... args) {
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, args);
+        return count == null ? 0 : count;
+    }
+
     private UniversalCoverageRawReport mapRow(ResultSet rs, int rowNum) throws SQLException {
         UniversalCoverageRawReport report = new UniversalCoverageRawReport();
         report.id = rs.getString("id");

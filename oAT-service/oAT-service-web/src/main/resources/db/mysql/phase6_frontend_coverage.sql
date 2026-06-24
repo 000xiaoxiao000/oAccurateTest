@@ -6,6 +6,7 @@ ALTER TABLE `oat_class_coverage`
 
 CREATE TABLE IF NOT EXISTS `oat_frontend_coverage_report` (
   `id` VARCHAR(64) PRIMARY KEY,
+  `request_id` VARCHAR(128),
   `project_id` VARCHAR(64) NOT NULL,
   `app_id` VARCHAR(64) NOT NULL,
   `commit_id` VARCHAR(128),
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS `oat_frontend_coverage_report` (
   `timestamp` BIGINT,
   `coverage_json` LONGTEXT NOT NULL,
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_frontend_cov_request_id` (`request_id`),
   INDEX `idx_frontend_cov_app_commit` (`app_id`, `commit_id`),
   INDEX `idx_frontend_cov_app_version` (`app_id`, `version_number`),
   INDEX `idx_frontend_cov_create_time` (`create_time`)

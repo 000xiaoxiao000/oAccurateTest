@@ -21,6 +21,7 @@ export type CoverageReportBody = {
   projectId?: string
   appId?: string
   appKey?: string
+  requestId?: string
   sourceType?: string
   commitId?: string
   versionNumber?: string
@@ -70,8 +71,8 @@ function buildCoverageRelayTarget(
   const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || config.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
   const targetType = body?.targetType || config.targetType || (relayBaseUrl ? 'relay' : 'service')
   const targetBaseUrl = targetType === 'relay' ? relayBaseUrl : serviceBaseUrl
-  const projectId = body?.projectId || config.projectId
-  const appId = body?.appId || body?.appKey || config.appId
+  const projectId = resolveCoverageProjectId(body, config)
+  const appId = resolveCoverageAppId(body, config)
   const sourceType = normalizeCoverageSourceType(body, record.url)
   const reportPath = sourceType === 'FRONTEND'
     ? 'coverage/frontend/report'
@@ -87,6 +88,14 @@ function buildCoverageRelayTarget(
   } catch {
     return match[0]
   }
+}
+
+function resolveCoverageProjectId(body: CoverageReportBody | null, config: CoverageRelayConfig): string | undefined {
+  return config.projectId || body?.projectId
+}
+
+function resolveCoverageAppId(body: CoverageReportBody | null, config: CoverageRelayConfig): string | undefined {
+  return config.appId || body?.appId || body?.appKey
 }
 
 function normalizeCoverageSourceType(body?: CoverageReportBody | null, url?: string): 'FRONTEND' | 'CPP' | 'GO' | 'PYTHON' {
@@ -129,7 +138,7 @@ function coverageRelayInfo(
   status: 'success' | 'failed' | 'skipped',
   body: CoverageReportBody | null,
   coverageReporter?: CoverageReporterOptions,
-  options: { targetUrl?: string; httpStatus?: number; error?: string } = {}
+  options: { targetUrl?: string; httpStatus?: number; error?: string; requestId?: string } = {}
 ) {
   const config = coverageReporter?.getConfig() ?? { enabled: false, intervalMs: 30000, coveragePort: 8889, proxyPort: 8888 }
   const intervalMs = Number(body?.intervalMs) > 0 ? Number(body?.intervalMs) : config.intervalMs
@@ -141,8 +150,9 @@ function coverageRelayInfo(
     error: options.error,
     intervalMs,
     nextReportAt: now + intervalMs,
-    projectId: body?.projectId || config.projectId,
-    appId: body?.appId || body?.appKey || config.appId,
+    requestId: options.requestId || body?.requestId,
+    projectId: resolveCoverageProjectId(body, config),
+    appId: resolveCoverageAppId(body, config),
     versionNumber: body?.versionNumber,
     commitId: body?.commitId
   }
@@ -211,8 +221,10 @@ export async function relayCoverageReport(
     }
   }
 
+  const requestId = body?.requestId || record.id
   try {
     const requestPayload = {
+      requestId,
       commitId: body?.commitId,
       versionNumber: body?.versionNumber,
       branch: body?.branch,
@@ -222,7 +234,10 @@ export async function relayCoverageReport(
     }
     const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(requestId ? { 'X-OAT-Request-Id': String(requestId) } : {})
+      },
       body: JSON.stringify(requestPayload)
     })
     const responseText = await response.text().catch(() => '')
@@ -232,6 +247,7 @@ export async function relayCoverageReport(
     record.coverageRelay = coverageRelayInfo(response.ok ? 'success' : 'failed', body, coverageReporter, {
       targetUrl,
       httpStatus: response.status,
+      requestId: String(requestId),
       error: response.ok ? undefined : `服务端返回 HTTP ${response.status}`
     })
     record.statusCode = response.ok ? '已上送' : '上送失败'
@@ -245,6 +261,7 @@ export async function relayCoverageReport(
   } catch (error: any) {
     record.coverageRelay = coverageRelayInfo('failed', body, coverageReporter, {
       targetUrl,
+      requestId: requestId ? String(requestId) : undefined,
       error: error?.message || String(error)
     })
     record.statusCode = '上送失败'

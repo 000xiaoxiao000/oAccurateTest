@@ -19,6 +19,7 @@ public class FrontendCoverageSchemaInitializer {
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS `oat_frontend_coverage_report` (
                   `id` VARCHAR(64) PRIMARY KEY,
+                  `request_id` VARCHAR(128),
                   `project_id` VARCHAR(64) NOT NULL,
                   `app_id` VARCHAR(64) NOT NULL,
                   `commit_id` VARCHAR(128),
@@ -28,11 +29,16 @@ public class FrontendCoverageSchemaInitializer {
                   `timestamp` BIGINT,
                   `coverage_json` LONGTEXT NOT NULL,
                   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                  INDEX `idx_frontend_cov_request_id` (`request_id`),
                   INDEX `idx_frontend_cov_app_commit` (`app_id`, `commit_id`),
                   INDEX `idx_frontend_cov_app_version` (`app_id`, `version_number`),
                   INDEX `idx_frontend_cov_create_time` (`create_time`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='前端 Istanbul 覆盖率原始上报表'
                 """);
+        ensureColumn("oat_frontend_coverage_report", "request_id",
+                "ALTER TABLE `oat_frontend_coverage_report` ADD COLUMN `request_id` VARCHAR(128) AFTER `id`");
+        ensureIndex("oat_frontend_coverage_report", "idx_frontend_cov_request_id",
+                "CREATE INDEX `idx_frontend_cov_request_id` ON `oat_frontend_coverage_report` (`request_id`)");
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS `oat_universal_coverage_report` (
                   `id` VARCHAR(64) PRIMARY KEY,
@@ -65,5 +71,33 @@ public class FrontendCoverageSchemaInitializer {
             return;
         }
         jdbcTemplate.execute("ALTER TABLE `" + tableName + "` ADD COLUMN `source_type` VARCHAR(32) DEFAULT 'JAVA' AFTER `" + afterColumn + "`");
+    }
+
+    private void ensureColumn(String tableName, String columnName, String alterSql) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME = ?
+                """, Integer.class, tableName, columnName);
+        if (count != null && count > 0) {
+            return;
+        }
+        jdbcTemplate.execute(alterSql);
+    }
+
+    private void ensureIndex(String tableName, String indexName, String createSql) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM information_schema.STATISTICS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND INDEX_NAME = ?
+                """, Integer.class, tableName, indexName);
+        if (count != null && count > 0) {
+            return;
+        }
+        jdbcTemplate.execute(createSql);
     }
 }

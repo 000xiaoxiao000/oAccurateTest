@@ -280,8 +280,8 @@ function resolveConfiguredApiUrl(record, body, context) {
   const serviceBaseUrl = body?.serviceBaseUrl || body?.endpointBaseUrl || context?.coverageRelay?.serviceBaseUrl || process.env.OAT_SERVICE_BASE_URL || ''
   const targetType = body?.targetType || context?.coverageRelay?.targetType || (relayBaseUrl ? 'relay' : 'service')
   const targetBaseUrl = targetType === 'relay' ? relayBaseUrl : serviceBaseUrl
-  const projectId = body?.projectId || context?.coverageRelay?.projectId
-  const appId = body?.appId || body?.appKey || context?.coverageRelay?.appId
+  const projectId = context?.coverageRelay?.projectId || body?.projectId
+  const appId = context?.coverageRelay?.appId || body?.appId || body?.appKey
   if (!targetBaseUrl || !projectId || !appId) return ''
   const sourceType = normalizeSourceType(body, record.url)
   const path = sourceType === 'FRONTEND' ? '/coverage/frontend/report' : '/coverage/universal/' + sourceType + '/report'
@@ -337,8 +337,9 @@ function relayRecord(record, body, context, status, options = {}) {
       error: options.error,
       intervalMs,
       nextReportAt: now + intervalMs,
-      projectId: body?.projectId || context?.coverageRelay?.projectId,
-      appId: body?.appId || body?.appKey || context?.coverageRelay?.appId,
+      requestId: body?.requestId || record.id,
+      projectId: context?.coverageRelay?.projectId || body?.projectId,
+      appId: context?.coverageRelay?.appId || body?.appId || body?.appKey,
       versionNumber: body?.versionNumber,
       commitId: body?.commitId
     }
@@ -386,8 +387,12 @@ export async function beforeSave(record, context) {
   try {
     const response = await fetch(targetUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-OAT-Request-Id': String(body.requestId || record.id || '')
+      },
       body: JSON.stringify({
+        requestId: body.requestId || record.id,
         commitId: body.commitId,
         versionNumber: body.versionNumber,
         branch: body.branch,

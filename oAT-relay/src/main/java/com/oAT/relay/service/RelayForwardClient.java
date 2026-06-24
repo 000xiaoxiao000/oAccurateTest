@@ -38,7 +38,7 @@ public class RelayForwardClient {
 
     public ResponseEntity<String> forward(RelayRequest request) {
         String url = properties.getTargetBaseUrl() + request.getPath();
-        HttpHeaders headers = buildForwardHeaders(request.getHeaders());
+        HttpHeaders headers = buildForwardHeaders(request);
         HttpEntity<?> entity = buildEntity(request, headers);
         long start = System.currentTimeMillis();
         try {
@@ -56,14 +56,16 @@ public class RelayForwardClient {
         }
     }
 
-    private HttpHeaders buildForwardHeaders(HttpHeaders source) {
+    private HttpHeaders buildForwardHeaders(RelayRequest request) {
         HttpHeaders headers = new HttpHeaders();
+        HttpHeaders source = request.getHeaders();
         source.forEach((name, values) -> {
             if (!HOP_BY_HOP_HEADERS.contains(name.toLowerCase())) {
                 headers.put(name, values);
             }
         });
         headers.set("X-OAT-Relay-Source", "oAT-relay");
+        headers.set("X-OAT-Relay-Request-Id", request.getRequestId());
         return headers;
     }
 

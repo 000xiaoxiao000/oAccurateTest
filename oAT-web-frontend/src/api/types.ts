@@ -934,6 +934,7 @@ export interface VersionItemSummary {
   fileExist: boolean
   hasReport: boolean
   current: boolean
+  rawCoverageSourceTypes?: string[]
 }
 
 export interface CompareReportSummary {
