@@ -174,9 +174,9 @@ a:focus-visible {
 .shell-main {
   --page-card-bg: var(--oat-surface-raised);
   --page-card-border: rgba(15, 23, 42, .09);
-  --page-gap: clamp(14px, 1.8vw, 22px);
-  --page-pad: clamp(16px, 1.7vw, 24px);
-  --page-pad-sm: clamp(12px, 1.2vw, 16px);
+  --page-gap: clamp(10px, 1.3vw, 16px);
+  --page-pad: clamp(12px, 1.25vw, 18px);
+  --page-pad-sm: clamp(10px, 1vw, 14px);
   --page-data-height: calc(100vh - 146px);
 }
 
@@ -186,7 +186,7 @@ a:focus-visible {
 }
 
 .shell-main :is(.page-header, .hero):not(.plain-header) {
-  padding: clamp(14px, 1.6vw, 18px);
+  padding: clamp(12px, 1.25vw, 16px);
   border: 1px solid rgba(15, 23, 42, .07);
   border-radius: var(--oat-radius-lg);
   background:
@@ -200,16 +200,16 @@ a:focus-visible {
   content: '';
   position: absolute;
   right: 34px;
-  bottom: -58px;
-  width: 132px;
-  height: 132px;
+  bottom: -52px;
+  width: 112px;
+  height: 112px;
   border-radius: 999px;
   background: rgba(var(--oat-accent-rgb), .07);
   pointer-events: none;
 }
 
 .shell-main :is(.page-header, .hero).plain-header {
-  padding: 0 0 12px;
+  padding: 0 0 10px;
   border: 0;
   border-bottom: 1px solid rgba(15, 23, 42, .07);
   border-radius: 0;
@@ -219,7 +219,7 @@ a:focus-visible {
 
 .shell-main :is(.page-header, .hero).plain-header h1 {
   margin: 0 0 4px;
-  font-size: clamp(22px, 2vw, 28px);
+  font-size: clamp(20px, 1.8vw, 26px);
   line-height: 1.15;
 }
 
@@ -233,11 +233,11 @@ a:focus-visible {
 }
 
 .shell-main :is(.page-header h1, .hero h1) {
-  margin: 2px 0 4px;
+  margin: 1px 0 3px;
   color: var(--oat-text);
-  font-size: clamp(20px, 2vw, 28px);
+  font-size: clamp(20px, 1.8vw, 26px);
   line-height: 1.2;
-  letter-spacing: -.02em;
+  letter-spacing: 0;
   font-weight: 800;
 }
 
@@ -246,8 +246,8 @@ a:focus-visible {
   align-items: center;
   gap: 6px;
   width: fit-content;
-  min-height: 24px;
-  padding: 3px 10px;
+  min-height: 22px;
+  padding: 2px 9px;
   border-radius: 999px;
   background: rgba(var(--oat-primary-rgb), .11);
   color: var(--oat-primary-dark);
@@ -259,11 +259,11 @@ a:focus-visible {
 
 .shell-main :is(.subtext, .panel-desc, .helper-text) {
   color: var(--oat-text-muted);
-  line-height: 1.6;
+  line-height: 1.45;
 }
 
 .shell-main :is(.page-header, .hero, .toolbar-card, .summary-grid, .panel-grid, .hero-grid, .layout-grid, .content-grid, .detail-grid, .section-grid) {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .shell-main :is(.panel, .status-card, .summary-card, .toolbar-card, .hero-card, .empty-card, .metric-card, .info-item, .card, .project-card, .snapshot-card, .overview-card, .stat-card, .ability-card, .message-card, .session-card, .node-card, .edge-card, .relation-row, .link-card) {
@@ -303,7 +303,7 @@ a:focus-visible {
   color: var(--oat-text);
   font-size: clamp(16px, 1.45vw, 18px);
   line-height: 1.25;
-  letter-spacing: -.015em;
+  letter-spacing: 0;
 }
 
 .shell-main :is(.panel-head, .card-title) > span,

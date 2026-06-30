@@ -120,12 +120,12 @@ const autoSaveSystemModel = computed({
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 14px;
   backdrop-filter: blur(12px);
   background: rgba(255, 255, 255, .92);
-  border-radius: 20px;
+  border-radius: 16px;
   box-shadow: 0 4px 12px rgba(15, 23, 42, .08);
 }
 
@@ -134,7 +134,7 @@ const autoSaveSystemModel = computed({
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
 }
 
 .toolbar-main {
@@ -148,7 +148,7 @@ const autoSaveSystemModel = computed({
 
 .toolbar-group {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -171,10 +171,10 @@ const autoSaveSystemModel = computed({
 .filter-chip-row {
   display: flex;
   gap: 4px;
-  min-height: 38px;
-  max-height: 76px;
+  min-height: 34px;
+  max-height: 68px;
   overflow: auto;
-  padding: 4px;
+  padding: 3px;
   border: 1px solid rgba(203, 213, 225, .6);
   border-radius: 12px;
   background: #fbfdfe;
@@ -187,7 +187,7 @@ const autoSaveSystemModel = computed({
   overflow: hidden;
   border: 1px solid transparent;
   border-radius: 999px;
-  padding: 7px 12px;
+  padding: 6px 10px;
   background: #ffffff;
   color: #475569;
   font-size: 13px;
@@ -216,7 +216,7 @@ const autoSaveSystemModel = computed({
   width: 100%;
   border: 1px solid rgba(203, 213, 225, .8);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 11px;
   background: #fbfdfe;
   color: #0f172a;
   font-size: 14px;
@@ -245,7 +245,7 @@ const autoSaveSystemModel = computed({
 .ghost-button {
   border: none;
   border-radius: 999px;
-  padding: 10px 16px;
+  padding: 8px 13px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

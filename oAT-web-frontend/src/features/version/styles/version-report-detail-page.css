@@ -20,7 +20,7 @@
 }
 
 .report-hero {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .hero-copy {
@@ -29,9 +29,9 @@
 
 .eyebrow {
   color: #0f766e;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: .12em;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
@@ -70,7 +70,7 @@
 }
 
 .hero-tags span {
-  padding: 5px 10px;
+  padding: 4px 9px;
   background: rgba(15, 118, 110, .10);
   color: #0f766e;
 }
@@ -95,7 +95,7 @@
 .impact-card,
 .impact-hint-card,
 .usecase-group {
-  padding: 18px;
+  padding: 14px;
   border: 1px solid rgba(15, 23, 42, .08);
   border-radius: 20px;
   background: rgba(255, 255, 255, .96);
@@ -130,11 +130,11 @@
 .impact-grid,
 .usecase-groups {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .hero-grid {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 .hero-card {
@@ -145,10 +145,10 @@
 .hero-card::after {
   content: '';
   position: absolute;
-  right: -28px;
-  bottom: -34px;
-  width: 98px;
-  height: 98px;
+  right: -24px;
+  bottom: -30px;
+  width: 82px;
+  height: 82px;
   border-radius: 999px;
   background: rgba(15, 118, 110, .08);
 }
@@ -156,12 +156,13 @@
 .hero-card strong,
 .info-item strong {
   display: block;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .hero-card strong {
   color: #111827;
-  font-size: 30px;
+  font-size: 28px;
+  line-height: 1.05;
 }
 
 .accent-class { border-color: rgba(37, 99, 235, .20); }
@@ -171,7 +172,7 @@
 .accent-endpoint { border-color: rgba(124, 58, 237, .20); }
 
 .panel {
-  margin-top: 18px;
+  margin-top: 12px;
 }
 
 .info-grid {
@@ -179,18 +180,18 @@
 }
 
 .compact-info-grid {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .revision-flow {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: stretch;
-  gap: 14px;
+  gap: 10px;
 }
 
 .revision-card {
   min-width: 0;
-  padding: 16px;
+  padding: 12px 14px;
   border: 1px solid rgba(15, 23, 42, .08);
   border-radius: 18px;
   background: #f8fbfb;
@@ -211,7 +212,7 @@
 
 .revision-card strong {
   display: block;
-  margin: 8px 0 6px;
+  margin: 6px 0 4px;
   color: #111827;
   font-size: 18px;
   overflow-wrap: anywhere;
@@ -220,7 +221,7 @@
 .revision-arrow {
   display: grid;
   place-items: center;
-  min-width: 46px;
+  min-width: 40px;
   color: #0f766e;
   font-size: 26px;
   font-weight: 900;
@@ -239,8 +240,8 @@
   top: 76px;
   z-index: 8;
   flex-wrap: wrap;
-  margin-top: 18px;
-  padding: 10px;
+  margin-top: 12px;
+  padding: 8px;
   border: 1px solid rgba(15, 23, 42, .08);
   border-radius: 18px;
   background: rgba(255, 255, 255, .88);
@@ -252,7 +253,7 @@
 .report-section-nav button {
   border: 1px solid rgba(15, 118, 110, .14);
   border-radius: 999px;
-  padding: 8px 12px;
+  padding: 7px 11px;
   background: rgba(15, 118, 110, .06);
   color: #0f766e;
   cursor: pointer;
@@ -280,7 +281,7 @@
   z-index: 7;
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   background: rgba(255, 255, 255, .94);
   backdrop-filter: blur(14px);
 }

@@ -86,7 +86,7 @@ function probeKey(probe: OnlineSessionSummary) {
 
 .panel,
 .status-card {
-  padding: 16px;
+  padding: 12px 14px;
 }
 
 .status-card {
@@ -103,14 +103,14 @@ function probeKey(probe: OnlineSessionSummary) {
 }
 
 .probe-panel {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .probe-dashboard-card {
   display: grid;
-  grid-template-columns: minmax(360px, .9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(320px, .82fr) minmax(0, 1.55fr);
   align-items: start;
-  gap: 16px;
+  gap: 12px;
   background: linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(248, 250, 252, .98));
 }
 
@@ -119,8 +119,8 @@ function probeKey(probe: OnlineSessionSummary) {
 }
 
 .probe-head h2 {
-  margin: 0 0 4px;
-  font-size: 18px;
+  margin: 0 0 3px;
+  font-size: 17px;
   font-weight: 600;
   color: #0f172a;
 }
@@ -141,22 +141,22 @@ function probeKey(probe: OnlineSessionSummary) {
 }
 
 .probe-summary {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: #64748b;
   font-size: 13px;
   font-weight: 600;
 }
 
 .compact-status {
-  padding: 12px;
-  border-radius: 16px;
+  padding: 10px;
+  border-radius: 14px;
 }
 
 .text-input {
   width: 100%;
   border: 1px solid rgba(203, 213, 225, .8);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 11px;
   background: #fbfdfe;
   color: #0f172a;
   font-size: 14px;
@@ -176,7 +176,7 @@ function probeKey(probe: OnlineSessionSummary) {
 .ghost-button {
   border: none;
   border-radius: 999px;
-  padding: 10px 16px;
+  padding: 8px 13px;
   background: rgba(14, 116, 144, .08);
   color: #0f766e;
   font-size: 14px;
@@ -201,9 +201,9 @@ function probeKey(probe: OnlineSessionSummary) {
 .probe-card {
   position: relative;
   display: grid;
-  gap: 4px;
-  padding: 12px;
-  border-radius: 16px;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 14px;
   text-align: left;
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
@@ -251,8 +251,8 @@ function probeKey(probe: OnlineSessionSummary) {
 
 .probe-status-dot {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   width: 8px;
   height: 8px;
   border-radius: 50%;

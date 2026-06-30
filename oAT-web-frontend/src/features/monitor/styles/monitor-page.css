@@ -9,11 +9,11 @@
 }
 
 .page-header {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .monitor-compact-header {
-  padding: 16px 20px;
+  padding: 12px 16px;
   border: 1px solid rgba(15, 23, 42, .05);
   border-radius: 20px;
   background: rgba(255, 255, 255, .95);
@@ -27,7 +27,7 @@
 
 .monitor-compact-header h1 {
   margin: 0 0 4px;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1.2;
   color: #0f172a;
@@ -36,16 +36,16 @@
 .monitor-compact-header .subtext {
   margin: 0;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .eyebrow {
   color: #0f766e;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: .12em;
+  letter-spacing: .08em;
   text-transform: uppercase;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
 }
 
 .subtext,
@@ -170,7 +170,7 @@
 
 .panel,
 .status-card {
-  padding: 16px;
+  padding: 14px;
 }
 
 .status-card {
@@ -221,7 +221,7 @@
   min-height: calc(100vh - 140px);
   overflow: auto;
   display: grid;
-  gap: 14px;
+  gap: 10px;
   align-content: start;
 }
 
@@ -268,13 +268,13 @@
 }
 
 .graph-panel-head {
-  padding-bottom: 14px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(15, 23, 42, .08);
 }
 
 .panel-head-content {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 

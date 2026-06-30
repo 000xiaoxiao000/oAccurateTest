@@ -37,7 +37,7 @@ defineProps<{
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .overview-card {
@@ -45,9 +45,9 @@ defineProps<{
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 4px 12px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 16px;
+  border-radius: 14px;
   background:
     radial-gradient(circle at top right, rgba(20, 184, 166, .12), transparent 50%),
     #ffffff;
@@ -71,7 +71,7 @@ defineProps<{
   grid-column: 2;
   display: block;
   margin-top: 0;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1;
   color: #0f766e;
@@ -86,7 +86,7 @@ defineProps<{
 }
 
 .overview-card .time-value {
-  font-size: 20px;
+  font-size: 19px;
 }
 
 @media (max-width: 980px) {

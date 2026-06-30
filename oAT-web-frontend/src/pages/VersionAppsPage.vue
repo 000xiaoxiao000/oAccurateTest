@@ -84,7 +84,7 @@ onMounted(load)
 }
 
 .page-header {
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 
@@ -95,8 +95,8 @@ onMounted(load)
 
 .status-card,
 .card {
-  padding: 18px;
-  border-radius: 20px;
+  padding: 14px 18px;
+  border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
@@ -110,11 +110,11 @@ onMounted(load)
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 520px));
   justify-content: start;
   align-items: stretch;
-  gap: 12px;
+  gap: 10px;
 }
 
 .card-body-row {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .action-row {
