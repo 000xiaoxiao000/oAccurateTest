@@ -40,6 +40,8 @@ def main():
     parser.add_argument("--commit-id")
     parser.add_argument("--branch")
     parser.add_argument("--case-name")
+    parser.add_argument("--build-id")
+    parser.add_argument("--test-stage", default="unknown")
     args = parser.parse_args()
 
     paths = []
@@ -50,18 +52,20 @@ def main():
     if not paths:
         raise SystemExit("no coverage JSON files matched")
 
-    url = (
-        args.endpoint.rstrip("/")
-        + f"/api/projects/{args.project_id}/apps/{args.app_id}/coverage/universal/CPP/report"
-    )
+    url = args.endpoint.rstrip("/") + "/api/v2/ingest/coverage"
     for path in paths:
         payload = {
+            "projectId": args.project_id,
+            "appId": args.app_id,
+            "language": "CPP",
             "versionNumber": args.version_number,
             "commitId": args.commit_id,
             "branch": args.branch,
             "caseName": args.case_name,
+            "buildId": args.build_id,
+            "testStage": args.test_stage,
             "timestamp": int(time.time() * 1000),
-            "coverageData": read_coverage_json(path),
+            "payload": read_coverage_json(path),
         }
         print(f"{path}: {post_json(url, payload)}")
 

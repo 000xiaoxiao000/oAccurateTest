@@ -3,7 +3,8 @@ package com.oAT.web.service.impl;
 import com.oAT.agent.model.*;
 import com.oAT.web.common.SqlStatParse;
 import com.oAT.web.domain.RemoteCallResolver;
-import com.oAT.web.esDao.ApiEndpointRepository;
+import com.oAT.web.domain.RemoteCallResolverService;
+import com.oAT.web.domain.snapshot.SystemSnapshotCoverageCalculationService;
 import com.oAT.web.esDao.SnapshotCommitMappingRepository;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
@@ -43,7 +44,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     AppService appService;
 
     @Autowired
-    ApiEndpointRepository apiEndpointRepository;
+    RemoteCallResolverService remoteCallResolverService;
 
     @Autowired
     com.oAT.web.service.SnapshotService snapshotService;
@@ -56,6 +57,9 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
 
     @Autowired
     com.oAT.web.coverage.CoverageStorage coverageStorage;
+
+    @Autowired
+    SystemSnapshotCoverageCalculationService systemSnapshotCoverageCalculationService;
 
     @Override
     public SystemSnapshot getById(String id) {
@@ -134,7 +138,7 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         snapshot.setCodes(codes);
 
         // 解析封装 远程调用
-        RemoteCallResolver remoteCallResolver = buildRemoteCallResolver(projectId);
+        RemoteCallResolver remoteCallResolver = remoteCallResolverService.build(projectId);
         Remote[] remotes = nodes.stream()
                 .filter(this::isRemoteTraceNode)
                 .map(a -> buildRemote(a, nodes, remoteCallResolver))
@@ -322,14 +326,6 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
         return remote;
     }
 
-    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        List<ApiEndpointIndex> endpoints = apps.stream()
-                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
-                .collect(Collectors.toList());
-        return new RemoteCallResolver(apps, endpoints);
-    }
-
     private String buildSrc(@NotNull StackNodeVo stackNodeVo) {
         String result = stackNodeVo.getClassName().replace('/', '.');
         String methodName = Optional.ofNullable(stackNodeVo.getMethodName()).orElse("").trim();
@@ -430,232 +426,6 @@ public class SystemSnapshotServiceImpl implements SystemSnapshotService {
     @Async("coverageExecutor")
     @Override
     public void asyncCalculateCoverage(String snapshotId) {
-        SystemSnapshot snapshot = getById(snapshotId);
-        if (snapshot == null) return;
-
-        try {
-            snapshot.setReportStatus(1); // 生成中
-            repository.save(snapshot);
-
-            Collection<TraceNode> traceNodes = snapshotService.getTraceNodes(snapshot.getTraceId());
-
-            // 加载全量静态数据，作为总数的数据源
-            List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(snapshot.getAppId());
-            // 构建 className -> (methodKey -> StaticSourceMethodInfo) 的查找表
-            // methodKey = methodName + "#" + methodDesc
-            Map<String, Map<String, StaticSourceMethodInfo>> staticMethodLookup = new HashMap<>();
-            for (StaticSourceInfo si : staticInfos) {
-                if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
-                String className = si.getClassInfo().getClassName();
-                Map<String, StaticSourceMethodInfo> methodMap = new HashMap<>();
-                for (Map.Entry<String, StaticSourceMethodInfo> entry : si.getClassInfo().getMethodMaps().entrySet()) {
-                    StaticSourceMethodInfo mInfo = entry.getValue();
-                    String methodKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
-                    methodMap.put(methodKey, mInfo);
-                }
-                staticMethodLookup.put(className, methodMap);
-            }
-
-            long totalLines = 0;
-            long coveredLines = 0;
-            long totalMethods = 0;
-            long coveredMethods = 0;
-            long totalBranches = 0;
-            long coveredBranches = 0;
-            int totalComplexity = 0;
-
-            Set<String> classMethods = new HashSet<>();
-            Map<String, Set<Integer>> methodTotalLinesMap = new HashMap<>();
-            Map<String, Set<Integer>> methodCoveredLinesMap = new HashMap<>();
-            Map<String, Set<Integer>> methodTotalBranchesMap = new HashMap<>();
-            Map<String, Set<Integer>> methodCoveredBranchesMap = new HashMap<>();
-            Map<String, Set<String>> methodTotalBranchTargetsMap = new HashMap<>();
-            Map<String, Set<String>> methodCoveredBranchTargetsMap = new HashMap<>();
-            Map<String, Integer> methodComplexityMap = new HashMap<>();
-
-            List<StackNodeVo> snapshotCodeNodes = new ArrayList<>(coverageStorage.load(snapshot.getTraceId()));
-            if (snapshotCodeNodes.isEmpty()) {
-                for (TraceNode node : traceNodes) {
-                    if (node instanceof CodeNodeBean) {
-                        StackNodeVo[] codeNodes = ((CodeNodeBean) node).getCodeNodes();
-                        if (codeNodes != null && codeNodes.length > 0) {
-                            snapshotCodeNodes.addAll(Arrays.asList(codeNodes));
-                        }
-                    }
-                }
-            }
-
-            for (StackNodeVo sn : snapshotCodeNodes) {
-                String methodKey = sn.getMethodName() + "#" + sn.getMethodDescriptor();
-                Map<String, StaticSourceMethodInfo> classMethodMap = staticMethodLookup.get(sn.getClassName());
-                if (classMethodMap == null) continue;
-
-                StaticSourceMethodInfo staticMethod = classMethodMap.get(methodKey);
-                if (staticMethod == null) continue;
-
-                classMethods.add(sn.getClassName());
-
-                // 从全量静态数据获取总数
-                methodTotalLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
-                        .addAll(staticMethod.getMethodLineNumberMap() != null ? staticMethod.getMethodLineNumberMap() : Collections.emptyList());
-                if (sn.getDoLines() != null) {
-                    methodCoveredLinesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getDoLines());
-                }
-
-                methodComplexityMap.put(methodKey,
-                        staticMethod.getCyclomaticComplexityMap() != null ? staticMethod.getCyclomaticComplexityMap() : 0);
-
-                methodTotalBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>())
-                        .addAll(staticMethod.getBranchLineNumberSet() != null ? staticMethod.getBranchLineNumberSet() : Collections.emptyList());
-                addBranchTargetKeys(methodTotalBranchTargetsMap, methodKey,
-                        normalizeStaticBranchTargets(staticMethod.getBranchLineAndTargetProbeMap(),
-                                sn.getExecuteBranchTargetProbeMap()));
-                if (sn.getExecuteBranch() != null) {
-                    methodCoveredBranchesMap.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(sn.getExecuteBranch());
-                }
-                addBranchTargetKeys(methodCoveredBranchTargetsMap, methodKey, sn.getExecuteBranchTargetProbeMap());
-                if (methodCoveredBranchTargetsMap.containsKey(methodKey)) {
-                    Set<String> normalizedKeys = new LinkedHashSet<>();
-                    Map<String, List<Integer>> normalizedStaticBranchTargets = normalizeStaticBranchTargets(
-                            staticMethod.getBranchLineAndTargetProbeMap(), sn.getExecuteBranchTargetProbeMap());
-                    addBranchTargetKeysToSet(normalizedKeys, normalizedStaticBranchTargets,
-                            decodeBranchTargetKeys(methodCoveredBranchTargetsMap.get(methodKey)));
-                    methodCoveredBranchTargetsMap.put(methodKey, normalizedKeys);
-                }
-            }
-
-            long totalBranchTargets = 0;
-            long coveredBranchTargets = 0;
-            totalMethods = methodTotalLinesMap.size();
-            for (String mKey : methodTotalLinesMap.keySet()) {
-                totalLines += methodTotalLinesMap.get(mKey).size();
-                coveredLines += methodCoveredLinesMap.getOrDefault(mKey, Collections.emptySet()).size();
-                if (methodCoveredLinesMap.containsKey(mKey) && !methodCoveredLinesMap.get(mKey).isEmpty()) {
-                    coveredMethods++;
-                }
-                totalComplexity += methodComplexityMap.getOrDefault(mKey, 0);
-                totalBranches += methodTotalBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
-                coveredBranches += methodCoveredBranchesMap.getOrDefault(mKey, Collections.emptySet()).size();
-                totalBranchTargets += methodTotalBranchTargetsMap.getOrDefault(mKey, Collections.emptySet()).size();
-                coveredBranchTargets += methodCoveredBranchTargetsMap.getOrDefault(mKey, Collections.emptySet()).size();
-            }
-
-            CoverageReportIndex report = new CoverageReportIndex();
-            report.setAppId(snapshot.getAppId());
-            report.setCreateTime(new Date());
-            report.setTotalClasses(classMethods.size());
-            report.setCoveredClasses(classMethods.size());
-            report.setTotalMethods(totalMethods);
-            report.setCoveredMethods(coveredMethods);
-            report.setTotalLines(totalLines);
-            report.setCoveredLines(coveredLines);
-            report.setTotalBranches(totalBranches);
-            report.setCoveredBranches(coveredBranches);
-            report.setTotalBranchTargets(totalBranchTargets);
-            report.setCoveredBranchTargets(coveredBranchTargets);
-            report.setTotalComplexity(totalComplexity);
-
-            snapshot.setCoverageReport(report);
-            snapshot.setReportStatus(2); // 已完成
-            repository.save(snapshot);
-        } catch (Exception e) {
-            logger.error("Error calculating coverage for snapshot: " + snapshotId, e);
-            snapshot.setReportStatus(3); // 失败
-            repository.save(snapshot);
-        }
-    }
-    private void addBranchTargetKeys(Map<String, Set<String>> target,
-                                     String methodKey,
-                                     Map<String, List<Integer>> branchTargetProbeMap) {
-        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
-            return;
-        }
-        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
-        for (Map.Entry<String, List<Integer>> entry : branchTargetProbeMap.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            for (Integer branchTarget : entry.getValue()) {
-                if (branchTarget != null) {
-                    keys.add(entry.getKey() + "#" + branchTarget);
-                }
-            }
-        }
-    }
-
-    private Map<String, List<Integer>> normalizeStaticBranchTargets(Map<String, List<Integer>> staticBranchTargets,
-                                                                     Map<String, List<Integer>> executedBranchTargets) {
-        if (staticBranchTargets == null || staticBranchTargets.isEmpty()) {
-            return staticBranchTargets;
-        }
-        if (executedBranchTargets == null || executedBranchTargets.isEmpty()) {
-            return staticBranchTargets;
-        }
-
-        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : staticBranchTargets.entrySet()) {
-            String branchLine = entry.getKey();
-            List<Integer> staticTargets = entry.getValue();
-            List<Integer> executedTargets = executedBranchTargets.get(branchLine);
-            if (staticTargets == null || staticTargets.isEmpty()) {
-                continue;
-            }
-            if (executedTargets == null || executedTargets.isEmpty()) {
-                normalized.put(branchLine, new ArrayList<>(new LinkedHashSet<>(staticTargets)));
-                continue;
-            }
-            Set<Integer> staticSet = new LinkedHashSet<>(staticTargets);
-            LinkedHashSet<Integer> executedSet = new LinkedHashSet<>(executedTargets);
-            if (staticSet.containsAll(executedSet)) {
-                normalized.put(branchLine, new ArrayList<>(executedSet));
-            } else {
-                normalized.put(branchLine, new ArrayList<>(staticSet));
-            }
-        }
-        return normalized.isEmpty() ? staticBranchTargets : normalized;
-    }
-
-    private void addBranchTargetKeysToSet(Set<String> target,
-                                          Map<String, List<Integer>> allowedBranchTargets,
-                                          Map<String, List<Integer>> coveredBranchTargets) {
-        if (allowedBranchTargets == null || allowedBranchTargets.isEmpty()
-                || coveredBranchTargets == null || coveredBranchTargets.isEmpty()) {
-            return;
-        }
-        for (Map.Entry<String, List<Integer>> entry : allowedBranchTargets.entrySet()) {
-            List<Integer> allowedValues = entry.getValue();
-            List<Integer> coveredValues = coveredBranchTargets.get(entry.getKey());
-            if (allowedValues == null || allowedValues.isEmpty() || coveredValues == null || coveredValues.isEmpty()) {
-                continue;
-            }
-            Set<Integer> allowed = new LinkedHashSet<>(allowedValues);
-            for (Integer branchTarget : coveredValues) {
-                if (branchTarget != null && allowed.contains(branchTarget)) {
-                    target.add(entry.getKey() + "#" + branchTarget);
-                }
-            }
-        }
-    }
-
-    private Map<String, List<Integer>> decodeBranchTargetKeys(Set<String> keys) {
-        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
-        if (keys == null || keys.isEmpty()) {
-            return decoded;
-        }
-        for (String key : keys) {
-            if (!StringUtils.hasText(key)) {
-                continue;
-            }
-            int split = key.lastIndexOf('#');
-            if (split <= 0 || split >= key.length() - 1) {
-                continue;
-            }
-            try {
-                int branchTarget = Integer.parseInt(key.substring(split + 1));
-                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(branchTarget);
-            } catch (NumberFormatException ignore) {
-            }
-        }
-        return decoded;
+        systemSnapshotCoverageCalculationService.calculateCoverage(snapshotId);
     }
 }

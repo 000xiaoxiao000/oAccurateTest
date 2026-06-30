@@ -1,5 +1,7 @@
 package com.oAT.web.control.api;
 
+import com.oAT.web.api.map.MapHomePayloadService;
+import com.oAT.web.api.map.MapAppPayloadService;
 import com.oAT.web.control.MapControl;
 import com.oAT.web.domain.ImageElement;
 import com.oAT.web.service.entity.DatabaseTable;
@@ -17,27 +19,33 @@ import java.util.List;
 public class MapApiControl {
 
     private final MapControl mapControl;
+    private final MapHomePayloadService mapHomePayloadService;
+    private final MapAppPayloadService mapAppPayloadService;
 
-    public MapApiControl(MapControl mapControl) {
+    public MapApiControl(MapControl mapControl,
+                         MapHomePayloadService mapHomePayloadService,
+                         MapAppPayloadService mapAppPayloadService) {
         this.mapControl = mapControl;
+        this.mapHomePayloadService = mapHomePayloadService;
+        this.mapAppPayloadService = mapAppPayloadService;
     }
 
     @GetMapping("/home")
     public List<ImageElement> home(@PathVariable String projectId) {
-        return mapControl.getHomeMapData(projectId);
+        return mapHomePayloadService.buildHomeMapData(projectId);
     }
 
     @GetMapping("/apps/{appId}")
     public List<ImageElement> app(@PathVariable String projectId,
                                   @PathVariable String appId,
                                   @RequestParam(required = false) String layers) throws BusinessException {
-        return mapControl.getAppMapData(projectId, appId, layers);
+        return mapAppPayloadService.buildAppMapData(projectId, appId, layers);
     }
 
     @GetMapping("/code")
     public List<ImageElement> code(@PathVariable String projectId,
                                    @RequestParam String traceId) {
-        return mapControl.getMapStackCodeNode(traceId, projectId);
+        return mapAppPayloadService.buildTraceStackCodeData(projectId, traceId);
     }
 
 
@@ -62,7 +70,7 @@ public class MapApiControl {
     @GetMapping("/layers/snapshots/{snapshotId}/code")
     public List<ImageElement> snapshotCode(@PathVariable String projectId,
                                            @PathVariable String snapshotId) {
-        return mapControl.getStackCodeNode(projectId, snapshotId);
+        return mapAppPayloadService.buildSnapshotStackCodeData(projectId, snapshotId);
     }
 
     @GetMapping("/layers/tables/snapshots")

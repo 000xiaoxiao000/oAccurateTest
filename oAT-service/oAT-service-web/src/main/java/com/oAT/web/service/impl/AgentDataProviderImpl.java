@@ -1,33 +1,19 @@
 package com.oAT.web.service.impl;
 
-import com.oAT.agent.model.HttpTraceNode;
 import com.oAT.ai.agent.AgentDataProvider;
-import com.oAT.web.common.Job;
 import com.oAT.ai.agent.cache.ToolCallCache;
-import com.oAT.web.esDao.StaticInfoRepository;
-import com.oAT.web.esDao.TraceNodeRepository;
-import com.oAT.web.esDao.TraceSummaryRepository;
-import com.oAT.web.esDao.entity.ClassCoverageIndex;
-import com.oAT.web.esDao.entity.CoverageReportIndex;
-import com.oAT.web.esDao.entity.StaticSourceClassInfo;
-import com.oAT.web.esDao.entity.StaticSourceInfo;
-import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
-import com.oAT.web.esDao.entity.TraceNodeIndex;
-import com.oAT.web.esDao.entity.TraceSummaryIndex;
+import com.oAT.web.api.ai.AgentCoverageDataService;
+import com.oAT.web.api.ai.AgentStaticSourceLookupService;
+import com.oAT.web.api.ai.AgentTraceSnapshotDataService;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.AppVo;
 import com.oAT.web.service.entity.ProjectVo;
-import com.oAT.web.service.entity.SnapshotVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 import java.util.*;
-import java.util.Arrays;
 
 /**
  * Agent 数据提供者实现
@@ -50,25 +36,16 @@ public class AgentDataProviderImpl implements AgentDataProvider {
     private ClientSessionService clientSessionService;
 
     @Autowired
-    private CoverageService coverageService;
-
-    @Autowired
-    private SnapshotService snapshotService;
-
-    @Autowired
-    private StaticInfoRepository staticInfoRepository;
-
-    @Autowired
-    private TraceNodeRepository traceNodeRepository;
-
-    @Autowired
-    private com.oAT.web.coverage.CoverageStorage coverageStorage;
-
-    @Autowired
-    private TraceSummaryRepository traceSummaryRepository;
-
-    @Autowired
     private GitService gitService;
+
+    @Autowired
+    private AgentStaticSourceLookupService agentStaticSourceLookupService;
+
+    @Autowired
+    private AgentCoverageDataService agentCoverageDataService;
+
+    @Autowired
+    private AgentTraceSnapshotDataService agentTraceSnapshotDataService;
 
     @Override
     public Map<String, Object> getProjectInfo(String projectId) {
@@ -171,416 +148,54 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             // 简化处理
         }
 
-        List<Map<String, Object>> result = new ArrayList<>();
-        try {
-            List<CoverageReportIndex> reports = coverageService.getReportsByAppId(appId);
-            if (reports != null) {
-                for (CoverageReportIndex report : reports) {
-                    Map<String, Object> reportMap = new HashMap<>();
-                    reportMap.put("id", report.getId());
-                    reportMap.put("createTime", report.getCreateTime());
-                    // 计算覆盖率
-                    reportMap.put("lineRate", calculateRate(report.getCoveredLines(), report.getTotalLines()));
-                    reportMap.put("branchRate", calculateRate(report.getCoveredBranchTargets(),
-                            report.getTotalBranchTargets()));
-                    reportMap.put("methodRate", calculateRate(report.getCoveredMethods(), report.getTotalMethods()));
-                    reportMap.put("reportType", report.getReportType());
-                    result.add(reportMap);
-                }
-                // 按创建时间倒序排序
-                result.sort((a, b) -> {
-                    Object timeA = a.get("createTime");
-                    Object timeB = b.get("createTime");
-                    if (timeA == null && timeB == null) return 0;
-                    if (timeA == null) return 1;
-                    if (timeB == null) return -1;
-                    return timeB.toString().compareTo(timeA.toString());
-                });
-
-                // 缓存3分钟（覆盖率数据变化不频繁）
-                cache.put(cacheKey, "cached", 3 * 60 * 1000);
-            }
-        } catch (Exception e) {
-            logger.error("Get coverage reports failed: {}", appId, e);
-        }
+        List<Map<String, Object>> result = agentCoverageDataService.getCoverageReports(appId);
+        cache.put(cacheKey, "cached", 3 * 60 * 1000);
         return result;
     }
 
     @Override
     public Map<String, Object> getCoverageReportDetail(String reportId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            CoverageReportIndex report = coverageService.getReport(reportId);
-            if (report != null) {
-                result.put("id", report.getId());
-                result.put("appId", report.getAppId());
-                result.put("appName", getAppName(report.getAppId()));
-                result.put("createTime", report.getCreateTime());
-                result.put("lineRate", calculateRate(report.getCoveredLines(), report.getTotalLines()));
-                result.put("branchRate", calculateRate(report.getCoveredBranchTargets(),
-                        report.getTotalBranchTargets()));
-                result.put("methodRate", calculateRate(report.getCoveredMethods(), report.getTotalMethods()));
-                result.put("reportType", report.getReportType());
-                result.put("classCount", report.getTotalClasses());
-                result.put("methodCount", report.getTotalMethods());
-                result.put("branch", report.getRepoBranch());
-                result.put("commitId", report.getRepoCommitId());
-                result.put("versionNumber", report.getVersionNumber());
-            }
-        } catch (Exception e) {
-            logger.error("Get coverage report detail failed: {}", reportId, e);
-        }
-        return result;
+        return agentCoverageDataService.getCoverageReportDetail(reportId);
     }
 
     @Override
     public List<Map<String, Object>> getCoverageTrend(String appId, int limit) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        try {
-            // getTrendData需要versionNumber参数，这里暂时返回空列表
-            // 实际使用时需要根据应用配置获取版本号
-            List<Map<String, Object>> trendData = coverageService.getTrendData(appId, null);
-            if (trendData != null) {
-                int count = 0;
-                for (Map<String, Object> data : trendData) {
-                    if (count >= limit) break;
-                    Map<String, Object> trendMap = new HashMap<>();
-                    trendMap.put("createTime", data.get("createTime"));
-                    trendMap.put("lineRate", data.get("lineRate"));
-                    trendMap.put("branchRate", data.get("branchRate"));
-                    trendMap.put("methodRate", data.get("methodRate"));
-                    result.add(trendMap);
-                    count++;
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Get coverage trend failed: {}", appId, e);
-        }
-        return result;
+        return agentCoverageDataService.getCoverageTrend(appId, limit);
     }
 
     @Override
     public List<Map<String, Object>> getClassCoverageList(String reportId, Double minRate, Double maxRate) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        try {
-            Page<ClassCoverageIndex> page = coverageService.getClassCoveragePage(
-                    reportId, null, null, minRate, maxRate, null, null, null, null, null, null,
-                    PageRequest.of(0, 50));
-            if (page != null && page.hasContent()) {
-                for (ClassCoverageIndex cls : page.getContent()) {
-                    Map<String, Object> classMap = new HashMap<>();
-                    classMap.put("className", cls.getClassName());
-                    classMap.put("lineRate", cls.getLineRate());
-                    classMap.put("branchRate", cls.getBranchRate());
-                    classMap.put("methodRate", cls.getMethodRate());
-                    classMap.put("complexity", cls.getTotalComplexity());
-                    result.add(classMap);
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Get class coverage list failed: {}", reportId, e);
-        }
-        return result;
+        return agentCoverageDataService.getClassCoverageList(reportId, minRate, maxRate);
     }
 
     @Override
     public List<Map<String, Object>> getTraceList(String projectId, String appId, int limit) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        try {
-            if (limit <= 0) {
-                limit = 20;
-            }
-
-            if (appId != null && !appId.trim().isEmpty()) {
-                result.addAll(getTraceListForApp(appId, limit));
-            } else {
-                List<AppVo> apps = appService.getAppList(projectId);
-                if (apps != null && !apps.isEmpty()) {
-                    int perApp = Math.max(1, limit / apps.size());
-                    for (AppVo app : apps) {
-                        result.addAll(getTraceListForApp(app.getId(), perApp));
-                        if (result.size() >= limit) {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            result.sort((a, b) -> {
-                Object timeA = a.get("createTime");
-                Object timeB = b.get("createTime");
-                if (timeA == null && timeB == null) return 0;
-                if (timeA == null) return 1;
-                if (timeB == null) return -1;
-                if (timeA instanceof Date && timeB instanceof Date) {
-                    return ((Date) timeB).compareTo((Date) timeA);
-                }
-                return timeB.toString().compareTo(timeA.toString());
-            });
-
-            if (result.size() > limit) {
-                return result.subList(0, limit);
-            }
-        } catch (Exception e) {
-            logger.error("Get trace list failed: projectId={}, appId={}", projectId, appId, e);
-        }
-        return result;
-    }
-
-    private List<Map<String, Object>> getTraceListForApp(String appId, int limit) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        try {
-            Page<TraceSummaryIndex> page = traceSummaryRepository.findByAppId(
-                    appId, PageRequest.of(0, limit));
-
-            for (TraceSummaryIndex summary : page.getContent()) {
-                if (summary == null || !StringUtils.hasText(summary.getTraceId())) {
-                    continue;
-                }
-                Map<String, Object> trace = new HashMap<>();
-                trace.put("traceId", summary.getTraceId());
-                trace.put("appId", summary.getAppId());
-                trace.put("appName", summary.getAppName() != null ? summary.getAppName() : "");
-                trace.put("createTime", summary.getCreateTime());
-                trace.put("type", "http");
-                trace.put("hasError", Boolean.TRUE.equals(summary.getHasError()));
-                trace.put("useTime", summary.getUseTime());
-                trace.put("url", summary.getHttpUrl());
-                trace.put("method", summary.getHttpMethod());
-                trace.put("clientIp", summary.getHttpClientIp());
-                trace.put("serverIp", summary.getHttpServerIp());
-                trace.put("responseCode", summary.getHttpResponseCode());
-                trace.put("error", Boolean.TRUE.equals(summary.getHasError()));
-                trace.put("nodeCount", summary.getNodeCount());
-                trace.put("sqlCount", summary.getSqlCount());
-                trace.put("remoteCount", summary.getRemoteCount());
-                result.add(trace);
-            }
-        } catch (Exception e) {
-            logger.error("Get trace list for app failed: appId={}", appId, e);
-        }
-        return result;
+        return agentTraceSnapshotDataService.getTraceList(projectId, appId, limit);
     }
 
     @Override
     public Map<String, Object> getTraceDetail(String traceId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            if (traceId == null || traceId.trim().isEmpty()) {
-                return result;
-            }
-
-            List<TraceNodeIndex> nodes = traceNodeRepository.findByTraceId(traceId, PageRequest.of(0, 50));
-            if (nodes == null || nodes.isEmpty()) {
-                return result;
-            }
-
-            nodes.sort((left, right) -> {
-                Date leftTime = left.getCreateTime();
-                Date rightTime = right.getCreateTime();
-                if (leftTime == null && rightTime == null) return 0;
-                if (leftTime == null) return 1;
-                if (rightTime == null) return -1;
-                return leftTime.compareTo(rightTime);
-            });
-
-            TraceNodeIndex first = nodes.get(0);
-            HttpTraceNode httpNode = first.getHttpNode();
-            result.put("traceId", traceId);
-            result.put("appId", first.getAppId());
-            result.put("createTime", first.getCreateTime());
-            result.put("type", first.getType());
-            result.put("nodes", new ArrayList<>());
-            if (httpNode != null) {
-                result.put("url", httpNode.getRequestUrl());
-                result.put("method", httpNode.getRequestMethod());
-                result.put("clientIp", httpNode.getClientIp());
-                result.put("serverIp", httpNode.getServerIp());
-                result.put("appName", httpNode.getApp() != null ? httpNode.getApp().getAppName() : "");
-                result.put("error", httpNode.getError() != null);
-
-                List<Map<String, Object>> codeNodesList = new ArrayList<>();
-                
-                // 优先从对象存储读取
-                List<com.oAT.agent.model.StackNodeVo> storedNodes = coverageStorage.load(traceId);
-                List<com.oAT.agent.model.StackNodeVo> codeNodesSource = storedNodes.isEmpty() 
-                    ? (httpNode.getCodeNodes() != null ? Arrays.asList(httpNode.getCodeNodes()) : Collections.emptyList())
-                    : storedNodes;
-                
-                for (com.oAT.agent.model.StackNodeVo node : codeNodesSource) {
-                    if (node == null) {
-                        continue;
-                    }
-                    Map<String, Object> codeNode = new HashMap<>();
-                    codeNode.put("id", node.getId());
-                    codeNode.put("name", node.getClassName() + "." + node.getMethodName());
-                    codeNode.put("className", node.getClassName());
-                    codeNode.put("methodName", node.getMethodName());
-                    codeNode.put("type", "method");
-                    codeNode.put("duration", node.getUseTime());
-                    codeNode.put("error", false);
-                    codeNode.put("done", node.isDone());
-                    codeNode.put("complexity", node.getExecCyclo());
-                    codeNodesList.add(codeNode);
-                }
-                result.put("nodes", codeNodesList);
-            }
-        } catch (Exception e) {
-            logger.error("Get trace detail failed: {}", traceId, e);
-        }
-        return result;
+        return agentTraceSnapshotDataService.getTraceDetail(traceId);
     }
 
     @Override
     public List<Map<String, Object>> getSnapshots(String projectId, String userId) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        try {
-            List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, userId);
-            if (snapshots != null) {
-                for (SnapshotVo snapshot : snapshots) {
-                    Map<String, Object> snapshotMap = new HashMap<>();
-                    snapshotMap.put("id", snapshot.getId());
-                    snapshotMap.put("name", snapshot.getName());
-                    snapshotMap.put("creator", snapshot.getCreateUser());
-                    snapshotMap.put("createTime", snapshot.getCreateTime());
-                    snapshotMap.put("shared", snapshot.getShare());
-                    result.add(snapshotMap);
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Get snapshots failed: {}", projectId, e);
-        }
-        return result;
+        return agentTraceSnapshotDataService.getSnapshots(projectId, userId);
     }
 
     @Override
     public Map<String, Object> getSnapshotDetail(String snapshotId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            SnapshotVo snapshot = snapshotService.get(snapshotId);
-            if (snapshot != null) {
-                result.put("id", snapshot.getId());
-                result.put("name", snapshot.getName());
-                result.put("creator", snapshot.getCreateUser());
-                result.put("createTime", snapshot.getCreateTime());
-                result.put("shared", snapshot.getShare());
-                result.put("traceId", snapshot.getTraceId());
-            }
-        } catch (Exception e) {
-            logger.error("Get snapshot detail failed: {}", snapshotId, e);
-        }
-        return result;
+        return agentTraceSnapshotDataService.getSnapshotDetail(snapshotId);
     }
 
     @Override
     public Map<String, Object> searchCodeRelation(String projectId, String keyword) {
-        Map<String, Object> result = new HashMap<>();
-        List<Map<String, Object>> interfaceList = new ArrayList<>();
-        List<Map<String, Object>> classList = new ArrayList<>();
-        try {
-            // 获取项目下所有应用的静态代码信息
-            List<AppVo> apps = appService.getAppList(projectId);
-            if (apps == null || apps.isEmpty()) {
-                result.put("interfaces", interfaceList);
-                result.put("classes", classList);
-                return result;
-            }
-            String lowerKeyword = keyword.toLowerCase();
-            int matchLimit = 30; // 限制返回数量，避免结果过多
-
-            for (AppVo app : apps) {
-                if (interfaceList.size() + classList.size() >= matchLimit * 2) break;
-                try {
-                    List<StaticSourceInfo> infos = staticInfoRepository.findByAppId(app.getId());
-                    if (infos == null) continue;
-                    for (StaticSourceInfo info : infos) {
-                        StaticSourceClassInfo classInfo = info.getClassInfo();
-                        if (classInfo == null || classInfo.getClassName() == null) continue;
-                        String fullClassName = classInfo.getClassName();
-
-                        // 关键词匹配：类名或简单类名
-                        boolean nameMatches = fullClassName.toLowerCase().contains(lowerKeyword)
-                                || simpleClassName(fullClassName).toLowerCase().contains(lowerKeyword);
-
-                        if (!nameMatches && classInfo.getMethodMaps() != null) {
-                            // 检查方法名和 URI（接口路径）是否匹配
-                            for (Map.Entry<String, ?> entry : classInfo.getMethodMaps().entrySet()) {
-                                Object methodObj = entry.getValue();
-                                if (methodObj instanceof Map) {
-                                    @SuppressWarnings("unchecked")
-                                    Map<String, Object> methodMap = (Map<String, Object>) methodObj;
-                                    String methodName = (String) methodMap.get("methodName");
-                                    if ((methodName != null && methodName.toLowerCase().contains(lowerKeyword))) {
-                                        nameMatches = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        if (!nameMatches) continue;
-
-                        Map<String, Object> cls = new HashMap<>();
-                        cls.put("name", fullClassName);
-                        cls.put("package", extractPackageName(fullClassName));
-                        cls.put("simpleName", simpleClassName(fullClassName));
-                        cls.put("appName", app.getName());
-                        classList.add(cls);
-                    }
-                } catch (Exception e) {
-                    logger.warn("Search code relation for app {} failed: {}", app.getId(), e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Search code relation failed: projectId={}, keyword={}", projectId, keyword, e);
-        }
-
-        result.put("interfaces", interfaceList);
-        result.put("classes", classList);
-        return result;
+        return agentStaticSourceLookupService.searchCodeRelation(projectId, keyword);
     }
 
     @Override
     public Map<String, Object> getCallGraph(String className, String methodName) {
-        Map<String, Object> result = new HashMap<>();
-        List<Map<String, Object>> callers = new ArrayList<>();
-        List<Map<String, Object>> callees = new ArrayList<>();
-        List<Map<String, Object>> traces = new ArrayList<>();
-
-        try {
-            boolean classFound = StringUtils.hasText(className) && !findClassStaticInfo(className).isEmpty();
-            boolean methodFound = !StringUtils.hasText(methodName);
-            if (classFound && StringUtils.hasText(methodName)) {
-                methodFound = findTargetMethodInfo(findClassStaticInfo(className).values(), methodName) != null;
-            }
-
-            result.put("classFound", classFound);
-            result.put("methodFound", methodFound);
-            result.put("callers", callers);
-            result.put("callees", callees);
-            result.put("traces", traces);
-
-            if (!classFound) {
-                logger.info("No static source info found for call graph: className={}, methodName={}", className, methodName);
-                return result;
-            }
-            if (StringUtils.hasText(methodName) && !methodFound) {
-                logger.info("No static method info found for call graph: className={}, methodName={}", className, methodName);
-                return result;
-            }
-
-            logger.info("No real method call graph data available for className={}, methodName={}; current data source only stores method coverage metadata, not invocation edges.",
-                    className, methodName);
-            return result;
-        } catch (Exception e) {
-            logger.error("Get call graph failed: className={}, methodName={}", className, methodName, e);
-            result.put("classFound", false);
-            result.put("methodFound", false);
-            result.put("callers", callers);
-            result.put("callees", callees);
-            result.put("traces", traces);
-            return result;
-        }
+        return agentStaticSourceLookupService.getCallGraph(className, methodName);
     }
 
     @Override
@@ -601,9 +216,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             result.put("appCount", appCount);
             result.put("onlineAppCount", onlineAppCount);
 
-            // 获取快照数量
-            List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, null);
-            result.put("snapshotCount", snapshots != null ? snapshots.size() : 0);
+            result.put("snapshotCount", agentTraceSnapshotDataService.countSnapshots(projectId));
 
             result.put("traceCount", 0);
         } catch (Exception e) {
@@ -618,28 +231,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
             return null;
         }
         try {
-            String targetClass = className.trim();
-            String normalizedTarget = normalizeClassName(targetClass);
-            String simpleName = simpleClassName(targetClass);
-
-            List<AppVo> allApps = appService.getAppList(null);
-            if (allApps == null || allApps.isEmpty()) {
-                return null;
-            }
-
-            for (AppVo app : allApps) {
-                try {
-                    List<StaticSourceInfo> appInfos = staticInfoRepository.findByAppId(app.getId());
-                    String source = findSourceCodeInAppInfos(appInfos, targetClass, normalizedTarget, simpleName);
-                    if (source != null) {
-                        return source;
-                    }
-                } catch (Exception e) {
-                    logger.debug("getSourceCode scan app failed: appId={}, className={}, reason={}", app.getId(), targetClass, e.getMessage());
-                }
-            }
-
-            return null;
+            return agentStaticSourceLookupService.findSourceCode(className);
         } catch (Exception e) {
             logger.error("Get source code failed: className={}", className, e);
             return null;
@@ -665,47 +257,17 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
     @Override
     public String startCoverageGenerationJob(String appId, String versionNumber, String branch, String commitId) {
-        try {
-            String jobId = coverageService.startGenerateJob(appId, versionNumber, branch, commitId);
-            logger.info("Started coverage generation job: appId={}, version={}, branch={}, commit={}, jobId={}",
-                    appId, versionNumber, branch, commitId, jobId);
-            return jobId;
-        } catch (Exception e) {
-            logger.error("Failed to start coverage generation job: appId={}, version={}, branch={}, commit={}",
-                    appId, versionNumber, branch, commitId, e);
-            return null;
-        }
+        return agentCoverageDataService.startCoverageGenerationJob(appId, versionNumber, branch, commitId);
     }
 
     @Override
     public Map<String, Object> getJobStatus(String jobId) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            Job<String> job = coverageService.getJob(jobId);
-            if (job == null) {
-                return result;
-            }
-            result.put("jobId", jobId);
-            result.put("status", mapJobState(job.getState()));
-            result.put("progress", job.getProgress() != null ? job.getProgress().getPercent() : 0);
-            result.put("message", job.getProgress() != null ? job.getProgress().getName() : "");
-            result.put("reportId", job.getData());
-            result.put("startTime", job.getBegin());
-            result.put("log", job.getLog());
-        } catch (Exception e) {
-            logger.error("Failed to get job status: jobId={}", jobId, e);
-        }
-        return result;
+        return agentCoverageDataService.getJobStatus(jobId);
     }
 
     @Override
     public String generateReportDownloadUrl(String reportId) {
-        try {
-            return "/api/coverage/reports/" + reportId + "/export";
-        } catch (Exception e) {
-            logger.error("Failed to generate download URL: reportId={}", reportId, e);
-            return null;
-        }
+        return agentCoverageDataService.generateReportDownloadUrl(reportId);
     }
 
     @Override
@@ -718,85 +280,6 @@ public class AgentDataProviderImpl implements AgentDataProvider {
                     repoUrl, branch, e.getMessage());
             return false;
         }
-    }
-
-    private String mapJobState(Job.JobState state) {
-        if (state == null) {
-            return "UNKNOWN";
-        }
-        switch (state) {
-            case finish:
-                return "COMPLETED";
-            case active:
-                return "RUNNING";
-            case error:
-                return "FAILED";
-            case wait:
-                return "PENDING";
-            case terminate:
-                return "TERMINATED";
-            default:
-                return state.name().toUpperCase();
-        }
-    }
-
-    private String findSourceCodeInAppInfos(List<StaticSourceInfo> appInfos, String targetClass, String normalizedTarget, String simpleName) {
-        if (appInfos == null || appInfos.isEmpty()) {
-            return null;
-        }
-        for (StaticSourceInfo info : appInfos) {
-            StaticSourceClassInfo classInfo = info.getClassInfo();
-            if (classInfo == null || classInfo.getClassName() == null || classInfo.getSourceCode() == null) {
-                continue;
-            }
-            String candidateClassName = classInfo.getClassName().trim();
-            String normalizedCandidate = normalizeClassName(candidateClassName);
-            String candidateSimpleName = simpleClassName(candidateClassName);
-
-            if (matchesClassName(candidateClassName, normalizedCandidate, candidateSimpleName, targetClass, normalizedTarget, simpleName)) {
-                return classInfo.getSourceCode();
-            }
-
-            if (normalizedCandidate.contains(normalizedTarget) || normalizedTarget.contains(normalizedCandidate)) {
-                return classInfo.getSourceCode();
-            }
-        }
-        return null;
-    }
-
-    private boolean matchesClassName(String candidateClassName, String normalizedCandidate, String candidateSimpleName,
-                                     String targetClass, String normalizedTarget, String targetSimpleName) {
-        if (candidateClassName.equals(targetClass) || normalizedCandidate.equals(normalizedTarget)) {
-            return true;
-        }
-        if (candidateSimpleName.equals(targetSimpleName)) {
-            return true;
-        }
-        return candidateClassName.endsWith("." + targetSimpleName)
-                || targetClass.endsWith("." + candidateSimpleName)
-                || normalizedCandidate.endsWith("." + normalizedTarget)
-                || normalizedTarget.endsWith("." + normalizedCandidate);
-    }
-
-    private boolean matchesMethodName(String candidateMethodName, String candidateKey, String normalizedTarget, String targetMethodName) {
-        String normalizedCandidate = normalizeMethodName(candidateMethodName);
-        String normalizedCandidateKey = normalizeMethodName(candidateKey);
-        String normalizedTargetMethod = normalizeMethodName(targetMethodName);
-        return normalizedCandidate.equals(normalizedTargetMethod)
-                || normalizedCandidateKey.equals(normalizedTargetMethod)
-                || normalizedCandidate.contains(normalizedTargetMethod)
-                || normalizedTargetMethod.contains(normalizedCandidate)
-                || normalizedCandidateKey.contains(normalizedTargetMethod)
-                || normalizedTargetMethod.contains(normalizedCandidateKey)
-                || normalizedCandidate.equals(normalizedTarget)
-                || normalizedCandidateKey.equals(normalizedTarget);
-    }
-
-    private String normalizeClassName(String className) {
-        if (className == null) {
-            return "";
-        }
-        return className.trim().replace('$', '.').toLowerCase(Locale.ROOT);
     }
 
     private Map<String, Object> convertAppToMap(AppVo app) {
@@ -816,179 +299,4 @@ public class AgentDataProviderImpl implements AgentDataProvider {
         return map;
     }
 
-    private String getAppName(String appId) {
-        if (appId == null) return "";
-        try {
-            AppVo app = appService.getApp(appId);
-            return app != null ? app.getName() : appId;
-        } catch (Exception e) {
-            return appId;
-        }
-    }
-
-    private double calculateRate(long covered, long total) {
-        if (total <= 0) return 0.0;
-        return (double) covered / total;
-    }
-
-    // ========== 代码关系查询辅助方法 ==========
-
-    /**
-     * 从全限定类名中提取简单类名
-     * 例如: "com.oAT.web.service.UserService" -> "UserService"
-     */
-    private String simpleClassName(String fullClassName) {
-        if (fullClassName == null || fullClassName.isEmpty()) return "";
-        int lastDot = fullClassName.lastIndexOf('.');
-        return lastDot >= 0 ? fullClassName.substring(lastDot + 1) : fullClassName;
-    }
-
-    /**
-     * 从全限定类名中提取包名
-     * 例如: "com.oAT.web.service.UserService" -> "com.oAT.web.service"
-     */
-    private String extractPackageName(String fullClassName) {
-        if (fullClassName == null || fullClassName.isEmpty()) return "";
-        int lastDot = fullClassName.lastIndexOf('.');
-        return lastDot > 0 ? fullClassName.substring(0, lastDot) : "default";
-    }
-
-    /**
-     * 在项目下所有应用中搜索类名匹配的静态代码信息
-     *
-     * @param className 类名（支持全限定名或简单名模糊匹配）
-     * @return Map<appId, StaticSourceInfo> 匹配结果
-     */
-    private Map<String, StaticSourceInfo> findClassStaticInfo(String className) {
-        Map<String, StaticSourceInfo> result = new LinkedHashMap<>();
-        if (className == null || className.isEmpty()) return result;
-
-        String targetClass = className.trim();
-        String normalizedTarget = normalizeClassName(targetClass);
-        String simpleName = simpleClassName(targetClass);
-        try {
-            List<AppVo> apps = appService.getAppList(null);
-            if (apps == null || apps.isEmpty()) {
-                return result;
-            }
-            for (AppVo app : apps) {
-                try {
-                    List<StaticSourceInfo> infos = staticInfoRepository.findByAppId(app.getId());
-                    if (infos == null || infos.isEmpty()) {
-                        continue;
-                    }
-                    for (StaticSourceInfo info : infos) {
-                        StaticSourceClassInfo classInfo = info.getClassInfo();
-                        if (classInfo == null || !StringUtils.hasText(classInfo.getClassName())) {
-                            continue;
-                        }
-                        String candidateClassName = classInfo.getClassName().trim();
-                        if (matchesClassName(candidateClassName, normalizeClassName(candidateClassName), simpleClassName(candidateClassName),
-                                targetClass, normalizedTarget, simpleName)) {
-                            result.put(app.getId(), info);
-                            break;
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.debug("findClassStaticInfo scan app failed: appId={}, className={}, reason={}", app.getId(), className, e.getMessage());
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("findClassStaticInfo failed: {}", e.getMessage());
-        }
-        return result;
-    }
-
-    /**
-     * 从堆栈节点中提取目标节点的直接调用方（父节点即为调用方）
-     */
-    private StaticSourceMethodInfo findTargetMethodInfo(Collection<StaticSourceInfo> classInfos, String methodName) {
-        if (classInfos == null || classInfos.isEmpty() || !StringUtils.hasText(methodName)) {
-            return null;
-        }
-        String normalizedTarget = normalizeMethodName(methodName);
-        for (StaticSourceInfo info : classInfos) {
-            if (info == null || info.getClassInfo() == null || info.getClassInfo().getMethodMaps() == null) {
-                continue;
-            }
-            for (Map.Entry<String, StaticSourceMethodInfo> entry : info.getClassInfo().getMethodMaps().entrySet()) {
-                StaticSourceMethodInfo methodInfo = entry.getValue();
-                if (methodInfo == null) {
-                    continue;
-                }
-                if (matchesMethodName(methodInfo.getMethodName(), entry.getKey(), normalizedTarget, methodName)) {
-                    return methodInfo;
-                }
-            }
-        }
-        return null;
-    }
-
-    private String normalizeMethodName(String methodName) {
-        if (!StringUtils.hasText(methodName)) {
-            return "";
-        }
-        String normalized = methodName.trim();
-        int parenIndex = normalized.indexOf('(');
-        if (parenIndex > 0) {
-            normalized = normalized.substring(0, parenIndex);
-        }
-        int lastDot = normalized.lastIndexOf('.');
-        if (lastDot >= 0) {
-            normalized = normalized.substring(lastDot + 1);
-        }
-        return normalized.toLowerCase(Locale.ROOT);
-    }
-
-    private void extractCallerFromStack(com.oAT.agent.model.StackNodeVo[] codeNodes,
-                                        com.oAT.agent.model.StackNodeVo targetNode,
-                                        List<Map<String, Object>> callers,
-                                        Set<String> seenTraceIds) {
-        if (codeNodes == null || targetNode == null) return;
-        String targetId = targetNode.getId();
-
-        // 找到目标节点的直接父节点（即调用方）
-        for (com.oAT.agent.model.StackNodeVo node : codeNodes) {
-            if (node == null || node.getId() == null) continue;
-            if (isParentOf(node.getId(), targetId)) {
-                // node 是 target 的父节点，即调用方
-                String key = node.getClassName() + "." + node.getMethodName();
-                boolean exists = callers.stream()
-                        .anyMatch(c -> key.equals(c.get("className") + "." + c.get("methodName")));
-                if (!exists) {
-                    Map<String, Object> caller = new HashMap<>();
-                    caller.put("className", node.getClassName());
-                    caller.put("methodName", node.getMethodName());
-                    caller.put("type", inferNodeType(node));
-                    callers.add(caller);
-                }
-                break; // 只取直接调用方
-            }
-        }
-    }
-
-    /**
-     * 判断 parentId 是否是 childId 的直接父节点
-     * 基于 StackNodeVo.id 层级结构: "0", "0.1", "0.1.2"
-     */
-    private boolean isParentOf(String parentId, String childId) {
-        if (parentId == null || childId == null) return false;
-        // 父ID 应该是 子ID 去掉最后一段 ".xxx" 后的结果
-        int lastDot = childId.lastIndexOf('.');
-        if (lastDot <= 0) return false;
-        return parentId.equals(childId.substring(0, lastDot));
-    }
-
-    /**
-     * 根据类名推断节点类型
-     */
-    private String inferNodeType(com.oAT.agent.model.StackNodeVo node) {
-        if (node == null || node.getClassName() == null) return "unknown";
-        String cn = node.getClassName().toLowerCase();
-        if (cn.contains("controller") || cn.contains("action") || cn.contains("resource")) return "controller";
-        if (cn.contains("service") || cn.contains("manager") || cn.contains("biz")) return "service";
-        if (cn.contains("dao") || cn.contains("mapper") || cn.contains("repository")) return "dao";
-        if (cn.contains("util") || cn.contains("helper") || cn.contains("tool")) return "util";
-        return "class";
-    }
 }

@@ -8,7 +8,9 @@
     :loading-text="'正在加载源码详情...'"
     :error="error"
     :methods="payload?.methods"
+    :source-coverage="payload?.sourceCoverage"
     :colored-source-html="payload?.coloredSourceHtml"
+    :language="payload?.sourceCoverage?.language || payload?.app?.language"
   />
 </template>
 

@@ -1,5 +1,7 @@
 package com.oAT.web.control.api;
 
+import com.oAT.web.api.common.ApiSummaries.*;
+import com.oAT.web.api.project.ProjectSettingsApiPayloads.*;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.App;
 import com.oAT.web.esDao.entity.LabelGroup;
@@ -51,11 +53,11 @@ public class ProjectSettingsApiControl {
     }
 
     @GetMapping("/apps")
-    public ResultNotified<List<FrontendContextApiControl.AppSummary>> apps(@PathVariable String projectId,
+    public ResultNotified<List<AppSummary>> apps(@PathVariable String projectId,
                                                                            @SessionAttribute UserVo user) {
         ensureProjectAccess(projectId, user);
         List<AppVo> apps = appService.getAppList(projectId);
-        List<FrontendContextApiControl.AppSummary> result = new ArrayList<>();
+        List<AppSummary> result = new ArrayList<>();
         for (AppVo app : apps) {
             app.setOnlineCount(clientSessionService.getOnlineSessionsByAppId(app.getId()).size());
             result.add(toAppSummary(app));
@@ -64,7 +66,7 @@ public class ProjectSettingsApiControl {
     }
 
     @PostMapping("/apps")
-    public ResultNotified<FrontendContextApiControl.AppSummary> createApp(@PathVariable String projectId,
+    public ResultNotified<AppSummary> createApp(@PathVariable String projectId,
                                                                           @SessionAttribute UserVo user,
                                                                           @RequestBody SaveAppRequest request) {
         ensureProjectAccess(projectId, user);
@@ -76,6 +78,8 @@ public class ProjectSettingsApiControl {
         app.setCreateUserId(user.getId());
         app.setName(request.getName().trim());
         app.setSrcName(request.getSrcName());
+        app.setLanguage(request.getLanguage());
+        app.setLanguageConfig(request.getLanguageConfig());
         app.setRange(request.getRange());
         app.setDescribe(request.getDescribe());
         app.setProperties(request.getProperties());
@@ -122,7 +126,7 @@ public class ProjectSettingsApiControl {
             memberSummaries.add(toProjectMemberSummary(member));
         }
 
-        List<FrontendContextApiControl.UserSummary> availableUsers = new ArrayList<>();
+        List<UserSummary> availableUsers = new ArrayList<>();
         for (UserVo candidate : users) {
             if (!existingMemberIds.contains(candidate.getId())) {
                 availableUsers.add(toUserSummary(candidate));
@@ -273,11 +277,13 @@ public class ProjectSettingsApiControl {
         app.setProbeWebhookUrl(request.getProbeWebhookUrl());
     }
 
-    private FrontendContextApiControl.AppSummary toAppSummary(AppVo app) {
-        FrontendContextApiControl.AppSummary summary = new FrontendContextApiControl.AppSummary();
+    private AppSummary toAppSummary(AppVo app) {
+        AppSummary summary = new AppSummary();
         summary.setId(app.getId());
         summary.setName(app.getName());
         summary.setSrcName(app.getSrcName());
+        summary.setLanguage(app.getLanguage());
+        summary.setLanguageConfig(app.getLanguageConfig());
         summary.setDescribe(app.getDescribe());
         summary.setRange(app.getRange());
         summary.setOnlineCount(app.getOnlineCount());
@@ -289,8 +295,8 @@ public class ProjectSettingsApiControl {
         return summary;
     }
 
-    private FrontendContextApiControl.UserSummary toUserSummary(UserVo user) {
-        FrontendContextApiControl.UserSummary summary = new FrontendContextApiControl.UserSummary();
+    private UserSummary toUserSummary(UserVo user) {
+        UserSummary summary = new UserSummary();
         summary.setId(user.getId());
         summary.setName(user.getName());
         summary.setNickname(user.getNickname());
@@ -345,301 +351,4 @@ public class ProjectSettingsApiControl {
         return null;
     }
 
-    public static class AddMembersRequest {
-        private List<String> userIds;
-
-        public List<String> getUserIds() {
-            return userIds;
-        }
-
-        public void setUserIds(List<String> userIds) {
-            this.userIds = userIds;
-        }
-    }
-
-    public static class UpdateMemberRoleRequest {
-        private String role;
-
-        public String getRole() {
-            return role;
-        }
-
-        public void setRole(String role) {
-            this.role = role;
-        }
-    }
-
-    public static class UpsertLabelRequest {
-        private String type;
-        private String name;
-        private String color;
-
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getColor() {
-            return color;
-        }
-
-        public void setColor(String color) {
-            this.color = color;
-        }
-    }
-
-    public static class DeleteLabelRequest {
-        private String type;
-        private String name;
-
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-    }
-
-    public static class SaveAppRequest {
-        private String name;
-        private String srcName;
-        private String range;
-        private String describe;
-        private String properties;
-        private String currentVersion;
-        private String currentBranch;
-        private String currentCommitId;
-        private Boolean probeAlertEnabled;
-        private Integer probeOfflineThresholdSeconds;
-        private String probeWebhookUrl;
-        private Boolean probeAlertOnOnline;
-        private Boolean probeAlertOnOffline;
-        private Boolean probeAlertOnRecovered;
-
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getSrcName() { return srcName; }
-        public void setSrcName(String srcName) { this.srcName = srcName; }
-        public String getRange() { return range; }
-        public void setRange(String range) { this.range = range; }
-        public String getDescribe() { return describe; }
-        public void setDescribe(String describe) { this.describe = describe; }
-        public String getProperties() { return properties; }
-        public void setProperties(String properties) { this.properties = properties; }
-        public String getCurrentVersion() { return currentVersion; }
-        public void setCurrentVersion(String currentVersion) { this.currentVersion = currentVersion; }
-        public String getCurrentBranch() { return currentBranch; }
-        public void setCurrentBranch(String currentBranch) { this.currentBranch = currentBranch; }
-        public String getCurrentCommitId() { return currentCommitId; }
-        public void setCurrentCommitId(String currentCommitId) { this.currentCommitId = currentCommitId; }
-        public Boolean getProbeAlertEnabled() { return probeAlertEnabled; }
-        public void setProbeAlertEnabled(Boolean probeAlertEnabled) { this.probeAlertEnabled = probeAlertEnabled; }
-        public Integer getProbeOfflineThresholdSeconds() { return probeOfflineThresholdSeconds; }
-        public void setProbeOfflineThresholdSeconds(Integer probeOfflineThresholdSeconds) { this.probeOfflineThresholdSeconds = probeOfflineThresholdSeconds; }
-        public String getProbeWebhookUrl() { return probeWebhookUrl; }
-        public void setProbeWebhookUrl(String probeWebhookUrl) { this.probeWebhookUrl = probeWebhookUrl; }
-        public Boolean getProbeAlertOnOnline() { return probeAlertOnOnline; }
-        public void setProbeAlertOnOnline(Boolean probeAlertOnOnline) { this.probeAlertOnOnline = probeAlertOnOnline; }
-        public Boolean getProbeAlertOnOffline() { return probeAlertOnOffline; }
-        public void setProbeAlertOnOffline(Boolean probeAlertOnOffline) { this.probeAlertOnOffline = probeAlertOnOffline; }
-        public Boolean getProbeAlertOnRecovered() { return probeAlertOnRecovered; }
-        public void setProbeAlertOnRecovered(Boolean probeAlertOnRecovered) { this.probeAlertOnRecovered = probeAlertOnRecovered; }
-    }
-
-    public static class DeleteAppRequest {
-        private String password;
-
-        public String getPassword() {
-            return password;
-        }
-
-        public void setPassword(String password) {
-            this.password = password;
-        }
-    }
-
-    public static class ProjectMembersPayload {
-        private List<ProjectMemberSummary> members;
-        private List<FrontendContextApiControl.UserSummary> availableUsers;
-        private String currentUserRole;
-
-        public List<ProjectMemberSummary> getMembers() {
-            return members;
-        }
-
-        public void setMembers(List<ProjectMemberSummary> members) {
-            this.members = members;
-        }
-
-        public List<FrontendContextApiControl.UserSummary> getAvailableUsers() {
-            return availableUsers;
-        }
-
-        public void setAvailableUsers(List<FrontendContextApiControl.UserSummary> availableUsers) {
-            this.availableUsers = availableUsers;
-        }
-
-        public String getCurrentUserRole() {
-            return currentUserRole;
-        }
-
-        public void setCurrentUserRole(String currentUserRole) {
-            this.currentUserRole = currentUserRole;
-        }
-    }
-
-    public static class ProjectMemberSummary {
-        private String id;
-        private String projectId;
-        private String memberId;
-        private String memberName;
-        private String memberEmail;
-        private String role;
-        private boolean star;
-        private boolean defaultProject;
-        private java.util.Date createTime;
-
-        public String getId() {
-            return id;
-        }
-
-        public void setId(String id) {
-            this.id = id;
-        }
-
-        public String getProjectId() {
-            return projectId;
-        }
-
-        public void setProjectId(String projectId) {
-            this.projectId = projectId;
-        }
-
-        public String getMemberId() {
-            return memberId;
-        }
-
-        public void setMemberId(String memberId) {
-            this.memberId = memberId;
-        }
-
-        public String getMemberName() {
-            return memberName;
-        }
-
-        public void setMemberName(String memberName) {
-            this.memberName = memberName;
-        }
-
-        public String getMemberEmail() {
-            return memberEmail;
-        }
-
-        public void setMemberEmail(String memberEmail) {
-            this.memberEmail = memberEmail;
-        }
-
-        public String getRole() {
-            return role;
-        }
-
-        public void setRole(String role) {
-            this.role = role;
-        }
-
-        public boolean isStar() {
-            return star;
-        }
-
-        public void setStar(boolean star) {
-            this.star = star;
-        }
-
-        public boolean isDefaultProject() {
-            return defaultProject;
-        }
-
-        public void setDefaultProject(boolean defaultProject) {
-            this.defaultProject = defaultProject;
-        }
-
-        public java.util.Date getCreateTime() {
-            return createTime;
-        }
-
-        public void setCreateTime(java.util.Date createTime) {
-            this.createTime = createTime;
-        }
-    }
-
-    public static class ProjectLabelsPayload {
-        private List<LabelSummary> usecaseLabels;
-        private List<LabelSummary> snapshotLabels;
-        private String currentUserRole;
-
-        public List<LabelSummary> getUsecaseLabels() {
-            return usecaseLabels;
-        }
-
-        public void setUsecaseLabels(List<LabelSummary> usecaseLabels) {
-            this.usecaseLabels = usecaseLabels;
-        }
-
-        public List<LabelSummary> getSnapshotLabels() {
-            return snapshotLabels;
-        }
-
-        public void setSnapshotLabels(List<LabelSummary> snapshotLabels) {
-            this.snapshotLabels = snapshotLabels;
-        }
-
-        public String getCurrentUserRole() {
-            return currentUserRole;
-        }
-
-        public void setCurrentUserRole(String currentUserRole) {
-            this.currentUserRole = currentUserRole;
-        }
-    }
-
-    public static class LabelSummary {
-        private String name;
-        private String color;
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getColor() {
-            return color;
-        }
-
-        public void setColor(String color) {
-            this.color = color;
-        }
-    }
 }

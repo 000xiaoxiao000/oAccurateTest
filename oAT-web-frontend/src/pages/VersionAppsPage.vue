@@ -23,8 +23,8 @@
             <span>{{ app.repoConfigured ? '已配置仓库' : '未配置仓库' }}</span>
           </div>
           <div class="action-row">
-            <RouterLink class="table-link" :to="`/p/${projectId}/apps/${app.id}/versions`">版本列表</RouterLink>
-            <RouterLink class="table-link" :to="`/p/${projectId}/version/apps`">比对与报告</RouterLink>
+            <RouterLink class="table-link" :to="{ name: 'version-list', params: { projectId, appId: app.id } }">版本列表</RouterLink>
+            <RouterLink class="table-link" :to="{ name: 'version-compare', params: { projectId, appId: app.id } }">比对与报告</RouterLink>
           </div>
         </div>
       </article>

@@ -8,6 +8,7 @@ import com.oAT.web.coverage.universal.CoverageParserRegistry;
 import com.oAT.web.coverage.universal.SourceType;
 import com.oAT.web.coverage.universal.UniversalCoverageFile;
 import com.oAT.web.coverage.universal.UniversalCoverageService;
+import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.entity.AppVo;
@@ -61,6 +62,8 @@ public class FrontendCoverageService {
         report.versionNumber = firstText(request.getVersionNumber(), app.getCurrentVersion(), report.commitId);
         report.branch = firstText(request.getBranch(), app.getCurrentBranch());
         report.caseName = request.getCaseName();
+        report.buildId = request.getBuildId();
+        report.testStage = request.getTestStage();
         report.timestamp = request.getTimestamp();
         report.coverageJson = UtilJson.writeValueAsString(request.getCoverage());
         String reportId = frontendCoverageReportRepository.save(report);
@@ -93,6 +96,13 @@ public class FrontendCoverageService {
         for (FrontendCoverageReport rawReport : rawReports) {
             lastTimestamp = Math.max(lastTimestamp, rawReport.timestamp == null ? 0L : rawReport.timestamp);
             List<UniversalCoverageFile> files = parser.parse(rawReport.coverageJson.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            ClassCoverageIndex.CoverageFootprintRecord footprint = ClassCoverageIndex.CoverageFootprintRecord.of(
+                    null,
+                    rawReport.caseName,
+                    rawReport.testStage,
+                    rawReport.buildId,
+                    rawReport.timestamp);
+            files.forEach(file -> file.withFootprint(footprint));
             Map<String, UniversalCoverageFile> nextMap = universalCoverageService.mergeFiles(files);
             for (Map.Entry<String, UniversalCoverageFile> entry : nextMap.entrySet()) {
                 coverageMap.compute(entry.getKey(), (key, existing) -> existing == null ? entry.getValue() : existing.merge(entry.getValue()));
@@ -107,6 +117,9 @@ public class FrontendCoverageService {
         report.setRepoCommitId(commitId);
         report.setCreateTime(new Date());
         report.setSourceType(SourceType.FRONTEND.name());
+        report.setLanguage(SourceType.FRONTEND.name());
+        report.setBuildId(request == null ? null : request.getBuildId());
+        report.setTestStage(request == null ? null : request.getTestStage());
         report.setReportType(0);
         report.setLastProcessedTime(lastTimestamp > 0 ? String.valueOf(lastTimestamp) : String.valueOf(System.currentTimeMillis()));
 
@@ -132,6 +145,8 @@ public class FrontendCoverageService {
         private String versionNumber;
         private String branch;
         private String caseName;
+        private String buildId;
+        private String testStage;
         private Long timestamp;
         private JsonNode coverage;
 
@@ -145,6 +160,10 @@ public class FrontendCoverageService {
         public void setBranch(String branch) { this.branch = branch; }
         public String getCaseName() { return caseName; }
         public void setCaseName(String caseName) { this.caseName = caseName; }
+        public String getBuildId() { return buildId; }
+        public void setBuildId(String buildId) { this.buildId = buildId; }
+        public String getTestStage() { return testStage; }
+        public void setTestStage(String testStage) { this.testStage = testStage; }
         public Long getTimestamp() { return timestamp; }
         public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
         public JsonNode getCoverage() { return coverage; }
@@ -194,6 +213,8 @@ public class FrontendCoverageService {
         private String versionNumber;
         private String branch;
         private String commitId;
+        private String buildId;
+        private String testStage;
 
         public String getVersionNumber() { return versionNumber; }
         public void setVersionNumber(String versionNumber) { this.versionNumber = versionNumber; }
@@ -201,5 +222,9 @@ public class FrontendCoverageService {
         public void setBranch(String branch) { this.branch = branch; }
         public String getCommitId() { return commitId; }
         public void setCommitId(String commitId) { this.commitId = commitId; }
+        public String getBuildId() { return buildId; }
+        public void setBuildId(String buildId) { this.buildId = buildId; }
+        public String getTestStage() { return testStage; }
+        public void setTestStage(String testStage) { this.testStage = testStage; }
     }
 }

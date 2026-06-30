@@ -1,10 +1,11 @@
 package com.oAT.web.control.api;
 
 import com.oAT.web.control.entity.ResultNotified;
-import com.oAT.web.coverage.UniversalCoverageIngestService;
-import com.oAT.web.coverage.UniversalCoverageIngestService.UniversalCoverageGenerateRequest;
-import com.oAT.web.coverage.UniversalCoverageIngestService.UniversalCoverageReportRequest;
+import com.oAT.web.api.ingest.CoverageIngestFacade;
 import com.oAT.web.coverage.universal.SourceType;
+import com.oAT.web.coveragecore.ingest.UniversalCoverageAliasReportRequest;
+import com.oAT.web.coveragecore.report.CoverageReportCommandService;
+import com.oAT.web.coveragecore.report.CoverageReportGenerationRequest;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.ProjectVo;
@@ -23,12 +24,15 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 @RequestMapping("/api/projects/{projectId}/apps/{appId}/coverage/universal/{sourceType}")
 @CrossOrigin(originPatterns = "*", allowCredentials = "true", methods = {RequestMethod.POST, RequestMethod.OPTIONS})
 public class UniversalCoverageApiControl {
-    private final UniversalCoverageIngestService universalCoverageIngestService;
+    private final CoverageIngestFacade coverageIngestFacade;
+    private final CoverageReportCommandService coverageReportCommandService;
     private final ProjectService projectService;
 
-    public UniversalCoverageApiControl(UniversalCoverageIngestService universalCoverageIngestService,
+    public UniversalCoverageApiControl(CoverageIngestFacade coverageIngestFacade,
+                                       CoverageReportCommandService coverageReportCommandService,
                                        ProjectService projectService) {
-        this.universalCoverageIngestService = universalCoverageIngestService;
+        this.coverageIngestFacade = coverageIngestFacade;
+        this.coverageReportCommandService = coverageReportCommandService;
         this.projectService = projectService;
     }
 
@@ -38,8 +42,8 @@ public class UniversalCoverageApiControl {
                                          @PathVariable String sourceType,
                                          @RequestBody String requestBody) {
         SourceType resolvedSourceType = resolveSourceType(sourceType);
-        UniversalCoverageReportRequest request = UniversalCoverageIngestService.parseReportRequest(requestBody);
-        String reportId = universalCoverageIngestService.saveReport(projectId, appId, resolvedSourceType, request);
+        UniversalCoverageAliasReportRequest request = UniversalCoverageAliasReportRequest.parse(requestBody);
+        String reportId = coverageIngestFacade.ingestUniversalAlias(projectId, appId, resolvedSourceType, request);
         return new ResultNotified<>(true, resolvedSourceType.name() + "覆盖率上报成功", reportId);
     }
 
@@ -52,10 +56,10 @@ public class UniversalCoverageApiControl {
                                            @PathVariable String appId,
                                            @PathVariable String sourceType,
                                            @SessionAttribute UserVo user,
-                                           @RequestBody(required = false) UniversalCoverageGenerateRequest request) {
+                                           @RequestBody(required = false) CoverageReportGenerationRequest request) {
         ensureProjectAccess(projectId, user);
         SourceType resolvedSourceType = resolveSourceType(sourceType);
-        CoverageReportIndex report = universalCoverageIngestService.generateReport(projectId, appId, resolvedSourceType, request);
+        CoverageReportIndex report = coverageReportCommandService.generateUniversalReport(projectId, appId, resolvedSourceType, request);
         return new ResultNotified<>(true, resolvedSourceType.name() + "覆盖率报告生成成功", report.getId());
     }
 

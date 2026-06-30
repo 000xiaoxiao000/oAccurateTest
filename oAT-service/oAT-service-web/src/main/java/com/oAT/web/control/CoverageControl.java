@@ -1,22 +1,18 @@
 package com.oAT.web.control;
 
 import com.oAT.web.config.FrontendProperties;
-import com.oAT.web.common.CoverageSourceClassUtil;
-import com.oAT.web.common.PaletteColors;
-import com.oAT.web.esDao.entity.ClassCoverageIndex;
+import com.oAT.web.coveragecore.query.CoverageCoreQueryService;
+import com.oAT.web.coveragecore.query.CoverageUnitQuery;
+import com.oAT.web.coveragecore.report.CoverageReportCommandService;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
-import com.oAT.web.service.CoverageService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SystemLogService;
 import com.oAT.web.service.entity.AppVo;
-import com.oAT.web.service.entity.CoverageComparisonVo;
 import com.oAT.web.service.entity.UserVo;
 import java.util.List;
 import java.util.Map;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -36,7 +32,10 @@ public class CoverageControl {
 
 
     @Autowired
-    private CoverageService coverageService;
+    private CoverageCoreQueryService coverageCoreQueryService;
+
+    @Autowired
+    private CoverageReportCommandService coverageReportCommandService;
 
     @Autowired
     private ProjectService projectService;
@@ -91,7 +90,7 @@ public class CoverageControl {
                           @RequestParam(required = false) Integer minComplexity,
                           @RequestParam(required = false) Integer maxComplexity,
                           Model model) {
-        CoverageReportIndex report = coverageService.getReport(reportId);
+        CoverageReportIndex report = coverageCoreQueryService.getReport(reportId);
         Assert.notNull(report, "覆盖率报告不存在");
         StringBuilder target = new StringBuilder("/p/")
                 .append(projectId).append("/apps/").append(report.getAppId())
@@ -113,7 +112,7 @@ public class CoverageControl {
      */
     @RequestMapping("/export")
     public void export(@RequestParam String reportId, HttpServletResponse response) throws IOException {
-        coverageService.exportReport(reportId, response);
+        coverageReportCommandService.exportReport(reportId, response);
     }
 
     /**
@@ -121,7 +120,7 @@ public class CoverageControl {
      */
     @RequestMapping("/export-methods")
     public void exportMethods(@RequestParam String reportId, HttpServletResponse response) throws IOException {
-        coverageService.exportMethodReport(reportId, response);
+        coverageReportCommandService.exportMethodReport(reportId, response);
     }
 
     /**
@@ -130,7 +129,7 @@ public class CoverageControl {
     @PostMapping("/generate")
     @ResponseBody
     public com.oAT.web.control.entity.ResultNotified<String> generate(@PathVariable String projectId, String appId, String versionNumber, String branch, String commitId, @SessionAttribute UserVo user) {
-        String jobId = coverageService.startGenerateJob(appId, versionNumber, branch, commitId);
+        String jobId = coverageReportCommandService.startVersionFullReport(appId, versionNumber, branch, commitId);
 
         // 记录日志
         AppVo appVo = appService.getApp(appId);
@@ -154,7 +153,7 @@ public class CoverageControl {
     @ResponseBody
     public com.oAT.web.control.entity.ResultNotified<String> generateIncremental(@PathVariable String projectId, String appId, String versionNumber, String branch, String commitId,
                                                                               String baseVersionNumber, String baseCommitId, @SessionAttribute UserVo user) {
-        String jobId = coverageService.startGenerateIncrementalJob(appId, versionNumber, branch, commitId, baseVersionNumber, baseCommitId);
+        String jobId = coverageReportCommandService.startIncrementalReport(appId, versionNumber, branch, commitId, baseVersionNumber, baseCommitId);
 
         // 记录日志
         AppVo appVo = appService.getApp(appId);
@@ -177,7 +176,7 @@ public class CoverageControl {
     @RequestMapping("/job/{jobId}")
     @ResponseBody
     public com.oAT.web.common.Job<String> getJob(@PathVariable String jobId) {
-        return coverageService.getJob(jobId);
+        return coverageReportCommandService.getJob(jobId);
     }
 
     /**
@@ -186,7 +185,7 @@ public class CoverageControl {
     @RequestMapping("/trend-data")
     @ResponseBody
     public List<Map<String, Object>> getTrendData(String appId, String versionNumber) {
-        return coverageService.getTrendData(appId, versionNumber);
+        return coverageReportCommandService.getTrendData(appId, versionNumber);
     }
 
     /**
@@ -194,42 +193,12 @@ public class CoverageControl {
      */
     @RequestMapping("/code")
     public String viewCode(@PathVariable String projectId, String appId, String reportId, String className, Model model) {
-        CoverageReportIndex report = coverageService.getReport(reportId);
+        CoverageReportIndex report = coverageCoreQueryService.getReport(reportId);
         if (report != null) {
             appId = report.getAppId();
         }
         Assert.hasText(appId, "应用不存在");
         return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/coverage/code?reportId=" + reportId + "&className=" + className);
-    }
-
-    private String toDisplayClassName(String className) {
-        if (!StringUtils.hasText(className)) {
-            return className;
-        }
-        String normalizedClassName = className.replace('$', '.');
-        int lastDot = normalizedClassName.lastIndexOf('.');
-        if (lastDot < 0 || lastDot >= normalizedClassName.length() - 1) {
-            return normalizedClassName;
-        }
-
-        String prefix = normalizedClassName.substring(0, lastDot + 1);
-        String tail = normalizedClassName.substring(lastDot + 1);
-        return prefix + CoverageSourceClassUtil.toTreeDisplayName(tail, "class");
-    }
-
-    // ========== Mascot Helper Methods (与 AIInteractive/ProjectInterceptor 保持一致) ==========
-
-    private String computeMascotPrimary(String projectId, String projectName) {
-        int seed = positiveHash(projectId + ":" + projectName);
-        return PaletteColors.pickPrimary(seed / 5 + 13);
-    }
-
-    private int positiveHash(String value) {
-        int hash = value == null ? 0 : value.hashCode();
-        if (hash == Integer.MIN_VALUE) {
-            return 0;
-        }
-        return Math.abs(hash);
     }
 
     /**
@@ -238,7 +207,7 @@ public class CoverageControl {
     @PostMapping("/delete")
     @ResponseBody
     public com.oAT.web.control.entity.ResultNotified<String> delete(@PathVariable String projectId, String reportId, @SessionAttribute UserVo user) {
-        CoverageReportIndex report = coverageService.getReport(reportId);
+        CoverageReportIndex report = coverageReportCommandService.getReport(reportId);
         if (report == null) {
             return new com.oAT.web.control.entity.ResultNotified<>(false, "Report not found", null);
         }
@@ -248,7 +217,7 @@ public class CoverageControl {
             return new com.oAT.web.control.entity.ResultNotified<>(false, "Permission denied", null);
         }
 
-        coverageService.deleteReport(reportId);
+        coverageReportCommandService.deleteReport(reportId);
 
         // 获取应用名称和报告类型
         AppVo appVo = appService.getApp(report.getAppId());
@@ -287,15 +256,17 @@ public class CoverageControl {
                                                                         @RequestParam(required = false) Double maxMethodRate,
                                                                         @RequestParam(required = false) Integer minComplexity,
                                                                         @RequestParam(required = false) Integer maxComplexity) {
-        return coverageService.getTreeNodes(reportId, parentPackage, className, methodName,
-                minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity);
-    }
-
-    private CoverageReportIndex getLatestFullReport(String appId, String versionNumber, String commitId) {
-        return coverageService.getLatestReportByType(appId, versionNumber, 0, commitId);
-    }
-
-    private CoverageReportIndex getLatestIncrementalReport(String appId, String versionNumber, String commitId) {
-        return coverageService.getLatestReportByType(appId, versionNumber, 1, commitId);
+        CoverageUnitQuery query = new CoverageUnitQuery();
+        query.setClassName(className);
+        query.setMethodName(methodName);
+        query.setMinRate(minRate);
+        query.setMaxRate(maxRate);
+        query.setMinBranchRate(minBranchRate);
+        query.setMaxBranchRate(maxBranchRate);
+        query.setMinMethodRate(minMethodRate);
+        query.setMaxMethodRate(maxMethodRate);
+        query.setMinComplexity(minComplexity);
+        query.setMaxComplexity(maxComplexity);
+        return coverageCoreQueryService.listTreeNodes(reportId, parentPackage, query);
     }
 }

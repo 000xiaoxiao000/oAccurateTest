@@ -1,288 +1,100 @@
 package com.oAT.web.service.impl;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ParseResult;
-import com.github.javaparser.ParserConfiguration;
-import com.github.javaparser.Position;
-import com.github.javaparser.Range;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.CallableDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.CompactConstructorDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.InitializerDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import com.oAT.web.common.FriendlyErrorMessageUtil;
 import com.oAT.web.common.Job;
 import com.oAT.web.common.compare.CompareResult;
 import com.oAT.web.common.compare.CompareUtils;
-import com.oAT.web.esDao.CaseCenterRepository;
-import com.oAT.web.esDao.VersionCenterRepository;
 import com.oAT.web.esDao.entity.SystemSnapshot;
-import com.oAT.web.esDao.entity.VersionCenterIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
-import com.oAT.web.esDao.entity.VersionItem;
 import com.oAT.web.exceptions.FriendlyException;
+import com.oAT.web.analytics.tia.VersionCompareImpactService;
+import com.oAT.web.domain.version.VersionGitDiffCompareService;
+import com.oAT.web.domain.version.VersionItemCatalogService;
+import com.oAT.web.domain.version.VersionCompareReportService;
 import com.oAT.web.service.ResourceService;
-import com.oAT.web.service.SnapshotSearchService;
 import com.oAT.web.service.SystemSnapshotService;
-import com.oAT.web.service.UsecaseSearchService;
 import com.oAT.web.service.VersionService;
 import com.oAT.web.service.entity.*;
-import com.oAT.web.service.entity.GitDiffVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.util.Assert;
-import org.springframework.util.FileSystemUtils;
 import org.springframework.util.StringUtils;
 
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.stream.Collectors;
 
 import static java.util.concurrent.Executors.*;
-
-import com.oAT.web.esDao.entity.CaseCenterIndex;
-import com.oAT.web.esDao.entity.CoverageReportIndex;
 
 @Service
 public class VersionServiceImpl implements VersionService, InitializingBean {
     static Logger logger = LoggerFactory.getLogger(VersionServiceImpl.class);
 
     @Autowired
-    VersionCenterRepository versionCenterRepository;
-
-    @Autowired
-    CaseCenterRepository caseCenterRepository;
+    SystemSnapshotService systemSnapshotService;
 
     @Autowired
     ResourceService resourceService;
 
     @Autowired
-    com.oAT.web.esDao.CoverageReportRepository coverageReportRepository;
-
-    @Autowired
-    SnapshotSearchService snapshotSearchService;
-
-    @Autowired
-    SystemSnapshotService systemSnapshotService;
-
-    @Autowired
-    UsecaseSearchService usecaseSearchService;
-
-    @Autowired
     private com.oAT.web.service.GitService gitService;
+
+    @Autowired
+    VersionGitDiffCompareService versionGitDiffCompareService;
+
+    @Autowired
+    VersionCompareReportService versionCompareReportService;
+
+    @Autowired
+    VersionCompareImpactService versionCompareImpactService;
+
+    @Autowired
+    VersionItemCatalogService versionItemCatalogService;
 
     private ExecutorService compareJobExecutors;
     private List<Job<CompareJobVo>> jobs;
 
     @Override
     public void addVersionItem(VersionItemVo itemVo) {
-        Assert.notNull(itemVo, "参数'itemVo'不能为空");
-        Assert.notNull(itemVo.getProgramFile(), "参数'itemVo.programFile'不能为空");
-        Assert.hasText(itemVo.getVersionNumber(), "参数'itemVo.versionNumber'不能为空");
-
-        VersionItem item = new VersionItem();
-        BeanUtils.copyProperties(itemVo, item);
-        VersionCenterIndex versionCenterIndex = new VersionCenterIndex(item);
-        versionCenterIndex = versionCenterRepository.save(versionCenterIndex);
-        convertVersionItem(versionCenterIndex);
+        versionItemCatalogService.addVersionItem(itemVo);
     }
 
     @Override
     public List<VersionItemVo> getVersionItemList(String projectId, String appId) {
-        List<VersionCenterIndex> list =
-                versionCenterRepository.findByVersionItem_ProjectIdAndVersionItem_AppId(projectId, appId);
-        // Batch fetch coverage reports for this app to avoid per-item queries
-        List<CoverageReportIndex> reports = coverageReportRepository.findByAppId(appId);
-        List<VersionItemVo> result = new ArrayList<>();
-        for (VersionCenterIndex versionCenterIndex : list) {
-            result.add(convertVersionItem(versionCenterIndex, reports));
-        }
-        return result;
+        return versionItemCatalogService.getVersionItemList(projectId, appId);
     }
 
     @Override
     public Page<VersionItemVo> getVersionItemList(String projectId, String appId, Pageable pageable) {
-        Page<VersionCenterIndex> page =
-                versionCenterRepository.findByVersionItem_ProjectIdAndVersionItem_AppId(projectId, appId, pageable);
-        // Batch fetch coverage reports for this app
-        List<CoverageReportIndex> reports = coverageReportRepository.findByAppId(appId);
-        List<VersionItemVo> vos = page.getContent().stream()
-                .map(idx -> convertVersionItem(idx, reports))
-                .collect(Collectors.toList());
-        return new PageImpl<>(vos, pageable, page.getTotalElements());
+        return versionItemCatalogService.getVersionItemList(projectId, appId, pageable);
     }
 
     @Override
     public VersionItemVo getLastVersionItem(String projectId, String appId) {
-        List<VersionCenterIndex> items =
-                versionCenterRepository.findTop1ByVersionItem_ProjectIdAndVersionItem_AppIdOrderByCreateTimeDesc(projectId, appId);
-        VersionCenterIndex item = (items != null && !items.isEmpty()) ? items.get(0) : null;
-        return Optional.ofNullable(item).map(this::convertVersionItem).orElse(null);
+        return versionItemCatalogService.getLastVersionItem(projectId, appId);
     }
 
     @Override
     public void doDeleteVersionItem(String id) {
-        Optional<VersionCenterIndex> indexOpt = versionCenterRepository.findById(id);
-        if (indexOpt.isPresent()) {
-            VersionItem item = indexOpt.get().getVersionItem();
-            if (item != null && StringUtils.hasText(item.getProgramFile())) {
-                try {
-                    String cacheRootStr = resourceService.getCacheRoot();
-                    File cacheRoot = new File(cacheRootStr);
-                    File file = new File(cacheRoot, item.getProgramFile());
-                    if (file.exists()) {
-                        File parent = file.getParentFile();
-                        // 判定逻辑：如果是 cacheRoot 下的子目录（即 md5 目录），则递归删除
-                        if (parent != null && !parent.equals(cacheRoot) && parent.getParentFile().equals(cacheRoot)) {
-                            // 删除包含文件的整个目录（MD5层级）
-                            FileSystemUtils.deleteRecursively(parent);
-                            logger.info("Deleted version directory: {}", parent.getAbsolutePath());
-                        } else {
-                            // 否则只删文件
-                            if (file.delete()) {
-                                logger.info("Deleted version file: {}", file.getAbsolutePath());
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.warn("Error deleting version file", e);
-                }
-            }
-        }
-        versionCenterRepository.deleteById(id);
+        versionItemCatalogService.deleteVersionItem(id);
     }
 
     @Override
     public VersionItemVo getVersionByGitInfo(String appId, String versionNumber, String branch, String commitId) {
-        List<VersionCenterIndex> results =
-                versionCenterRepository.findTop1ByVersionItem_AppIdAndVersionItem_VersionNumberAndVersionItem_RepoBranchAndVersionItem_RepoCommitId(appId, versionNumber, branch, commitId);
-        VersionCenterIndex c = (results != null && !results.isEmpty()) ? results.get(0) : null;
-        return c == null ? null : convertVersionItem(c);
+        return versionItemCatalogService.getVersionByGitInfo(appId, versionNumber, branch, commitId);
     }
 
     @Override
     public void deleteCacheFile(String path) {
-        if (!StringUtils.hasText(path)) {
-            return;
-        }
-        try {
-            String cacheRootStr = resourceService.getCacheRoot();
-            File cacheRoot = new File(cacheRootStr);
-            File file = new File(cacheRoot, path);
-            if (file.exists()) {
-                File parent = file.getParentFile();
-                // 判定逻辑：如果是 cacheRoot 下的子目录（即 md5 目录），则尝试递归删除整个目录
-                if (parent != null && !parent.equals(cacheRoot) && parent.getParentFile().equals(cacheRoot)) {
-                    FileSystemUtils.deleteRecursively(parent);
-                    logger.info("Deleted cache directory: {}", parent.getAbsolutePath());
-                } else {
-                    if (file.delete()) {
-                        logger.info("Deleted cache file: {}", file.getAbsolutePath());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Error deleting cache file: {}", path, e);
-        }
-    }
-
-    private VersionItemVo convertVersionItem(VersionCenterIndex index) {
-        // Fallback converter that fetches reports for the app and delegates to the batch-aware converter
-        VersionItemVo vo = new VersionItemVo();
-        BeanUtils.copyProperties(index.getVersionItem(), vo);
-        vo.setId(index.getId());
-        if (StringUtils.hasText(vo.getProgramFile())) {
-            vo.setProgramName(new File(vo.getProgramFile()).getName());
-
-            // 检查物理文件是否存在
-            File file = new File(vo.getProgramFile());
-            if (!file.exists()) {
-                file = new File(resourceService.getCacheRoot(), vo.getProgramFile());
-            }
-            vo.setFileExist(file.exists());
-        }
-        vo.setCreateTime(index.getCreateTime());
-        // Use a safe, slightly broader check when called without pre-fetched reports
-        List<CoverageReportIndex> reports = coverageReportRepository.findByAppId(vo.getAppId());
-        return convertVersionItem(index, reports);
-    }
-
-    /**
-     * Batch-aware converter: use pre-fetched coverage reports to determine whether this version has any related report.
-     */
-    private VersionItemVo convertVersionItem(VersionCenterIndex index, List<CoverageReportIndex> reports) {
-        VersionItemVo vo = new VersionItemVo();
-        BeanUtils.copyProperties(index.getVersionItem(), vo);
-        vo.setId(index.getId());
-        if (StringUtils.hasText(vo.getProgramFile())) {
-            vo.setProgramName(new File(vo.getProgramFile()).getName());
-
-            // 检查物理文件是否存在
-            File file = new File(vo.getProgramFile());
-            if (!file.exists()) {
-                file = new File(resourceService.getCacheRoot(), vo.getProgramFile());
-            }
-            vo.setFileExist(file.exists());
-        }
-        vo.setCreateTime(index.getCreateTime());
-
-        // Normalize version and commit for safe comparison
-        String version = vo.getVersionNumber() == null ? null : vo.getVersionNumber().trim();
-        String commit = vo.getRepoCommitId() == null ? null : vo.getRepoCommitId().trim();
-
-        boolean hasReport = false;
-        if (StringUtils.hasText(version)) {
-            // 更稳健的匹配逻辑：逐条检查 coverage report，支持短 SHA 与全 SHA 前缀匹配
-            if (reports != null) {
-                for (CoverageReportIndex r : reports) {
-                    if (r == null) continue;
-                    String rVer = r.getVersionNumber() == null ? null : r.getVersionNumber().trim();
-                    String rCommit = r.getRepoCommitId() == null ? null : r.getRepoCommitId().trim();
-                    String rBase = r.getBaseVersionNumber() == null ? null : r.getBaseVersionNumber().trim();
-
-                    // 如果版本号匹配且提交 ID 可比对，则尝试更宽松的匹配（相等或前缀匹配）
-                    if (StringUtils.hasText(rVer) && rVer.equals(version)) {
-                        if (StringUtils.hasText(commit) && StringUtils.hasText(rCommit)) {
-                            if (rCommit.equals(commit) || rCommit.startsWith(commit) || commit.startsWith(rCommit)) {
-                                hasReport = true;
-                                break;
-                            }
-                        } else {
-                            // 版本号匹配且 report 没有提交信息，则也视为存在覆盖率报告
-                            hasReport = true;
-                            break;
-                        }
-                    }
-                    // 检查是否为某些增量报告引用了该版本作为 baseVersion
-                    if (StringUtils.hasText(rBase) && rBase.equals(version)) {
-                        hasReport = true;
-                        break;
-                    }
-                }
-            }
-        }
-        vo.setHasReport(hasReport);
-        return vo;
+        versionItemCatalogService.deleteCacheFile(path);
     }
 
     @Override
@@ -361,141 +173,9 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 job.setProgress(new Job.JobProgress());
                 job.getProgress().next("获取Git差异", 50);
 
-                List<GitDiffVo> diffs = gitService.getDiffDetail(appinfo.getRepoAddress(), appinfo.getRepoUserName(),
-                        appinfo.getRepoPassword(), oldCommit, newCommit);
-
                 job.getProgress().next("生成差异结果", 40);
-                List<CompareResult> differences = new ArrayList<>();
-                int totalClasses = 0, addedClasses = 0, deletedClasses = 0, modifiedClasses = 0;
-                int addedMethods = 0, deletedMethods = 0, modifiedMethods = 0;
-
-                if (diffs != null) {
-                    String packageFilter = normalizePackageFilter(packageName);
-                    for (GitDiffVo diffVo : diffs) {
-                        String changeType = diffVo.getChangeType();
-                        String dottedName = diffVo.getClassName();
-
-                        // remove any leading dots or slashes
-                        dottedName = dottedName.replaceFirst("^[./]+", "");
-                        if (!matchesPackageFilter(dottedName, packageFilter)) {
-                            continue;
-                        }
-
-                        // prepare possible file path for fetching source
-                        String filePath = dottedName.replace('.', '/') + ".java";
-
-                        CompareResult.Model classModel;
-                        if ("ADD".equals(changeType)) classModel = CompareResult.Model.add;
-                        else if ("DELETE".equals(changeType)) classModel = CompareResult.Model.delete;
-                        else classModel = CompareResult.Model.update;
-
-                        CompareResult r = new CompareResult(dottedName, classModel);
-                        totalClasses++;
-                        if (classModel == CompareResult.Model.add) addedClasses++;
-                        else if (classModel == CompareResult.Model.delete) deletedClasses++;
-                        else modifiedClasses++;
-
-                        try {
-                            String repo = appinfo.getRepoAddress();
-                            String user = appinfo.getRepoUserName();
-                            String pass = appinfo.getRepoPassword();
-                            String oldContent = null, newContent = null;
-
-                            // 优先使用 GitDiffVo 提供的原始路径
-                            List<String> candidates = new ArrayList<>();
-                            if (StringUtils.hasText(diffVo.getOriginalPath())) {
-                                candidates.add(diffVo.getOriginalPath());
-                            }
-                            candidates.add("src/main/java/" + filePath);
-                            candidates.add("src/test/java/" + filePath);
-                            candidates.add(filePath);
-
-                            for (String cand : candidates) {
-                                String o = null;
-                                if (classModel != CompareResult.Model.add && oldCommit != null && !oldCommit.isEmpty()) {
-                                    o = gitService.getFileContent(repo, user, pass, oldCommit, cand);
-                                }
-                                String n = null;
-                                if (classModel != CompareResult.Model.delete) {
-                                    n = gitService.getFileContent(repo, user, pass, newCommit, cand);
-                                }
-
-                                if ((classModel == CompareResult.Model.add && n != null) ||
-                                    (classModel == CompareResult.Model.delete && o != null) ||
-                                    (classModel == CompareResult.Model.update && (o != null || n != null))) {
-                                    oldContent = o;
-                                    newContent = n;
-                                    break;
-                                }
-                            }
-
-                            List<Integer> changedLines = diffVo.getChangedLines();
-                            Map<String, MethodInfo> oldMethods = (oldContent == null) ? Collections.emptyMap() : extractMethodsWithLines(oldContent);
-                            Map<String, MethodInfo> newMethods = (newContent == null) ? Collections.emptyMap() : extractMethodsWithLines(newContent);
-
-                            if (classModel == CompareResult.Model.delete) {
-                                job.getLogger().info(String.format("发现【删除】类: %s", dottedName));
-                                for (Map.Entry<String, MethodInfo> eMethod : oldMethods.entrySet()) {
-                                    MethodInfo om = eMethod.getValue();
-                                    r.add(eMethod.getKey(), String.format("行: %d-%d", om.startLine, om.endLine), CompareResult.Model.delete);
-                                    deletedMethods++;
-                                }
-                            } else if (classModel == CompareResult.Model.add) {
-                                job.getLogger().info(String.format("发现【新增】类: %s", dottedName));
-                                for (Map.Entry<String, MethodInfo> eMethod : newMethods.entrySet()) {
-                                    MethodInfo nm = eMethod.getValue();
-                                    r.add(eMethod.getKey(), String.format("行: %d-%d", nm.startLine, nm.endLine), CompareResult.Model.add);
-                                    addedMethods++;
-                                }
-                            } else {
-                                // Compare methods for updated classes
-                                boolean nameLogged = false;
-                                Set<String> retainedMethodNames = new LinkedHashSet<>();
-                                for (Map.Entry<String, MethodInfo> eMethod : oldMethods.entrySet()) {
-                                    String mName = eMethod.getKey();
-                                    MethodInfo om = eMethod.getValue();
-                                    if (newMethods.containsKey(mName)) {
-                                        MethodInfo nm = newMethods.get(mName);
-                                        boolean bodyChanged = !Objects.equals(om.body, nm.body);
-                                        boolean linesIntersect = changedLines.stream().anyMatch(l -> l >= nm.startLine && l <= nm.endLine);
-                                        if (bodyChanged || linesIntersect) {
-                                            if (!nameLogged) { job.getLogger().info(String.format("发现【修改】类: %s", dottedName)); nameLogged = true; }
-                                            r.add(mName, String.format("行: %d-%d", nm.startLine, nm.endLine), CompareResult.Model.update);
-                                            retainedMethodNames.add(mName);
-                                            modifiedMethods++;
-                                            job.getLogger().info(String.format("    - 变更方法: %s (行: %d-%d)", mName, nm.startLine, nm.endLine));
-                                        }
-                                        newMethods.remove(mName);
-                                    } else {
-                                        if (!nameLogged) { job.getLogger().info(String.format("发现【修改】类: %s", dottedName)); nameLogged = true; }
-                                        r.add(mName, String.format("行: %d-%d", om.startLine, om.endLine), CompareResult.Model.delete);
-                                        retainedMethodNames.add(mName);
-                                        deletedMethods++;
-                                        job.getLogger().info(String.format("    - 删除方法: %s", mName));
-                                    }
-                                }
-                                for (Map.Entry<String, MethodInfo> eNew : newMethods.entrySet()) {
-                                    if (!nameLogged) { job.getLogger().info(String.format("发现【修改】类: %s", dottedName)); nameLogged = true; }
-                                    MethodInfo nm = eNew.getValue();
-                                    r.add(eNew.getKey(), String.format("行: %d-%d", nm.startLine, nm.endLine), CompareResult.Model.add);
-                                    addedMethods++;
-                                    job.getLogger().info(String.format("    - 新增方法: %s (行: %d-%d)", eNew.getKey(), nm.startLine, nm.endLine));
-                                }
-                                if (!nameLogged) {
-                                    // Modified but methods didn't show changes, maybe comments or imports
-                                    job.getLogger().info(String.format("发现【修改】类(细节无显著变化): %s", dottedName));
-                                } else {
-                                    keepOnlyDeclaredClassMethods(r, dottedName, retainedMethodNames);
-                                }
-                            }
-                        } catch (Exception e) {
-                            job.getLogger().error("处理类 " + dottedName + " 差异失败: " + e.getMessage());
-                        }
-                        differences.add(r);
-                    }
-                }
-                job.getLogger().info(String.format("比对完成: 共分析 %d 个类 (新增:%d, 修改:%d, 删除:%d)", totalClasses, addedClasses, modifiedClasses, deletedClasses));
-                job.getLogger().info(String.format("方法变更统计: 新增:%d, 修改:%d, 删除:%d", addedMethods, modifiedMethods, deletedMethods));
+                List<CompareResult> differences = versionGitDiffCompareService.buildGitDifferences(
+                        job, appinfo, packageName, oldCommit, newCommit);
 
                 // 初始化并设置差异和影响集合，防止后续保存时报空指针
                 job.getData().setDifferences(differences);
@@ -533,7 +213,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
                 for (CompareResult compareResult : differences) {
                     if (compareResult.getModel() != CompareResult.Model.same) {
                         try {
-                            findUsecaseImpact(job, compareResult);
+                            versionCompareImpactService.findUsecaseImpact(job, compareResult);
                         } catch (Exception e) {
                             job.getLogger().error(e);
                         }
@@ -675,7 +355,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         for (CompareResult compareResult : difference) {
             // 新增的类也可能会产生影响（例如新增的接口实现），建议分析所有非 same 的类
             if (compareResult.getModel() != CompareResult.Model.same) {
-                findUsecaseImpact(job, compareResult);
+                versionCompareImpactService.findUsecaseImpact(job, compareResult);
             }
             job.getProgress().loaded++;
         }
@@ -694,253 +374,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     private void saveCompareReport(Job<CompareJobVo> job) {
         flushJobState(job);
-        CompareJobVo vo = job.getData();
-        VersionCompareReport report = new VersionCompareReport();
-        report.setProjectId(job.getData().getProjectId());
-        report.setAppId(job.getData().getAppId());
-        report.setJobId(job.getId());
-        report.setJobLog(vo.getLog());
-        report.setJobName(vo.getName());
-
-        String sv = vo.getGitOldCommit();
-        if (!StringUtils.hasText(sv)) sv = vo.getSourceFile();
-        report.setSourceVersion(sv);
-
-        String tv = vo.getGitNewCommit();
-        if (!StringUtils.hasText(tv)) tv = vo.getTargetFile();
-        report.setTargetVersion(tv);
-
-        report.setGitBranch(vo.getGitBranch());
-        report.setGitOldCommit(vo.getGitOldCommit());
-        report.setGitNewCommit(vo.getGitNewCommit());
-
-        List<VersionCompareReport.Difference> listDifference = new ArrayList<>();
-        List<CompareResult> diffsToIterate = vo.getDifferences() == null ? Collections.emptyList() : vo.getDifferences();
-        for (CompareResult difference : diffsToIterate) {
-            listDifference.add(new VersionCompareReport.Difference("class", difference.getModel().toString(),
-                    difference.getClassName()));
-            for (CompareResult.Method method : difference.getMethods()) {
-                String methodValue = difference.getClassName() + "\t" + method.getName() + "\t" + (method.getDesc() == null ? "" : method.getDesc());
-                listDifference.add(new VersionCompareReport.Difference("method", method.getModel().toString(), methodValue));
-            }
-        }
-        report.setDifferences(listDifference.toArray(new VersionCompareReport.Difference[0]));
-
-        List<VersionCompareReport.ImpactCase> listCase = new ArrayList<>();
-        Map<String, CompareJobVo.UsecaseUnion> impact = vo.getImpactUsecases() == null ? Collections.emptyMap() : vo.getImpactUsecases();
-        impact.values().forEach(a -> listCase.add(new VersionCompareReport.ImpactCase(a.getUsecase().getId(),
-                a.getClasses().toArray(new String[0]))));
-        report.setCases(listCase.toArray(new VersionCompareReport.ImpactCase[0]));
-
-        report.setAddClassCount(vo.getAddClassCount());
-        report.setUpdateClassCount(vo.getUpdateClassCount());
-        report.setDeleteClassCount(vo.getDeleteClassCount());
-        report.setAddMethodCount(vo.getAddMethodCount());
-        report.setUpdateMethodCount(vo.getUpdateMethodCount());
-        report.setDeleteMethodCount(vo.getDeleteMethodCount());
-        report.setImpactCaseCount(impact.size());
-
-        job.getLogger().info(String.format("开始保存版本比对报告 id=%s 差异数=%s 影响用例数=%s",
-                job.getId(), listDifference.size(), listCase.size()));
-        logger.info("保存版本比对报告 id={} diffs={} cases={}", job.getId(), listDifference.size(), listCase.size());
-
-        VersionCenterIndex index = new VersionCenterIndex(report);
-        index.setId(job.getId());
-        try {
-            index = versionCenterRepository.save(index);
-            boolean saved = versionCenterRepository.findById(index.getId()).isPresent();
-            Assert.isTrue(saved, "比对报告保存失败，id=" + index.getId());
-            job.getLogger().info("比对报告保存成功 id=" + index.getId());
-        } catch (Exception e) {
-            job.getLogger().error("比对报告保存失败 id=" + job.getId() + " 错误=" + e.getMessage());
-            logger.error("比对报告保存失败 id={} diffs={} cases={}", job.getId(), listDifference.size(), listCase.size(), e);
-            throw e;
-        }
-    }
-
-    private void findUsecaseImpact(Job<CompareJobVo> job, CompareResult compareResult) {
-        Map<String, CompareJobVo.SnapshotUnion> cases = job.getData().getImpactSnapshot();
-        List<SystemSnapshot> list = Collections.emptyList();
-        String projectId = job.getData().getProjectId();
-        String appId = job.getData().getAppId();
-        String originalName = compareResult.getClassName();
-        if (originalName != null && originalName.startsWith("/")) {
-            originalName = originalName.substring(1);
-        }
-        String classDot = Optional.ofNullable(originalName).orElse("");
-        classDot = classDot.replace('/', '.');
-
-        int appSnapshotCount = Optional.ofNullable(job.getData().getAppSnapshotCount()).orElse(0);
-
-        if (compareResult.getModel() == CompareResult.Model.delete || compareResult.getModel() == CompareResult.Model.add) {
-            List<String> classCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot);
-            List<String> classPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot);
-            job.getLogger().info(String.format("查找快照影响 类名：%s 类级候选：%s 模式：%s（当前应用快照数：%s）",
-                    classDot, String.join(" | ", classCandidates), String.join(" | ", classPatterns), appSnapshotCount));
-            list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
-            String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-            job.getLogger().info(String.format("查找快照影响 类名：%s 类级检索影响数：%s，命中快照：%s",
-                    classDot, list.size(), StringUtils.hasText(titles) ? titles : "-"));
-        } else if (compareResult.getModel() == CompareResult.Model.update) {
-            List<String> filteredNames = normalizeMethodNamesForSearch(classDot, compareResult);
-            List<String> fallbackMethodNames = buildMethodFallbackCandidates(filteredNames);
-
-            if (filteredNames.isEmpty()) {
-                List<String> classCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot);
-                List<String> classPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot);
-                job.getLogger().info(String.format("查找快照影响 类名：%s (方法未解析或仅占位) 类级候选：%s 模式：%s（当前应用快照数：%s）",
-                        classDot, String.join(" | ", classCandidates), String.join(" | ", classPatterns), appSnapshotCount));
-                list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
-                String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                job.getLogger().info(String.format("查找快照影响 类名：%s (方法未解析或仅占位) 影响数：%s，命中快照：%s",
-                        classDot, list.size(), StringUtils.hasText(titles) ? titles : "-"));
-            } else {
-                List<String> methodCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot, StringUtils.toStringArray(fallbackMethodNames));
-                List<String> methodPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot, StringUtils.toStringArray(fallbackMethodNames));
-                job.getLogger().info(String.format("查找快照影响 类名：%s 方法候选：%s 检索候选：%s 模式：%s（当前应用快照数：%s）",
-                        classDot, String.join(", ", fallbackMethodNames), String.join(" | ", methodCandidates), String.join(" | ", methodPatterns), appSnapshotCount));
-                list = snapshotSearchService.searchByCode(projectId, appId, classDot, StringUtils.toStringArray(fallbackMethodNames));
-                if (list.isEmpty()) {
-                    List<String> classCandidates = snapshotSearchService.buildCodeSearchCandidates(classDot);
-                    List<String> classPatterns = snapshotSearchService.buildCodeSearchPatterns(classDot);
-                    list = snapshotSearchService.searchByCode(projectId, appId, classDot, new String[0]);
-                    String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s 未找到，回退到类级别检索；类级候选：%s 模式：%s 影响数：%s，命中快照：%s",
-                            classDot, String.join(", ", fallbackMethodNames), String.join(" | ", classCandidates), String.join(" | ", classPatterns), list.size(), StringUtils.hasText(titles) ? titles : "-"));
-                } else {
-                    String titles = list.stream().map(SystemSnapshot::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                    job.getLogger().info(String.format("查找快照影响 类名：%s 方法：%s 影响数：%s，命中快照：%s",
-                            classDot, String.join(", ", fallbackMethodNames), list.size(), StringUtils.hasText(titles) ? titles : "-"));
-                }
-            }
-        }
-        Optional.ofNullable(list).orElse(Collections.emptyList()).stream().filter(a -> !cases.containsKey(a.getId())).forEach(a -> {
-            if (!cases.containsKey(a.getId())) {
-                cases.put(a.getId(), new CompareJobVo.SnapshotUnion(a));
-            }
-            cases.get(a.getId()).getClasses().add(compareResult.getClassName());
-        });
-
-        collectUsecaseImpact(job, compareResult, classDot, list);
-    }
-
-    private void collectUsecaseImpact(Job<CompareJobVo> job, CompareResult compareResult, String classDot, List<SystemSnapshot> matchedSnapshots) {
-        Map<String, CompareJobVo.UsecaseUnion> cases = job.getData().getImpactUsecases();
-        if (cases == null) {
-            return;
-        }
-        String projectId = job.getData().getProjectId();
-        List<UsecaseVo> usecases = Collections.emptyList();
-
-        if (compareResult.getModel() == CompareResult.Model.delete || compareResult.getModel() == CompareResult.Model.add) {
-            usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
-            String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-            String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-            job.getLogger().info(String.format("查找影响用例 类名：%s 类级检索影响数：%s，命中用例ID：%s，命中用例：%s",
-                    classDot, usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
-        } else if (compareResult.getModel() == CompareResult.Model.update) {
-            List<String> filteredNames = normalizeMethodNamesForSearch(classDot, compareResult);
-            List<String> fallbackMethodNames = buildMethodFallbackCandidates(filteredNames);
-            if (fallbackMethodNames.isEmpty()) {
-                usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
-                String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                job.getLogger().info(String.format("查找影响用例 类名：%s (方法未解析或仅占位) 影响数：%s，命中用例ID：%s，命中用例：%s",
-                        classDot, usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
-            } else {
-                LinkedHashSet<String> srcMethods = new LinkedHashSet<>();
-                for (String methodName : fallbackMethodNames) {
-                    if (StringUtils.hasText(methodName)) {
-                        srcMethods.add(classDot.replace('.', '/') + " " + methodName);
-                    }
-                }
-                if (!srcMethods.isEmpty()) {
-                    LinkedHashSet<String> queryMethods = new LinkedHashSet<>(srcMethods);
-                    for (String methodName : fallbackMethodNames) {
-                        if (StringUtils.hasText(methodName)) {
-                            queryMethods.add(classDot + " " + methodName);
-                        }
-                    }
-                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法源码键：%s",
-                            classDot, String.join(" | ", queryMethods)));
-                    usecases = usecaseSearchService.getBySrcMethod(projectId, queryMethods.toArray(new String[0]));
-                }
-                if (usecases.isEmpty()) {
-                    usecases = usecaseSearchService.getBySrcClass(projectId, "/" + classDot.replace('.', '/'));
-                    String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                    String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 未找到，回退到类级别检索，影响数：%s，命中用例ID：%s，命中用例：%s",
-                            classDot, String.join(", ", fallbackMethodNames), usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
-                } else {
-                    String usecaseIds = usecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                    String titles = usecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                    job.getLogger().info(String.format("查找影响用例 类名：%s 方法：%s 影响数：%s，命中用例ID：%s，命中用例：%s",
-                            classDot, String.join(", ", fallbackMethodNames), usecases.size(), StringUtils.hasText(usecaseIds) ? usecaseIds : "-", StringUtils.hasText(titles) ? titles : "-"));
-                }
-            }
-        }
-
-        if (usecases.isEmpty()) {
-            List<UsecaseVo> fallbackUsecases = collectUsecasesByMatchedSnapshots(projectId, cases, matchedSnapshots);
-            if (!fallbackUsecases.isEmpty()) {
-                String snapshotIds = Optional.ofNullable(matchedSnapshots).orElse(Collections.emptyList()).stream()
-                        .map(SystemSnapshot::getId)
-                        .filter(StringUtils::hasText)
-                        .distinct()
-                        .collect(Collectors.joining(", "));
-                String usecaseIds = fallbackUsecases.stream().map(UsecaseVo::getId).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                String titles = fallbackUsecases.stream().map(UsecaseVo::getTitle).filter(StringUtils::hasText).distinct().collect(Collectors.joining(", "));
-                job.getLogger().info(String.format("查找影响用例 类名：%s 直接源码检索未命中，改为基于当前命中系统快照反推，命中快照ID：%s，影响数：%s，命中用例ID：%s，命中用例：%s",
-                        classDot,
-                        StringUtils.hasText(snapshotIds) ? snapshotIds : "-",
-                        fallbackUsecases.size(),
-                        StringUtils.hasText(usecaseIds) ? usecaseIds : "-",
-                        StringUtils.hasText(titles) ? titles : "-"));
-                usecases = fallbackUsecases;
-            }
-        }
-
-        Optional.ofNullable(usecases).orElse(Collections.emptyList()).stream().filter(a -> !cases.containsKey(a.getId())).forEach(a -> {
-            if (!cases.containsKey(a.getId())) {
-                cases.put(a.getId(), new CompareJobVo.UsecaseUnion(a));
-            }
-            cases.get(a.getId()).getClasses().add(compareResult.getClassName());
-        });
-    }
-
-    private List<UsecaseVo> collectUsecasesByMatchedSnapshots(String projectId,
-                                                              Map<String, CompareJobVo.UsecaseUnion> existingCases,
-                                                              List<SystemSnapshot> matchedSnapshots) {
-        if (matchedSnapshots == null || matchedSnapshots.isEmpty()) {
-            return Collections.emptyList();
-        }
-        LinkedHashMap<String, UsecaseVo> collected = new LinkedHashMap<>();
-        for (SystemSnapshot matchedSnapshot : matchedSnapshots) {
-            if (matchedSnapshot == null || !StringUtils.hasText(matchedSnapshot.getId())) {
-                continue;
-            }
-            String snapshotId = matchedSnapshot.getId();
-            List<CaseCenterIndex> indexes = caseCenterRepository.findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshotId);
-            for (CaseCenterIndex index : indexes) {
-                if (index == null || index.getUsecase() == null || !StringUtils.hasText(index.getId())) {
-                    continue;
-                }
-                if (existingCases != null && existingCases.containsKey(index.getId())) {
-                    continue;
-                }
-                collected.putIfAbsent(index.getId(), convertUsecaseIndex(index));
-            }
-        }
-        return new ArrayList<>(collected.values());
-    }
-
-    private UsecaseVo convertUsecaseIndex(CaseCenterIndex index) {
-        UsecaseVo vo = new UsecaseVo();
-        BeanUtils.copyProperties(index.getUsecase(), vo);
-        vo.setId(index.getId());
-        vo.setCreateTime(index.getCreateTime());
-        vo.setUpdateTime(index.getUpdateTime());
-        return vo;
+        versionCompareReportService.saveCompareReport(job);
     }
 
     private void countJobInfo(List<CompareResult> result, CompareJobVo jobInfo) {
@@ -985,18 +419,7 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Override
     public VersionCompareReport getCompareReport(String compareId) {
-        Assert.hasText(compareId, "参数compareId不能为空");
-
-        Optional<VersionCenterIndex> optional = versionCenterRepository.findById(compareId);
-        Assert.isTrue(optional.isPresent(), String.format("找不到id=%s的比对报告", compareId));
-
-        VersionCenterIndex index = optional.get();
-        Assert.isTrue("compareReport".equalsIgnoreCase(index.getType()), String.format("id=%s对应的记录不是比对报告", compareId));
-        Assert.notNull(index.getCompareReport(), String.format("id=%s对应的记录不是比对报告", compareId));
-
-        VersionCompareReport report = index.getCompareReport();
-        report.setCreateTime(index.getCreateTime());
-        return report;
+        return versionCompareReportService.getCompareReport(compareId);
     }
 
     @Override
@@ -1007,129 +430,12 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
 
     @Override
     public Page<VersionCompareReportVo> getCompareReportList(String projectId, String appId, Pageable pageable) {
-        Page<VersionCenterIndex> page = versionCenterRepository.findCompareReportPage(projectId, appId, pageable);
-        List<VersionCompareReportVo> result = page.getContent().stream()
-                .map(this::convertCompareReport)
-                .collect(Collectors.toList());
-        return new PageImpl<>(result, pageable, page.getTotalElements());
-    }
-
-    private VersionCompareReportVo convertCompareReport(VersionCenterIndex index) {
-        VersionCompareReport reportIndex = index.getCompareReport();
-        VersionCompareReportVo report = new VersionCompareReportVo(index.getId(),
-                reportIndex == null ? null : reportIndex.getJobName());
-        if (reportIndex != null) {
-            report.setSourceVersion(reportIndex.getSourceVersion());
-            report.setTargetVersion(reportIndex.getTargetVersion());
-            report.setGitBranch(reportIndex.getGitBranch());
-            report.setGitOldCommit(reportIndex.getGitOldCommit());
-            report.setGitNewCommit(reportIndex.getGitNewCommit());
-            report.setAddClassCount(reportIndex.getAddClassCount());
-            report.setUpdateClassCount(reportIndex.getUpdateClassCount());
-            report.setDeleteClassCount(reportIndex.getDeleteClassCount());
-            report.setAddMethodCount(reportIndex.getAddMethodCount());
-            report.setUpdateMethodCount(reportIndex.getUpdateMethodCount());
-            report.setDeleteMethodCount(reportIndex.getDeleteMethodCount());
-            report.setImpactCaseCount(reportIndex.getImpactCaseCount());
-        }
-        report.setCreateTime(index.getCreateTime());
-        return report;
+        return versionCompareReportService.getCompareReportList(projectId, appId, pageable);
     }
 
     @Override
     public void deleteCompareReport(String projectId, String reportId) {
-        Optional<VersionCenterIndex> index = versionCenterRepository.findById(reportId);
-        Assert.isTrue(index.isPresent(), "找不到比对报告，id=" + reportId);
-        Assert.isTrue("compareReport".equalsIgnoreCase(index.get().getType()), "找不到比对报告，id=" + reportId);
-        Assert.isTrue(index.get().getCompareReport().getProjectId().equalsIgnoreCase(projectId), "项目ID不符，非法的操作");
-        versionCenterRepository.deleteById(reportId);
-    }
-
-    private List<String> normalizeMethodNamesForSearch(String classDot, CompareResult compareResult) {
-        final String simpleClassName = classDot.contains(".") ? classDot.substring(classDot.lastIndexOf('.') + 1) : classDot;
-        final String nestedPrefix = simpleClassName + "$";
-        LinkedHashSet<String> filteredNames = Arrays.stream(compareResult.getMethods())
-                .map(CompareResult.Method::getName)
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(n -> !n.isEmpty() && !n.startsWith("("))
-                .map(n -> {
-                    if (n.startsWith(simpleClassName + ".")) {
-                        return n.substring(simpleClassName.length() + 1);
-                    }
-                    if (n.startsWith(nestedPrefix)) {
-                        int methodSeparator = n.lastIndexOf('.');
-                        if (methodSeparator >= 0 && methodSeparator < n.length() - 1) {
-                            return n.substring(methodSeparator + 1);
-                        }
-                    }
-                    return n;
-                })
-                .filter(n -> !n.contains("$"))
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        return new ArrayList<>(filteredNames);
-    }
-
-    private List<String> buildMethodFallbackCandidates(List<String> methodNames) {
-        if (methodNames == null || methodNames.isEmpty()) {
-            return Collections.emptyList();
-        }
-        LinkedHashSet<String> candidates = new LinkedHashSet<>();
-        for (String methodName : methodNames) {
-            if (!StringUtils.hasText(methodName)) {
-                continue;
-            }
-            String trimmed = methodName.trim();
-            candidates.add(trimmed);
-            int dotIndex = trimmed.lastIndexOf('.');
-            if (dotIndex >= 0 && dotIndex < trimmed.length() - 1) {
-                candidates.add(trimmed.substring(dotIndex + 1));
-            }
-        }
-        return new ArrayList<>(candidates);
-    }
-
-    private void keepOnlyDeclaredClassMethods(CompareResult compareResult, String dottedName, Set<String> retainedMethodNames) {
-        if (compareResult == null || retainedMethodNames == null || retainedMethodNames.isEmpty()) {
-            return;
-        }
-        String simpleClassName = dottedName.contains(".") ? dottedName.substring(dottedName.lastIndexOf('.') + 1) : dottedName;
-        String nestedPrefix = simpleClassName + "$";
-        CompareResult.Method[] methods = compareResult.getMethods();
-        if (methods == null || methods.length == 0) {
-            return;
-        }
-        LinkedHashSet<String> normalizedRetained = retainedMethodNames.stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        compareResult.removeMethodsIf(method -> {
-            if (method == null || !StringUtils.hasText(method.getName())) {
-                return false;
-            }
-            String trimmed = method.getName().trim();
-            if (normalizedRetained.contains(trimmed)) {
-                return false;
-            }
-            if (trimmed.startsWith(simpleClassName + ".")) {
-                return false;
-            }
-            return trimmed.startsWith(nestedPrefix);
-        });
-    }
-
-    private String normalizePackageFilter(String packageName) {
-        if (!StringUtils.hasText(packageName)) {
-            return null;
-        }
-        String normalized = packageName.trim();
-        if ("*".equals(normalized)) {
-            return null;
-        }
-        if (normalized.endsWith(".*")) {
-            normalized = normalized.substring(0, normalized.length() - 2);
-        }
-        return normalized;
+        versionCompareReportService.deleteCompareReport(projectId, reportId);
     }
 
     private String shortCommit(String commitId) {
@@ -1140,223 +446,4 @@ public class VersionServiceImpl implements VersionService, InitializingBean {
         return trimmed.length() > 7 ? trimmed.substring(0, 7) : trimmed;
     }
 
-    private boolean matchesPackageFilter(String className, String packageFilter) {
-        if (!StringUtils.hasText(className)) {
-            return true;
-        }
-        if (!StringUtils.hasText(packageFilter)) {
-            return true;
-        }
-        return className.equals(packageFilter) || className.startsWith(packageFilter + ".");
-    }
-
-    // Helper to hold method body and line range
-    private static class MethodInfo {
-        String body;
-        int startLine;
-        int endLine;
-
-        MethodInfo(String body, int startLine, int endLine) {
-            this.body = body;
-            this.startLine = startLine;
-            this.endLine = endLine;
-        }
-    }
-
-    // Extract methods and their start/end line numbers from source text using Java AST
-    private Map<String, MethodInfo> extractMethodsWithLines(String source) {
-        Map<String, MethodInfo> result = new LinkedHashMap<>();
-        if (!StringUtils.hasText(source)) {
-            return result;
-        }
-
-        ParserConfiguration configuration = new ParserConfiguration();
-        configuration.setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
-        JavaParser parser = new JavaParser(configuration);
-        ParseResult<CompilationUnit> parseResult = parser.parse(source);
-        if (!parseResult.isSuccessful() || !parseResult.getResult().isPresent()) {
-            return result;
-        }
-
-        CompilationUnit cu = parseResult.getResult().get();
-        AstMethodCollector collector = new AstMethodCollector(source, result);
-        collector.visit(cu, new ArrayDeque<>());
-        return result;
-    }
-
-    private static class AstMethodCollector extends VoidVisitorAdapter<Deque<String>> {
-        private final String source;
-        private final Map<String, MethodInfo> methods;
-        private final IdentityHashMap<Node, Integer> anonymousCounters = new IdentityHashMap<>();
-
-        private AstMethodCollector(String source, Map<String, MethodInfo> methods) {
-            this.source = source;
-            this.methods = methods;
-        }
-
-        @Override
-        public void visit(ClassOrInterfaceDeclaration n, Deque<String> path) {
-            visitNamedType(n, n.getNameAsString(), path);
-        }
-
-        @Override
-        public void visit(EnumDeclaration n, Deque<String> path) {
-            visitNamedType(n, n.getNameAsString(), path);
-        }
-
-        @Override
-        public void visit(RecordDeclaration n, Deque<String> path) {
-            visitNamedType(n, n.getNameAsString(), path);
-        }
-
-        @Override
-        public void visit(MethodDeclaration n, Deque<String> path) {
-            addCallableMethod(n, n.getNameAsString(), n.getBody().orElse(null), path);
-            super.visit(n, path);
-        }
-
-        @Override
-        public void visit(ConstructorDeclaration n, Deque<String> path) {
-            addCallableMethod(n, n.getNameAsString(), n.getBody(), path);
-            super.visit(n, path);
-        }
-
-        @Override
-        public void visit(CompactConstructorDeclaration n, Deque<String> path) {
-            addCompactConstructorMethod(n, path);
-            super.visit(n, path);
-        }
-
-        @Override
-        public void visit(ObjectCreationExpr n, Deque<String> path) {
-            if (n.getAnonymousClassBody().isPresent()) {
-                int nextIndex = anonymousCounters.merge(n.getParentNode().orElse(null), 1, Integer::sum);
-                String anonName = "Anon" + nextIndex;
-                path.addLast(anonName);
-                try {
-                    super.visit(n, path);
-                } finally {
-                    path.removeLast();
-                }
-                return;
-            }
-            super.visit(n, path);
-        }
-
-        @Override
-        public void visit(BlockStmt n, Deque<String> path) {
-            if (isInitializerBody(n)) {
-                String initName = isStaticInitializer(n) ? "<clinit>" : "<init>_block";
-                addBlockMethod(initName, n, path);
-            }
-            super.visit(n, path);
-        }
-
-        private void visitNamedType(TypeDeclaration<?> n, String name, Deque<String> path) {
-            path.addLast(name);
-            try {
-                for (Node child : n.getChildNodes()) {
-                    child.accept(this, path);
-                }
-            } finally {
-                path.removeLast();
-            }
-        }
-
-        private void addCallableMethod(CallableDeclaration<?> declaration, String name, Node bodyNode, Deque<String> path) {
-            Range bodyRange = getBodyRange(bodyNode, declaration.getRange().orElse(null));
-            if (bodyRange == null) {
-                return;
-            }
-            String fullName = buildMethodName(path, name);
-            methods.put(fullName, new MethodInfo(extractRangeText(bodyRange), bodyRange.begin.line, bodyRange.end.line));
-        }
-
-        private void addCompactConstructorMethod(CompactConstructorDeclaration declaration, Deque<String> path) {
-            Range bodyRange = declaration.getBody().getRange().orElse(declaration.getRange().orElse(null));
-            if (bodyRange == null) {
-                return;
-            }
-            String fullName = buildMethodName(path, declaration.getNameAsString());
-            methods.put(fullName, new MethodInfo(extractRangeText(bodyRange), bodyRange.begin.line, bodyRange.end.line));
-        }
-
-        private void addBlockMethod(String name, BlockStmt body, Deque<String> path) {
-            Range range = body.getRange().orElse(null);
-            if (range == null) {
-                return;
-            }
-            String fullName = buildMethodName(path, name);
-            methods.put(fullName, new MethodInfo(extractRangeText(range), range.begin.line, range.end.line));
-        }
-
-        private String buildMethodName(Deque<String> path, String methodName) {
-            if (path.isEmpty()) {
-                return methodName;
-            }
-            return String.join("$", path) + "." + methodName;
-        }
-
-        private Range getBodyRange(Node bodyNode, Range fallback) {
-            if (bodyNode != null) {
-                return bodyNode.getRange().orElse(fallback);
-            }
-            return fallback;
-        }
-
-        private String extractRangeText(Range range) {
-            if (range == null) {
-                return "";
-            }
-            int begin = positionToIndex(source, range.begin);
-            int end = positionToIndexExclusive(source, range.end);
-            if (begin < 0 || end < begin || begin > source.length()) {
-                return "";
-            }
-            end = Math.min(end, source.length());
-            return source.substring(begin, end).trim();
-        }
-
-        private boolean isInitializerBody(BlockStmt block) {
-            Node parent = block.getParentNode().orElse(null);
-            return parent instanceof InitializerDeclaration;
-        }
-
-        private boolean isStaticInitializer(BlockStmt block) {
-            Node parent = block.getParentNode().orElse(null);
-            if (parent instanceof InitializerDeclaration) {
-                return ((InitializerDeclaration) parent).isStatic();
-            }
-            return false;
-        }
-    }
-
-    private static int positionToIndex(String source, Position position) {
-        if (position == null) {
-            return -1;
-        }
-        int line = 1;
-        int column = 1;
-        for (int i = 0; i < source.length(); i++) {
-            if (line == position.line && column == position.column) {
-                return i;
-            }
-            char c = source.charAt(i);
-            if (c == '\n') {
-                line++;
-                column = 1;
-            } else {
-                column++;
-            }
-        }
-        if (line == position.line && column == position.column) {
-            return source.length();
-        }
-        return -1;
-    }
-
-    private static int positionToIndexExclusive(String source, Position position) {
-        int index = positionToIndex(source, position);
-        return index < 0 ? -1 : index + 1;
-    }
 }

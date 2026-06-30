@@ -14,6 +14,8 @@ public class AppVo implements Serializable {
     private String name;
     // 应用工程名称
     private String srcName;
+    private String language;
+    private String languageConfig;
     // 作用范围
     private String range;
     //  创建用户ID
@@ -124,6 +126,22 @@ public class AppVo implements Serializable {
 
     public void setSrcName(String srcName) {
         this.srcName = srcName;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public String getLanguageConfig() {
+        return languageConfig;
+    }
+
+    public void setLanguageConfig(String languageConfig) {
+        this.languageConfig = languageConfig;
     }
 
     public String getProperties() {

@@ -21,16 +21,23 @@ type ReportOptions struct {
 	CommitID      string
 	Branch        string
 	CaseName      string
+	BuildID       string
+	TestStage     string
 	HTTPClient    *http.Client
 }
 
 type reportPayload struct {
+	ProjectID     string `json:"projectId"`
+	AppID         string `json:"appId"`
+	Language      string `json:"language"`
 	VersionNumber string `json:"versionNumber,omitempty"`
 	CommitID      string `json:"commitId,omitempty"`
 	Branch        string `json:"branch,omitempty"`
 	CaseName      string `json:"caseName,omitempty"`
+	BuildID       string `json:"buildId,omitempty"`
+	TestStage     string `json:"testStage,omitempty"`
 	Timestamp     int64  `json:"timestamp"`
-	CoverageData  string `json:"coverageData"`
+	Payload       string `json:"payload"`
 }
 
 func PostProfile(ctx context.Context, options ReportOptions) error {
@@ -53,19 +60,23 @@ func PostProfile(ctx context.Context, options ReportOptions) error {
 	}
 
 	payload, err := json.Marshal(reportPayload{
+		ProjectID:     options.ProjectID,
+		AppID:         options.AppID,
+		Language:      "GO",
 		VersionNumber: options.VersionNumber,
 		CommitID:      options.CommitID,
 		Branch:        options.Branch,
 		CaseName:      options.CaseName,
+		BuildID:       options.BuildID,
+		TestStage:     defaultText(options.TestStage, "unknown"),
 		Timestamp:     time.Now().UnixMilli(),
-		CoverageData:  string(rawProfile),
+		Payload:       string(rawProfile),
 	})
 	if err != nil {
 		return err
 	}
 
-	url := fmt.Sprintf("%s/api/projects/%s/apps/%s/coverage/universal/GO/report",
-		strings.TrimRight(options.Endpoint, "/"), options.ProjectID, options.AppID)
+	url := fmt.Sprintf("%s/api/v2/ingest/coverage", strings.TrimRight(options.Endpoint, "/"))
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return err
@@ -86,4 +97,11 @@ func PostProfile(ctx context.Context, options ReportOptions) error {
 	}
 	body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
 	return fmt.Errorf("oAT coverage upload failed: status=%d body=%s", response.StatusCode, string(body))
+}
+
+func defaultText(value string, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
 }

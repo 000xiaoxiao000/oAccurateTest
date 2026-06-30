@@ -74,6 +74,23 @@ public class CaseCenterRepository {
         return query("SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE project_id = ? AND system_snapshots_json IS NOT NULL AND JSON_CONTAINS(system_snapshots_json, JSON_QUOTE(?)) ORDER BY create_time DESC", projectId, systemSnapshotId);
     }
 
+    public List<CaseCenterIndex> findByUsecase_ProjectIdAndUsecase_CoverageFootprintsContaining(String projectId, String footprintKey) {
+        List<CaseCenterIndex> result = new ArrayList<>();
+        for (CaseCenterIndex index : findByUsecase_ProjectId(projectId)) {
+            Usecase usecase = index.getUsecase();
+            if (usecase == null || usecase.getCoverageFootprints() == null) {
+                continue;
+            }
+            for (String current : usecase.getCoverageFootprints()) {
+                if (footprintKey.equals(current)) {
+                    result.add(index);
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
     public List<CaseCenterIndex> findByDirectory_ProjectIdAndDirectory_ParentId(String projectId, String parentId) {
         return query("SELECT 'directory' type, id, payload_json, create_time, update_time FROM oat_usecase_directory WHERE project_id = ? AND parent_id = ? ORDER BY create_time DESC", projectId, parentId);
     }

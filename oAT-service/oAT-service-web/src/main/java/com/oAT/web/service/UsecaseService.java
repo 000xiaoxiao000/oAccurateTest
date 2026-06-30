@@ -27,11 +27,17 @@ public interface UsecaseService {
 
     List<UsecaseVo> getUsecasesBySystemSnapshot(String projectId, String systemSnapshotId);
 
+    List<UsecaseVo> getUsecasesByCoverageFootprint(String projectId, String footprintKey);
+
     void bindSnapshotToUsecases(String projectId, String operator, String snapshotId, String[] usecaseIds);
 
     void batchAppendSnapshotsToUsecases(String projectId, String operator, String[] snapshotIds, String[] usecaseIds);
 
     void bindSystemSnapshotToUsecases(String projectId, String operator, String systemSnapshotId, String[] usecaseIds);
+
+    void bindCoverageFootprintToUsecases(String projectId, String operator, String footprintKey, String[] usecaseIds);
+
+    void removeCoverageFootprintRelation(String footprintKey);
 
     /**
      * 创建用例目录

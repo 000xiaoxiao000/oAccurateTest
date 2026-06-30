@@ -20,11 +20,17 @@
           <span>应用名称</span>
           <input v-model.trim="form.name" class="text-input" type="text" />
         </label>
-        <label class="field">
+        <label v-if="isResidentCollector" class="field">
           <span>源码工程名</span>
           <input v-model.trim="form.srcName" class="text-input" type="text" />
         </label>
         <label class="field">
+          <span>主语言</span>
+          <select v-model="form.language" class="select">
+            <option v-for="option in languageOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+        <label v-if="isResidentCollector" class="field">
           <span>作用范围</span>
           <input v-model.trim="form.range" class="text-input" type="text" />
         </label>
@@ -32,10 +38,13 @@
           <span>应用描述</span>
           <textarea v-model.trim="form.describe" class="text-area" rows="3" />
         </label>
-        <label class="field wide">
+        <label v-if="isResidentCollector" class="field wide">
           <span>应用参数</span>
           <textarea v-model.trim="form.properties" class="text-area" rows="4" />
         </label>
+        <div class="field wide">
+          <LanguageConfigForm v-model="form.languageConfig" :language="form.language" />
+        </div>
         <label class="field">
           <span>当前版本</span>
           <input v-model.trim="form.currentVersion" class="text-input" type="text" />
@@ -50,14 +59,14 @@
         </label>
       </div>
       <div class="subsection">
-        <h2>探针上下线告警</h2>
+        <h2>{{ isResidentCollector ? '探针上下线告警' : '批量采集源告警' }}</h2>
         <label class="checkbox-row">
           <input v-model="form.probeAlertEnabled" type="checkbox" />
-          <span>启用探针实例上下线告警</span>
+          <span>{{ isResidentCollector ? '启用探针实例上下线告警' : '启用采集源静默告警' }}</span>
         </label>
         <div class="editor-grid">
           <label>
-            <span>下线阈值（秒）</span>
+            <span>{{ isResidentCollector ? '下线阈值（秒）' : '静默阈值（秒）' }}</span>
             <input v-model.number="form.probeOfflineThresholdSeconds" class="text-input" type="number" min="30" />
           </label>
           <label>
@@ -65,7 +74,8 @@
             <input v-model.trim="form.probeWebhookUrl" class="text-input" type="text" />
           </label>
         </div>
-        <div class="checkbox-group">
+        <p class="helper-text">{{ isResidentCollector ? '常驻 Java Agent 按心跳生成上线、下线、恢复事件。' : '批量型语言按最近覆盖率上报时间判活。' }}</p>
+        <div v-if="isResidentCollector" class="checkbox-group">
           <label class="checkbox-row"><input v-model="form.probeAlertOnOffline" type="checkbox" /> <span>下线</span></label>
           <label class="checkbox-row"><input v-model="form.probeAlertOnRecovered" type="checkbox" /> <span>恢复上线</span></label>
           <label class="checkbox-row"><input v-model="form.probeAlertOnOnline" type="checkbox" /> <span>首次上线</span></label>
@@ -118,12 +128,14 @@
             <div class="app-id">{{ app.id }}</div>
             <div class="card-sub">{{ app.srcName || app.range || '未配置源工程信息' }}</div>
           </div>
-          <RouterLink :class="app.onlineCount > 0 ? 'badge online' : 'badge offline'" :to="`/p/${projectId}/apps/online?appId=${app.id}`">
-            {{ app.onlineCount > 0 ? `${app.onlineCount} 在线` : '离线' }}
+          <RouterLink :class="['badge', collectorHealthTone(app)]" :to="`/p/${projectId}/apps/online?appId=${app.id}`">
+            {{ collectorHealthLabel(app) }}
           </RouterLink>
         </div>
         <div class="card-desc">{{ app.describe || '暂无应用描述' }}</div>
         <div class="meta-list">
+          <span>{{ app.language || app.sourceType || 'JAVA' }}</span>
+          <span>{{ collectorSummary(app) }}</span>
           <span>版本 {{ app.currentVersion || '-' }}</span>
           <span>分支 {{ app.currentBranch || '-' }}</span>
           <span>{{ app.repoConfigured ? '已配置仓库' : '未配置仓库' }}</span>
@@ -172,16 +184,20 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { backendApiUrl } from '@/api/http'
 import AppPagination from '@/components/AppPagination.vue'
+import LanguageConfigForm from '@/features/app/LanguageConfigForm.vue'
+import { isResidentLanguage, languageOptions } from '@/features/app/languageProfiles'
 import { useProjectStore } from '@/stores/project'
+import type { AppSummary, CollectorSourceSummary } from '@/api/types'
 
 const DEFAULT_APP_PROPERTIES = `#代码追踪范围包括
 #codeStack.include=`
-
+const DEFAULT_LANGUAGE_CONFIG = '{}'
 const route = useRoute()
 const router = useRouter()
 const projectStore = useProjectStore()
 const projectId = computed(() => String(route.params.projectId || ''))
 const apps = computed(() => projectStore.appsByProjectId[projectId.value] || [])
+const collectorSources = computed(() => projectStore.collectorSourcesByProjectId[projectId.value]?.sources || [])
 const loading = ref(false)
 const error = ref('')
 const creating = ref(false)
@@ -197,6 +213,8 @@ const currentPage = ref(1)
 const form = reactive({
   name: '',
   srcName: '',
+  language: 'JAVA',
+  languageConfig: DEFAULT_LANGUAGE_CONFIG,
   range: '',
   describe: '',
   properties: DEFAULT_APP_PROPERTIES,
@@ -214,10 +232,19 @@ const form = reactive({
 const filteredApps = computed(() => {
   const needle = keyword.value.toLowerCase()
   if (!needle) return apps.value
-  return apps.value.filter((app) => [app.id, app.name, app.srcName, app.range, app.currentVersion, app.currentBranch, app.currentCommitId]
-    .join(' ')
-    .toLowerCase()
-    .includes(needle))
+  return apps.value.filter((app) => [
+    app.id,
+    app.name,
+    app.srcName,
+    app.range,
+    app.language,
+    app.sourceType,
+    collectorHealth(app),
+    collectorSummary(app),
+    app.currentVersion,
+    app.currentBranch,
+    app.currentCommitId,
+  ].join(' ').toLowerCase().includes(needle))
 })
 
 const paginatedApps = computed(() => {
@@ -227,9 +254,10 @@ const paginatedApps = computed(() => {
 
 const totalPages = computed(() => Math.max(1, Math.ceil(filteredApps.value.length / pageSize.value)))
 
-const totalOnlineCount = computed(() => apps.value.reduce((sum, app) => sum + (app.onlineCount || 0), 0))
+const totalOnlineCount = computed(() => apps.value.filter((app) => collectorHealth(app) === 'ONLINE').length)
 
 const repoConfiguredCount = computed(() => apps.value.filter((app) => app.repoConfigured).length)
+const isResidentCollector = computed(() => isResidentLanguage(form.language))
 
 function applyRouteIntent() {
   const create = route.query.create
@@ -247,12 +275,57 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    await projectStore.loadProjectApps(projectId.value)
+    await Promise.all([
+      projectStore.loadProjectApps(projectId.value),
+      projectStore.loadCollectorSources(projectId.value).catch(() => null),
+    ])
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载应用列表失败'
   } finally {
     loading.value = false
   }
+}
+
+type AppCollectorHealth = 'ONLINE' | 'SILENT' | 'OFFLINE' | 'UNKNOWN' | 'NEVER'
+
+function appCollectorSources(app: AppSummary): CollectorSourceSummary[] {
+  return collectorSources.value.filter((source) => source.appId === app.id)
+}
+
+function collectorHealth(app: AppSummary): AppCollectorHealth {
+  const sources = appCollectorSources(app)
+  if (!sources.length) return app.onlineCount > 0 ? 'ONLINE' : 'NEVER'
+  if (sources.some((source) => source.health === 'ONLINE')) return 'ONLINE'
+  if (sources.some((source) => source.health === 'SILENT')) return 'SILENT'
+  if (sources.some((source) => source.health === 'UNKNOWN')) return 'UNKNOWN'
+  return 'OFFLINE'
+}
+
+function collectorHealthLabel(app: AppSummary) {
+  const health = collectorHealth(app)
+  const sources = appCollectorSources(app)
+  if (health === 'ONLINE') return sources.length ? `${sources.filter((source) => source.health === 'ONLINE').length} 源在线` : `${app.onlineCount || 0} 在线`
+  if (health === 'SILENT') return '采集静默'
+  if (health === 'OFFLINE') return '采集离线'
+  if (health === 'UNKNOWN') return '状态未知'
+  return '未接入'
+}
+
+function collectorHealthTone(app: AppSummary) {
+  const health = collectorHealth(app)
+  if (health === 'ONLINE') return 'online'
+  if (health === 'SILENT') return 'silent'
+  if (health === 'OFFLINE') return 'offline'
+  if (health === 'UNKNOWN') return 'unknown'
+  return 'never'
+}
+
+function collectorSummary(app: AppSummary) {
+  const sources = appCollectorSources(app)
+  if (!sources.length) return app.onlineCount > 0 ? `Java 实例 ${app.onlineCount}` : '无采集源'
+  const resident = sources.filter((source) => source.collectorType === 'RESIDENT').length
+  const batch = sources.filter((source) => source.collectorType === 'BATCH').length
+  return `采集源 ${sources.length} · 常驻 ${resident} · 批量 ${batch}`
 }
 
 async function submitCreate() {
@@ -263,9 +336,11 @@ async function submitCreate() {
   submittingCreate.value = true
   createError.value = ''
   try {
-    const created = await projectStore.createManagedApp(projectId.value, { ...form })
+    const created = await projectStore.createManagedApp(projectId.value, normalizeFormForSubmit())
     form.name = ''
     form.srcName = ''
+    form.language = 'JAVA'
+    form.languageConfig = DEFAULT_LANGUAGE_CONFIG
     form.range = ''
     form.describe = ''
     form.properties = DEFAULT_APP_PROPERTIES
@@ -284,6 +359,18 @@ async function submitCreate() {
     createError.value = err instanceof Error ? err.message : '创建应用失败'
   } finally {
     submittingCreate.value = false
+  }
+}
+
+function normalizeFormForSubmit() {
+  return {
+    ...form,
+    srcName: isResidentCollector.value ? form.srcName : '',
+    range: isResidentCollector.value ? form.range : 'only',
+    properties: isResidentCollector.value ? form.properties : '',
+    probeAlertOnOnline: isResidentCollector.value ? form.probeAlertOnOnline : false,
+    probeAlertOnOffline: isResidentCollector.value ? form.probeAlertOnOffline : true,
+    probeAlertOnRecovered: isResidentCollector.value ? form.probeAlertOnRecovered : false,
   }
 }
 
@@ -520,8 +607,14 @@ watch(totalPages, (pages) => {
 
 .card-sub,
 .card-desc,
-.meta-list {
+.meta-list,
+.helper-text {
   color: #64748b;
+}
+
+.helper-text {
+  margin: 10px 0 0;
+  font-size: 13px;
 }
 
 .card-sub {
@@ -594,6 +687,17 @@ watch(totalPages, (pages) => {
 .badge.offline {
   background: rgba(148, 163, 184, 0.18);
   color: #475569;
+}
+
+.badge.silent {
+  background: rgba(217, 119, 6, 0.14);
+  color: #b45309;
+}
+
+.badge.unknown,
+.badge.never {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
 }
 
 @media (max-width: 720px) {

@@ -1,26 +1,32 @@
 package com.oAT.web.control.api;
 
+import com.oAT.web.api.coverage.CoverageApiPayloads.*;
+import com.oAT.web.api.coverage.CoverageApiPayloadMapper;
 import com.oAT.web.common.Job;
-import com.oAT.web.common.PaletteColors;
 import com.oAT.web.control.entity.ResultNotified;
-import com.oAT.web.esDao.entity.ClassCoverageIndex;
+import com.oAT.web.coveragecore.model.SourceCoveragePayload;
+import com.oAT.web.coveragecore.query.CoverageCoreQueryService;
+import com.oAT.web.coveragecore.query.CoverageUnitPage;
+import com.oAT.web.coveragecore.query.CoverageUnitQuery;
+import com.oAT.web.coveragecore.report.CoverageOverviewQueryService;
+import com.oAT.web.coveragecore.report.CoverageFootprintSnapshotService;
+import com.oAT.web.coveragecore.report.CoverageFootprintSnapshotService.CoverageFootprintSnapshot;
+import com.oAT.web.coveragecore.report.CoverageReportAnalysisService;
+import com.oAT.web.coveragecore.report.CoverageReportCommandService;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.SystemLog;
 import com.oAT.web.service.AppService;
-import com.oAT.web.service.CoverageService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.VersionService;
 import com.oAT.web.service.SystemLogService;
+import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.entity.AppVo;
-import com.oAT.web.service.entity.CoverageComparisonVo;
 import com.oAT.web.service.entity.CoverageTreeNode;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.ProjectVo;
+import com.oAT.web.service.entity.UsecaseVo;
 import com.oAT.web.service.entity.UserVo;
 import com.oAT.web.service.entity.VersionItemVo;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,36 +39,48 @@ import org.springframework.web.bind.annotation.SessionAttribute;
 
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Locale;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/projects/{projectId}/coverage")
 public class CoverageApiControl {
 
-    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
-
-    private final CoverageService coverageService;
+    private final CoverageCoreQueryService coverageCoreQueryService;
+    private final CoverageReportCommandService coverageReportCommandService;
+    private final CoverageReportAnalysisService coverageReportAnalysisService;
+    private final CoverageOverviewQueryService coverageOverviewQueryService;
+    private final CoverageFootprintSnapshotService coverageFootprintSnapshotService;
     private final ProjectService projectService;
     private final AppService appService;
     private final VersionService versionService;
     private final SystemLogService systemLogService;
+    private final UsecaseService usecaseService;
+    private final CoverageApiPayloadMapper coverageApiPayloadMapper;
 
-    public CoverageApiControl(CoverageService coverageService,
+    public CoverageApiControl(CoverageCoreQueryService coverageCoreQueryService,
+                              CoverageReportCommandService coverageReportCommandService,
+                              CoverageReportAnalysisService coverageReportAnalysisService,
+                              CoverageOverviewQueryService coverageOverviewQueryService,
+                              CoverageFootprintSnapshotService coverageFootprintSnapshotService,
                               ProjectService projectService,
                               AppService appService,
                               VersionService versionService,
-                              SystemLogService systemLogService) {
-        this.coverageService = coverageService;
+                              SystemLogService systemLogService,
+                              UsecaseService usecaseService,
+                              CoverageApiPayloadMapper coverageApiPayloadMapper) {
+        this.coverageCoreQueryService = coverageCoreQueryService;
+        this.coverageReportCommandService = coverageReportCommandService;
+        this.coverageReportAnalysisService = coverageReportAnalysisService;
+        this.coverageOverviewQueryService = coverageOverviewQueryService;
+        this.coverageFootprintSnapshotService = coverageFootprintSnapshotService;
         this.projectService = projectService;
         this.appService = appService;
         this.versionService = versionService;
         this.systemLogService = systemLogService;
+        this.usecaseService = usecaseService;
+        this.coverageApiPayloadMapper = coverageApiPayloadMapper;
     }
 
 
@@ -71,18 +89,18 @@ public class CoverageApiControl {
     public void export(@PathVariable String projectId,
                        @SessionAttribute UserVo user,
                        @RequestParam String reportId,
-                       HttpServletResponse response) throws IOException {
+        HttpServletResponse response) throws IOException {
         ensureProjectAccess(projectId, user);
-        coverageService.exportReport(reportId, response);
+        coverageReportCommandService.exportReport(reportId, response);
     }
 
     @GetMapping("/export-methods")
     public void exportMethods(@PathVariable String projectId,
                               @SessionAttribute UserVo user,
                               @RequestParam String reportId,
-                              HttpServletResponse response) throws IOException {
+        HttpServletResponse response) throws IOException {
         ensureProjectAccess(projectId, user);
-        coverageService.exportMethodReport(reportId, response);
+        coverageReportCommandService.exportMethodReport(reportId, response);
     }
 
     @PostMapping("/generate")
@@ -93,7 +111,7 @@ public class CoverageApiControl {
                                            @RequestParam(required = false) String branch,
                                            @RequestParam(required = false) String commitId) {
         ensureProjectAccess(projectId, user);
-        String jobId = coverageService.startGenerateJob(appId, versionNumber, branch, commitId);
+        String jobId = coverageReportCommandService.startVersionFullReport(appId, versionNumber, branch, commitId);
         AppVo app = appService.getApp(appId);
         String appName = app == null ? appId : app.getName();
         addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 全量 覆盖率报告 [版本:%s, 分支:%s, Commit:%s]",
@@ -117,7 +135,7 @@ public class CoverageApiControl {
         Assert.hasText(targetVersion, "当前应用未配置当前版本，无法生成本次 Commit 覆盖率报告");
         Assert.hasText(targetCommit, "当前应用未配置当前 CommitId，无法生成本次 Commit 覆盖率报告");
 
-        String jobId = coverageService.startGenerateCurrentCommitJob(appId, targetVersion, targetBranch, targetCommit);
+        String jobId = coverageReportCommandService.startCurrentCommitReport(appId, targetVersion, targetBranch, targetCommit);
         String appName = StringUtils.hasText(app.getName()) ? app.getName() : appId;
         addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 本次 Commit 覆盖率报告 [版本:%s, 分支:%s, Commit:%s]",
                 user.getName(), appName, targetVersion, targetBranch, targetCommit));
@@ -134,7 +152,7 @@ public class CoverageApiControl {
                                                       @RequestParam String baseVersionNumber,
                                                       @RequestParam(required = false) String baseCommitId) {
         ensureProjectAccess(projectId, user);
-        String jobId = coverageService.startGenerateIncrementalJob(appId, versionNumber, branch, commitId, baseVersionNumber, baseCommitId);
+        String jobId = coverageReportCommandService.startIncrementalReport(appId, versionNumber, branch, commitId, baseVersionNumber, baseCommitId);
         AppVo app = appService.getApp(appId);
         String appName = app == null ? appId : app.getName();
         addCoverageLog(projectId, user, String.format("%s 生成了应用 [%s] 的 增量 覆盖率报告 [版本:%s, 基准:%s, 分支:%s, Commit:%s]",
@@ -144,7 +162,7 @@ public class CoverageApiControl {
 
     @GetMapping("/jobs/{jobId}")
     public Map<String, Object> job(@PathVariable String jobId) {
-        Job<String> job = coverageService.getJob(jobId);
+        Job<String> job = coverageReportCommandService.getJob(jobId);
         Map<String, Object> result = new LinkedHashMap<>();
         if (job == null) {
             result.put("id", jobId);
@@ -175,7 +193,67 @@ public class CoverageApiControl {
                                                @RequestParam String appId,
                                                @RequestParam String versionNumber) {
         ensureProjectAccess(projectId, user);
-        return coverageService.getTrendData(appId, versionNumber);
+        return coverageReportCommandService.getTrendData(appId, versionNumber);
+    }
+
+    @GetMapping("/footprints")
+    public ResultNotified<List<CoverageFootprintSnapshot>> footprints(@PathVariable String projectId,
+                                                                      @SessionAttribute UserVo user,
+                                                                      @RequestParam(required = false) String appId,
+                                                                      @RequestParam(required = false) String language,
+                                                                      @RequestParam(required = false) String versionNumber,
+                                                                      @RequestParam(required = false) String commitId) {
+        ensureProjectAccess(projectId, user);
+        return new ResultNotified<>(true, "获取覆盖率足迹快照成功",
+                coverageFootprintSnapshotService.listFootprints(projectId, appId, language, versionNumber, commitId));
+    }
+
+    @GetMapping("/footprints/{footprintKey}")
+    public ResultNotified<CoverageFootprintSnapshot> footprintDetail(@PathVariable String projectId,
+                                                                     @PathVariable String footprintKey,
+                                                                     @SessionAttribute UserVo user) {
+        ensureProjectAccess(projectId, user);
+        return new ResultNotified<>(true, "获取覆盖率足迹详情成功",
+                coverageFootprintSnapshotService.getFootprint(projectId, footprintKey));
+    }
+
+    @PostMapping("/footprints/{footprintKey}/delete")
+    public ResultNotified<String> deleteFootprint(@PathVariable String projectId,
+                                                  @PathVariable String footprintKey,
+                                                  @SessionAttribute UserVo user) {
+        ensureProjectAccess(projectId, user);
+        CoverageFootprintSnapshot deleted = coverageFootprintSnapshotService.deleteFootprint(projectId, footprintKey);
+        if (StringUtils.hasText(deleted.getSnapshotKey())) {
+            usecaseService.removeCoverageFootprintRelation(deleted.getSnapshotKey());
+        }
+        if (StringUtils.hasText(deleted.getRawReportId())) {
+            usecaseService.removeCoverageFootprintRelation(deleted.getRawReportId());
+        }
+        addCoverageLog(projectId, user, String.format("%s 删除了覆盖率足迹 [%s]",
+                user.getName(), footprintKey));
+        return new ResultNotified<>(true, "覆盖率足迹已删除", footprintKey);
+    }
+
+    @GetMapping("/footprints/{footprintKey}/usecases")
+    public ResultNotified<List<UsecaseVo>> footprintUsecases(@PathVariable String projectId,
+                                                             @PathVariable String footprintKey,
+                                                             @SessionAttribute UserVo user) {
+        ensureProjectAccess(projectId, user);
+        return new ResultNotified<>(true, "获取覆盖率足迹关联用例成功",
+                usecaseService.getUsecasesByCoverageFootprint(projectId, footprintKey));
+    }
+
+    @PostMapping("/footprints/{footprintKey}/usecases/bind")
+    public ResultNotified<Integer> bindFootprintUsecases(@PathVariable String projectId,
+                                                         @PathVariable String footprintKey,
+                                                         @SessionAttribute UserVo user,
+                                                         @org.springframework.web.bind.annotation.RequestBody Map<String, String[]> body) {
+        ensureProjectAccess(projectId, user);
+        String[] usecaseIds = body == null ? new String[0] : body.getOrDefault("usecaseIds", new String[0]);
+        usecaseService.bindCoverageFootprintToUsecases(projectId, user.getId(), footprintKey, usecaseIds);
+        addCoverageLog(projectId, user, String.format("%s 关联了覆盖率足迹 [%s] 的用例，数量:%d",
+                user.getName(), footprintKey, usecaseIds.length));
+        return new ResultNotified<>(true, "覆盖率足迹关联用例成功", usecaseIds.length);
     }
 
     @PostMapping("/delete")
@@ -183,9 +261,9 @@ public class CoverageApiControl {
                                          @SessionAttribute UserVo user,
                                          @RequestParam String reportId) {
         ensureProjectAccess(projectId, user);
-        CoverageReportIndex report = coverageService.getReport(reportId);
+        CoverageReportIndex report = coverageReportCommandService.getReport(reportId);
         Assert.notNull(report, "Report not found");
-        coverageService.deleteReport(reportId);
+        coverageReportCommandService.deleteReport(reportId);
         AppVo app = appService.getApp(report.getAppId());
         String appName = app == null ? report.getAppId() : app.getName();
         String reportType = reportTypeLabel(report.getReportType());
@@ -211,63 +289,9 @@ public class CoverageApiControl {
         Assert.hasText(appId, "appId不能为空");
         Assert.hasText(versionNumber, "versionNumber不能为空");
 
-        AppVo app = appService.getApp(appId);
-        Assert.notNull(app, "应用不存在");
-
-        VersionItemVo version = findVersion(projectId, appId, versionNumber, commitId);
-        String versionCommitId = version == null ? null : version.getRepoCommitId();
-        String currentCommitId = app.getCurrentCommitId();
-        CoverageReportIndex report = StringUtils.hasText(reportId)
-                ? coverageService.getReport(reportId)
-                : coverageService.getLatestReport(appId, versionNumber, commitId);
-        String targetCommitId = StringUtils.hasText(commitId)
-                ? commitId
-                : report == null ? (StringUtils.hasText(currentCommitId) ? currentCommitId : versionCommitId) : report.getRepoCommitId();
-
-        CoverageReportIndex versionFullReport = coverageService.getLatestReportByType(appId, versionNumber, 0, versionCommitId);
-        CoverageReportIndex currentCommitReport = StringUtils.hasText(targetCommitId)
-                ? coverageService.getLatestReportByType(appId, versionNumber, 2, targetCommitId)
-                : null;
-        if (currentCommitReport == null && StringUtils.hasText(targetCommitId) && !isSameCommit(targetCommitId, versionCommitId)) {
-            currentCommitReport = coverageService.getLatestReportByType(appId, versionNumber, 0, targetCommitId);
-        }
-
-        CoverageReportIndex incrementalReport = coverageService.getLatestReportByType(appId, versionNumber, 1, targetCommitId);
-        CoverageReportIndex selectedReport = report;
-        if (selectedReport == null) {
-            selectedReport = currentCommitReport != null ? currentCommitReport : incrementalReport;
-        }
-
-        if (selectedReport != null && Integer.valueOf(1).equals(selectedReport.getReportType())) {
-            incrementalReport = selectedReport;
-        } else if (selectedReport != null) {
-            currentCommitReport = selectedReport;
-        }
-        if (incrementalReport == null) {
-            incrementalReport = coverageService.getLatestReportByType(appId, versionNumber, 1);
-        }
-
-        CoverageReportIndex freshnessReport = selectedReport != null ? selectedReport : currentCommitReport;
-        boolean hasNewerData = freshnessReport == null
-                ? coverageService.hasNewerData(appId, versionNumber, null)
-                : coverageService.hasNewerData(appId, versionNumber, freshnessReport);
-
-        CoverageOverviewPayload payload = new CoverageOverviewPayload();
-        payload.setProject(toProjectSummary(projectService.getProject(projectId)));
-        payload.setApps(toAppSummaries(appService.getAppList(projectId)));
-        payload.setApp(toAppSummary(app));
-        payload.setVersion(toVersionSummary(version));
-        payload.setReport(toCoverageReportSummary(selectedReport != null ? selectedReport : currentCommitReport));
-        payload.setVersionFullReport(toCoverageReportSummary(versionFullReport));
-        payload.setCurrentCommitReport(toCoverageReportSummary(currentCommitReport));
-        payload.setIncrementalReport(toCoverageReportSummary(incrementalReport));
-        payload.setHasNewerData(hasNewerData);
-        payload.setComparison(toComparisonSummary(selectedReport == null ? null : coverageService.getComparison(selectedReport.getId())));
-        payload.setVersionFullComparison(toComparisonSummary(versionFullReport == null ? null : coverageService.getComparison(versionFullReport.getId())));
-        payload.setCurrentCommitComparison(toComparisonSummary(currentCommitReport == null ? null : coverageService.getComparison(currentCommitReport.getId())));
-        payload.setIncrementalComparison(toComparisonSummary(incrementalReport == null ? null : coverageService.getComparison(incrementalReport.getId())));
-        payload.setCurrentUserRole(resolveUserRole(projectId, user));
-        payload.setMascotPrimary(computeMascotPrimary(projectId, payload.getProject().getName()));
+        CoverageOverviewPayload payload = coverageApiPayloadMapper.toLegacyOverviewPayload(
+                coverageOverviewQueryService.getOverview(projectId, appId, versionNumber, reportId, commitId, user),
+                projectId);
         return new ResultNotified<>(true, "获取覆盖率概览成功", payload);
     }
 
@@ -291,15 +315,15 @@ public class CoverageApiControl {
         ensureProjectAccess(projectId, user);
         Assert.hasText(reportId, "reportId不能为空");
 
-        CoverageReportIndex report = coverageService.getReport(reportId);
+        CoverageReportIndex report = coverageCoreQueryService.getReport(reportId);
         Assert.notNull(report, "覆盖率报告不存在");
         AppVo app = appService.getApp(report.getAppId());
 
         CoverageDetailsPayload payload = new CoverageDetailsPayload();
-        payload.setReport(toCoverageReportSummary(report));
-        payload.setApp(toAppSummary(app));
-        payload.setVersion(toVersionSummary(findVersion(projectId, report.getAppId(), report.getVersionNumber(), report.getRepoCommitId())));
-        payload.setReportNeedRegenerate(coverageService.hasNewerData(report.getAppId(), report.getVersionNumber(), report));
+        payload.setReport(coverageApiPayloadMapper.toCoverageReportSummary(report));
+        payload.setApp(coverageApiPayloadMapper.toAppSummary(app));
+        payload.setVersion(coverageApiPayloadMapper.toVersionSummary(findVersion(projectId, report.getAppId(), report.getVersionNumber(), report.getRepoCommitId())));
+        payload.setReportNeedRegenerate(coverageReportAnalysisService.hasNewerData(report.getAppId(), report.getVersionNumber(), report));
         payload.setCurrentUserRole(resolveUserRole(projectId, user));
         payload.setViewType(viewType);
         payload.setClassName(className);
@@ -313,16 +337,14 @@ public class CoverageApiControl {
         payload.setMinComplexity(minComplexity);
         payload.setMaxComplexity(maxComplexity);
 
-        coverageService.ensureSourceClassesIndexed(reportId);
+        CoverageUnitQuery query = buildUnitQuery(className, methodName, minRate, maxRate, minBranchRate, maxBranchRate,
+                minMethodRate, maxMethodRate, minComplexity, maxComplexity, page, size);
 
         if ("tree".equalsIgnoreCase(viewType)) {
-            payload.setTreeNodes(coverageService.getTreeNodes(reportId, "", className, methodName,
-                    minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity));
+            payload.setTreeNodes(coverageCoreQueryService.listTreeNodes(reportId, "", query));
         } else {
-            Page<ClassCoverageIndex> classPage = coverageService.getClassCoveragePage(reportId, className, methodName,
-                    minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity,
-                    PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "lineRate", "branchRate", "methodRate")));
-            payload.setClassPage(toPageSummary(classPage));
+            CoverageUnitPage unitPage = coverageCoreQueryService.listUnits(reportId, query);
+            payload.setClassPage(coverageApiPayloadMapper.toPageSummary(unitPage));
         }
         return new ResultNotified<>(true, "获取覆盖率明细成功", payload);
     }
@@ -344,9 +366,10 @@ public class CoverageApiControl {
                                                             @RequestParam(required = false) Integer maxComplexity) {
         ensureProjectAccess(projectId, user);
         Assert.hasText(reportId, "reportId不能为空");
-        coverageService.ensureSourceClassesIndexed(reportId);
-        return new ResultNotified<>(true, "获取覆盖率树节点成功", coverageService.getTreeNodes(reportId, parentPackage, className, methodName,
-                minRate, maxRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate, minComplexity, maxComplexity));
+        CoverageUnitQuery query = buildUnitQuery(className, methodName, minRate, maxRate, minBranchRate, maxBranchRate,
+                minMethodRate, maxMethodRate, minComplexity, maxComplexity, null, null);
+        return new ResultNotified<>(true, "获取覆盖率树节点成功",
+                coverageCoreQueryService.listTreeNodes(reportId, parentPackage, query));
     }
 
     @GetMapping("/code")
@@ -362,31 +385,13 @@ public class CoverageApiControl {
 
         AppVo app = appService.getApp(appId);
         Assert.notNull(app, "应用不存在");
-        CoverageReportIndex report = coverageService.getReport(reportId);
+        CoverageReportIndex report = coverageCoreQueryService.getReport(reportId);
         Assert.notNull(report, "覆盖率报告不存在");
-        coverageService.ensureSourceClassesIndexed(reportId);
+        List<com.oAT.web.coveragecore.report.CoverageMethodSummary> methods = coverageCoreQueryService.listMethods(reportId, className);
+        SourceCoveragePayload sourceCoverage = coverageCoreQueryService.getSourceCoverage(reportId, className);
 
-        ClassCoverageIndex classCoverage = coverageService.getClassCoverage(reportId, className);
-        if (classCoverage != null && classCoverage.getMethods() != null) {
-            classCoverage.getMethods().sort((left, right) -> {
-                double leftRate = left.getTotalLines() > 0 ? (double) left.getCoveredLines() / left.getTotalLines() : 0;
-                double rightRate = right.getTotalLines() > 0 ? (double) right.getCoveredLines() / right.getTotalLines() : 0;
-                if (leftRate != rightRate) {
-                    return Double.compare(rightRate, leftRate);
-                }
-                double leftBranchRate = left.getBranchRate() == null ? 0 : left.getBranchRate();
-                double rightBranchRate = right.getBranchRate() == null ? 0 : right.getBranchRate();
-                return Double.compare(rightBranchRate, leftBranchRate);
-            });
-        }
-
-        CoverageCodePayload payload = new CoverageCodePayload();
-        payload.setApp(toAppSummary(app));
-        payload.setReport(toCoverageReportSummary(report));
-        payload.setClassName(className);
-        payload.setMethods(toMethodSummaries(classCoverage == null ? null : classCoverage.getMethods()));
-        payload.setColoredSourceHtml(classCoverage == null ? "Coverage data not found for class: " + className : coverageService.getColoredSource(appId, classCoverage));
-        payload.setCurrentUserRole(resolveUserRole(projectId, user));
+        CoverageCodePayload payload = coverageApiPayloadMapper.toCoverageCodePayload(
+                app, report, className, methods, sourceCoverage, resolveUserRole(projectId, user));
         return new ResultNotified<>(true, "获取覆盖率源码详情成功", payload);
     }
 
@@ -447,572 +452,32 @@ public class CoverageApiControl {
         return ProjectMemberVo.Role.visitor.name();
     }
 
-    private String computeMascotPrimary(String projectId, String projectName) {
-        int hash = Math.abs((projectId + ":" + projectName).hashCode());
-        return PaletteColors.pickPrimary(hash / 5 + 13);
+    private CoverageUnitQuery buildUnitQuery(String className,
+                                             String methodName,
+                                             Double minRate,
+                                             Double maxRate,
+                                             Double minBranchRate,
+                                             Double maxBranchRate,
+                                             Double minMethodRate,
+                                             Double maxMethodRate,
+                                             Integer minComplexity,
+                                             Integer maxComplexity,
+                                             Integer page,
+                                             Integer size) {
+        CoverageUnitQuery query = new CoverageUnitQuery();
+        query.setClassName(className);
+        query.setMethodName(methodName);
+        query.setMinRate(minRate);
+        query.setMaxRate(maxRate);
+        query.setMinBranchRate(minBranchRate);
+        query.setMaxBranchRate(maxBranchRate);
+        query.setMinMethodRate(minMethodRate);
+        query.setMaxMethodRate(maxMethodRate);
+        query.setMinComplexity(minComplexity);
+        query.setMaxComplexity(maxComplexity);
+        query.setPage(page);
+        query.setSize(size);
+        return query;
     }
 
-    private ProjectSummary toProjectSummary(ProjectVo project) {
-        ProjectSummary summary = new ProjectSummary();
-        summary.setId(project.getId());
-        summary.setName(project.getName());
-        summary.setDescribe(project.getDescribe());
-        return summary;
-    }
-
-    private AppSummary toAppSummary(AppVo app) {
-        AppSummary summary = new AppSummary();
-        if (app == null) {
-            return summary;
-        }
-        summary.setId(app.getId());
-        summary.setName(app.getName());
-        summary.setCurrentVersion(app.getCurrentVersion());
-        summary.setCurrentBranch(app.getCurrentBranch());
-        summary.setCurrentCommitId(app.getCurrentCommitId());
-        summary.setSourceType("JAVA");
-        return summary;
-    }
-
-    private List<AppSummary> toAppSummaries(List<AppVo> apps) {
-        return apps.stream().map(this::toAppSummary).collect(Collectors.toList());
-    }
-
-    private VersionSummary toVersionSummary(VersionItemVo item) {
-        if (item == null) {
-            return null;
-        }
-        VersionSummary summary = new VersionSummary();
-        summary.setId(item.getId());
-        summary.setVersionNumber(item.getVersionNumber());
-        summary.setDescribe(item.getDescribe());
-        summary.setRepoBranch(item.getRepoBranch());
-        summary.setRepoCommitId(item.getRepoCommitId());
-        summary.setProgramFile(item.getProgramFile());
-        summary.setProgramName(item.getProgramName());
-        summary.setCreateTimeText(formatDate(item.getCreateTime()));
-        return summary;
-    }
-
-    private CoverageReportSummary toCoverageReportSummary(CoverageReportIndex report) {
-        if (report == null) {
-            return null;
-        }
-        CoverageReportSummary summary = new CoverageReportSummary();
-        summary.setId(report.getId());
-        summary.setAppId(report.getAppId());
-        summary.setVersionNumber(report.getVersionNumber());
-        summary.setRepoBranch(report.getRepoBranch());
-        summary.setRepoCommitId(report.getRepoCommitId());
-        summary.setCreateTimeText(formatDate(report.getCreateTime()));
-        summary.setSourceType(normalizeSourceType(report.getSourceType()));
-        summary.setLastProcessedTime(report.getLastProcessedTime());
-        summary.setTotalClasses(report.getTotalClasses());
-        summary.setCoveredClasses(report.getCoveredClasses());
-        summary.setTotalMethods(report.getTotalMethods());
-        summary.setCoveredMethods(report.getCoveredMethods());
-        summary.setTotalBranches(report.getTotalBranches());
-        summary.setCoveredBranches(report.getCoveredBranches());
-        summary.setTotalBranchTargets(report.getTotalBranchTargets());
-        summary.setCoveredBranchTargets(report.getCoveredBranchTargets());
-        summary.setTotalLines(report.getTotalLines());
-        summary.setCoveredLines(report.getCoveredLines());
-        summary.setTotalComplexity(report.getTotalComplexity());
-        summary.setSnapshotCount(report.getSnapshotCount());
-        summary.setReportType(report.getReportType());
-        summary.setBaseVersionNumber(report.getBaseVersionNumber());
-        summary.setBaseRepoCommitId(report.getBaseRepoCommitId());
-        return summary;
-    }
-
-    private CoverageComparisonSummary toComparisonSummary(CoverageComparisonVo comparison) {
-        if (comparison == null) {
-            return null;
-        }
-        CoverageComparisonSummary summary = new CoverageComparisonSummary();
-        summary.setAddedCount(comparison.getAddedCount());
-        summary.setStableCount(comparison.getStableCount());
-        summary.setDecreasedCount(comparison.getDecreasedCount());
-        summary.setAddedMethods(toMethodDiffSummaries(comparison.getAddedMethods()));
-        summary.setStableMethods(toMethodDiffSummaries(comparison.getStableMethods()));
-        summary.setDecreasedMethods(toMethodDiffSummaries(comparison.getDecreasedMethods()));
-        return summary;
-    }
-
-    private List<MethodDiffSummary> toMethodDiffSummaries(List<CoverageComparisonVo.MethodDiff> items) {
-        if (items == null) {
-            return new ArrayList<>();
-        }
-        return items.stream().map(item -> {
-            MethodDiffSummary summary = new MethodDiffSummary();
-            summary.setClassName(item.getClassName());
-            summary.setMethodName(item.getMethodName());
-            summary.setMethodDesc(item.getMethodDesc());
-            return summary;
-        }).collect(Collectors.toList());
-    }
-
-    private PageSummary<ClassCoverageSummary> toPageSummary(Page<ClassCoverageIndex> page) {
-        PageSummary<ClassCoverageSummary> summary = new PageSummary<>();
-        summary.setContent(page.getContent().stream().map(this::toClassCoverageSummary).collect(Collectors.toList()));
-        summary.setPage(page.getNumber());
-        summary.setSize(page.getSize());
-        summary.setTotalElements(page.getTotalElements());
-        summary.setTotalPages(page.getTotalPages());
-        return summary;
-    }
-
-    private ClassCoverageSummary toClassCoverageSummary(ClassCoverageIndex item) {
-        ClassCoverageSummary summary = new ClassCoverageSummary();
-        summary.setClassName(item.getClassName());
-        summary.setTotalMethods(item.getTotalMethods());
-        summary.setCoveredMethods(item.getCoveredMethods());
-        summary.setTotalBranches(item.getTotalBranches());
-        summary.setCoveredBranches(item.getCoveredBranches());
-        summary.setTotalBranchTargets(item.getTotalBranchTargets());
-        summary.setCoveredBranchTargets(item.getCoveredBranchTargets());
-        summary.setTotalLines(item.getTotalLines());
-        summary.setCoveredLines(item.getCoveredLines());
-        summary.setTotalComplexity(item.getTotalComplexity());
-        summary.setLineRate(item.getLineRate());
-        summary.setBranchRate(item.getBranchRate());
-        summary.setMethodRate(item.getMethodRate());
-        summary.setHasCodeChanges(Boolean.TRUE.equals(item.getHasCodeChanges()));
-        return summary;
-    }
-
-    private List<MethodCoverageSummary> toMethodSummaries(List<ClassCoverageIndex.MethodCoverageDetail> items) {
-        if (items == null) {
-            return new ArrayList<>();
-        }
-        return items.stream().map(item -> {
-            MethodCoverageSummary summary = new MethodCoverageSummary();
-            summary.setMethodName(item.getMethodName());
-            summary.setMethodDesc(item.getMethodDesc());
-            summary.setTotalLines(item.getTotalLines());
-            summary.setCoveredLines(item.getCoveredLines());
-            summary.setTotalBranches(item.getTotalBranches());
-            summary.setCoveredBranches(item.getCoveredBranches());
-            summary.setComplexity(item.getComplexity());
-            summary.setCovered(item.isCovered());
-            summary.setTotalBranchTargets(item.getTotalBranchTargets());
-            summary.setCoveredBranchTargets(item.getCoveredBranchTargets());
-            summary.setBranchRate(item.getBranchRate());
-            summary.setHasCodeChanges(item.isHasCodeChanges());
-            return summary;
-        }).collect(Collectors.toList());
-    }
-
-    private String formatDate(java.util.Date date) {
-        return date == null ? null : new SimpleDateFormat(DATE_TIME_PATTERN, Locale.CHINA).format(date);
-    }
-
-    private String normalizeSourceType(String sourceType) {
-        return StringUtils.hasText(sourceType) ? sourceType : "JAVA";
-    }
-
-    public static class CoverageOverviewPayload {
-        private ProjectSummary project;
-        private List<AppSummary> apps;
-        private AppSummary app;
-        private VersionSummary version;
-        private CoverageReportSummary report;
-        private CoverageReportSummary versionFullReport;
-        private CoverageReportSummary currentCommitReport;
-        private CoverageReportSummary incrementalReport;
-        private Boolean hasNewerData;
-        private CoverageComparisonSummary comparison;
-        private CoverageComparisonSummary versionFullComparison;
-        private CoverageComparisonSummary currentCommitComparison;
-        private CoverageComparisonSummary incrementalComparison;
-        private String currentUserRole;
-        private String mascotPrimary;
-
-        public ProjectSummary getProject() { return project; }
-        public void setProject(ProjectSummary project) { this.project = project; }
-        public List<AppSummary> getApps() { return apps; }
-        public void setApps(List<AppSummary> apps) { this.apps = apps; }
-        public AppSummary getApp() { return app; }
-        public void setApp(AppSummary app) { this.app = app; }
-        public VersionSummary getVersion() { return version; }
-        public void setVersion(VersionSummary version) { this.version = version; }
-        public CoverageReportSummary getReport() { return report; }
-        public void setReport(CoverageReportSummary report) { this.report = report; }
-        public CoverageReportSummary getVersionFullReport() { return versionFullReport; }
-        public void setVersionFullReport(CoverageReportSummary versionFullReport) { this.versionFullReport = versionFullReport; }
-        public CoverageReportSummary getCurrentCommitReport() { return currentCommitReport; }
-        public void setCurrentCommitReport(CoverageReportSummary currentCommitReport) { this.currentCommitReport = currentCommitReport; }
-        public CoverageReportSummary getIncrementalReport() { return incrementalReport; }
-        public void setIncrementalReport(CoverageReportSummary incrementalReport) { this.incrementalReport = incrementalReport; }
-        public Boolean getHasNewerData() { return hasNewerData; }
-        public void setHasNewerData(Boolean hasNewerData) { this.hasNewerData = hasNewerData; }
-        public CoverageComparisonSummary getComparison() { return comparison; }
-        public void setComparison(CoverageComparisonSummary comparison) { this.comparison = comparison; }
-        public CoverageComparisonSummary getVersionFullComparison() { return versionFullComparison; }
-        public void setVersionFullComparison(CoverageComparisonSummary versionFullComparison) { this.versionFullComparison = versionFullComparison; }
-        public CoverageComparisonSummary getCurrentCommitComparison() { return currentCommitComparison; }
-        public void setCurrentCommitComparison(CoverageComparisonSummary currentCommitComparison) { this.currentCommitComparison = currentCommitComparison; }
-        public CoverageComparisonSummary getIncrementalComparison() { return incrementalComparison; }
-        public void setIncrementalComparison(CoverageComparisonSummary incrementalComparison) { this.incrementalComparison = incrementalComparison; }
-        public String getCurrentUserRole() { return currentUserRole; }
-        public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
-        public String getMascotPrimary() { return mascotPrimary; }
-        public void setMascotPrimary(String mascotPrimary) { this.mascotPrimary = mascotPrimary; }
-    }
-
-    public static class CoverageDetailsPayload {
-        private CoverageReportSummary report;
-        private AppSummary app;
-        private VersionSummary version;
-        private Boolean reportNeedRegenerate;
-        private String currentUserRole;
-        private String viewType;
-        private String className;
-        private String methodName;
-        private Double minRate;
-        private Double maxRate;
-        private Double minBranchRate;
-        private Double maxBranchRate;
-        private Double minMethodRate;
-        private Double maxMethodRate;
-        private Integer minComplexity;
-        private Integer maxComplexity;
-        private PageSummary<ClassCoverageSummary> classPage;
-        private List<CoverageTreeNode> treeNodes;
-
-        public CoverageReportSummary getReport() { return report; }
-        public void setReport(CoverageReportSummary report) { this.report = report; }
-        public AppSummary getApp() { return app; }
-        public void setApp(AppSummary app) { this.app = app; }
-        public VersionSummary getVersion() { return version; }
-        public void setVersion(VersionSummary version) { this.version = version; }
-        public Boolean getReportNeedRegenerate() { return reportNeedRegenerate; }
-        public void setReportNeedRegenerate(Boolean reportNeedRegenerate) { this.reportNeedRegenerate = reportNeedRegenerate; }
-        public String getCurrentUserRole() { return currentUserRole; }
-        public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
-        public String getViewType() { return viewType; }
-        public void setViewType(String viewType) { this.viewType = viewType; }
-        public String getClassName() { return className; }
-        public void setClassName(String className) { this.className = className; }
-        public String getMethodName() { return methodName; }
-        public void setMethodName(String methodName) { this.methodName = methodName; }
-        public Double getMinRate() { return minRate; }
-        public void setMinRate(Double minRate) { this.minRate = minRate; }
-        public Double getMaxRate() { return maxRate; }
-        public void setMaxRate(Double maxRate) { this.maxRate = maxRate; }
-        public Double getMinBranchRate() { return minBranchRate; }
-        public void setMinBranchRate(Double minBranchRate) { this.minBranchRate = minBranchRate; }
-        public Double getMaxBranchRate() { return maxBranchRate; }
-        public void setMaxBranchRate(Double maxBranchRate) { this.maxBranchRate = maxBranchRate; }
-        public Double getMinMethodRate() { return minMethodRate; }
-        public void setMinMethodRate(Double minMethodRate) { this.minMethodRate = minMethodRate; }
-        public Double getMaxMethodRate() { return maxMethodRate; }
-        public void setMaxMethodRate(Double maxMethodRate) { this.maxMethodRate = maxMethodRate; }
-        public Integer getMinComplexity() { return minComplexity; }
-        public void setMinComplexity(Integer minComplexity) { this.minComplexity = minComplexity; }
-        public Integer getMaxComplexity() { return maxComplexity; }
-        public void setMaxComplexity(Integer maxComplexity) { this.maxComplexity = maxComplexity; }
-        public PageSummary<ClassCoverageSummary> getClassPage() { return classPage; }
-        public void setClassPage(PageSummary<ClassCoverageSummary> classPage) { this.classPage = classPage; }
-        public List<CoverageTreeNode> getTreeNodes() { return treeNodes; }
-        public void setTreeNodes(List<CoverageTreeNode> treeNodes) { this.treeNodes = treeNodes; }
-    }
-
-    public static class CoverageCodePayload {
-        private AppSummary app;
-        private CoverageReportSummary report;
-        private String className;
-        private List<MethodCoverageSummary> methods;
-        private String coloredSourceHtml;
-        private String currentUserRole;
-
-        public AppSummary getApp() { return app; }
-        public void setApp(AppSummary app) { this.app = app; }
-        public CoverageReportSummary getReport() { return report; }
-        public void setReport(CoverageReportSummary report) { this.report = report; }
-        public String getClassName() { return className; }
-        public void setClassName(String className) { this.className = className; }
-        public List<MethodCoverageSummary> getMethods() { return methods; }
-        public void setMethods(List<MethodCoverageSummary> methods) { this.methods = methods; }
-        public String getColoredSourceHtml() { return coloredSourceHtml; }
-        public void setColoredSourceHtml(String coloredSourceHtml) { this.coloredSourceHtml = coloredSourceHtml; }
-        public String getCurrentUserRole() { return currentUserRole; }
-        public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
-    }
-
-    public static class CoverageComparisonSummary {
-        private int addedCount;
-        private int stableCount;
-        private int decreasedCount;
-        private List<MethodDiffSummary> addedMethods;
-        private List<MethodDiffSummary> stableMethods;
-        private List<MethodDiffSummary> decreasedMethods;
-
-        public int getAddedCount() { return addedCount; }
-        public void setAddedCount(int addedCount) { this.addedCount = addedCount; }
-        public int getStableCount() { return stableCount; }
-        public void setStableCount(int stableCount) { this.stableCount = stableCount; }
-        public int getDecreasedCount() { return decreasedCount; }
-        public void setDecreasedCount(int decreasedCount) { this.decreasedCount = decreasedCount; }
-        public List<MethodDiffSummary> getAddedMethods() { return addedMethods; }
-        public void setAddedMethods(List<MethodDiffSummary> addedMethods) { this.addedMethods = addedMethods; }
-        public List<MethodDiffSummary> getStableMethods() { return stableMethods; }
-        public void setStableMethods(List<MethodDiffSummary> stableMethods) { this.stableMethods = stableMethods; }
-        public List<MethodDiffSummary> getDecreasedMethods() { return decreasedMethods; }
-        public void setDecreasedMethods(List<MethodDiffSummary> decreasedMethods) { this.decreasedMethods = decreasedMethods; }
-    }
-
-    public static class MethodDiffSummary {
-        private String className;
-        private String methodName;
-        private String methodDesc;
-
-        public String getClassName() { return className; }
-        public void setClassName(String className) { this.className = className; }
-        public String getMethodName() { return methodName; }
-        public void setMethodName(String methodName) { this.methodName = methodName; }
-        public String getMethodDesc() { return methodDesc; }
-        public void setMethodDesc(String methodDesc) { this.methodDesc = methodDesc; }
-    }
-
-    public static class PageSummary<T> {
-        private List<T> content;
-        private int page;
-        private int size;
-        private long totalElements;
-        private int totalPages;
-
-        public List<T> getContent() { return content; }
-        public void setContent(List<T> content) { this.content = content; }
-        public int getPage() { return page; }
-        public void setPage(int page) { this.page = page; }
-        public int getSize() { return size; }
-        public void setSize(int size) { this.size = size; }
-        public long getTotalElements() { return totalElements; }
-        public void setTotalElements(long totalElements) { this.totalElements = totalElements; }
-        public int getTotalPages() { return totalPages; }
-        public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
-    }
-
-    public static class ProjectSummary {
-        private String id;
-        private String name;
-        private String describe;
-
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getDescribe() { return describe; }
-        public void setDescribe(String describe) { this.describe = describe; }
-    }
-
-    public static class AppSummary {
-        private String id;
-        private String name;
-        private String currentVersion;
-        private String currentBranch;
-        private String currentCommitId;
-        private String sourceType;
-
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getCurrentVersion() { return currentVersion; }
-        public void setCurrentVersion(String currentVersion) { this.currentVersion = currentVersion; }
-        public String getCurrentBranch() { return currentBranch; }
-        public void setCurrentBranch(String currentBranch) { this.currentBranch = currentBranch; }
-        public String getCurrentCommitId() { return currentCommitId; }
-        public void setCurrentCommitId(String currentCommitId) { this.currentCommitId = currentCommitId; }
-        public String getSourceType() { return sourceType; }
-        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
-    }
-
-    public static class VersionSummary {
-        private String id;
-        private String versionNumber;
-        private String describe;
-        private String repoBranch;
-        private String repoCommitId;
-        private String programFile;
-        private String programName;
-        private String createTimeText;
-
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getVersionNumber() { return versionNumber; }
-        public void setVersionNumber(String versionNumber) { this.versionNumber = versionNumber; }
-        public String getDescribe() { return describe; }
-        public void setDescribe(String describe) { this.describe = describe; }
-        public String getRepoBranch() { return repoBranch; }
-        public void setRepoBranch(String repoBranch) { this.repoBranch = repoBranch; }
-        public String getRepoCommitId() { return repoCommitId; }
-        public void setRepoCommitId(String repoCommitId) { this.repoCommitId = repoCommitId; }
-        public String getProgramFile() { return programFile; }
-        public void setProgramFile(String programFile) { this.programFile = programFile; }
-        public String getProgramName() { return programName; }
-        public void setProgramName(String programName) { this.programName = programName; }
-        public String getCreateTimeText() { return createTimeText; }
-        public void setCreateTimeText(String createTimeText) { this.createTimeText = createTimeText; }
-    }
-
-    public static class CoverageReportSummary {
-        private String id;
-        private String appId;
-        private String versionNumber;
-        private String repoBranch;
-        private String repoCommitId;
-        private String createTimeText;
-        private String sourceType;
-        private String lastProcessedTime;
-        private long totalClasses;
-        private long coveredClasses;
-        private long totalMethods;
-        private long coveredMethods;
-        private long totalBranches;
-        private long coveredBranches;
-        private long totalBranchTargets;
-        private long coveredBranchTargets;
-        private long totalLines;
-        private long coveredLines;
-        private int totalComplexity;
-        private Integer snapshotCount;
-        private Integer reportType;
-        private String baseVersionNumber;
-        private String baseRepoCommitId;
-
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getAppId() { return appId; }
-        public void setAppId(String appId) { this.appId = appId; }
-        public String getVersionNumber() { return versionNumber; }
-        public void setVersionNumber(String versionNumber) { this.versionNumber = versionNumber; }
-        public String getRepoBranch() { return repoBranch; }
-        public void setRepoBranch(String repoBranch) { this.repoBranch = repoBranch; }
-        public String getRepoCommitId() { return repoCommitId; }
-        public void setRepoCommitId(String repoCommitId) { this.repoCommitId = repoCommitId; }
-        public String getCreateTimeText() { return createTimeText; }
-        public void setCreateTimeText(String createTimeText) { this.createTimeText = createTimeText; }
-        public String getSourceType() { return sourceType; }
-        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
-        public String getLastProcessedTime() { return lastProcessedTime; }
-        public void setLastProcessedTime(String lastProcessedTime) { this.lastProcessedTime = lastProcessedTime; }
-        public long getTotalClasses() { return totalClasses; }
-        public void setTotalClasses(long totalClasses) { this.totalClasses = totalClasses; }
-        public long getCoveredClasses() { return coveredClasses; }
-        public void setCoveredClasses(long coveredClasses) { this.coveredClasses = coveredClasses; }
-        public long getTotalMethods() { return totalMethods; }
-        public void setTotalMethods(long totalMethods) { this.totalMethods = totalMethods; }
-        public long getCoveredMethods() { return coveredMethods; }
-        public void setCoveredMethods(long coveredMethods) { this.coveredMethods = coveredMethods; }
-        public long getTotalBranches() { return totalBranches; }
-        public void setTotalBranches(long totalBranches) { this.totalBranches = totalBranches; }
-        public long getCoveredBranches() { return coveredBranches; }
-        public void setCoveredBranches(long coveredBranches) { this.coveredBranches = coveredBranches; }
-        public long getTotalBranchTargets() { return totalBranchTargets; }
-        public void setTotalBranchTargets(long totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
-        public long getCoveredBranchTargets() { return coveredBranchTargets; }
-        public void setCoveredBranchTargets(long coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
-        public long getTotalLines() { return totalLines; }
-        public void setTotalLines(long totalLines) { this.totalLines = totalLines; }
-        public long getCoveredLines() { return coveredLines; }
-        public void setCoveredLines(long coveredLines) { this.coveredLines = coveredLines; }
-        public int getTotalComplexity() { return totalComplexity; }
-        public void setTotalComplexity(int totalComplexity) { this.totalComplexity = totalComplexity; }
-        public Integer getSnapshotCount() { return snapshotCount; }
-        public void setSnapshotCount(Integer snapshotCount) { this.snapshotCount = snapshotCount; }
-        public Integer getReportType() { return reportType; }
-        public void setReportType(Integer reportType) { this.reportType = reportType; }
-        public String getBaseVersionNumber() { return baseVersionNumber; }
-        public void setBaseVersionNumber(String baseVersionNumber) { this.baseVersionNumber = baseVersionNumber; }
-        public String getBaseRepoCommitId() { return baseRepoCommitId; }
-        public void setBaseRepoCommitId(String baseRepoCommitId) { this.baseRepoCommitId = baseRepoCommitId; }
-    }
-
-    public static class ClassCoverageSummary {
-        private String className;
-        private int totalMethods;
-        private int coveredMethods;
-        private int totalBranches;
-        private int coveredBranches;
-        private int totalBranchTargets;
-        private int coveredBranchTargets;
-        private int totalLines;
-        private int coveredLines;
-        private int totalComplexity;
-        private Double lineRate;
-        private Double branchRate;
-        private Double methodRate;
-        private boolean hasCodeChanges;
-
-        public String getClassName() { return className; }
-        public void setClassName(String className) { this.className = className; }
-        public int getTotalMethods() { return totalMethods; }
-        public void setTotalMethods(int totalMethods) { this.totalMethods = totalMethods; }
-        public int getCoveredMethods() { return coveredMethods; }
-        public void setCoveredMethods(int coveredMethods) { this.coveredMethods = coveredMethods; }
-        public int getTotalBranches() { return totalBranches; }
-        public void setTotalBranches(int totalBranches) { this.totalBranches = totalBranches; }
-        public int getCoveredBranches() { return coveredBranches; }
-        public void setCoveredBranches(int coveredBranches) { this.coveredBranches = coveredBranches; }
-        public int getTotalBranchTargets() { return totalBranchTargets; }
-        public void setTotalBranchTargets(int totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
-        public int getCoveredBranchTargets() { return coveredBranchTargets; }
-        public void setCoveredBranchTargets(int coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
-        public int getTotalLines() { return totalLines; }
-        public void setTotalLines(int totalLines) { this.totalLines = totalLines; }
-        public int getCoveredLines() { return coveredLines; }
-        public void setCoveredLines(int coveredLines) { this.coveredLines = coveredLines; }
-        public int getTotalComplexity() { return totalComplexity; }
-        public void setTotalComplexity(int totalComplexity) { this.totalComplexity = totalComplexity; }
-        public Double getLineRate() { return lineRate; }
-        public void setLineRate(Double lineRate) { this.lineRate = lineRate; }
-        public Double getBranchRate() { return branchRate; }
-        public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
-        public Double getMethodRate() { return methodRate; }
-        public void setMethodRate(Double methodRate) { this.methodRate = methodRate; }
-        public boolean isHasCodeChanges() { return hasCodeChanges; }
-        public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
-    }
-
-    public static class MethodCoverageSummary {
-        private String methodName;
-        private String methodDesc;
-        private int totalLines;
-        private int coveredLines;
-        private int totalBranches;
-        private int coveredBranches;
-        private int complexity;
-        private boolean covered;
-        private int totalBranchTargets;
-        private int coveredBranchTargets;
-        private Double branchRate;
-        private boolean hasCodeChanges;
-
-        public String getMethodName() { return methodName; }
-        public void setMethodName(String methodName) { this.methodName = methodName; }
-        public String getMethodDesc() { return methodDesc; }
-        public void setMethodDesc(String methodDesc) { this.methodDesc = methodDesc; }
-        public int getTotalLines() { return totalLines; }
-        public void setTotalLines(int totalLines) { this.totalLines = totalLines; }
-        public int getCoveredLines() { return coveredLines; }
-        public void setCoveredLines(int coveredLines) { this.coveredLines = coveredLines; }
-        public int getTotalBranches() { return totalBranches; }
-        public void setTotalBranches(int totalBranches) { this.totalBranches = totalBranches; }
-        public int getCoveredBranches() { return coveredBranches; }
-        public void setCoveredBranches(int coveredBranches) { this.coveredBranches = coveredBranches; }
-        public int getComplexity() { return complexity; }
-        public void setComplexity(int complexity) { this.complexity = complexity; }
-        public boolean isCovered() { return covered; }
-        public void setCovered(boolean covered) { this.covered = covered; }
-        public int getTotalBranchTargets() { return totalBranchTargets; }
-        public void setTotalBranchTargets(int totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
-        public int getCoveredBranchTargets() { return coveredBranchTargets; }
-        public void setCoveredBranchTargets(int coveredBranchTargets) { this.coveredBranchTargets = coveredBranchTargets; }
-        public Double getBranchRate() { return branchRate; }
-        public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
-        public boolean isHasCodeChanges() { return hasCodeChanges; }
-        public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
-    }
 }

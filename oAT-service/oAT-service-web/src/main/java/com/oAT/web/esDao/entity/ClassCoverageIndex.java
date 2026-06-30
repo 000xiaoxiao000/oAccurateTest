@@ -5,6 +5,7 @@ import com.alibaba.excel.annotation.ExcelProperty;
 import org.springframework.data.annotation.Id;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -21,6 +22,15 @@ public class ClassCoverageIndex implements Serializable {
 
     @ExcelIgnore
     private String sourceType;
+
+    @ExcelIgnore
+    private String language;
+
+    @ExcelIgnore
+    private String displayName;
+
+    @ExcelIgnore
+    private String sourcePath;
 
     @ExcelProperty("方法总数")
     private int totalMethods;
@@ -64,9 +74,11 @@ public class ClassCoverageIndex implements Serializable {
         private boolean isCovered;
         private List<Integer> coveredLineNumbers;
         private List<Integer> totalLineNumbers;
+        private Map<Integer, List<CoverageFootprintRecord>> lineFootprints;
         private List<Integer> coveredBranchLines;
         private Map<String, List<Integer>> totalBranchTargetProbeMap;
         private Map<String, List<Integer>> coveredBranchTargetProbeMap;
+        private Map<String, List<CoverageFootprintRecord>> branchFootprints;
         private int totalBranchTargets;
         private int coveredBranchTargets;
         private Double branchRate;
@@ -91,12 +103,16 @@ public class ClassCoverageIndex implements Serializable {
         public void setCoveredLineNumbers(List<Integer> coveredLineNumbers) { this.coveredLineNumbers = coveredLineNumbers; }
         public List<Integer> getTotalLineNumbers() { return totalLineNumbers; }
         public void setTotalLineNumbers(List<Integer> totalLineNumbers) { this.totalLineNumbers = totalLineNumbers; }
+        public Map<Integer, List<CoverageFootprintRecord>> getLineFootprints() { return lineFootprints; }
+        public void setLineFootprints(Map<Integer, List<CoverageFootprintRecord>> lineFootprints) { this.lineFootprints = lineFootprints; }
         public List<Integer> getCoveredBranchLines() { return coveredBranchLines; }
         public void setCoveredBranchLines(List<Integer> coveredBranchLines) { this.coveredBranchLines = coveredBranchLines; }
         public Map<String, List<Integer>> getTotalBranchTargetProbeMap() { return totalBranchTargetProbeMap; }
         public void setTotalBranchTargetProbeMap(Map<String, List<Integer>> totalBranchTargetProbeMap) { this.totalBranchTargetProbeMap = totalBranchTargetProbeMap; }
         public Map<String, List<Integer>> getCoveredBranchTargetProbeMap() { return coveredBranchTargetProbeMap; }
         public void setCoveredBranchTargetProbeMap(Map<String, List<Integer>> coveredBranchTargetProbeMap) { this.coveredBranchTargetProbeMap = coveredBranchTargetProbeMap; }
+        public Map<String, List<CoverageFootprintRecord>> getBranchFootprints() { return branchFootprints; }
+        public void setBranchFootprints(Map<String, List<CoverageFootprintRecord>> branchFootprints) { this.branchFootprints = branchFootprints; }
         public int getTotalBranchTargets() { return totalBranchTargets; }
         public void setTotalBranchTargets(int totalBranchTargets) { this.totalBranchTargets = totalBranchTargets; }
         public int getCoveredBranchTargets() { return coveredBranchTargets; }
@@ -105,6 +121,43 @@ public class ClassCoverageIndex implements Serializable {
         public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
         public boolean isHasCodeChanges() { return hasCodeChanges; }
         public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
+    }
+
+    public static class CoverageFootprintRecord implements Serializable {
+        private String traceId;
+        private String caseName;
+        private String testStage;
+        private String buildId;
+        private Long timestamp;
+
+        public String getTraceId() { return traceId; }
+        public void setTraceId(String traceId) { this.traceId = traceId; }
+        public String getCaseName() { return caseName; }
+        public void setCaseName(String caseName) { this.caseName = caseName; }
+        public String getTestStage() { return testStage; }
+        public void setTestStage(String testStage) { this.testStage = testStage; }
+        public String getBuildId() { return buildId; }
+        public void setBuildId(String buildId) { this.buildId = buildId; }
+        public Long getTimestamp() { return timestamp; }
+        public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
+
+        public static CoverageFootprintRecord of(String traceId, String caseName, String testStage, String buildId, Long timestamp) {
+            CoverageFootprintRecord record = new CoverageFootprintRecord();
+            record.setTraceId(traceId);
+            record.setCaseName(caseName);
+            record.setTestStage(testStage);
+            record.setBuildId(buildId);
+            record.setTimestamp(timestamp);
+            return record;
+        }
+
+        public static List<CoverageFootprintRecord> listOf(CoverageFootprintRecord record) {
+            List<CoverageFootprintRecord> records = new ArrayList<>();
+            if (record != null) {
+                records.add(record);
+            }
+            return records;
+        }
     }
 
     public String getId() { return id; }
@@ -117,6 +170,12 @@ public class ClassCoverageIndex implements Serializable {
     public void setClassName(String className) { this.className = className; }
     public String getSourceType() { return sourceType; }
     public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public String getLanguage() { return language; }
+    public void setLanguage(String language) { this.language = language; }
+    public String getDisplayName() { return displayName; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
+    public String getSourcePath() { return sourcePath; }
+    public void setSourcePath(String sourcePath) { this.sourcePath = sourcePath; }
     public int getTotalMethods() { return totalMethods; }
     public void setTotalMethods(int totalMethods) { this.totalMethods = totalMethods; }
     public int getCoveredMethods() { return coveredMethods; }

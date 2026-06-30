@@ -1,10 +1,9 @@
 package com.oAT.web.control;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.oAT.ai.agent.AgentContext;
 import com.oAT.ai.agent.AIAgentService;
 import com.oAT.ai.agent.ToolRecommender;
+import com.oAT.web.api.ai.AIStreamingSseService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
@@ -18,7 +17,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -46,7 +44,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AIStreamingControl {
 
     private static final Logger logger = LoggerFactory.getLogger(AIStreamingControl.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private static final Long SSE_TIMEOUT = 300_000L; // 5分钟
     private static final String DEFAULT_STREAM_MEMORY_SCOPE = "workbench";
@@ -58,6 +55,9 @@ public class AIStreamingControl {
 
     @Autowired
     private ProjectService projectService;
+
+    @Autowired
+    private AIStreamingSseService aiStreamingSseService;
 
     /**
      * 流式AI对话（SSE）
@@ -465,69 +465,30 @@ public class AIStreamingControl {
     }
 
     private void trySendJsonEvent(SseEmitter emitter, String event, Object data) {
-        try {
-            sendJsonEvent(emitter, event, data);
-        } catch (Exception e) {
-            logger.debug("Failed to send SSE {} event: {}", event, errorMessage(e));
-        }
+        aiStreamingSseService.trySendJsonEvent(emitter, event, data);
     }
 
     private void completeEmitter(SseEmitter emitter, AtomicBoolean completed) {
-        if (completed.compareAndSet(false, true)) {
-            try {
-                emitter.complete();
-            } catch (Exception e) {
-                logger.debug("SSE complete ignored: {}", errorMessage(e));
-            }
-        }
+        aiStreamingSseService.completeEmitter(emitter, completed);
     }
 
     private void completeEmitterWithError(SseEmitter emitter, AtomicBoolean completed, Throwable error) {
-        if (completed.compareAndSet(false, true)) {
-            try {
-                emitter.completeWithError(error);
-            } catch (Exception e) {
-                logger.debug("SSE completeWithError ignored: {}", errorMessage(e));
-            }
-        }
+        aiStreamingSseService.completeEmitterWithError(emitter, completed, error);
     }
 
     private String errorMessage(Throwable error) {
-        if (error == null) {
-            return "内部错误";
-        }
-        return error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
+        return aiStreamingSseService.errorMessage(error);
     }
 
     /**
      * 发送 SSE JSON 事件（自动序列化）
      */
     private void sendJsonEvent(SseEmitter emitter, String event, Object data) throws IOException {
-        try {
-            String jsonStr = JSON.writeValueAsString(data);
-            emitter.send(SseEmitter.event()
-                    .name(event)
-                    .data(jsonStr)
-                    .reconnectTime(3000));
-            emitter.send(SseEmitter.event()
-                    .name("message")
-                    .data(jsonStr)
-                    .id(buildEventId(event))
-                    .reconnectTime(3000));
-        } catch (JsonProcessingException e) {
-            emitter.send(SseEmitter.event()
-                    .name(event)
-                    .data("{\"error\":\"serialization_error\"}")
-                    .reconnectTime(3000));
-        }
+        aiStreamingSseService.sendJsonEvent(emitter, event, data);
     }
 
     private void sendProcessingStatus(SseEmitter emitter, String phase, String message) throws IOException {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("type", "status");
-        payload.put("phase", phase);
-        payload.put("message", message);
-        sendJsonEvent(emitter, "status", payload);
+        aiStreamingSseService.sendProcessingStatus(emitter, phase, message);
     }
 
     private String normalizeMemoryScope(String memoryScope) {
@@ -539,47 +500,7 @@ public class AIStreamingControl {
     }
 
     private void emitFallbackToolEvents(SseEmitter emitter) throws IOException {
-        AIAgentService.FallbackReport report = aiAgentService.getLatestFallbackReport();
-        if (report == null || !report.isSuccess()) {
-            return;
-        }
-
-        Map<String, Object> toolCallPayload = new LinkedHashMap<>();
-        toolCallPayload.put("toolName", report.getEffectiveToolName());
-        toolCallPayload.put("strategy", report.getStrategy());
-        toolCallPayload.put("retried", report.isRetried());
-        toolCallPayload.put("durationMs", report.getDurationMs());
-        toolCallPayload.put("parameterCount", report.getParameterReports().size());
-        sendJsonEvent(emitter, "tool_call", toolCallPayload);
-
-        Map<String, Object> execPayload = new LinkedHashMap<>();
-        execPayload.put("type", "exec");
-        execPayload.put("tool", report.getEffectiveToolName());
-        execPayload.put("success", true);
-        execPayload.put("durationMs", report.getDurationMs());
-        execPayload.put("strategy", report.getStrategy());
-        execPayload.put("resultLength", report.getResultLength());
-        execPayload.put("parameters", buildExecParameterSummary(report));
-        sendJsonEvent(emitter, "exec", execPayload);
-    }
-
-    private Map<String, Object> buildExecParameterSummary(AIAgentService.FallbackReport report) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        for (AIAgentService.FallbackParameterReport parameterReport : report.getParameterReports()) {
-            Map<String, Object> item = new LinkedHashMap<>();
-            item.put("matchedKey", parameterReport.getMatchedKey());
-            item.put("strategy", parameterReport.getStrategy());
-            item.put("targetType", parameterReport.getTargetType());
-            item.put("usedDefault", parameterReport.isUsedDefault());
-            item.put("explicitNull", parameterReport.isExplicitNull());
-            item.put("message", parameterReport.getMessage());
-            payload.put(parameterReport.getParameterName(), item);
-        }
-        return payload;
-    }
-
-    private String buildEventId(String event) {
-        return event + "-" + System.currentTimeMillis();
+        aiStreamingSseService.emitFallbackToolEvents(emitter);
     }
 
     /**
@@ -587,49 +508,7 @@ public class AIStreamingControl {
      * 前端收到此事件后可自动渲染对应图表
      */
     private Map<String, Object> inferVisualizationData(String question, String response, String projectId) {
-        Map<String, Object> viz = new HashMap<>();
-        String lowerQ = question.toLowerCase();
-
-        if (containsAny(lowerQ, "趋势", "trend", "变化", "历史")) {
-            viz.put("chartType", "line");
-            viz.put("title", "数据趋势图");
-            viz.put("suggestedApi", "/p/" + projectId + "/coverage");
-        } else if (containsAny(lowerQ, "对比", "compare", "分布", "比例", "占比")) {
-            viz.put("chartType", "pie");
-            viz.put("title", "数据分布图");
-            viz.put("suggestedApi", "/p/" + projectId + "/coverage");
-        } else if (containsAny(lowerQ, "排名", "top", "最差", "最低", "最高", "排序")) {
-            viz.put("chartType", "bar");
-            viz.put("title", "排行榜");
-            viz.put("suggestedApi", "/p/" + projectId + "/coverage");
-        } else if (containsAny(lowerQ, "性能", "响应时间", "慢", "延迟", "p95", "p99")) {
-            viz.put("chartType", "bar");
-            viz.put("title", "性能指标");
-            viz.put("suggestedApi", "/p/" + projectId + "/map/home");
-        } else if (containsAny(lowerQ, "错误率", "异常", "缺陷", "bug", "失败")) {
-            viz.put("chartType", "heatmap");
-            viz.put("title", "错误热力图");
-            viz.put("suggestedApi", "/p/" + projectId + "/map/home");
-        }
-
-        // 如果回答已包含表格，不重复推荐
-        if (response != null && (response.contains("|") && response.contains("---") ||
-                response.contains("<table"))) {
-            return viz;
-        }
-
-        if (!viz.isEmpty()) {
-            viz.put("actionHint", "点击查看详细图表");
-            viz.put("autoRender", true);
-        }
-        return viz;
-    }
-
-    private boolean containsAny(String text, String... keywords) {
-        for (String kw : keywords) {
-            if (text.contains(kw)) return true;
-        }
-        return false;
+        return aiStreamingSseService.inferVisualizationData(question, response, projectId);
     }
 
     /**
@@ -637,38 +516,7 @@ public class AIStreamingControl {
      * 按字符分批发送，创造打字机效果
      */
     private void sendTypingEffect(SseEmitter emitter, String response) throws IOException, InterruptedException {
-        int chunkSize = 10; // 每次发送10个字符
-        int length = response.length();
-
-        for (int i = 0; i < length; i += chunkSize) {
-            int end = Math.min(i + chunkSize, length);
-            String chunk = response.substring(i, end);
-
-            SseEmitter.SseEventBuilder event = SseEmitter.event()
-                .name("content")
-                .data(chunk)
-                .reconnectTime(3000);
-
-            emitter.send(event);
-            emitter.send(SseEmitter.event()
-                    .name("token")
-                    .data(chunk)
-                    .reconnectTime(3000));
-
-            // 延迟50ms，模拟打字速度
-            Thread.sleep(50);
-        }
+        aiStreamingSseService.sendTypingEffect(emitter, response);
     }
 
-    /**
-     * JSON转义
-     */
-    private String escapeJson(String text) {
-        if (text == null) return "";
-        return text.replace("\\", "\\\\")
-                  .replace("\"", "\\\"")
-                  .replace("\n", "\\n")
-                  .replace("\r", "\\r")
-                  .replace("\t", "\\t");
-    }
 }

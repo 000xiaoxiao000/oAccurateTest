@@ -2,16 +2,10 @@ package com.oAT.web.control;
 
 import com.oAT.web.config.FrontendProperties;
 import com.oAT.agent.model.*;
+import com.oAT.web.api.snapshot.TraceGraphViewService;
 import com.oAT.web.control.entity.GraphView;
 import com.oAT.web.control.entity.ResultNotified;
-import com.oAT.web.domain.RemoteCallResolver;
-import com.oAT.web.esDao.ApiEndpointRepository;
-import com.oAT.web.esDao.StaticInfoRepository;
-import com.oAT.web.esDao.entity.ApiEndpointIndex;
-import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.Snapshot;
-import com.oAT.web.esDao.entity.StaticSourceInfo;
-import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import com.oAT.web.service.*;
 import com.oAT.web.service.entity.*;
 import org.apache.commons.lang3.ArrayUtils;
@@ -66,19 +60,10 @@ public class SnapshotControl {
     private VersionService versionService;
 
     @Autowired
-    private CoverageService coverageService;
-
-    @Autowired
-    private StaticInfoRepository staticInfoRepository;
-
-    @Autowired
     private UsecaseService usecaseService;
 
     @Autowired
-    private ApiEndpointAnalysisService apiEndpointAnalysisService;
-
-    @Autowired
-    private ApiEndpointRepository apiEndpointRepository;
+    private TraceGraphViewService traceGraphViewService;
 
     @PostMapping("/save")
     @ResponseBody
@@ -178,60 +163,6 @@ public class SnapshotControl {
         return "redirect:" + frontendProperties.url(target.toString());
     }
 
-    private String buildSnapshotApiCoverageSummaryText(List<SnapshotVo> snapshots) {
-        String appId = snapshots.stream()
-                .map(SnapshotVo::getAppId)
-                .filter(StringUtils::hasText)
-                .findFirst()
-                .orElse(null);
-        if (!StringUtils.hasText(appId)) {
-            return "0 / 0";
-        }
-        List<String> traceIds = snapshots.stream()
-                .map(SnapshotVo::getTraceId)
-                .filter(StringUtils::hasText)
-                .distinct()
-                .collect(Collectors.toList());
-        ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(appId, traceIds);
-        return coverage.getDisplayText();
-    }
-
-    private boolean in(String[] source, String[] target) {
-        for (String s : source) {
-            if (s == null) {
-                continue;
-            }
-            for (String t : target) {
-                if (s.equals(t)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private List<UsecaseVo> collectAllProjectUsecases(String projectId) {
-        LinkedHashMap<String, UsecaseVo> result = new LinkedHashMap<>();
-        Deque<String> directoryQueue = new ArrayDeque<>();
-        directoryQueue.add("root");
-        while (!directoryQueue.isEmpty()) {
-            String directoryId = directoryQueue.poll();
-            for (UsecaseVo usecaseVo : usecaseService.getUsecases(projectId, directoryId, "updateTime", null)) {
-                result.putIfAbsent(usecaseVo.getId(), usecaseVo);
-            }
-            List<UsecaseDirectoryVo> childDirectories = usecaseService.getDirectory(projectId, directoryId);
-            if (childDirectories == null) {
-                continue;
-            }
-            for (UsecaseDirectoryVo directoryVo : childDirectories) {
-                if (directoryVo != null && StringUtils.hasText(directoryVo.getId())) {
-                    directoryQueue.add(directoryVo.getId());
-                }
-            }
-        }
-        return new ArrayList<>(result.values());
-    }
-
     @RequestMapping("/mySnapshotsCodeReport")
     public String mySnapshotsCodeReport(@PathVariable String projectId, String sort) {
         return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code-report" + (StringUtils.hasText(sort) ? "?sort=" + sort : ""));
@@ -262,226 +193,6 @@ public class SnapshotControl {
         }
     }
 
-    private String buildMySnapshotsCodeReport(String projectId, List<SnapshotVo> snapshots, Model model) {
-        Map<String, Map<String, List<Map<String, Object>>>> codeRelationships = new HashMap<>();
-
-        // 用于计算聚合指标
-        long totalMethods = 0;
-        long coveredMethods = 0;
-        long totalLines = 0;
-        long coveredLines = 0;
-        long totalBranches = 0;
-        long coveredBranches = 0;
-        int totalComplexity = 0;
-
-        // 全局去重用，确保同一方法在不同快照中被统计多次时，覆盖行能合并
-        // Key: className + methodDescriptor
-        Map<String, Set<Integer>> methodCoveredLines = new HashMap<>();
-        Map<String, Set<Integer>> methodTotalLines = new HashMap<>();
-        Map<String, Integer> methodComplexity = new HashMap<>();
-        Map<String, Set<Integer>> methodTotalBranches = new HashMap<>();
-        Map<String, Set<Integer>> methodCoveredBranches = new HashMap<>();
-        Map<String, Set<String>> methodTotalBranchTargets = new HashMap<>();
-        Map<String, Set<String>> methodCoveredBranchTargets = new HashMap<>();
-
-        // 用于类级汇总
-        Map<String, Set<String>> classMethods = new HashMap<>();
-        Map<String, String> classToAppId = new HashMap<>();
-
-        for (SnapshotVo snapshot : snapshots) {
-            String traceId = snapshot.getTraceId();
-            //得到代码关系
-            TraceNode traceNode = snapshotService.getTraceNode(traceId, "0");
-            if (traceNode instanceof HttpTraceNode) {
-                HttpTraceNode httpTraceNode = (HttpTraceNode) traceNode;
-                String requestUrl = httpTraceNode.getRequestUrl();
-
-                StackNodeVo[] codeNodes = httpTraceNode.getCodeNodes();
-                if (codeNodes != null) {
-                    Map<String, List<Map<String, Object>>> childNodes = new HashMap<>();
-                    codeRelationships.put(requestUrl, childNodes);
-
-                    // 获取 appId
-                    String currentAppId = snapshot.getAppId();
-                    if (!StringUtils.hasText(currentAppId) && traceNode.getApp() != null) {
-                        currentAppId = traceNode.getApp().getAppId();
-                    }
-
-                    if (StringUtils.hasText(currentAppId)) {
-                        classToAppId.putIfAbsent(null, currentAppId); // 用于后续静态数据加载标记
-                    }
-
-                    for (StackNodeVo node : codeNodes) {
-                        String methodKey = node.getMethodName() + "#" + node.getMethodDescriptor();
-                        classMethods.computeIfAbsent(node.getClassName(), k -> new HashSet<>()).add(methodKey);
-
-                        if (StringUtils.hasText(currentAppId)) {
-                            classToAppId.putIfAbsent(node.getClassName(), currentAppId);
-                        }
-
-                        childNodes.computeIfAbsent(node.parentId(), k -> new ArrayList<>()).add(new HashMap<String, Object>() {{
-                            put("className", node.getClassName());
-                            put("methodName", node.getMethodName());
-                            put("methodDescriptor", node.getMethodDescriptor());
-                            put("doLines", node.getDoLines() != null ? new ArrayList<>(node.getDoLines()) : Collections.emptyList());
-                            put("lineTotal", Collections.emptyList());
-                            put("branchCovered", 0);
-                            put("branchTotal", 0);
-                        }});
-
-                        // 行覆盖
-                        if (node.getDoLines() != null) {
-                            methodCoveredLines.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getDoLines());
-                        }
-
-                        // 分支覆盖
-                        if (node.getExecuteBranch() != null) {
-                            methodCoveredBranches.computeIfAbsent(methodKey, k -> new HashSet<>()).addAll(node.getExecuteBranch());
-                        }
-                        addBranchTargetKeys(methodCoveredBranchTargets, methodKey, node.getExecuteBranchTargetProbeMap(), null);
-                    }
-                }
-            }
-        }
-
-        // 从全量静态数据补充总数
-        for (String appId : new HashSet<>(classToAppId.values())) {
-            if (!StringUtils.hasText(appId)) continue;
-            List<StaticSourceInfo> staticInfos = staticInfoRepository.findByAppId(appId);
-            for (StaticSourceInfo si : staticInfos) {
-                if (si.getClassInfo() == null || si.getClassInfo().getMethodMaps() == null) continue;
-                for (StaticSourceMethodInfo mInfo : si.getClassInfo().getMethodMaps().values()) {
-                    String mKey = mInfo.getMethodName() + "#" + mInfo.getMethodDesc();
-                    // 只统计被覆盖过的方法的总数
-                    if (methodCoveredLines.containsKey(mKey) || methodCoveredBranches.containsKey(mKey)) {
-                        methodTotalLines.computeIfAbsent(mKey, k -> new HashSet<>())
-                                .addAll(mInfo.getMethodLineNumberMap() != null ? mInfo.getMethodLineNumberMap() : Collections.emptyList());
-                        methodComplexity.put(mKey, mInfo.getCyclomaticComplexityMap() != null ? mInfo.getCyclomaticComplexityMap() : 0);
-                        methodTotalBranches.computeIfAbsent(mKey, k -> new HashSet<>())
-                                .addAll(mInfo.getBranchLineNumberSet() != null ? mInfo.getBranchLineNumberSet() : Collections.emptyList());
-                        Map<String, List<Integer>> normalizedTotalBranchTargetProbeMap = normalizeMethodBranchTargetProbeMap(
-                                mInfo.getBranchLineAndTargetProbeMap(),
-                                decodeBranchTargetKeys(methodCoveredBranchTargets.get(mKey)));
-                        addBranchTargetKeys(methodTotalBranchTargets, mKey, normalizedTotalBranchTargetProbeMap, null);
-                        if (methodCoveredBranchTargets.containsKey(mKey)) {
-                            Set<String> normalizedKeys = new LinkedHashSet<>();
-                            addBranchTargetKeysToSet(normalizedKeys, normalizedTotalBranchTargetProbeMap,
-                                    decodeBranchTargetKeys(methodCoveredBranchTargets.get(mKey)));
-                            methodCoveredBranchTargets.put(mKey, normalizedKeys);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 计算汇总
-        for (Map<String, List<Map<String, Object>>> childNodes : codeRelationships.values()) {
-            for (List<Map<String, Object>> nodes : childNodes.values()) {
-                for (Map<String, Object> node : nodes) {
-                    String methodKey = node.get("methodName") + "#" + node.get("methodDescriptor");
-                    Set<Integer> totalLineSet = methodTotalLines.getOrDefault(methodKey, Collections.emptySet());
-                    Set<String> totalBranchSet = methodTotalBranchTargets.getOrDefault(methodKey, Collections.emptySet());
-                    Set<String> coveredBranchSet = methodCoveredBranchTargets.getOrDefault(methodKey, Collections.emptySet());
-                    node.put("lineTotalCount", totalLineSet.size());
-                    node.put("branchTotalCount", totalBranchSet.size());
-                    node.put("branchCoveredCount", coveredBranchSet.size());
-                }
-            }
-        }
-
-        // 计算汇总
-        List<Map<String, Object>> classStats = new ArrayList<>();
-        totalMethods = methodTotalLines.size();
-        for (String mKey : methodTotalLines.keySet()) {
-            totalLines += methodTotalLines.get(mKey).size();
-            coveredLines += methodCoveredLines.getOrDefault(mKey, Collections.emptySet()).size();
-            if (methodCoveredLines.containsKey(mKey) && !methodCoveredLines.get(mKey).isEmpty()) {
-                coveredMethods++;
-            }
-            totalComplexity += methodComplexity.getOrDefault(mKey, 0);
-            totalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
-            coveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
-        }
-        long totalBranchTargets = 0;
-        long coveredBranchTargets = 0;
-        for (String mKey : methodTotalLines.keySet()) {
-            totalBranchTargets += methodTotalBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
-            coveredBranchTargets += methodCoveredBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
-        }
-
-        // 生成类级详细统计，供页面 Table 展示 (参考 CoverageReportIndex 结构)
-        for (Map.Entry<String, Set<String>> entry : classMethods.entrySet()) {
-            String className = entry.getKey();
-            Set<String> methods = entry.getValue();
-            String classAppId = classToAppId.get(className);
-
-            long cTotalMethods = methods.size();
-            long cCoveredMethods = 0;
-            long cTotalLines = 0;
-            long cCoveredLines = 0;
-            long cTotalBranches = 0;
-            long cCoveredBranches = 0;
-            long cTotalBranchTargets = 0;
-            long cCoveredBranchTargets = 0;
-            int cTotalComplexity = 0;
-
-            for (String mKey : methods) {
-                cTotalLines += methodTotalLines.get(mKey).size();
-                cCoveredLines += methodCoveredLines.getOrDefault(mKey, Collections.emptySet()).size();
-                if (methodCoveredLines.containsKey(mKey) && !methodCoveredLines.get(mKey).isEmpty()) {
-                    cCoveredMethods++;
-                }
-                cTotalComplexity += methodComplexity.getOrDefault(mKey, 0);
-                cTotalBranches += methodTotalBranches.getOrDefault(mKey, Collections.emptySet()).size();
-                cCoveredBranches += methodCoveredBranches.getOrDefault(mKey, Collections.emptySet()).size();
-                cTotalBranchTargets += methodTotalBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
-                cCoveredBranchTargets += methodCoveredBranchTargets.getOrDefault(mKey, Collections.emptySet()).size();
-            }
-
-            Map<String, Object> cStat = new HashMap<>();
-            cStat.put("className", className);
-            cStat.put("appId", classAppId);
-            cStat.put("totalMethods", cTotalMethods);
-            cStat.put("coveredMethods", cCoveredMethods);
-            cStat.put("totalLines", cTotalLines);
-            cStat.put("coveredLines", cCoveredLines);
-            cStat.put("totalBranches", cTotalBranches);
-            cStat.put("coveredBranches", cCoveredBranches);
-            cStat.put("totalBranchTargets", cTotalBranchTargets);
-            cStat.put("coveredBranchTargets", cCoveredBranchTargets);
-            cStat.put("branchRate", cTotalBranchTargets > 0 ? cCoveredBranchTargets * 100.0 / cTotalBranchTargets : 0);
-            cStat.put("totalComplexity", cTotalComplexity);
-            classStats.add(cStat);
-        }
-
-        // 获取一个代表性的 appId (如果有的话)
-        String appId = snapshots.isEmpty() ? null : snapshots.get(0).getAppId();
-
-        // 模拟一个 CoverageReportIndex 对象传递给模板以复用样式
-        CoverageReportIndex summary = new CoverageReportIndex();
-        summary.setTotalMethods(totalMethods);
-        summary.setCoveredMethods(coveredMethods);
-        summary.setTotalLines(totalLines);
-        summary.setCoveredLines(coveredLines);
-        summary.setTotalBranches(totalBranches);
-        summary.setCoveredBranches(coveredBranches);
-        summary.setTotalBranchTargets(totalBranchTargets);
-        summary.setCoveredBranchTargets(coveredBranchTargets);
-        summary.setTotalComplexity(totalComplexity);
-        // 类覆盖率在快照中较难准确统计全量（因为不知道没碰到的类），这里取触达过的类
-        summary.setTotalClasses(classMethods.size());
-        summary.setCoveredClasses(summary.getTotalClasses());
-
-        model.addAttribute("report", summary);
-        model.addAttribute("classStats", classStats);
-        model.addAttribute("codeRelationships", codeRelationships);
-        model.addAttribute("codeRelatSize", codeRelationships.size());
-        model.addAttribute("projectId", projectId);
-        model.addAttribute("appId", appId);
-
-        return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code-report");
-    }
-
     @RequestMapping("/my/code")
     public String snapshotCodeView(@PathVariable String projectId, String appId, String className) {
         return "redirect:" + frontendProperties.url("/p/" + projectId + "/my-snapshots/code?appId=" + appId + "&className=" + className);
@@ -495,23 +206,6 @@ public class SnapshotControl {
         if (StringUtils.hasText(nodeId)) query.add("nodeId=" + nodeId);
         if (!query.isEmpty()) target.append("?").append(String.join("&", query));
         return "redirect:" + frontendProperties.url(target.toString());
-    }
-
-    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        List<ApiEndpointIndex> endpoints = apps.stream()
-                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
-                .collect(Collectors.toList());
-        return new RemoteCallResolver(apps, endpoints);
-    }
-
-    private Map<String, TraceNode> buildTraceNodeMap(String traceId) {
-        Collection<TraceNode> nodes = snapshotService.getTraceNodes(traceId);
-        return nodes.stream()
-                .filter(Objects::nonNull)
-                .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
-                .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node,
-                        (left, right) -> left, LinkedHashMap::new));
     }
 
 
@@ -529,7 +223,7 @@ public class SnapshotControl {
     @RequestMapping("/detail/graph/{traceId}")
     @ResponseBody
     public GraphView getGraphView(@PathVariable String projectId, @PathVariable String traceId) {
-        return new TraceGraphParse(buildTraceNodeMap(traceId), buildRemoteCallResolver(projectId)).getGraphView();
+        return traceGraphViewService.buildGraphView(projectId, traceId);
     }
 
     @RequestMapping("/detail/stack/{traceId}")
@@ -595,181 +289,6 @@ public class SnapshotControl {
         return new ResultNotified<>(true, "快照更新成功");
     }
 
-    private Map<String, List<Integer>> normalizeMethodBranchTargetProbeMap(Map<String, List<Integer>> total,
-                                                                            Map<String, List<Integer>> covered) {
-        if (total == null || total.isEmpty()) {
-            return new LinkedHashMap<>();
-        }
-        if (covered == null || covered.isEmpty()) {
-            return copyBranchTargetProbeMap(total);
-        }
-        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
-            String branchLine = entry.getKey();
-            List<Integer> totalValues = entry.getValue();
-            if (totalValues == null || totalValues.isEmpty()) {
-                continue;
-            }
-            LinkedHashSet<Integer> totalSet = new LinkedHashSet<>(totalValues);
-            List<Integer> coveredValues = covered.get(branchLine);
-            if (coveredValues == null || coveredValues.isEmpty()) {
-                normalized.put(branchLine, new ArrayList<>(totalSet));
-                continue;
-            }
-            LinkedHashSet<Integer> coveredSet = new LinkedHashSet<>(coveredValues);
-            if (totalSet.containsAll(coveredSet)) {
-                normalized.put(branchLine, new ArrayList<>(coveredSet));
-            } else {
-                normalized.put(branchLine, new ArrayList<>(totalSet));
-            }
-        }
-        return normalized.isEmpty() ? copyBranchTargetProbeMap(total) : normalized;
-    }
-
-    private Map<String, List<Integer>> copyBranchTargetProbeMap(Map<String, List<Integer>> source) {
-        if (source == null || source.isEmpty()) {
-            return null;
-        }
-        Map<String, List<Integer>> copy = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
-            List<Integer> values = entry.getValue() == null ? Collections.emptyList() : new ArrayList<>(new LinkedHashSet<>(entry.getValue()));
-            copy.put(entry.getKey(), values);
-        }
-        return copy;
-    }
-
-    private Map<String, List<Integer>> mergeBranchTargetProbeMap(Map<String, List<Integer>> current,
-                                                                 Map<String, List<Integer>> incoming) {
-        Map<String, LinkedHashSet<Integer>> merged = new LinkedHashMap<>();
-        appendBranchTargetProbeMap(merged, current);
-        appendBranchTargetProbeMap(merged, incoming);
-        Map<String, List<Integer>> result = new LinkedHashMap<>();
-        for (Map.Entry<String, LinkedHashSet<Integer>> entry : merged.entrySet()) {
-            result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
-        }
-        return result;
-    }
-
-    private void appendBranchTargetProbeMap(Map<String, LinkedHashSet<Integer>> target,
-                                            Map<String, List<Integer>> source) {
-        if (source == null || source.isEmpty()) {
-            return;
-        }
-        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
-            LinkedHashSet<Integer> values = target.computeIfAbsent(entry.getKey(), key -> new LinkedHashSet<>());
-            if (entry.getValue() != null) {
-                values.addAll(entry.getValue());
-            }
-        }
-    }
-
-    private int countBranchTargets(Map<String, List<Integer>> branchTargetProbeMap) {
-        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
-            return 0;
-        }
-        int total = 0;
-        for (List<Integer> values : branchTargetProbeMap.values()) {
-            total += values == null ? 0 : new LinkedHashSet<>(values).size();
-        }
-        return total;
-    }
-
-    private Map<String, List<Integer>> normalizeCoveredBranchTargetProbeMap(Map<String, List<Integer>> total,
-                                                                            Map<String, List<Integer>> covered) {
-        if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
-            return new LinkedHashMap<>();
-        }
-        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
-            List<Integer> totalValues = entry.getValue();
-            if (totalValues == null || totalValues.isEmpty()) {
-                continue;
-            }
-            Set<Integer> allowed = new LinkedHashSet<>(totalValues);
-            List<Integer> coveredValues = covered.get(entry.getKey());
-            if (coveredValues == null || coveredValues.isEmpty()) {
-                continue;
-            }
-            LinkedHashSet<Integer> matched = new LinkedHashSet<>();
-            for (Integer value : coveredValues) {
-                if (value != null && allowed.contains(value)) {
-                    matched.add(value);
-                }
-            }
-            if (!matched.isEmpty()) {
-                normalized.put(entry.getKey(), new ArrayList<>(matched));
-            }
-        }
-        return normalized;
-    }
-
-    private double calculateBranchRate(int coveredBranchTargets, int totalBranchTargets) {
-        return totalBranchTargets > 0 ? (double) coveredBranchTargets / totalBranchTargets * 100 : 0.0;
-    }
-
-    private void addBranchTargetKeys(Map<String, Set<String>> target,
-                                     String methodKey,
-                                     Map<String, List<Integer>> branchTargetProbeMap,
-                                     Map<String, List<Integer>> allowedBranchTargetProbeMap) {
-        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
-            return;
-        }
-        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
-        Map<String, List<Integer>> effective = allowedBranchTargetProbeMap == null
-                ? branchTargetProbeMap
-                : normalizeCoveredBranchTargetProbeMap(allowedBranchTargetProbeMap, branchTargetProbeMap);
-        for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            for (Integer branchTarget : entry.getValue()) {
-                if (branchTarget != null) {
-                    keys.add(entry.getKey() + "#" + branchTarget);
-                }
-            }
-        }
-    }
-
-    private void addBranchTargetKeysToSet(Set<String> target,
-                                          Map<String, List<Integer>> allowedBranchTargetProbeMap,
-                                          Map<String, List<Integer>> branchTargetProbeMap) {
-        Map<String, List<Integer>> effective = allowedBranchTargetProbeMap == null
-                ? branchTargetProbeMap
-                : normalizeCoveredBranchTargetProbeMap(allowedBranchTargetProbeMap, branchTargetProbeMap);
-        for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            for (Integer branchTarget : entry.getValue()) {
-                if (branchTarget != null) {
-                    target.add(entry.getKey() + "#" + branchTarget);
-                }
-            }
-        }
-    }
-
-    private Map<String, List<Integer>> decodeBranchTargetKeys(Set<String> keys) {
-        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
-        if (keys == null || keys.isEmpty()) {
-            return decoded;
-        }
-        for (String key : keys) {
-            if (!StringUtils.hasText(key)) {
-                continue;
-            }
-            int split = key.lastIndexOf('#');
-            if (split <= 0 || split >= key.length() - 1) {
-                continue;
-            }
-            try {
-                int branchTarget = Integer.parseInt(key.substring(split + 1));
-                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(branchTarget);
-            } catch (NumberFormatException ignore) {
-            }
-        }
-        return decoded;
-    }
-
     @RequestMapping("/getTraceGraph")
     @ResponseBody
     public GraphView getTraceGraph(@PathVariable String projectId, String traceId, HttpSession session) {
@@ -781,7 +300,7 @@ public class SnapshotControl {
         for (TraceNode node : list) {
             nodes.put(node.getTraceNodeId(), node);
         }
-        return new TraceGraphParse(nodes, buildRemoteCallResolver(projectId)).getGraphView();
+        return traceGraphViewService.buildGraphView(projectId, nodes);
     }
 
 

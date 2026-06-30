@@ -16,6 +16,12 @@ public class CoverageReportIndex implements Serializable {
 
     private String sourceType;
 
+    private String language;
+
+    private String buildId;
+
+    private String testStage;
+
     private String lastProcessedTime;
 
     private long totalClasses;
@@ -70,6 +76,12 @@ public class CoverageReportIndex implements Serializable {
     public void setCreateTime(Date createTime) { this.createTime = createTime; }
     public String getSourceType() { return sourceType; }
     public void setSourceType(String sourceType) { this.sourceType = sourceType; }
+    public String getLanguage() { return language; }
+    public void setLanguage(String language) { this.language = language; }
+    public String getBuildId() { return buildId; }
+    public void setBuildId(String buildId) { this.buildId = buildId; }
+    public String getTestStage() { return testStage; }
+    public void setTestStage(String testStage) { this.testStage = testStage; }
     public String getLastProcessedTime() { return lastProcessedTime; }
     public void setLastProcessedTime(String lastProcessedTime) { this.lastProcessedTime = lastProcessedTime; }
     public long getTotalClasses() { return totalClasses; }

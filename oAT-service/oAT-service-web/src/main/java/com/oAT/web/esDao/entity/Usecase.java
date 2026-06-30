@@ -31,6 +31,10 @@ public class Usecase implements Serializable, StandardDate{
      */
     private String systemSnapshots[];
     /**
+     * 绑定的多语言覆盖率足迹快照 key。
+     */
+    private String coverageFootprints[];
+    /**
      * 绑定的测试缺陷id
      */
     private String defects[];
@@ -115,6 +119,14 @@ public class Usecase implements Serializable, StandardDate{
 
     public void setSystemSnapshots(String[] systemSnapshots) {
         this.systemSnapshots = systemSnapshots;
+    }
+
+    public String[] getCoverageFootprints() {
+        return coverageFootprints;
+    }
+
+    public void setCoverageFootprints(String[] coverageFootprints) {
+        this.coverageFootprints = coverageFootprints;
     }
 
     public String[] getDefects() {

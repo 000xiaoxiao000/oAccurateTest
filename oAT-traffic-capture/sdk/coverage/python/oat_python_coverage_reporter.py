@@ -32,23 +32,27 @@ def main():
     parser.add_argument("--commit-id")
     parser.add_argument("--branch")
     parser.add_argument("--case-name")
+    parser.add_argument("--build-id")
+    parser.add_argument("--test-stage", default="unknown")
     args = parser.parse_args()
 
     with open(args.coverage_json, "r", encoding="utf-8") as handle:
         coverage_data = json.load(handle)
 
     payload = {
+        "projectId": args.project_id,
+        "appId": args.app_id,
+        "language": "PYTHON",
         "versionNumber": args.version_number,
         "commitId": args.commit_id,
         "branch": args.branch,
         "caseName": args.case_name,
+        "buildId": args.build_id,
+        "testStage": args.test_stage,
         "timestamp": int(time.time() * 1000),
-        "coverageData": coverage_data,
+        "payload": coverage_data,
     }
-    url = (
-        args.endpoint.rstrip("/")
-        + f"/api/projects/{args.project_id}/apps/{args.app_id}/coverage/universal/PYTHON/report"
-    )
+    url = args.endpoint.rstrip("/") + "/api/v2/ingest/coverage"
     print(post_json(url, payload))
 
 

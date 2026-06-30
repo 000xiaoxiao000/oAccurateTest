@@ -3,13 +3,13 @@
     <div class="page-header plain-header coverage-page-header">
       <div>
         <div class="eyebrow">Coverage Details</div>
-        <h1>{{ payload?.app.name || appId }}</h1>
-        <p class="subtext">{{ payload?.report?.versionNumber || '-' }}</p>
+        <h1>{{ reportApp?.name || appId }}</h1>
+        <p class="subtext">{{ reportSummary?.versionNumber || '-' }}</p>
       </div>
       <div class="header-actions">
         <RouterLink class="secondary-link" :to="backRoute">返回概览</RouterLink>
-        <a v-if="reportId" class="secondary-link" :href="backendApiUrl(`/p/${projectId}/coverage/export?reportId=${reportId}`)">导出报告</a>
-        <a v-if="reportId" class="secondary-link" :href="backendApiUrl(`/p/${projectId}/coverage/export-methods?reportId=${reportId}`)">导出方法</a>
+        <a v-if="reportId" class="secondary-link" :href="coverageReportExportUrl(projectId, reportId)">导出报告</a>
+        <a v-if="reportId" class="secondary-link" :href="coverageMethodExportUrl(projectId, reportId)">导出方法</a>
       </div>
     </div>
 
@@ -68,74 +68,69 @@
 
     <div v-if="loading" class="status-card">正在加载覆盖率明细...</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
-    <template v-else-if="payload">
+    <template v-else-if="hasCoverageContent">
+      <section class="core-summary">
+        <div>
+          <span>统一模型语言</span>
+          <strong>{{ coverageLanguage }}</strong>
+        </div>
+        <div>
+          <span>CoverageUnit</span>
+          <strong>{{ coverageUnitCount }}</strong>
+        </div>
+        <div>
+          <span>函数/方法</span>
+          <strong>{{ coverageUnitFunctionCount }}</strong>
+        </div>
+        <div>
+          <span>源码单元</span>
+          <strong>{{ coverageSourceUnitCount }}</strong>
+        </div>
+      </section>
+
+      <section class="analytics-summary">
+        <div :class="['gate-card', qualityGate?.passed ? 'passed' : 'failed']">
+          <span>质量门禁</span>
+          <strong>{{ qualityGate?.passed ? 'PASS' : 'FAIL' }}</strong>
+          <small>阈值 {{ formatRate(qualityGate?.minLineCoverageRate) }}</small>
+        </div>
+        <div>
+          <span>行覆盖率</span>
+          <strong>{{ formatRate(testGap?.lineCoverageRate) }}</strong>
+          <small>{{ testGap?.totalLines || 0 }} 行</small>
+        </div>
+        <div>
+          <span>未覆盖行</span>
+          <strong>{{ testGap?.uncoveredLines || 0 }}</strong>
+          <small>{{ testGap?.riskyUnits || 0 }} 个风险单元</small>
+        </div>
+        <div>
+          <span>最高风险</span>
+          <strong>{{ topRiskUnit?.displayName || topRiskUnit?.sourcePath || '-' }}</strong>
+          <small>{{ topRiskUnit?.uncoveredLines || 0 }} 行未覆盖</small>
+        </div>
+        <div>
+          <span>TIA 选测</span>
+          <strong>{{ testImpact?.impactedCaseCount || testImpact?.impactedTraceCount || 0 }}</strong>
+          <small>{{ testImpactSummary }}</small>
+        </div>
+      </section>
+
       <section v-if="viewType === 'list'" class="panel">
         <div class="panel-head">
-          <h2>类覆盖列表</h2>
-          <span>{{ payload.classPage?.totalElements || 0 }}</span>
+          <h2>覆盖单元列表</h2>
+          <span>{{ coverageUnits?.totalElements ?? coverageCoreUnits.length }}</span>
         </div>
-        <div class="table-shell">
-          <table class="report-table class-table">
-            <colgroup>
-              <col class="col-name" />
-              <col class="col-method-count" />
-              <col class="col-method-rate" />
-              <col class="col-branch-count" />
-              <col class="col-branch-rate" />
-              <col class="col-line-count" />
-              <col class="col-line-rate" />
-              <col class="col-complexity" />
-              <col class="col-action" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>类名</th>
-                <th>方法 (覆盖/总)</th>
-                <th>方法覆盖率</th>
-                <th>分支 (覆盖/总)</th>
-                <th>分支覆盖率</th>
-                <th>代码行 (覆盖/总)</th>
-                <th>代码行覆盖率</th>
-                <th>圈复杂度</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in payload.classPage?.content || []" :key="item.className" :class="['class-row', item.hasCodeChanges && 'row-changed']">
-                <td :title="displayClassName(item.className, true)">
-                  <span class="cell-name-row">
-                    <span class="cell-name-text">
-                      <span class="tree-fold muted">−</span>
-                      <span class="tree-icon">📄</span>
-                      <span class="class-name">{{ displayClassName(item.className) }}</span>
-                    </span>
-                    <span
-                      v-if="item.hasCodeChanges"
-                      class="change-badge"
-                      title="该类在不同 Commit 间覆盖率数据有变化。当前报告汇总了所有 Commit 数据，源码着色使用最新 Commit，建议重点关注此类。"
-                    >跨 Commit 差异</span>
-                  </span>
-                </td>
-                <td>{{ item.coveredMethods }} / {{ item.totalMethods }}</td>
-                <td class="coverage-rate" :class="rateTone(item.methodRate)">{{ percent(item.methodRate) }}</td>
-                <td>{{ item.coveredBranchTargets }} / {{ item.totalBranchTargets }}</td>
-                <td class="coverage-rate" :class="rateTone(item.branchRate, item.totalBranchTargets)">{{ item.totalBranchTargets > 0 ? percent(item.branchRate) : 'N/A' }}</td>
-                <td>{{ item.coveredLines }} / {{ item.totalLines }}</td>
-                <td class="coverage-rate" :class="rateTone(item.lineRate)">{{ percent(item.lineRate) }}</td>
-                <td>{{ item.totalComplexity }}</td>
-                <td>
-                  <RouterLink class="table-link code-link" :to="buildCodeRoute(item.className)">代码</RouterLink>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <CoverageUnitListTable
+          :units="coverageCoreUnits"
+          :open-code-route="buildCoverageUnitCodeRoute"
+        />
         <AppPagination
-          v-if="payload.classPage && payload.classPage.totalElements > 0"
+          v-if="(coverageUnits?.totalElements || 0) > 0"
           :page="currentPage + 1"
           :page-size="pageSize"
-          :total="payload.classPage.totalElements"
-          item-name="类"
+          :total="coverageUnits?.totalElements || 0"
+          item-name="源码单元"
           @update:page="goPage($event - 1)"
           @update:page-size="changePageSize"
         />
@@ -144,60 +139,14 @@
       <section v-else class="panel">
         <div class="panel-head">
           <h2>树结构</h2>
-          <span>{{ visibleTreeRows.length }}</span>
+          <span>{{ coverageUnitTreeCount }}</span>
         </div>
-        <div class="table-shell">
-          <table class="report-table tree-table">
-            <colgroup>
-              <col class="col-name" />
-              <col class="col-method-count" />
-              <col class="col-method-rate" />
-              <col class="col-branch-count" />
-              <col class="col-branch-rate" />
-              <col class="col-line-count" />
-              <col class="col-line-rate" />
-              <col class="col-complexity" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>包/类</th>
-                <th>方法 (覆盖/总)</th>
-                <th>方法覆盖率</th>
-                <th>分支 (覆盖/总)</th>
-                <th>分支覆盖率</th>
-                <th>代码行 (覆盖/总)</th>
-                <th>代码行覆盖率</th>
-                <th>圈复杂度</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="row in visibleTreeRows" :key="row.id" :class="[row.type === 'package' ? 'package-row' : 'class-row', row.hasCodeChanges && 'row-changed']">
-                <td :title="row.fullName || row.name" :style="{ paddingLeft: `${16 + row.level * 22}px` }">
-                  <button v-if="row.hasChildren" class="tree-fold" type="button" :disabled="row.loading" @click="toggleTreeRow(row)">
-                    {{ row.loading ? '…' : row.expanded ? '▣' : '▢' }}
-                  </button>
-                  <span v-else class="tree-fold muted">−</span>
-                  <span class="tree-icon">{{ row.type === 'package' ? '📁' : '📄' }}</span>
-                  <span>{{ row.type === 'class' ? displayClassName(row.name) : row.name }}</span>
-                  <span
-                    v-if="row.type === 'class' && row.hasCodeChanges"
-                    class="change-badge"
-                    title="该类在不同 Commit 间覆盖率数据有变化。当前报告汇总了所有 Commit 数据，源码着色使用最新 Commit，建议重点关注此类。"
-                  >跨 Commit 差异</span>
-                  <RouterLink v-if="row.type === 'class'" class="code-link" :to="buildCodeRoute(row.fullName || row.name)">代码</RouterLink>
-                </td>
-                <td>{{ row.coveredMethods }} / {{ row.totalMethods }}</td>
-                <td class="coverage-rate" :class="rateTone(row.methodRate)">{{ percent(row.methodRate) }}</td>
-                <td>{{ row.coveredBranchTargets }} / {{ row.totalBranchTargets }}</td>
-                <td class="coverage-rate" :class="rateTone(row.branchRate, row.totalBranchTargets)">{{ row.totalBranchTargets > 0 ? percent(row.branchRate) : 'N/A' }}</td>
-                <td>{{ row.coveredLines }} / {{ row.totalLines }}</td>
-                <td class="coverage-rate" :class="rateTone(row.lineRate)">{{ percent(row.lineRate) }}</td>
-                <td>{{ row.totalComplexity }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="treeError" class="status-card error compact">{{ treeError }}</div>
+        <CoverageTreeTable
+          :units="coverageUnits?.units || []"
+          :modules="coverageModules?.modules || []"
+          :language="coverageLanguage"
+          :open-code-route="buildCoverageUnitCodeRoute"
+        />
       </section>
     </template>
   </section>
@@ -206,11 +155,22 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import AppPagination from '@/components/AppPagination.vue'
-import { backendApiUrl } from '@/api/http'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
-import { fetchCoverageDetails, fetchCoverageTreeNodes } from '@/api/bootstrap'
-import type { CoverageDetailsPayload, CoverageTreeNode } from '@/api/types'
+import { coverageMethodExportUrl, coverageReportExportUrl, fetchCoverageModules, fetchCoverageReportMetadata, fetchCoverageUnits, fetchQualityGate, fetchTestGap, fetchTestImpact } from '@/features/coverage/api/core'
+import { CoverageTreeTable } from '@/shared/viz/CoverageTreeTable'
+import { CoverageUnitListTable } from '@/shared/viz/CoverageUnitListTable'
+import type {
+  CoverageAppSummary,
+  CoverageModulesPayload,
+  CoverageReportMetadata,
+  CoverageReportSummary,
+  CoverageUnit,
+  CoverageUnitsPayload,
+  QualityGateResult,
+  TestGapReport,
+  TestImpactAnalysisReport,
+} from '@/entities/coverage/model'
 
 const route = useRoute()
 const router = useRouter()
@@ -229,12 +189,14 @@ const backRoute = computed(() => ({
     commitId: route.query.commitId,
   },
 }))
-const payload = ref<CoverageDetailsPayload | null>(null)
+const reportMetadata = ref<CoverageReportMetadata | null>(null)
+const coverageUnits = ref<CoverageUnitsPayload | null>(null)
+const coverageModules = ref<CoverageModulesPayload | null>(null)
+const testGap = ref<TestGapReport | null>(null)
+const qualityGate = ref<QualityGateResult | null>(null)
+const testImpact = ref<TestImpactAnalysisReport | null>(null)
 const loading = ref(false)
 const error = ref('')
-const treeError = ref('')
-type TreeRow = CoverageTreeNode & { level: number; expanded: boolean; loaded: boolean; loading: boolean }
-const treeRows = ref<TreeRow[]>([])
 const filters = reactive({
   className: '',
   methodName: '',
@@ -260,59 +222,50 @@ const advancedFilterCount = computed(
       filters.maxComplexity,
     ].filter((value) => value !== undefined && value !== null).length,
 )
+const coverageCoreUnits = computed(() => coverageModules.value?.modules.flatMap((module) => module.units || []) || coverageUnits.value?.units || [])
+const reportSummary = computed<CoverageReportSummary | undefined>(() => reportMetadata.value?.report)
+const reportApp = computed<CoverageAppSummary | undefined>(() => reportMetadata.value?.app)
+const coverageLanguage = computed(() => coverageUnits.value?.language || reportSummary.value?.language || reportSummary.value?.sourceType || reportApp.value?.language || 'JAVA')
+const hasCoverageContent = computed(() => Boolean(reportMetadata.value || coverageCoreUnits.value.length))
+const coverageUnitCount = computed(() => coverageCoreUnits.value.length || '-')
+const coverageUnitFunctionCount = computed(() =>
+  coverageCoreUnits.value.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0) || '-',
+)
+const coverageSourceUnitCount = computed(() => {
+  const count = coverageCoreUnits.value.filter((unit) => Boolean(unit.sourcePath || unit.displayName || unit.unitKey)).length
+  return count || '-'
+})
+const coverageUnitTreeCount = computed(() => {
+  const units = coverageCoreUnits.value
+  return units.length + units.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0)
+})
+const topRiskUnit = computed(() => testGap.value?.units?.[0])
+const testImpactSummary = computed(() => {
+  const report = testImpact.value
+  if (!report) return '等待分析'
+  if (report.impactedCaseCount) return `${report.impactedCaseCount} 个用例受影响`
+  if (report.impactedTraceCount) return `${report.impactedTraceCount} 条链路受影响`
+  return report.reasons?.[0] || '暂无可归因快照'
+})
 
-function percent(value?: number) {
+function formatRate(value?: number) {
   return value === undefined || value === null ? '-' : `${value.toFixed(1)}%`
 }
 
-function rateTone(value?: number, total = 1) {
-  if (total <= 0) return ''
-  return (value || 0) > 0 ? 'positive' : 'negative'
-}
-
-function isPathLikeName(value?: string) {
-  return Boolean(value && (value.includes('/') || value.includes('\\') || /\.[a-z0-9]+$/i.test(value)))
-}
-
-function displayClassName(value?: string, keepFullPath = false) {
-  if (!value) return ''
-  if (isPathLikeName(value)) {
-    const normalized = value.replace(/\\/g, '/')
-    if (keepFullPath) return normalized
-    const sourceMarkers = ['/src/', '/app/', '/pages/', '/components/', '/lib/']
-    for (const marker of sourceMarkers) {
-      const markerIndex = normalized.indexOf(marker)
-      if (markerIndex <= 0) continue
-      const rootPath = normalized.slice(0, markerIndex)
-      const rootName = rootPath.slice(rootPath.lastIndexOf('/') + 1)
-      if (rootName) return `${rootName}${normalized.slice(markerIndex)}`
-    }
-    return normalized.replace(/^\/+/, '')
-  }
-  return `${value}.java`
-}
-
-function toTreeRow(node: CoverageTreeNode, level: number): TreeRow {
-  return { ...node, level, expanded: false, loaded: !node.hasChildren, loading: false }
-}
-
-const visibleTreeRows = computed(() => treeRows.value.filter((row) => isTreeRowVisible(row)))
-
-function isTreeRowVisible(row: TreeRow): boolean {
-  if (row.level === 0) return true
-  let parentId = row.parentId
-  while (parentId) {
-    const parent = treeRows.value.find((item) => item.fullName === parentId)
-    if (!parent || !parent.expanded) return false
-    parentId = parent.parentId
-  }
-  return true
-}
-
-function buildTreeQuery(parentPackage?: string) {
+function buildCodeRoute(className: string) {
   return {
-    reportId: reportId.value,
-    parentPackage,
+    name: 'coverage-code',
+    params: { projectId: projectId.value, appId: appId.value },
+    query: { reportId: reportId.value, className },
+  }
+}
+
+function buildCoverageUnitCodeRoute(unit: CoverageUnit) {
+  return buildCodeRoute(unit.unitKey || unit.displayName || unit.sourcePath || '')
+}
+
+function coverageUnitQuery(includePaging = true) {
+  return {
     className: filters.className || undefined,
     methodName: filters.methodName || undefined,
     minRate: filters.minRate,
@@ -323,36 +276,8 @@ function buildTreeQuery(parentPackage?: string) {
     maxMethodRate: filters.maxMethodRate,
     minComplexity: filters.minComplexity,
     maxComplexity: filters.maxComplexity,
-  }
-}
-
-async function toggleTreeRow(row: TreeRow) {
-  treeError.value = ''
-  if (row.loaded) {
-    row.expanded = !row.expanded
-    return
-  }
-  row.loading = true
-  try {
-    const children = await fetchCoverageTreeNodes(projectId.value, buildTreeQuery(row.fullName || row.name))
-    const index = treeRows.value.findIndex((item) => item.id === row.id)
-    if (index >= 0) {
-      treeRows.value.splice(index + 1, 0, ...children.map((child) => toTreeRow(child, row.level + 1)))
-    }
-    row.loaded = true
-    row.expanded = true
-  } catch (err) {
-    treeError.value = err instanceof Error ? err.message : '加载树节点失败'
-  } finally {
-    row.loading = false
-  }
-}
-
-function buildCodeRoute(className: string) {
-  return {
-    name: 'coverage-code',
-    params: { projectId: projectId.value, appId: appId.value },
-    query: { reportId: reportId.value, className },
+    page: includePaging ? currentPage.value : undefined,
+    size: includePaging ? pageSize.value : undefined,
   }
 }
 
@@ -440,24 +365,20 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    payload.value = await fetchCoverageDetails(projectId.value, {
-      reportId: reportId.value,
-      viewType: viewType.value,
-      page: currentPage.value,
-      size: pageSize.value,
-      className: filters.className || undefined,
-      methodName: filters.methodName || undefined,
-      minRate: filters.minRate,
-      maxRate: filters.maxRate,
-      minBranchRate: filters.minBranchRate,
-      maxBranchRate: filters.maxBranchRate,
-      minMethodRate: filters.minMethodRate,
-      maxMethodRate: filters.maxMethodRate,
-      minComplexity: filters.minComplexity,
-      maxComplexity: filters.maxComplexity,
-    })
-    
-    treeRows.value = viewType.value === 'tree' ? (payload.value.treeNodes || []).map((node) => toTreeRow(node, 0)) : []
+    const [metadata, units, modules, gap, gate, impact] = await Promise.all([
+      fetchCoverageReportMetadata(projectId.value, reportId.value),
+      fetchCoverageUnits(projectId.value, reportId.value, coverageUnitQuery(true)),
+      fetchCoverageModules(projectId.value, reportId.value, coverageUnitQuery(false)),
+      fetchTestGap(projectId.value, reportId.value),
+      fetchQualityGate(projectId.value, reportId.value),
+      fetchTestImpact(projectId.value, reportId.value, String(route.query.changedLines || '')),
+    ])
+    reportMetadata.value = metadata
+    coverageUnits.value = units
+    coverageModules.value = modules
+    testGap.value = gap
+    qualityGate.value = gate
+    testImpact.value = impact
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载覆盖率明细失败'
   } finally {
@@ -482,17 +403,13 @@ onMounted(() => {
 <style scoped>
 .page-header,
 .header-actions,
-.toolbar,
-.panel-head,
-.tree-top,
-.meta-grid {
+.panel-head {
   display: flex;
   gap: 12px;
 }
 
 .page-header,
-.panel-head,
-.tree-top {
+.panel-head {
   justify-content: space-between;
   align-items: center;
 }
@@ -503,7 +420,7 @@ onMounted(() => {
 
 
 .subtext,
-.meta-grid {
+.subtext {
   color: #64748b;
 }
 
@@ -701,10 +618,65 @@ onMounted(() => {
   margin-top: 12px;
 }
 
-.table-shell {
-  max-height: min(680px, calc(100vh - 240px));
-  overflow: auto;
-  overscroll-behavior: contain;
+.core-summary,
+.analytics-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.core-summary div,
+.analytics-summary div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.core-summary span,
+.analytics-summary span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.core-summary strong,
+.analytics-summary strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analytics-summary small {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analytics-summary .gate-card.passed {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: rgba(15, 118, 110, 0.08);
+}
+
+.analytics-summary .gate-card.failed {
+  border-color: rgba(185, 28, 28, 0.24);
+  background: rgba(185, 28, 28, 0.07);
+}
+
+.analytics-summary .gate-card.passed strong {
+  color: #0f766e;
+}
+
+.analytics-summary .gate-card.failed strong {
+  color: #b91c1c;
 }
 
 @media (max-width: 980px) {
@@ -715,6 +687,11 @@ onMounted(() => {
 
   .metric-filter-grid {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .core-summary,
+  .analytics-summary {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
 }
 
@@ -728,237 +705,10 @@ onMounted(() => {
   .metric-filter-grid {
     grid-template-columns: 1fr;
   }
-}
 
-.report-table {
-  width: 100%;
-  min-width: 1200px;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.report-table th,
-.report-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  text-align: left;
-}
-
-.report-table th {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-
-.report-table tbody tr {
-  transition: background 0.16s ease, box-shadow 0.16s ease;
-}
-
-.report-table tbody tr:hover {
-  background: rgba(15, 118, 110, 0.04);
-  box-shadow: inset 3px 0 0 rgba(15, 118, 110, 0.62);
-}
-
-.class-table,
-.tree-table {
-  table-layout: fixed;
-}
-
-.class-table th:not(:first-child),
-.class-table td:not(:first-child),
-.tree-table th:not(:first-child),
-.tree-table td:not(:first-child) {
-  text-align: center;
-}
-
-.class-table .col-name {
-  width: 32%;
-}
-
-.tree-table .col-name {
-  width: 37.5%;
-}
-
-.class-table .col-method-count,
-.class-table .col-branch-count,
-.tree-table .col-method-count,
-.tree-table .col-branch-count {
-  width: 9.5%;
-}
-
-.class-table .col-line-count,
-.tree-table .col-line-count {
-  width: 10.5%;
-}
-
-.class-table .col-method-rate,
-.class-table .col-branch-rate,
-.tree-table .col-method-rate,
-.tree-table .col-branch-rate {
-  width: 8.5%;
-}
-
-.class-table .col-line-rate,
-.tree-table .col-line-rate {
-  width: 9%;
-}
-
-.class-table .col-complexity,
-.tree-table .col-complexity {
-  width: 7%;
-}
-
-.class-table .col-action {
-  width: 5.5%;
-}
-
-.class-table td,
-.tree-table td {
-  height: 46px;
-}
-
-.class-table td:first-child,
-.tree-table td:first-child {
-  overflow: hidden;
-  color: #172033;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.cell-name-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-
-.cell-name-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-  direction: rtl;
-  text-align: left;
-}
-
-.cell-name-row .change-badge {
-  flex-shrink: 0;
-}
-
-.class-name {
-  vertical-align: middle;
-  direction: ltr;
-  unicode-bidi: embed;
-}
-
-.tree-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tree-table .package-row {
-  background: #f9fafb;
-  font-weight: 800;
-}
-
-.report-table .coverage-rate {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.tree-fold {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-right: 5px;
-  border: none;
-  background: transparent;
-  color: #0f766e;
-  font-weight: 900;
-}
-
-.tree-fold.muted {
-  color: #94a3b8;
-}
-
-.tree-icon {
-  margin-right: 6px;
-}
-
-.code-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  margin-left: 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(15, 118, 110, 0.08);
-  color: #0f766e;
-  font-weight: 800;
-}
-
-.class-table .code-link {
-  margin-left: 0;
-}
-
-.report-table .positive {
-  color: #047857;
-}
-
-.report-table .negative {
-  color: #b91c1c;
-}
-
-.status-card.compact {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-}
-
-.meta-grid {
-  flex-wrap: wrap;
-  margin: 10px 0;
-}
-
-.tag {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(15, 118, 110, 0.08);
-  color: #0f766e;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.change-badge {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 8px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(217, 119, 6, 0.12);
-  color: #b45309;
-  font-size: 11px;
-  font-weight: 800;
-  cursor: help;
-  white-space: nowrap;
-}
-
-.row-changed {
-  background: rgba(217, 119, 6, 0.04) !important;
-  border-left: 3px solid rgba(217, 119, 6, 0.42) !important;
-}
-
-.row-changed:hover {
-  background: rgba(217, 119, 6, 0.08) !important;
-  box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.62) !important;
+  .core-summary,
+  .analytics-summary {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

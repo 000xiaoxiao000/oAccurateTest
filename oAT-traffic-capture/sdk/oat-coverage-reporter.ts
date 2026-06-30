@@ -5,6 +5,8 @@ type CoveragePayload = {
   versionNumber?: string
   branch?: string
   caseName?: string
+  buildId?: string
+  testStage?: string
   serviceBaseUrl?: string
 }
 
@@ -24,7 +26,9 @@ export function reportOatCoverage(endpoint: string, meta: CoveragePayload): void
 
   const body = JSON.stringify({
     ...meta,
-    coverage,
+    language: 'FRONTEND',
+    testStage: meta.testStage || 'unknown',
+    payload: coverage,
     timestamp: Date.now(),
   })
 

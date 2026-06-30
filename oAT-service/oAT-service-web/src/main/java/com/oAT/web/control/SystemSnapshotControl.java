@@ -1,21 +1,12 @@
 package com.oAT.web.control;
 
 import com.oAT.web.config.FrontendProperties;
-import com.oAT.agent.model.*;
-import com.oAT.web.common.CoverageMethodKeyUtil;
-import com.oAT.web.common.DateUtil;
+import com.oAT.web.api.snapshot.TraceGraphViewService;
 import com.oAT.web.control.entity.*;
-import com.oAT.web.domain.RemoteCallResolver;
-import com.oAT.web.esDao.ApiEndpointRepository;
-import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.service.*;
-import com.oAT.web.service.entity.AppVo;
-import com.oAT.web.service.entity.LableType;
-import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.UserVo;
-import com.oAT.server.model.ClientSessionVo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,9 +17,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.Serializable;
-import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Controller
 @RequestMapping("/p/{projectId}/{appId}/snapshot/")
@@ -37,42 +26,18 @@ public class SystemSnapshotControl {
     @Autowired
     FrontendProperties frontendProperties;
 
-
-    private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
-
     final Logger logger = LoggerFactory.getLogger(SystemSnapshotControl.class);
     @Autowired
     SystemSnapshotService systemSnapshotService;
 
     @Autowired
-    ProjectService projectService;
-
-    @Autowired
-    UserService userService;
-
-    @Autowired
     AppService appService;
-
-    @Autowired
-    SnapshotService snapshotService;
-
-    @Autowired
-    CoverageService coverageService;
-
-    @Autowired
-    ClientSessionService clientSessionService;
-
-    @Autowired
-    StaticInfoRepository staticInfoRepository;
 
     @Autowired
     UsecaseService usecaseService;
 
     @Autowired
-    private ApiEndpointAnalysisService apiEndpointAnalysisService;
-
-    @Autowired
-    private ApiEndpointRepository apiEndpointRepository;
+    private TraceGraphViewService traceGraphViewService;
 
     // 打开系统快照列表
     @RequestMapping("/list")
@@ -213,14 +178,6 @@ public class SystemSnapshotControl {
         }
     }
 
-    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        List<ApiEndpointIndex> endpoints = apps.stream()
-                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
-                .collect(Collectors.toList());
-        return new RemoteCallResolver(apps, endpoints);
-    }
-
     /**
      * 将 TraceNode 转换成前台堆栈列表树节点
      */
@@ -229,12 +186,7 @@ public class SystemSnapshotControl {
     public GraphView getGraphView(@PathVariable String projectId, @PathVariable String id) {
         SystemSnapshot snapshot = systemSnapshotService.getById(id);
         Assert.notNull(snapshot, "找不到系统快照id=" + id);
-        Collection<TraceNode> nodes = snapshotService.getTraceNodes(snapshot.getTraceId());
-        Map<String, TraceNode> nodeMap = nodes.stream()
-                .filter(Objects::nonNull)
-                .filter(node -> StringUtils.hasText(node.getTraceNodeId()))
-                .collect(Collectors.toMap(TraceNode::getTraceNodeId, node -> node, (left, right) -> left, LinkedHashMap::new));
-        return new TraceGraphParse(nodeMap, buildRemoteCallResolver(projectId)).getGraphView();
+        return traceGraphViewService.buildGraphView(projectId, snapshot.getTraceId());
     }
 
     @RequestMapping("/node/{snapshotId}")
@@ -255,68 +207,6 @@ public class SystemSnapshotControl {
         if (StringUtils.hasText(nodeId)) query.add("nodeId=" + nodeId);
         if (!query.isEmpty()) target.append("?").append(String.join("&", query));
         return "redirect:" + frontendProperties.url(target.toString());
-    }
-
-    private Map<String, String> buildSnapshotTimeTextMap(List<SystemSnapshot> snapshots) {
-        Map<String, String> result = new HashMap<>();
-        for (SystemSnapshot snapshot : snapshots) {
-            result.put(snapshot.getId(), formatDateTime(snapshot.getVersionLastUpdate()));
-        }
-        return result;
-    }
-
-    private Map<String, String> buildSnapshotRelativeTimeTextMap(List<SystemSnapshot> snapshots) {
-        Map<String, String> result = new HashMap<>();
-        for (SystemSnapshot snapshot : snapshots) {
-            result.put(snapshot.getId(), formatRelativeTime(snapshot.getVersionLastUpdate()));
-        }
-        return result;
-    }
-
-    private String buildSnapshotApiCoverageSummaryText(String appId, List<SystemSnapshot> snapshots) {
-        if (!StringUtils.hasText(appId)) {
-            return "0 / 0";
-        }
-        List<String> traceIds = snapshots.stream()
-                .filter(Objects::nonNull)
-                .map(SystemSnapshot::getTraceId)
-                .filter(StringUtils::hasText)
-                .distinct()
-                .collect(Collectors.toList());
-        com.oAT.web.service.entity.ApiEndpointCoverageVo coverage = apiEndpointAnalysisService.calculateCoverage(appId, traceIds);
-        return coverage.getDisplayText();
-    }
-
-    private String formatDateTime(Date date) {
-        if (date == null) {
-            return "-";
-        }
-        return new SimpleDateFormat(DATE_TIME_PATTERN).format(date);
-    }
-
-    private List<com.oAT.web.service.entity.UsecaseVo> collectAllProjectUsecases(String projectId) {
-        LinkedHashMap<String, com.oAT.web.service.entity.UsecaseVo> result = new LinkedHashMap<>();
-        Deque<String> directoryQueue = new ArrayDeque<>();
-        directoryQueue.add("root");
-        while (!directoryQueue.isEmpty()) {
-            String directoryId = directoryQueue.poll();
-            for (com.oAT.web.service.entity.UsecaseVo usecaseVo : usecaseService.getUsecases(projectId, directoryId, "updateTime", null)) {
-                result.putIfAbsent(usecaseVo.getId(), usecaseVo);
-            }
-            for (com.oAT.web.service.entity.UsecaseDirectoryVo directoryVo : usecaseService.getDirectory(projectId, directoryId)) {
-                if (directoryVo != null && StringUtils.hasText(directoryVo.getId())) {
-                    directoryQueue.add(directoryVo.getId());
-                }
-            }
-        }
-        return new ArrayList<>(result.values());
-    }
-
-    private String formatRelativeTime(Date date) {
-        if (date == null) {
-            return "-";
-        }
-        return DateUtil.timeDifference(date) + "前";
     }
 
     /**
@@ -405,176 +295,6 @@ public class SystemSnapshotControl {
     @RequestMapping("/report/code")
     public String systemSnapshotCodeView(@PathVariable String projectId, @PathVariable String appId, String snapshotId, String className, Model model) {
         return "redirect:" + frontendProperties.url("/p/" + projectId + "/apps/" + appId + "/snapshots/" + snapshotId + "/report/code?className=" + className);
-    }
-
-    private Map<String, List<Integer>> normalizeMethodBranchTargetProbeMap(Map<String, List<Integer>> total,
-                                                                            Map<String, List<Integer>> covered) {
-        if (total == null || total.isEmpty()) {
-            return new LinkedHashMap<>();
-        }
-        if (covered == null || covered.isEmpty()) {
-            return copyBranchTargetProbeMap(total);
-        }
-        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
-            String branchLine = entry.getKey();
-            List<Integer> totalValues = entry.getValue();
-            if (totalValues == null || totalValues.isEmpty()) {
-                continue;
-            }
-            LinkedHashSet<Integer> totalSet = new LinkedHashSet<>(totalValues);
-            List<Integer> coveredValues = covered.get(branchLine);
-            if (coveredValues == null || coveredValues.isEmpty()) {
-                normalized.put(branchLine, new ArrayList<>(totalSet));
-                continue;
-            }
-            LinkedHashSet<Integer> coveredSet = new LinkedHashSet<>(coveredValues);
-            if (totalSet.containsAll(coveredSet)) {
-                normalized.put(branchLine, new ArrayList<>(coveredSet));
-            } else {
-                normalized.put(branchLine, new ArrayList<>(totalSet));
-            }
-        }
-        return normalized.isEmpty() ? copyBranchTargetProbeMap(total) : normalized;
-    }
-
-    private Map<String, List<Integer>> copyBranchTargetProbeMap(Map<String, List<Integer>> source) {
-        if (source == null || source.isEmpty()) {
-            return null;
-        }
-        Map<String, List<Integer>> copy = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
-            List<Integer> values = entry.getValue() == null ? Collections.emptyList() : new ArrayList<>(new LinkedHashSet<>(entry.getValue()));
-            copy.put(entry.getKey(), values);
-        }
-        return copy;
-    }
-
-    private Map<String, List<Integer>> mergeBranchTargetProbeMap(Map<String, List<Integer>> current,
-                                                                 Map<String, List<Integer>> incoming) {
-        Map<String, LinkedHashSet<Integer>> merged = new LinkedHashMap<>();
-        appendBranchTargetProbeMap(merged, current);
-        appendBranchTargetProbeMap(merged, incoming);
-        Map<String, List<Integer>> result = new LinkedHashMap<>();
-        for (Map.Entry<String, LinkedHashSet<Integer>> entry : merged.entrySet()) {
-            result.put(entry.getKey(), new ArrayList<>(entry.getValue()));
-        }
-        return result;
-    }
-
-    private void appendBranchTargetProbeMap(Map<String, LinkedHashSet<Integer>> target,
-                                            Map<String, List<Integer>> source) {
-        if (source == null || source.isEmpty()) {
-            return;
-        }
-        for (Map.Entry<String, List<Integer>> entry : source.entrySet()) {
-            LinkedHashSet<Integer> values = target.computeIfAbsent(entry.getKey(), key -> new LinkedHashSet<>());
-            if (entry.getValue() != null) {
-                values.addAll(entry.getValue());
-            }
-        }
-    }
-
-    private int countBranchTargets(Map<String, List<Integer>> branchTargetProbeMap) {
-        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
-            return 0;
-        }
-        int total = 0;
-        for (List<Integer> values : branchTargetProbeMap.values()) {
-            total += values == null ? 0 : new LinkedHashSet<>(values).size();
-        }
-        return total;
-    }
-
-    private Map<String, List<Integer>> normalizeCoveredBranchTargetProbeMap(Map<String, List<Integer>> total,
-                                                                            Map<String, List<Integer>> covered) {
-        if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
-            return new LinkedHashMap<>();
-        }
-        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
-            List<Integer> totalValues = entry.getValue();
-            if (totalValues == null || totalValues.isEmpty()) {
-                continue;
-            }
-            Set<Integer> allowed = new LinkedHashSet<>(totalValues);
-            List<Integer> coveredValues = covered.get(entry.getKey());
-            if (coveredValues == null || coveredValues.isEmpty()) {
-                continue;
-            }
-            LinkedHashSet<Integer> matched = new LinkedHashSet<>();
-            for (Integer value : coveredValues) {
-                if (value != null && allowed.contains(value)) {
-                    matched.add(value);
-                }
-            }
-            if (!matched.isEmpty()) {
-                normalized.put(entry.getKey(), new ArrayList<>(matched));
-            }
-        }
-        return normalized;
-    }
-
-    private double calculateBranchRate(int coveredBranchTargets, int totalBranchTargets) {
-        return totalBranchTargets > 0 ? (double) coveredBranchTargets / totalBranchTargets * 100 : 0.0;
-    }
-
-    private void addBranchTargetKeys(Map<String, Set<String>> target,
-                                     String methodKey,
-                                     Map<String, List<Integer>> branchTargetProbeMap) {
-        if (branchTargetProbeMap == null || branchTargetProbeMap.isEmpty()) {
-            return;
-        }
-        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
-        for (Map.Entry<String, List<Integer>> entry : branchTargetProbeMap.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            for (Integer branchTarget : entry.getValue()) {
-                if (branchTarget != null) {
-                    keys.add(entry.getKey() + "#" + branchTarget);
-                }
-            }
-        }
-    }
-
-    private void addBranchTargetKeysToSet(Set<String> target,
-                                          Map<String, List<Integer>> allowedBranchTargetProbeMap,
-                                          Map<String, List<Integer>> branchTargetProbeMap) {
-        Map<String, List<Integer>> effective = normalizeCoveredBranchTargetProbeMap(
-                allowedBranchTargetProbeMap, branchTargetProbeMap);
-        for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            for (Integer branchTarget : entry.getValue()) {
-                if (branchTarget != null) {
-                    target.add(entry.getKey() + "#" + branchTarget);
-                }
-            }
-        }
-    }
-
-    private Map<String, List<Integer>> decodeBranchTargetKeys(Set<String> keys) {
-        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
-        if (keys == null || keys.isEmpty()) {
-            return decoded;
-        }
-        for (String key : keys) {
-            if (!StringUtils.hasText(key)) {
-                continue;
-            }
-            int split = key.lastIndexOf('#');
-            if (split <= 0 || split >= key.length() - 1) {
-                continue;
-            }
-            try {
-                int branchTarget = Integer.parseInt(key.substring(split + 1));
-                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(branchTarget);
-            } catch (NumberFormatException ignore) {
-            }
-        }
-        return decoded;
     }
 
 }

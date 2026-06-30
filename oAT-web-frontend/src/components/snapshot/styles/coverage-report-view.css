@@ -1,0 +1,369 @@
+.page-header,
+.header-actions,
+.card-title,
+.title-actions,
+.list-toolbar,
+.relationship-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.page-header,
+.card-title {
+  justify-content: space-between;
+}
+
+.header-actions,
+.title-actions,
+.list-toolbar,
+.relationship-actions {
+  flex-wrap: wrap;
+}
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.subtext,
+.info-item span,
+.metric-card span,
+.search-box span,
+.table-count {
+  color: #64748b;
+}
+
+.secondary-link,
+.ghost-button,
+.table-link {
+  color: #0f766e;
+  font-weight: 700;
+}
+
+.ghost-button {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(15, 118, 110, 0.06);
+  cursor: pointer;
+}
+
+.ghost-button.small {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.status-card,
+.hero-card,
+.panel,
+.empty-card {
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.status-card.error {
+  color: #b91c1c;
+}
+
+.hero-grid,
+.info-grid,
+.metric-list {
+  display: grid;
+  gap: 14px;
+}
+
+.hero-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin-bottom: 18px;
+}
+
+.hero-card strong {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.class-panel {
+  margin-top: 18px;
+}
+
+.info-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.info-item,
+.metric-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: #f8fbfb;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.info-item strong {
+  display: block;
+  margin-top: 6px;
+  word-break: break-word;
+}
+
+.metric-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.metric-card div {
+  display: grid;
+  gap: 4px;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.search-box,
+.select-box {
+  display: grid;
+  gap: 8px;
+}
+
+.list-toolbar {
+  justify-content: space-between;
+  margin: 14px 0 16px;
+}
+
+.compact-search {
+  min-width: min(460px, 100%);
+  flex: 1 1 360px;
+}
+
+.select-box {
+  min-width: 150px;
+}
+
+.text-input {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.table-shell {
+  overflow: auto;
+  max-width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1040px;
+  table-layout: fixed;
+}
+
+.report-table th,
+.report-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.report-table th {
+  color: #475569;
+  font-size: 13px;
+}
+
+.report-table th:first-child,
+.report-table td:first-child {
+  width: 34%;
+  min-width: 300px;
+}
+
+.report-table th:nth-child(2),
+.report-table td:nth-child(2) {
+  width: 26%;
+}
+
+.relationship-table th:first-child,
+.relationship-table td:first-child {
+  width: 32%;
+}
+
+.relationship-table th:nth-child(2),
+.relationship-table td:nth-child(2) {
+  width: 30%;
+}
+
+.class-cell {
+  max-width: none;
+  min-width: 300px;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.change-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.row-changed {
+  background: rgba(217, 119, 6, 0.04);
+  box-shadow: inset 3px 0 0 rgba(217, 119, 6, 0.42);
+}
+
+.row-changed:hover {
+  background: rgba(217, 119, 6, 0.08);
+}
+
+.interface-panel {
+  margin-top: 18px;
+}
+
+.relationship-graph-card {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(37, 99, 235, 0.08)), #f8fbfb;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.relationship-graph-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.relationship-graph-head div {
+  display: grid;
+  gap: 4px;
+}
+
+.relationship-graph-head span {
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.relationship-list {
+  display: grid;
+  gap: 14px;
+}
+
+.relationship-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: #f8fbfb;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+}
+
+.relationship-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.relationship-url {
+  display: block;
+  word-break: break-all;
+}
+
+.relationship-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.group-rate {
+  color: #0f766e;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.relationship-actions {
+  justify-content: flex-end;
+}
+
+.relationship-shell {
+  background: transparent;
+  max-height: 430px;
+}
+
+.relationship-table {
+  min-width: 880px;
+}
+
+.class-panel .table-shell {
+  max-height: min(620px, calc(100vh - 280px));
+}
+
+.status-pill.success {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.status-pill.warning {
+  background: rgba(234, 88, 12, 0.12);
+  color: #c2410c;
+}
+
+.status-pill.default {
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+}
+
+@media (max-width: 960px) {
+  .hero-grid,
+  .detail-grid,
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header,
+  .header-actions,
+  .card-title,
+  .relationship-graph-head,
+  .list-toolbar,
+  .relationship-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

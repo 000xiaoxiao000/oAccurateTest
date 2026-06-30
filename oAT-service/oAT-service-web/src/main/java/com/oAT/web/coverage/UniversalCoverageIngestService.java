@@ -8,6 +8,7 @@ import com.oAT.web.coverage.universal.CoverageParserRegistry;
 import com.oAT.web.coverage.universal.SourceType;
 import com.oAT.web.coverage.universal.UniversalCoverageFile;
 import com.oAT.web.coverage.universal.UniversalCoverageService;
+import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.entity.AppVo;
@@ -58,6 +59,8 @@ public class UniversalCoverageIngestService {
         report.versionNumber = firstText(request.getVersionNumber(), app.getCurrentVersion(), report.commitId);
         report.branch = firstText(request.getBranch(), app.getCurrentBranch());
         report.caseName = request.getCaseName();
+        report.buildId = request.getBuildId();
+        report.testStage = request.getTestStage();
         report.timestamp = request.getTimestamp();
         report.coverageData = request.getCoverageData();
         return rawRepository.save(report);
@@ -85,6 +88,13 @@ public class UniversalCoverageIngestService {
         for (UniversalCoverageRawReport rawReport : rawReports) {
             lastTimestamp = Math.max(lastTimestamp, rawReport.timestamp == null ? 0L : rawReport.timestamp);
             List<UniversalCoverageFile> files = parser.parse(rawReport.coverageData.getBytes(StandardCharsets.UTF_8));
+            ClassCoverageIndex.CoverageFootprintRecord footprint = ClassCoverageIndex.CoverageFootprintRecord.of(
+                    null,
+                    rawReport.caseName,
+                    rawReport.testStage,
+                    rawReport.buildId,
+                    rawReport.timestamp);
+            files.forEach(file -> file.withFootprint(footprint));
             Map<String, UniversalCoverageFile> nextMap = universalCoverageService.mergeFiles(files);
             for (Map.Entry<String, UniversalCoverageFile> entry : nextMap.entrySet()) {
                 coverageMap.compute(entry.getKey(), (key, existing) -> existing == null ? entry.getValue() : existing.merge(entry.getValue()));
@@ -100,6 +110,9 @@ public class UniversalCoverageIngestService {
         report.setRepoCommitId(commitId);
         report.setCreateTime(new Date());
         report.setSourceType(sourceType.name());
+        report.setLanguage(sourceType.name());
+        report.setBuildId(request == null ? null : request.getBuildId());
+        report.setTestStage(request == null ? null : request.getTestStage());
         report.setReportType(0);
         report.setLastProcessedTime(lastTimestamp > 0 ? String.valueOf(lastTimestamp) : String.valueOf(System.currentTimeMillis()));
 
@@ -128,6 +141,8 @@ public class UniversalCoverageIngestService {
             request.setVersionNumber(text(root, "versionNumber", "version", "version_number"));
             request.setBranch(text(root, "branch", "repoBranch"));
             request.setCaseName(text(root, "caseName", "case_name"));
+            request.setBuildId(text(root, "buildId", "build_id"));
+            request.setTestStage(text(root, "testStage", "test_stage"));
             request.setTimestamp(longValue(root, "timestamp", "time"));
 
             JsonNode coverageNode = first(root, "coverageData", "coverage", "data", "profile");
@@ -174,6 +189,8 @@ public class UniversalCoverageIngestService {
         private String versionNumber;
         private String branch;
         private String caseName;
+        private String buildId;
+        private String testStage;
         private Long timestamp;
         private String coverageData;
 
@@ -185,6 +202,10 @@ public class UniversalCoverageIngestService {
         public void setBranch(String branch) { this.branch = branch; }
         public String getCaseName() { return caseName; }
         public void setCaseName(String caseName) { this.caseName = caseName; }
+        public String getBuildId() { return buildId; }
+        public void setBuildId(String buildId) { this.buildId = buildId; }
+        public String getTestStage() { return testStage; }
+        public void setTestStage(String testStage) { this.testStage = testStage; }
         public Long getTimestamp() { return timestamp; }
         public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
         public String getCoverageData() { return coverageData; }
@@ -195,6 +216,8 @@ public class UniversalCoverageIngestService {
         private String versionNumber;
         private String branch;
         private String commitId;
+        private String buildId;
+        private String testStage;
 
         public String getVersionNumber() { return versionNumber; }
         public void setVersionNumber(String versionNumber) { this.versionNumber = versionNumber; }
@@ -202,5 +225,9 @@ public class UniversalCoverageIngestService {
         public void setBranch(String branch) { this.branch = branch; }
         public String getCommitId() { return commitId; }
         public void setCommitId(String commitId) { this.commitId = commitId; }
+        public String getBuildId() { return buildId; }
+        public void setBuildId(String buildId) { this.buildId = buildId; }
+        public String getTestStage() { return testStage; }
+        public void setTestStage(String testStage) { this.testStage = testStage; }
     }
 }

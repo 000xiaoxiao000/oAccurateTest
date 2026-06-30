@@ -21,6 +21,16 @@ public class App implements Serializable {
     private String srcName;
 
     /**
+     * 应用主语言。存量数据默认 JAVA。
+     */
+    private String language;
+
+    /**
+     * 按语言差异化的配置 JSON。旧字段继续保留为兼容别名。
+     */
+    private String languageConfig;
+
+    /**
      * 创建用户ID
      */
     private String createUserId;
@@ -105,6 +115,22 @@ public class App implements Serializable {
 
     public void setSrcName(String srcName) {
         this.srcName = srcName;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public String getLanguageConfig() {
+        return languageConfig;
+    }
+
+    public void setLanguageConfig(String languageConfig) {
+        this.languageConfig = languageConfig;
     }
 
     public String getCreateUserId() {

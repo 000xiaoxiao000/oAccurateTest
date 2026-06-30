@@ -2,13 +2,13 @@ package com.oAT.web.control;
 
 import com.oAT.web.config.FrontendProperties;
 import com.oAT.agent.model.*;
+import com.oAT.web.api.monitor.CoverageMonitorEventService;
+import com.oAT.web.api.snapshot.GraphNodeDetailMapper;
+import com.oAT.web.api.snapshot.GraphNodeDetailPayload;
+import com.oAT.web.api.snapshot.TraceGraphViewService;
 import com.oAT.server.model.ClientSessionVo;
 import com.oAT.web.common.DateUtil;
-import com.oAT.web.control.api.SnapshotApiControl;
 import com.oAT.web.control.entity.*;
-import com.oAT.web.domain.RemoteCallResolver;
-import com.oAT.web.esDao.ApiEndpointRepository;
-import com.oAT.web.esDao.entity.ApiEndpointIndex;
 import com.oAT.web.esDao.entity.LabelGroup;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.*;
@@ -50,7 +50,10 @@ public class MonitorControl {
     SystemSnapshotService systemSnapshotService;
 
     @Autowired
-    ApiEndpointRepository apiEndpointRepository;
+    TraceGraphViewService traceGraphViewService;
+
+    @Autowired
+    CoverageMonitorEventService coverageMonitorEventService;
 
     @RequestMapping("/probeStatus")
     @ResponseBody
@@ -109,14 +112,6 @@ public class MonitorControl {
         return clientSessionService.getTraceItemByIndex(lastIndex, true, maxSize == null ? 50 : maxSize, appIds);
     }
 
-    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        List<ApiEndpointIndex> endpoints = apps.stream()
-                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
-                .collect(java.util.stream.Collectors.toList());
-        return new RemoteCallResolver(apps, endpoints);
-    }
-
     private List<String> getAppIds(String projectId) {
         List<AppVo> appList = appService.getAppList(projectId);
         List<String> appIds = new ArrayList<>(appList.size());
@@ -150,8 +145,13 @@ public class MonitorControl {
             filter.setMaxSize(defaultMaxSize);
         }
         int queryUpToTime = upToTime == null || upToTime <= 0 ? DEFAULT_UP_TO_TIME_SECONDS : upToTime;
-        List<TraceItemVo> list = clientSessionService.getTraceItemByTime(queryUpToTime, filter);
-        // 基于时间到序排列
+        List<TraceItemVo> list = new ArrayList<>(clientSessionService.getTraceItemByTime(queryUpToTime, filter));
+        list.addAll(coverageMonitorEventService.listEvents(projectId, queryUpToTime, filter));
+        list.sort(Comparator.comparingLong(item -> item.getCacheTime() == null ? 0L : item.getCacheTime()));
+        int maxSize = filter.getMaxSize() == null ? defaultMaxSize : filter.getMaxSize();
+        if (maxSize > 0 && list.size() > maxSize) {
+            list = list.subList(list.size() - maxSize, list.size());
+        }
         TraceItemVo[] items = new TraceItemVo[list.size()];
         for (int i = list.size() - 1, k = 0; i >= 0; i--, k++) {
             items[k] = list.get(i);
@@ -162,18 +162,23 @@ public class MonitorControl {
     @RequestMapping("/getTraceGraph")
     @ResponseBody
     public GraphView getTraceGraph(@PathVariable String projectId, String traceId) {
-        return new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId)).getGraphView();
+        if (coverageMonitorEventService.isCoverageTraceId(traceId)) {
+            return coverageMonitorEventService.buildGraph(projectId, traceId);
+        }
+        return traceGraphViewService.buildGraphView(projectId, getTraceNode(traceId));
     }
 
     @RequestMapping("/getTraceGraphNode")
     @ResponseBody
-    public ResultNotified<SnapshotApiControl.GraphNodeDetailPayload> getTraceGraphNode(@PathVariable String projectId,
-                                                                                       String traceId,
-                                                                                       String nodeId) {
-        TraceGraphParse parse = new TraceGraphParse(getTraceNode(traceId), buildRemoteCallResolver(projectId));
-        GraphNode node = parse.getGraphNode(nodeId);
+    public ResultNotified<GraphNodeDetailPayload> getTraceGraphNode(@PathVariable String projectId,
+                                                                     String traceId,
+                                                                     String nodeId) {
+        if (coverageMonitorEventService.isCoverageTraceId(traceId)) {
+            return coverageMonitorEventService.buildNodeDetail(projectId, traceId, nodeId);
+        }
+        GraphNode node = traceGraphViewService.getGraphNode(projectId, getTraceNode(traceId), nodeId);
         Assert.notNull(node, "not found GraphNode: " + nodeId);
-        return new ResultNotified<>(true, "获取监控链路节点详情成功", SnapshotApiControl.toGraphNodeDetail(node));
+        return new ResultNotified<>(true, "获取监控链路节点详情成功", GraphNodeDetailMapper.toGraphNodeDetail(node));
     }
 
     /**
@@ -185,6 +190,9 @@ public class MonitorControl {
      * @return
      */
     private Map<String, TraceNode> getTraceNode(String traceId) {
+        if (coverageMonitorEventService.isCoverageTraceId(traceId)) {
+            return coverageMonitorEventService.buildTraceNodes(null, traceId);
+        }
         Map<String, TraceNode> nodes = clientSessionService.getTraceNodes(traceId);
         if (nodes == null || nodes.isEmpty()) {
             Collection<TraceNode> list = snapshotService.getTraceNodes(traceId);
@@ -195,6 +203,13 @@ public class MonitorControl {
         }
         Assert.notNull(nodes, "找不到traceNode traceId=" + traceId);
         return nodes;
+    }
+
+    private Map<String, TraceNode> getTraceNode(String projectId, String traceId) {
+        if (coverageMonitorEventService.isCoverageTraceId(traceId)) {
+            return coverageMonitorEventService.buildTraceNodes(projectId, traceId);
+        }
+        return getTraceNode(traceId);
     }
 
     @RequestMapping("/{traceId}/{nodeId}.html")
@@ -218,7 +233,7 @@ public class MonitorControl {
                                                                                  @SessionAttribute UserVo user,
                                                                                  @RequestParam String traceId,
                                                                                  @RequestParam(required = false) String appId) {
-        Map<String, TraceNode> nodes = getTraceNode(traceId);
+        Map<String, TraceNode> nodes = getTraceNode(projectId, traceId);
         TraceNode rootNode = nodes.get("0");
         Assert.notNull(rootNode, "找不到主调用节点");
         Application app = rootNode.getApp();
@@ -248,7 +263,7 @@ public class MonitorControl {
         try {
             String resolvedTraceId = StringUtils.hasText(traceId) ? traceId : snapshot.getTraceId();
             Assert.hasText(resolvedTraceId, "traceId 不能为空");
-            Map<String, TraceNode> nodes = getTraceNode(resolvedTraceId);
+            Map<String, TraceNode> nodes = getTraceNode(projectId, resolvedTraceId);
             TraceNode rootNode = nodes.get("0");
             Assert.notNull(rootNode, "找不到主调用节点");
             Application app = rootNode.getApp();
@@ -277,7 +292,7 @@ public class MonitorControl {
                                                          @RequestParam(required = false) String appId,
                                                          @RequestParam(required = false) String title) {
         try {
-            Map<String, TraceNode> nodes = getTraceNode(traceId);
+            Map<String, TraceNode> nodes = getTraceNode(projectId, traceId);
             TraceNode rootNode = nodes.get("0");
             Assert.notNull(rootNode, "找不到主调用节点");
             Application app = rootNode.getApp();

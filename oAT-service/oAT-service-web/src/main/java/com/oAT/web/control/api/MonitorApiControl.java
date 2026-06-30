@@ -4,7 +4,7 @@ import com.oAT.web.control.MonitorControl;
 import com.oAT.web.service.entity.TraceItemSearchParam;
 import com.oAT.web.control.entity.GraphView;
 import com.oAT.web.control.entity.ResultNotified;
-import com.oAT.web.control.api.SnapshotApiControl.GraphNodeDetailPayload;
+import com.oAT.web.api.snapshot.GraphNodeDetailPayload;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.entity.TraceItemVo;
 import com.oAT.web.service.entity.UserVo;

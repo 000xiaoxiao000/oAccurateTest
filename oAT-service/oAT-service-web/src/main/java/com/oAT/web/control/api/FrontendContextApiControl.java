@@ -1,5 +1,7 @@
 package com.oAT.web.control.api;
 
+import com.oAT.web.api.context.FrontendContextPayloads.*;
+import com.oAT.web.api.common.ApiSummaries.*;
 import com.oAT.web.common.PaletteColors;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.exceptions.UserOperationException;
@@ -259,6 +261,8 @@ public class FrontendContextApiControl {
         summary.setId(app.getId());
         summary.setName(app.getName());
         summary.setSrcName(app.getSrcName());
+        summary.setLanguage(app.getLanguage());
+        summary.setLanguageConfig(app.getLanguageConfig());
         summary.setDescribe(app.getDescribe());
         summary.setRange(app.getRange());
         summary.setOnlineCount(app.getOnlineCount());
@@ -267,7 +271,7 @@ public class FrontendContextApiControl {
         summary.setCurrentCommitId(app.getCurrentCommitId());
         summary.setRepoConfigured(app.getRepoAddress() != null && !app.getRepoAddress().trim().isEmpty());
         summary.setProbeAlertEnabled(Boolean.TRUE.equals(app.getProbeAlertEnabled()));
-        summary.setSourceType("JAVA");
+        summary.setSourceType(app.getLanguage());
         return summary;
     }
 
@@ -300,203 +304,6 @@ public class FrontendContextApiControl {
         return PaletteColors.pickPrimary(Math.abs(hash) / 5 + 13);
     }
 
-    public static class UserSummary {
-        private String id;
-        private String name;
-        private String nickname;
-        private String email;
-        private String header;
-        private String phone;
-        private String readme;
 
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getNickname() { return nickname; }
-        public void setNickname(String nickname) { this.nickname = nickname; }
-        public String getEmail() { return email; }
-        public void setEmail(String email) { this.email = email; }
-        public String getHeader() { return header; }
-        public void setHeader(String header) { this.header = header; }
-        public String getPhone() { return phone; }
-        public void setPhone(String phone) { this.phone = phone; }
-        public String getReadme() { return readme; }
-        public void setReadme(String readme) { this.readme = readme; }
-    }
 
-    public static class LoginRequest {
-        private String nameOrEmail;
-        private String password;
-
-        public String getNameOrEmail() {
-            return nameOrEmail;
-        }
-
-        public void setNameOrEmail(String nameOrEmail) {
-            this.nameOrEmail = nameOrEmail;
-        }
-
-        public String getPassword() {
-            return password;
-        }
-
-        public void setPassword(String password) {
-            this.password = password;
-        }
-    }
-
-    public static class ProjectSummary {
-        private String id;
-        private String name;
-        private String describe;
-        private String create;
-        private String createDisplayName;
-        private int memberCount;
-        private java.util.Date createTime;
-        private java.util.Date updateTime;
-
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getDescribe() { return describe; }
-        public void setDescribe(String describe) { this.describe = describe; }
-        public String getCreate() { return create; }
-        public void setCreate(String create) { this.create = create; }
-        public String getCreateDisplayName() { return createDisplayName; }
-        public void setCreateDisplayName(String createDisplayName) { this.createDisplayName = createDisplayName; }
-        public int getMemberCount() { return memberCount; }
-        public void setMemberCount(int memberCount) { this.memberCount = memberCount; }
-        public java.util.Date getCreateTime() { return createTime; }
-        public void setCreateTime(java.util.Date createTime) { this.createTime = createTime; }
-        public java.util.Date getUpdateTime() { return updateTime; }
-        public void setUpdateTime(java.util.Date updateTime) { this.updateTime = updateTime; }
-    }
-
-    public static class SaveProjectRequest {
-        private String name;
-        private String describe;
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getDescribe() {
-            return describe;
-        }
-
-        public void setDescribe(String describe) {
-            this.describe = describe;
-        }
-    }
-
-    public static class DeleteProjectRequest {
-        private String password;
-
-        public String getPassword() {
-            return password;
-        }
-
-        public void setPassword(String password) {
-            this.password = password;
-        }
-    }
-
-    public static class AppSummary {
-        private String id;
-        private String name;
-        private String srcName;
-        private String describe;
-        private String range;
-        private int onlineCount;
-        private String currentVersion;
-        private String currentBranch;
-        private String currentCommitId;
-        private boolean repoConfigured;
-        private boolean probeAlertEnabled;
-        private String sourceType;
-
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-        public String getSrcName() { return srcName; }
-        public void setSrcName(String srcName) { this.srcName = srcName; }
-        public String getDescribe() { return describe; }
-        public void setDescribe(String describe) { this.describe = describe; }
-        public String getRange() { return range; }
-        public void setRange(String range) { this.range = range; }
-        public int getOnlineCount() { return onlineCount; }
-        public void setOnlineCount(int onlineCount) { this.onlineCount = onlineCount; }
-        public String getCurrentVersion() { return currentVersion; }
-        public void setCurrentVersion(String currentVersion) { this.currentVersion = currentVersion; }
-        public String getCurrentBranch() { return currentBranch; }
-        public void setCurrentBranch(String currentBranch) { this.currentBranch = currentBranch; }
-        public String getCurrentCommitId() { return currentCommitId; }
-        public void setCurrentCommitId(String currentCommitId) { this.currentCommitId = currentCommitId; }
-        public boolean isRepoConfigured() { return repoConfigured; }
-        public void setRepoConfigured(boolean repoConfigured) { this.repoConfigured = repoConfigured; }
-        public boolean isProbeAlertEnabled() { return probeAlertEnabled; }
-        public void setProbeAlertEnabled(boolean probeAlertEnabled) { this.probeAlertEnabled = probeAlertEnabled; }
-        public String getSourceType() { return sourceType; }
-        public void setSourceType(String sourceType) { this.sourceType = sourceType; }
-    }
-
-    public static class AiSummary {
-        private boolean enabled;
-        private int timeout;
-        private String interactivePath;
-        private String askApiPath;
-        private String feedbackApiBasePath;
-        private String mascotPrimary;
-
-        public boolean isEnabled() { return enabled; }
-        public void setEnabled(boolean enabled) { this.enabled = enabled; }
-        public int getTimeout() { return timeout; }
-        public void setTimeout(int timeout) { this.timeout = timeout; }
-        public String getInteractivePath() { return interactivePath; }
-        public void setInteractivePath(String interactivePath) { this.interactivePath = interactivePath; }
-        public String getAskApiPath() { return askApiPath; }
-        public void setAskApiPath(String askApiPath) { this.askApiPath = askApiPath; }
-        public String getFeedbackApiBasePath() { return feedbackApiBasePath; }
-        public void setFeedbackApiBasePath(String feedbackApiBasePath) { this.feedbackApiBasePath = feedbackApiBasePath; }
-        public String getMascotPrimary() { return mascotPrimary; }
-        public void setMascotPrimary(String mascotPrimary) { this.mascotPrimary = mascotPrimary; }
-    }
-
-    public static class ProjectContext {
-        private UserSummary currentUser;
-        private ProjectSummary project;
-        private List<AppSummary> apps;
-        private List<SnapshotVo> recentSnapshots;
-        private List<SystemLogVo> recentLogs;
-        private String currentUserRole;
-        private AiSummary ai;
-        private int onlineAppCount;
-        private int appCount;
-
-        public UserSummary getCurrentUser() { return currentUser; }
-        public void setCurrentUser(UserSummary currentUser) { this.currentUser = currentUser; }
-        public ProjectSummary getProject() { return project; }
-        public void setProject(ProjectSummary project) { this.project = project; }
-        public List<AppSummary> getApps() { return apps; }
-        public void setApps(List<AppSummary> apps) { this.apps = apps; }
-        public List<SnapshotVo> getRecentSnapshots() { return recentSnapshots; }
-        public void setRecentSnapshots(List<SnapshotVo> recentSnapshots) { this.recentSnapshots = recentSnapshots; }
-        public List<SystemLogVo> getRecentLogs() { return recentLogs; }
-        public void setRecentLogs(List<SystemLogVo> recentLogs) { this.recentLogs = recentLogs; }
-        public String getCurrentUserRole() { return currentUserRole; }
-        public void setCurrentUserRole(String currentUserRole) { this.currentUserRole = currentUserRole; }
-        public AiSummary getAi() { return ai; }
-        public void setAi(AiSummary ai) { this.ai = ai; }
-        public int getOnlineAppCount() { return onlineAppCount; }
-        public void setOnlineAppCount(int onlineAppCount) { this.onlineAppCount = onlineAppCount; }
-        public int getAppCount() { return appCount; }
-        public void setAppCount(int appCount) { this.appCount = appCount; }
-    }
 }

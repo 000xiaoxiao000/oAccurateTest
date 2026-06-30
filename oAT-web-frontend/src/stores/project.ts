@@ -26,6 +26,7 @@ import {
   calculateSystemSnapshotReport,
   fetchAppSettings,
   fetchAiInteractiveContext,
+  fetchCollectorSources,
   fetchMySnapshotDetail,
   fetchMySnapshotCode,
   fetchMySnapshotReport,
@@ -75,6 +76,7 @@ import type {
   AIInteractiveReply,
   AppSummary,
   AppSettingsPayload,
+  CollectorSourcesPayload,
   DirectoryDeletePreview,
   GraphNodeDetailPayload,
   GraphViewPayload,
@@ -105,6 +107,7 @@ export const useProjectStore = defineStore('project', () => {
   const membersByProjectId = ref<Record<string, ProjectMembersPayload>>({})
   const labelsByProjectId = ref<Record<string, ProjectLabelsPayload>>({})
   const onlineSessionsByProjectId = ref<Record<string, OnlineSessionsPayload>>({})
+  const collectorSourcesByProjectId = ref<Record<string, CollectorSourcesPayload>>({})
   const appSettingsByKey = ref<Record<string, AppSettingsPayload>>({})
   const probeAlertsByKey = ref<Record<string, ProbeAlertsPayload>>({})
   const repositoryByKey = ref<Record<string, RepositoryConfigPayload>>({})
@@ -166,6 +169,8 @@ export const useProjectStore = defineStore('project', () => {
     payload: {
       name: string
       srcName?: string
+      language?: string
+      languageConfig?: string
       range?: string
       describe?: string
       properties?: string
@@ -215,6 +220,10 @@ export const useProjectStore = defineStore('project', () => {
 
   async function loadProjectMembers(projectId: string) {
     return loadRecordByKey(membersByProjectId, projectId, () => fetchProjectMembers(projectId))
+  }
+
+  async function loadCollectorSources(projectId: string) {
+    return loadRecordByKey(collectorSourcesByProjectId, projectId, () => fetchCollectorSources(projectId))
   }
 
   async function addMembers(projectId: string, userIds: string[]) {
@@ -651,6 +660,7 @@ export const useProjectStore = defineStore('project', () => {
     membersByProjectId,
     labelsByProjectId,
     onlineSessionsByProjectId,
+    collectorSourcesByProjectId,
     appSettingsByKey,
     probeAlertsByKey,
     repositoryByKey,
@@ -688,6 +698,7 @@ export const useProjectStore = defineStore('project', () => {
     saveProjectLabel,
     removeLabel,
     loadOnlineSessions,
+    loadCollectorSources,
     controlSandbox,
     loadAppSettings,
     loadProbeAlerts,

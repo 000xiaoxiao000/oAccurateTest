@@ -18,6 +18,14 @@
             <span>当前在线实例数</span>
           </div>
           <div class="summary-card">
+            <strong>{{ collectorPayload?.total || 0 }}</strong>
+            <span>探针状态数</span>
+          </div>
+          <div class="summary-card">
+            <strong>{{ healthyCollectorCount }}</strong>
+            <span>健康探针状态</span>
+          </div>
+          <div class="summary-card">
             <strong>{{ projectApps.length }}</strong>
             <span>项目应用数</span>
           </div>
@@ -27,6 +35,38 @@
           <span>{{ filteredSessions.length }} 个匹配实例</span>
         </div>
       </div>
+
+      <section class="table-card collector-card">
+        <div class="card-title">
+          <div>
+            <h2>探针健康度</h2>
+            <p class="subtext">统一按探针状态展示在线、静默和最近活跃时间。</p>
+          </div>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>应用</th>
+              <th>语言</th>
+              <th>探针类型</th>
+              <th>健康度</th>
+              <th>最近活跃</th>
+              <th>来源</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="source in filteredCollectorSources" :key="source.sourceId || `${source.appId}-${source.language}`">
+              <td>{{ source.appName || source.appId || '-' }}</td>
+              <td>{{ source.language || '-' }}</td>
+              <td>{{ source.collectorType === 'RESIDENT' ? '常驻' : '批量' }}</td>
+              <td><span :class="['health-badge', healthTone(source.health)]">{{ healthLabel(source.health) }}</span></td>
+              <td>{{ formatLastSeen(source.lastSeenTime) }}</td>
+              <td>{{ source.addressIp || source.sessionId || source.sourceId || '-' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="!filteredCollectorSources.length" class="empty-card">暂无探针状态</div>
+      </section>
 
       <div class="table-card">
         <table class="table">
@@ -192,12 +232,13 @@ import { useRoute } from 'vue-router'
 
 import AppPagination from '@/components/AppPagination.vue'
 import { useProjectStore } from '@/stores/project'
-import type { AppSummary, OnlineSessionSummary } from '@/api/types'
+import type { AppSummary, CollectorSourceSummary, OnlineSessionSummary } from '@/api/types'
 
 const route = useRoute()
 const projectStore = useProjectStore()
 const projectId = computed(() => String(route.params.projectId || ''))
 const payload = computed(() => projectStore.onlineSessionsByProjectId[projectId.value])
+const collectorPayload = computed(() => projectStore.collectorSourcesByProjectId[projectId.value])
 const projectContext = computed(() => projectStore.contextByProjectId[projectId.value])
 const projectApps = computed<AppSummary[]>(() => projectContext.value?.apps || [])
 const appId = computed(() => String(route.query.appId || ''))
@@ -273,6 +314,30 @@ const filteredSessions = computed(() => {
     return matchesApp && matchesKeyword
   })
 })
+
+const filteredCollectorSources = computed(() => {
+  const sources = collectorPayload.value?.sources || []
+  const term = keyword.value.toLowerCase()
+  return sources.filter((source) => {
+    const matchesApp = !appId.value || source.appId === appId.value || source.appName === appId.value
+    const matchesKeyword = !term || [
+      source.appName,
+      source.appId,
+      source.language,
+      source.collectorType,
+      source.health,
+      source.addressIp,
+      source.pid,
+      source.agentVersion,
+      source.sandboxStatus,
+    ].some((value) => String(value || '').toLowerCase().includes(term))
+    return matchesApp && matchesKeyword
+  })
+})
+
+const healthyCollectorCount = computed(() =>
+  (collectorPayload.value?.sources || []).filter((source) => source.health === 'ONLINE').length,
+)
 
 const paginatedSessions = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
@@ -539,6 +604,29 @@ function formatSandboxStatus(status?: string) {
   }
 }
 
+function healthLabel(health?: CollectorSourceSummary['health']) {
+  if (health === 'ONLINE') return '在线'
+  if (health === 'SILENT') return '静默'
+  if (health === 'OFFLINE') return '离线'
+  return '未知'
+}
+
+function healthTone(health?: CollectorSourceSummary['health']) {
+  if (health === 'ONLINE') return 'tone-ok'
+  if (health === 'SILENT') return 'tone-warn'
+  if (health === 'OFFLINE') return 'tone-error'
+  return 'tone-muted'
+}
+
+function formatLastSeen(value?: number) {
+  if (!value) return '-'
+  const diff = Math.max(0, Date.now() - value)
+  if (diff < 60_000) return '刚刚'
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} 小时前`
+  return `${Math.floor(diff / 86_400_000)} 天前`
+}
+
 async function load(options: { silent?: boolean } = {}) {
   if (!projectId.value) {
     error.value = '缺少 projectId'
@@ -552,7 +640,10 @@ async function load(options: { silent?: boolean } = {}) {
     if (!projectContext.value) {
       await projectStore.loadProjectContext(projectId.value)
     }
-    await projectStore.loadOnlineSessions(projectId.value)
+    await Promise.all([
+      projectStore.loadOnlineSessions(projectId.value),
+      projectStore.loadCollectorSources(projectId.value),
+    ])
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载在线实例失败'
   } finally {
@@ -604,409 +695,4 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-
-.action-button {
-  border: none;
-  border-radius: 999px;
-  padding: 10px 14px;
-  background: #0f172a;
-  color: #fff;
-  cursor: pointer;
-}
-
-.status-card,
-.summary-card,
-.toolbar-card,
-.table-card,
-.empty-card {
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.status-card.error {
-  color: #b91c1c;
-}
-
-.runtime-overview {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 220px)) minmax(420px, 1fr);
-  align-items: stretch;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.summary-row {
-  display: contents;
-}
-
-.summary-card {
-  display: inline-flex;
-  flex-direction: column;
-  min-height: 112px;
-}
-
-.toolbar-card {
-  position: sticky;
-  top: 12px;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-}
-
-.text-input {
-  width: 100%;
-  max-width: 760px;
-  border-radius: 14px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  padding: 10px 12px;
-  background: #fff;
-}
-
-.summary-card strong {
-  font-size: 28px;
-}
-
-.summary-card span {
-  color: #64748b;
-}
-
-.table-card {
-  max-height: min(620px, calc(100vh - 270px));
-  overflow: auto;
-}
-
-.empty-card {
-  margin-top: 12px;
-  text-align: center;
-  color: #64748b;
-}
-
-.empty-title {
-  color: #0f172a;
-  font-size: 18px;
-  font-weight: 900;
-}
-
-.empty-text {
-  margin-top: 6px;
-}
-
-.bootstrap-panel {
-  display: grid;
-  gap: 14px;
-  margin-top: 16px;
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-}
-
-.bootstrap-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.bootstrap-header div,
-.bootstrap-grid label {
-  display: grid;
-  gap: 6px;
-}
-
-.bootstrap-header strong {
-  color: #0f172a;
-  font-size: 18px;
-}
-
-.bootstrap-header span,
-.bootstrap-grid span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.bootstrap-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
-  gap: 12px;
-}
-
-.command-block {
-  display: grid;
-  gap: 8px;
-}
-
-.command-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 900;
-}
-
-.command-block code {
-  display: block;
-  padding: 12px;
-  border-radius: 10px;
-  background: #0f172a;
-  color: #e2e8f0;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.table th,
-.table td {
-  padding: 11px 10px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  text-align: left;
-}
-
-.table th {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-
-.detail-button {
-  border: none;
-  border-radius: 999px;
-  padding: 7px 10px;
-  background: rgba(15, 118, 110, 0.08);
-  color: #0f766e;
-  cursor: pointer;
-  font-weight: 800;
-}
-
-.detail-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.detail-row td {
-  background: #f8fafc;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.detail-grid div {
-  display: grid;
-  gap: 5px;
-}
-
-.detail-grid .wide {
-  grid-column: 1 / -1;
-}
-
-.detail-grid span {
-  color: #64748b;
-  font-size: 12px;
-}
-
-.detail-grid strong {
-  color: #0f172a;
-  word-break: break-word;
-}
-
-.status-text {
-  white-space: pre-wrap;
-}
-
-.sandbox-badge,
-.module-chip {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.sandbox-badge {
-  padding: 6px 9px;
-}
-
-.module-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 8px;
-}
-
-.module-panel {
-  display: grid;
-  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
-  align-items: start;
-  gap: 12px;
-}
-
-.module-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-  gap: 8px;
-}
-
-.module-stat {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  width: fit-content;
-  border-radius: 8px;
-  padding: 8px 10px;
-}
-
-.module-list-wrap {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.module-stat strong {
-  color: inherit;
-  font-size: 18px;
-}
-
-.module-stat span {
-  color: inherit;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.module-chip {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  padding: 7px 9px;
-  width: 100%;
-  min-width: 0;
-}
-
-.inline-button {
-  width: fit-content;
-  border: none;
-  border-radius: 999px;
-  padding: 7px 10px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #475569;
-  cursor: pointer;
-  font-weight: 800;
-}
-
-.module-chip strong {
-  color: inherit;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.module-chip em {
-  flex: 0 0 auto;
-  font-style: normal;
-  opacity: 0.78;
-}
-
-.module-chip-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-}
-
-.module-hit {
-  overflow: hidden;
-  color: inherit;
-  font-size: 11px;
-  font-weight: 800;
-  opacity: 0.82;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.module-hit.hit {
-  opacity: 1;
-}
-
-.module-hit.miss {
-  opacity: 0.62;
-}
-
-.tone-ok {
-  background: rgba(15, 118, 110, 0.1);
-  color: #0f766e;
-}
-
-.tone-warn {
-  background: rgba(217, 119, 6, 0.12);
-  color: #b45309;
-}
-
-.tone-error {
-  background: rgba(185, 28, 28, 0.1);
-  color: #b91c1c;
-}
-
-.tone-muted {
-  background: rgba(100, 116, 139, 0.12);
-  color: #475569;
-}
-
-@media (max-width: 760px) {
-  .runtime-overview,
-  .detail-grid,
-  .bootstrap-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-row {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .toolbar-card {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .module-panel {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+<style scoped src="@/features/admin/styles/online-apps-page.css"></style>

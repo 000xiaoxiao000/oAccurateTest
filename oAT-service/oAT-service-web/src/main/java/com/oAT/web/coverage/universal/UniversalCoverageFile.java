@@ -17,6 +17,8 @@ public class UniversalCoverageFile implements Serializable {
     private List<FunctionCoverage> functions = new ArrayList<>();
     private List<LineCoverage> lines = new ArrayList<>();
     private List<BranchCoverage> branches = new ArrayList<>();
+    private Map<Integer, List<ClassCoverageIndex.CoverageFootprintRecord>> lineFootprints = new LinkedHashMap<>();
+    private Map<String, List<ClassCoverageIndex.CoverageFootprintRecord>> branchFootprints = new LinkedHashMap<>();
 
     public UniversalCoverageFile() {
     }
@@ -38,6 +40,7 @@ public class UniversalCoverageFile implements Serializable {
             lineMap.compute(line.getLine(), (key, existing) -> existing == null ? line : existing.merge(line));
         }
         lines = new ArrayList<>(lineMap.values());
+        mergeFootprints(lineFootprints, next.lineFootprints);
 
         Map<String, FunctionCoverage> functionMap = new LinkedHashMap<>();
         for (FunctionCoverage function : functions) {
@@ -56,6 +59,24 @@ public class UniversalCoverageFile implements Serializable {
             branchMap.compute(branch.key(), (key, existing) -> existing == null ? branch : existing.merge(branch));
         }
         branches = new ArrayList<>(branchMap.values());
+        mergeFootprints(branchFootprints, next.branchFootprints);
+        return this;
+    }
+
+    public UniversalCoverageFile withFootprint(ClassCoverageIndex.CoverageFootprintRecord footprint) {
+        if (footprint == null) {
+            return this;
+        }
+        for (LineCoverage line : lines) {
+            if (line.getLine() > 0 && line.getCoveredCount() > 0) {
+                lineFootprints.computeIfAbsent(line.getLine(), ignored -> new ArrayList<>()).add(footprint);
+            }
+        }
+        for (BranchCoverage branch : branches) {
+            if (branch.getCoveredCount() > 0) {
+                branchFootprints.computeIfAbsent(branch.key(), ignored -> new ArrayList<>()).add(footprint);
+            }
+        }
         return this;
     }
 
@@ -64,6 +85,9 @@ public class UniversalCoverageFile implements Serializable {
         index.setAppId(appId);
         index.setClassName(filePath);
         index.setSourceType(sourceType == null ? SourceType.JAVA.name() : sourceType.name());
+        index.setLanguage(sourceType == null ? SourceType.JAVA.name() : sourceType.name());
+        index.setDisplayName(filePath);
+        index.setSourcePath(filePath);
 
         Set<Integer> totalLines = new LinkedHashSet<>();
         Set<Integer> coveredLines = new LinkedHashSet<>();
@@ -80,6 +104,7 @@ public class UniversalCoverageFile implements Serializable {
         List<ClassCoverageIndex.MethodCoverageDetail> methods = new ArrayList<>();
         for (FunctionCoverage function : functions) {
             ClassCoverageIndex.MethodCoverageDetail method = function.toMethodCoverageDetail();
+            method.setLineFootprints(lineFootprintsFor(function));
             methods.add(method);
         }
 
@@ -93,6 +118,9 @@ public class UniversalCoverageFile implements Serializable {
                 coveredBranchGroups.add(groupKey);
                 coveredBranchTargets++;
             }
+        }
+        if (!methods.isEmpty()) {
+            methods.get(0).setBranchFootprints(new LinkedHashMap<>(branchFootprints));
         }
 
         index.setMethods(methods);
@@ -130,6 +158,35 @@ public class UniversalCoverageFile implements Serializable {
     public void setLines(List<LineCoverage> lines) { this.lines = lines == null ? new ArrayList<>() : lines; }
     public List<BranchCoverage> getBranches() { return branches; }
     public void setBranches(List<BranchCoverage> branches) { this.branches = branches == null ? new ArrayList<>() : branches; }
+    public Map<Integer, List<ClassCoverageIndex.CoverageFootprintRecord>> getLineFootprints() { return lineFootprints; }
+    public void setLineFootprints(Map<Integer, List<ClassCoverageIndex.CoverageFootprintRecord>> lineFootprints) { this.lineFootprints = lineFootprints == null ? new LinkedHashMap<>() : lineFootprints; }
+    public Map<String, List<ClassCoverageIndex.CoverageFootprintRecord>> getBranchFootprints() { return branchFootprints; }
+    public void setBranchFootprints(Map<String, List<ClassCoverageIndex.CoverageFootprintRecord>> branchFootprints) { this.branchFootprints = branchFootprints == null ? new LinkedHashMap<>() : branchFootprints; }
+
+    private Map<Integer, List<ClassCoverageIndex.CoverageFootprintRecord>> lineFootprintsFor(FunctionCoverage function) {
+        Map<Integer, List<ClassCoverageIndex.CoverageFootprintRecord>> result = new LinkedHashMap<>();
+        int normalizedStart = Math.max(1, function.getStartLine());
+        int normalizedEnd = Math.max(normalizedStart, function.getEndLine());
+        for (int line = normalizedStart; line <= normalizedEnd; line++) {
+            List<ClassCoverageIndex.CoverageFootprintRecord> records = lineFootprints.get(line);
+            if (records != null && !records.isEmpty()) {
+                result.put(line, new ArrayList<>(records));
+            }
+        }
+        return result;
+    }
+
+    private <K> void mergeFootprints(Map<K, List<ClassCoverageIndex.CoverageFootprintRecord>> target,
+                                     Map<K, List<ClassCoverageIndex.CoverageFootprintRecord>> source) {
+        if (source == null || source.isEmpty()) {
+            return;
+        }
+        source.forEach((key, records) -> {
+            if (records != null && !records.isEmpty()) {
+                target.computeIfAbsent(key, ignored -> new ArrayList<>()).addAll(records);
+            }
+        });
+    }
 
     public static class FunctionCoverage implements Serializable {
         private String name;

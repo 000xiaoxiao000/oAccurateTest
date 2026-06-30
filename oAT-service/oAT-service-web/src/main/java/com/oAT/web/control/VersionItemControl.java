@@ -1,8 +1,9 @@
 package com.oAT.web.control;
 
 import com.oAT.web.config.FrontendProperties;
-import com.oAT.server.model.ClientSessionVo;
+import com.oAT.web.api.version.VersionGitWorkflowService;
 import com.oAT.web.control.entity.ResultNotified;
+import com.oAT.web.coveragecore.report.CoverageReportCommandService;
 import com.oAT.web.esDao.StaticInfoRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.service.*;
@@ -14,16 +15,10 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
-import java.io.InputStream;
-import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,13 +60,16 @@ public class VersionItemControl {
     UserService userService;
 
     @Autowired
-    private CoverageService coverageService;
+    private CoverageReportCommandService coverageReportCommandService;
 
     @Autowired
     StaticInfoRepository staticInfoRepository;
 
     @Autowired
     SystemLogService systemLogService;
+
+    @Autowired
+    VersionGitWorkflowService versionGitWorkflowService;
 
 
     @RequestMapping("{appId}/version/new")
@@ -181,33 +179,7 @@ public class VersionItemControl {
     @ResponseBody
     public ResultNotified<GitPullEstimateVo> checkGitPull(@PathVariable String appId, String branch, String commitId, String versionNumber, String excludePaths) {
         try {
-            AppVo app = appService.getApp(appId);
-            String finalBranch = branch != null ? branch.trim() : "";
-            String finalCommitId = commitId != null ? commitId.trim() : "";
-
-            ResultNotified<String> excludePathCheckResult = validateExcludePaths(excludePaths);
-            if (excludePathCheckResult != null) {
-                return new ResultNotified<>(false, excludePathCheckResult.getMessage(), null);
-            }
-
-            gitService.checkGitPull(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, finalCommitId);
-
-            // 数据库预检查
-            String checkCommitId = finalCommitId;
-            if (checkCommitId.isEmpty()) {
-                checkCommitId = gitService.getLatestCommitId(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch);
-            }
-
-            // 检查 同版本号 + 分支 + CommitId 是否重复
-            if (StringUtils.hasText(versionNumber)) {
-                VersionItemVo existing = versionService.getVersionByGitInfo(appId, versionNumber.trim(), finalBranch, checkCommitId);
-                if (existing != null) {
-                    return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID (版本号: " + existing.getVersionNumber() + ")", null);
-                }
-            }
-
-            GitPullEstimateVo estimate = gitService.estimateGitPull(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, checkCommitId, excludePaths);
-            estimate.setPackageCommitVerify(verifyRuntimeCommit(appId, checkCommitId));
+            GitPullEstimateVo estimate = versionGitWorkflowService.checkGitPull(appId, branch, commitId, versionNumber, excludePaths);
             return new ResultNotified<>(true, "检测通过", estimate);
         } catch (Exception e) {
             return new ResultNotified<>(false, "检测失败: " + e.getMessage(), null);
@@ -218,8 +190,7 @@ public class VersionItemControl {
     @ResponseBody
     public ResultNotified<PackageCommitVerifyVo> verifyUploadedPackageCommit(@PathVariable String appId, String programFile, String commitId) {
         try {
-            String targetCommitId = StringUtils.hasText(commitId) ? commitId.trim() : readPackageCommitId(programFile);
-            PackageCommitVerifyVo verify = verifyRuntimeCommit(appId, targetCommitId);
+            PackageCommitVerifyVo verify = versionGitWorkflowService.verifyUploadedPackageCommit(appId, programFile, commitId);
             return new ResultNotified<>(true, "校验完成", verify);
         } catch (Exception e) {
             return new ResultNotified<>(false, "校验失败: " + e.getMessage(), null);
@@ -256,30 +227,7 @@ public class VersionItemControl {
     @ResponseBody
     public ResultNotified<String> startGitPull(@PathVariable String appId, String branch, String commitId, String excludePaths, String versionNumber) {
         try {
-            AppVo app = appService.getApp(appId);
-            String finalBranch = branch != null ? branch.trim() : "";
-            String finalCommitId = (commitId != null && !commitId.trim().isEmpty()) ? commitId.trim() : null;
-
-            ResultNotified<String> excludePathCheckResult = validateExcludePaths(excludePaths);
-            if (excludePathCheckResult != null) {
-                return excludePathCheckResult;
-            }
-
-            // 如果 commitId 为空，先获取远程最新 commitId，以便查重
-            String checkCommitId = finalCommitId;
-            if (checkCommitId == null) {
-                checkCommitId = gitService.getLatestCommitId(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch);
-            }
-
-            // 检查 同版本号 + 分支 + CommitId 是否重复
-            if (StringUtils.hasText(versionNumber)) {
-                VersionItemVo existing = versionService.getVersionByGitInfo(appId, versionNumber.trim(), finalBranch, checkCommitId);
-                if (existing != null) {
-                    return new ResultNotified<>(false, "该版本号下已存在相同的分支和 CommitID (版本号: " + existing.getVersionNumber() + ")", null);
-                }
-            }
-
-            String jobId = gitService.startGitPullJob(app.getRepoAddress(), app.getRepoUserName(), app.getRepoPassword(), finalBranch, finalCommitId, excludePaths);
+            String jobId = versionGitWorkflowService.startGitPull(appId, branch, commitId, excludePaths, versionNumber);
             return new ResultNotified<>(true, "开始拉取", jobId);
         } catch (Exception e) {
             return new ResultNotified<>(false, "远程代码拉取失败: " + e.getMessage(), null);
@@ -295,157 +243,6 @@ public class VersionItemControl {
         } catch (Exception e) {
             return new ResultNotified<>(false, "删除失败: " + e.getMessage());
         }
-    }
-
-    private ResultNotified<String> validateExcludePaths(String excludePaths) {
-        if (!StringUtils.hasText(excludePaths)) {
-            return null;
-        }
-
-        String[] paths = excludePaths.split(",");
-        for (String path : paths) {
-            String trimmedPath = path.trim();
-            if (!StringUtils.hasText(trimmedPath)) {
-                continue;
-            }
-            if (trimmedPath.contains("..")) {
-                return new ResultNotified<>(false, "检测失败: 排除路径不能包含 ..");
-            }
-            if (trimmedPath.startsWith("/") || trimmedPath.startsWith("\\") || trimmedPath.matches("^[A-Za-z]:.*")) {
-                return new ResultNotified<>(false, "检测失败: 排除路径不能是绝对路径");
-            }
-
-            Path normalizedPath = Paths.get(trimmedPath).normalize();
-            String normalized = normalizedPath.toString().replace('\\', '/');
-            if (normalized.isEmpty() || ".".equals(normalized) || normalized.startsWith("../")) {
-                return new ResultNotified<>(false, "检测失败: 排除路径格式不合法");
-            }
-        }
-        return null;
-    }
-
-    private PackageCommitVerifyVo verifyRuntimeCommit(String appId, String targetCommitId) {
-        List<ClientSessionVo> onlineSessions = clientSessionService.getOnlineSessionsByAppId(appId);
-        if (onlineSessions == null || onlineSessions.isEmpty()) {
-            return new PackageCommitVerifyVo(null, targetCommitId, null, false, "探针不在线，无法获取运行时目标系统 CommitId");
-        }
-        String runtimeCommitId = findRuntimePackageCommitId(appId, onlineSessions);
-        String normalizedRuntimeCommitId = normalizeCommitId(runtimeCommitId);
-        String normalizedTargetCommitId = normalizeCommitId(targetCommitId);
-        Boolean matched = null;
-        if (StringUtils.hasText(normalizedRuntimeCommitId) && StringUtils.hasText(normalizedTargetCommitId)) {
-            matched = commitIdMatches(normalizedRuntimeCommitId, normalizedTargetCommitId);
-        }
-        String unavailableReason = StringUtils.hasText(runtimeCommitId) ? null : "探针在线，但暂未上报运行时目标系统 CommitId";
-        return new PackageCommitVerifyVo(runtimeCommitId, targetCommitId, matched, true, unavailableReason);
-    }
-
-    private String findRuntimePackageCommitId(String appId) {
-        return findRuntimePackageCommitId(appId, clientSessionService.getOnlineSessionsByAppId(appId));
-    }
-
-    private String findRuntimePackageCommitId(String appId, List<ClientSessionVo> sessions) {
-        if (sessions == null || sessions.isEmpty()) {
-            return null;
-        }
-        for (ClientSessionVo session : sessions) {
-            String commitId = extractCommitIdFromPackageVerifyData(clientSessionService.getPackageVerifyData(session.getSessionId()));
-            if (StringUtils.hasText(commitId)) {
-                return commitId;
-            }
-        }
-        for (ClientSessionVo session : sessions) {
-            if (session.getClientInfo() == null || !StringUtils.hasText(session.getClientInfo().getAppKey())) {
-                continue;
-            }
-            String commitId = extractCommitIdFromPackageVerifyData(clientSessionService.getLatestPackageVerifyDataByAppId(session.getClientInfo().getAppKey()));
-            if (StringUtils.hasText(commitId)) {
-                return commitId;
-            }
-        }
-        return null;
-    }
-
-    private String extractCommitIdFromPackageVerifyData(String packageVerifyData) {
-        if (!StringUtils.hasText(packageVerifyData)) {
-            return null;
-        }
-        Matcher matcher =
-                Pattern.compile("gitCommitIdFromPackage\\s*[:=]\\s*([0-9a-fA-F]{7,40})").matcher(packageVerifyData);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        matcher = Pattern.compile("[0-9a-fA-F]{7,40}").matcher(packageVerifyData);
-        String lastMatch = null;
-        while (matcher.find()) {
-            lastMatch = matcher.group();
-        }
-        return lastMatch;
-    }
-
-    private String readPackageCommitId(String cachePath) throws Exception {
-        if (!StringUtils.hasText(cachePath)) {
-            throw new IllegalArgumentException("程序文件不能为空");
-        }
-        File cacheRoot = new File(resourceService.getCacheRoot()).getCanonicalFile();
-        File packageFile = new File(cacheRoot, cachePath).getCanonicalFile();
-        if (!packageFile.getPath().startsWith(cacheRoot.getPath() + File.separator) || !packageFile.exists() || !packageFile.isFile()) {
-            throw new IllegalArgumentException("程序文件不存在");
-        }
-        try (ZipFile zipFile = new ZipFile(packageFile)) {
-            ZipEntry entry = findBuildInfoEntry(zipFile);
-            if (entry == null) {
-                return null;
-            }
-            Properties props = new Properties();
-            try (InputStream inputStream = zipFile.getInputStream(entry)) {
-                props.load(inputStream);
-            }
-            String commitId = props.getProperty("git.commit.id");
-            if (!StringUtils.hasText(commitId)) {
-                commitId = props.getProperty("git.commit.id.abbrev");
-            }
-            return commitId;
-        }
-    }
-
-    private ZipEntry findBuildInfoEntry(ZipFile zipFile) {
-        String[] buildInfoPaths = {
-                "META-INF/git.properties",
-                "META-INF/build-info.properties",
-                "WEB-INF/classes/META-INF/git.properties",
-                "WEB-INF/classes/META-INF/build-info.properties",
-                "WEB-INF/classes/git.properties",
-                "WEB-INF/classes/build-info.properties"
-        };
-        for (String buildInfoPath : buildInfoPaths) {
-            ZipEntry entry = zipFile.getEntry(buildInfoPath);
-            if (entry != null) {
-                return entry;
-            }
-        }
-        return null;
-    }
-
-    private boolean commitIdMatches(String runtimeCommitId, String targetCommitId) {
-        String runtime = normalizeCommitId(runtimeCommitId);
-        String target = normalizeCommitId(targetCommitId);
-        if (!StringUtils.hasText(runtime) || !StringUtils.hasText(target)) {
-            return false;
-        }
-        return runtime.equals(target) || runtime.startsWith(target) || target.startsWith(runtime);
-    }
-
-    private String normalizeCommitId(String commitId) {
-        if (!StringUtils.hasText(commitId)) {
-            return null;
-        }
-        String normalized = commitId.trim().toLowerCase(Locale.ROOT);
-        Matcher matcher = Pattern.compile("[0-9a-f]{8,40}").matcher(normalized);
-        if (matcher.find()) {
-            return matcher.group();
-        }
-        return normalized;
     }
 
     @RequestMapping("{appId}/version/git/status")
@@ -580,97 +377,6 @@ public class VersionItemControl {
     }
 
 
-    private double calculateBranchRate(long coveredBranchTargets, long totalBranchTargets) {
-        return totalBranchTargets > 0 ? (double) coveredBranchTargets / totalBranchTargets * 100 : 0.0;
-    }
-
-    private void addBranchConditionKeys(Map<String, Set<String>> target,
-                                        String methodKey,
-                                        Map<String, List<Integer>> branchConditionNumbers) {
-        if (branchConditionNumbers == null || branchConditionNumbers.isEmpty()) {
-            return;
-        }
-        Set<String> keys = target.computeIfAbsent(methodKey, key -> new LinkedHashSet<>());
-        for (Map.Entry<String, List<Integer>> entry : branchConditionNumbers.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            for (Integer conditionNumber : entry.getValue()) {
-                if (conditionNumber != null) {
-                    keys.add(entry.getKey() + "#" + conditionNumber);
-                }
-            }
-        }
-    }
-
-    private Map<String, List<Integer>> normalizeCoveredBranchTargetProbeMap(Map<String, List<Integer>> total,
-                                                                            Map<String, List<Integer>> covered) {
-        if (total == null || total.isEmpty() || covered == null || covered.isEmpty()) {
-            return new LinkedHashMap<>();
-        }
-        Map<String, List<Integer>> normalized = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : total.entrySet()) {
-            List<Integer> totalValues = entry.getValue();
-            if (totalValues == null || totalValues.isEmpty()) {
-                continue;
-            }
-            Set<Integer> allowed = new LinkedHashSet<>(totalValues);
-            List<Integer> coveredValues = covered.get(entry.getKey());
-            if (coveredValues == null || coveredValues.isEmpty()) {
-                continue;
-            }
-            LinkedHashSet<Integer> matched = new LinkedHashSet<>();
-            for (Integer value : coveredValues) {
-                if (value != null && allowed.contains(value)) {
-                    matched.add(value);
-                }
-            }
-            if (!matched.isEmpty()) {
-                normalized.put(entry.getKey(), new ArrayList<>(matched));
-            }
-        }
-        return normalized;
-    }
-
-    private void addBranchConditionKeysToSet(Set<String> target,
-                                             Map<String, List<Integer>> allowedBranchConditionNumbers,
-                                             Map<String, List<Integer>> branchConditionNumbers) {
-        Map<String, List<Integer>> effective = normalizeCoveredBranchTargetProbeMap(
-                allowedBranchConditionNumbers, branchConditionNumbers);
-        for (Map.Entry<String, List<Integer>> entry : effective.entrySet()) {
-            if (entry.getValue() == null) {
-                continue;
-            }
-            for (Integer conditionNumber : entry.getValue()) {
-                if (conditionNumber != null) {
-                    target.add(entry.getKey() + "#" + conditionNumber);
-                }
-            }
-        }
-    }
-
-    private Map<String, List<Integer>> decodeBranchConditionKeys(Set<String> keys) {
-        Map<String, List<Integer>> decoded = new LinkedHashMap<>();
-        if (keys == null || keys.isEmpty()) {
-            return decoded;
-        }
-        for (String key : keys) {
-            if (!StringUtils.hasText(key)) {
-                continue;
-            }
-            int split = key.lastIndexOf('#');
-            if (split <= 0 || split >= key.length() - 1) {
-                continue;
-            }
-            try {
-                int conditionNumber = Integer.parseInt(key.substring(split + 1));
-                decoded.computeIfAbsent(key.substring(0, split), k -> new ArrayList<>()).add(conditionNumber);
-            } catch (NumberFormatException ignore) {
-            }
-        }
-        return decoded;
-    }
-
     // 支持 AJAX POST 删除，返回 JSON
     @RequestMapping(value = "{appId}/version/report/delete", method = RequestMethod.POST)
     @ResponseBody
@@ -698,7 +404,7 @@ public class VersionItemControl {
     @ResponseBody
     public ResultNotified<String> deleteCoverageReport(@PathVariable String projectId, @PathVariable String appId, String reportId) {
         try {
-            coverageService.deleteReport(reportId);
+            coverageReportCommandService.deleteReport(reportId);
             return new ResultNotified<>(true, "覆盖率报告删除成功");
         } catch (Exception e) {
             return new ResultNotified<>(false, "删除失败: " + e.getMessage());
@@ -725,156 +431,6 @@ public class VersionItemControl {
             CompareJobVo compareJob = versionService.getCompareJob(reportId);
             String appId = compareJob == null ? "" : compareJob.getAppId();
             return "redirect:" + frontendProperties.url("/p/" + projectId + "/version/reports/" + reportId + "?appId=" + appId);
-        }
-    }
-
-    private String resolveUsecaseDirectoryPath(String projectId, String directoryId) {
-        if (!StringUtils.hasText(directoryId) || "root".equalsIgnoreCase(directoryId)) {
-            return "ROOT";
-        }
-        try {
-            List<UsecaseDirectoryVo> tiers = usecaseService.getDirectoryTier(projectId, directoryId);
-            if (tiers == null || tiers.isEmpty()) {
-                return directoryId;
-            }
-            List<String> names = new ArrayList<>();
-            Collections.reverse(tiers);
-            for (UsecaseDirectoryVo vo : tiers) {
-                if (vo != null && StringUtils.hasText(vo.getName())) {
-                    names.add(vo.getName());
-                }
-            }
-            return names.isEmpty() ? directoryId : String.join(" / ", names);
-        } catch (Exception ex) {
-            logger.warn("解析用例目录失败, directoryId={}", directoryId, ex);
-            return directoryId;
-        }
-    }
-
-    private ImpactHintSummary buildImpactHintSummary(String jobLog) {
-        ImpactHintSummary summary = new ImpactHintSummary();
-        if (!StringUtils.hasText(jobLog)) {
-            return summary;
-        }
-
-        Pattern snapshotCountPattern = Pattern.compile("当前应用快照数：(\\d+)");
-        Matcher countMatcher = snapshotCountPattern.matcher(jobLog);
-        int maxSnapshotCount = -1;
-        while (countMatcher.find()) {
-            int count = Integer.parseInt(countMatcher.group(1));
-            if (count > maxSnapshotCount) {
-                maxSnapshotCount = count;
-            }
-        }
-        if (maxSnapshotCount >= 0) {
-            summary.setSnapshotCount(maxSnapshotCount);
-        }
-
-        Pattern hitPattern = Pattern.compile("命中快照：([^\\n\\r]+)");
-        Matcher hitMatcher = hitPattern.matcher(jobLog);
-        LinkedHashSet<String> snapshotTitles = new LinkedHashSet<>();
-        while (hitMatcher.find()) {
-            String title = hitMatcher.group(1).trim();
-            if (StringUtils.hasText(title) && !"-".equals(title)) {
-                Arrays.stream(title.split(",")).map(String::trim).filter(StringUtils::hasText).forEach(snapshotTitles::add);
-            }
-        }
-        summary.setHitSnapshots(new ArrayList<>(snapshotTitles));
-
-        Pattern zeroPattern = Pattern.compile("查找快照影响 类名：([^\\s]+).*?影响数：0");
-        Matcher zeroMatcher = zeroPattern.matcher(jobLog);
-        LinkedHashSet<String> zeroHitClasses = new LinkedHashSet<>();
-        while (zeroMatcher.find()) {
-            zeroHitClasses.add(zeroMatcher.group(1).trim());
-        }
-        summary.setZeroHitClasses(new ArrayList<>(zeroHitClasses));
-        return summary;
-    }
-
-    public class ImpactHintSummary implements Serializable {
-        private Integer snapshotCount;
-        private List<String> hitSnapshots = Collections.emptyList();
-        private List<String> zeroHitClasses = Collections.emptyList();
-
-        public Integer getSnapshotCount() {
-            return snapshotCount;
-        }
-
-        public void setSnapshotCount(Integer snapshotCount) {
-            this.snapshotCount = snapshotCount;
-        }
-
-        public List<String> getHitSnapshots() {
-            return hitSnapshots;
-        }
-
-        public void setHitSnapshots(List<String> hitSnapshots) {
-            this.hitSnapshots = hitSnapshots;
-        }
-
-        public List<String> getZeroHitClasses() {
-            return zeroHitClasses;
-        }
-
-        public void setZeroHitClasses(List<String> zeroHitClasses) {
-            this.zeroHitClasses = zeroHitClasses;
-        }
-    }
-
-    public class UsecaseGroup implements Serializable {
-        String directoryName;
-        List<UsecaseBo> list;
-
-        public UsecaseGroup(String directoryName, List<UsecaseBo> list) {
-            this.directoryName = directoryName;
-            this.list = list;
-        }
-
-        public String getDirectoryName() {
-            return directoryName;
-        }
-
-        public List<UsecaseBo> getList() {
-            return list;
-        }
-    }
-
-    public class UsecaseBo implements Serializable {
-        private String id;
-        private String name;
-        private String directoryPath;
-        private List<LabelGroup.Label> labels;
-        private String[] differences;
-
-        public UsecaseBo(String id, String name, List<LabelGroup.Label> labels, String[] differences) {
-            this.id = id;
-            this.name = name;
-            this.labels = labels;
-            this.differences = differences;
-        }
-
-        public String getId() {
-            return id;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public List<LabelGroup.Label> getLabels() {
-            return labels;
-        }
-
-        public String[] getDifferences() {
-            return differences;
-        }
-
-        public String getDirectoryPath() {
-            return directoryPath;
-        }
-
-        public void setDirectoryPath(String directoryPath) {
-            this.directoryPath = directoryPath;
         }
     }
 

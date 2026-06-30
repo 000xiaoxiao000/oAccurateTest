@@ -5,8 +5,10 @@ import com.oAT.web.esDao.SystemRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.entity.*;
 import com.oAT.web.esDao.entity.StandardDate;
+import com.oAT.web.coveragecore.model.CoverageLanguage;
 import com.oAT.web.exceptions.BusinessException;
 import com.oAT.web.exceptions.DirtyDataException;
+import com.oAT.web.language.spi.AppConfigValidatorRegistry;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.UsecaseService;
 import com.oAT.web.service.entity.AppVo;
@@ -33,6 +35,8 @@ public class AppServiceImpl implements AppService, StandardDate {
     private UsecaseService usecaseService;
     @Autowired
     private SnapshotCommitMappingRepository snapshotCommitMappingRepository;
+    @Autowired
+    private AppConfigValidatorRegistry appConfigValidatorRegistry;
 
     /**
      * 创建新的应用
@@ -48,6 +52,7 @@ public class AppServiceImpl implements AppService, StandardDate {
         app.setProbeAlertOnOnline(Boolean.TRUE.equals(app.getProbeAlertOnOnline()));
         app.setProbeAlertOnOffline(app.getProbeAlertOnOffline() == null ? Boolean.TRUE : app.getProbeAlertOnOffline());
         app.setProbeAlertOnRecovered(app.getProbeAlertOnRecovered() == null ? Boolean.TRUE : app.getProbeAlertOnRecovered());
+        appConfigValidatorRegistry.validateAndApplyDefaults(app);
         SystemIndex systemIndex = systemRepository.save(new SystemIndex(app));
         return convertApp(systemIndex);
     }
@@ -65,6 +70,8 @@ public class AppServiceImpl implements AppService, StandardDate {
         app.setDescribe(appVo.getDescribe());
         app.setName(appVo.getName());
         app.setSrcName(appVo.getSrcName());
+        app.setLanguage(appVo.getLanguage());
+        app.setLanguageConfig(appVo.getLanguageConfig());
         app.setRange(appVo.getRange());
         app.setProperties(appVo.getProperties());
         app.setCurrentVersion(appVo.getCurrentVersion());
@@ -85,6 +92,7 @@ public class AppServiceImpl implements AppService, StandardDate {
         app.setProbeAlertOnOnline(Boolean.TRUE.equals(appVo.getProbeAlertOnOnline()));
         app.setProbeAlertOnOffline(appVo.getProbeAlertOnOffline() == null ? Boolean.TRUE : appVo.getProbeAlertOnOffline());
         app.setProbeAlertOnRecovered(appVo.getProbeAlertOnRecovered() == null ? Boolean.TRUE : appVo.getProbeAlertOnRecovered());
+        appConfigValidatorRegistry.validateAndApplyDefaults(app);
         appIndex.setApp(app);
         appIndex.setUpdateTime(new java.util.Date());
         systemRepository.save(appIndex);
@@ -235,7 +243,15 @@ public class AppServiceImpl implements AppService, StandardDate {
         BeanUtils.copyProperties(systemIndex, appVo);
         BeanUtils.copyProperties(systemIndex.getApp(), appVo);
         fillProbeAlertDefaults(appVo);
+        fillLanguageDefaults(appVo);
         return appVo;
+    }
+
+    private void fillLanguageDefaults(AppVo appVo) {
+        appVo.setLanguage(CoverageLanguage.from(appVo.getLanguage()).name());
+        if (!StringUtils.hasText(appVo.getLanguageConfig())) {
+            appVo.setLanguageConfig("{}");
+        }
     }
 
     private void fillProbeAlertDefaults(AppVo appVo) {

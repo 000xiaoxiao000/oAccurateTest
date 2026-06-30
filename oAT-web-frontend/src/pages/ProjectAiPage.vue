@@ -15,437 +15,74 @@
     <div v-if="loading" class="status-card">正在加载 AI 工作台...</div>
     <div v-else-if="error" class="status-card error">{{ error }}</div>
     <template v-else-if="context">
-      <div class="hero-card">
-        <div>
-          <div class="hero-kicker">智能协作</div>
-          <h2>{{ context.welcomeMessage }}</h2>
-          <p>{{ context.mascotHint }}</p>
-          <div class="hero-actions">
-            <button class="primary-button" type="button" @click="useQuestion('帮我总结一下当前项目概况')">启动概览</button>
-            <button class="ghost-button" type="button" @click="useQuestion('如果线上有异常，排查顺序是什么')">开始排查</button>
-            <RouterLink class="ghost-link" :to="`/p/${projectId}/monitor`">打开监控台</RouterLink>
-          </div>
-        </div>
-        <div class="hero-mascot">
-          <div class="stage-ring one"></div>
-          <div class="stage-ring two"></div>
-          <MascotCanvas :size="118" :color="context.mascot?.mascotPrimary || '#0f766e'" :seed="projectId" :mood="asking ? 'thinking' : error ? 'error' : 'happy'" :interactive="true" />
-        </div>
-        <div class="hero-meta">
-          <div class="hero-chip">
-            <strong>{{ context.onlineAppCount }}</strong>
-            <span>在线应用</span>
-          </div>
-          <div class="hero-chip">
-            <strong>{{ context.appCount }}</strong>
-            <span>全部应用</span>
-          </div>
-          <div class="hero-chip">
-            <strong>{{ context.aiTimeout }}s</strong>
-            <span>超时设置</span>
-          </div>
-        </div>
-      </div>
+      <ProjectAiHero :context="context" :project-id="projectId" :mood="asking ? 'thinking' : error ? 'error' : 'happy'" @use-question="useQuestion" />
 
       <div class="page-grid">
-        <aside class="side-stack">
-          <section class="panel ask-panel">
-            <div class="card-title">
-              <h2>会话</h2>
-              <button class="ghost-button small" type="button" @click="newSession">新会话</button>
-            </div>
-            <div class="session-tools">
-              <input v-model.trim="sessionSearch" class="text-input small-input" type="search" placeholder="搜索会话标题或内容" aria-label="搜索 AI 会话" />
-              <select v-model="sessionSort" class="text-input small-input" @change="syncSessionState">
-                <option value="recent">最近更新</option>
-                <option value="oldest">最早更新</option>
-                <option value="name">标题排序</option>
-              </select>
-            </div>
-            <div class="session-list">
-              <article
-                v-for="session in visibleSessions"
-                :key="session.id"
-                class="session-card"
-                :class="{ active: session.id === activeSessionId, pinned: session.pinned }"
-              >
-                <button class="session-main" type="button" @click="switchSession(session.id)">
-                  <strong>{{ session.pinned ? '★ ' : '' }}{{ session.title }}</strong>
-                  <span>{{ session.messages.length }} 条消息 · {{ formatSessionTime(session.updatedAt) }}</span>
-                </button>
-                <div class="session-actions">
-                  <button type="button" title="置顶/取消置顶" @click="togglePinSession(session.id)">{{ session.pinned ? '取消置顶' : '置顶' }}</button>
-                  <button type="button" title="重命名" @click="renameSession(session.id)">重命名</button>
-                  <button type="button" title="删除" @click="deleteSession(session.id)">删除</button>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel ability-panel">
-            <div class="card-title">
-              <h2>能力卡片</h2>
-            </div>
-            <div class="ability-list">
-              <article v-for="card in context.abilityCards" :key="`${card.title}-${card.value}`" class="ability-card">
-                <strong>{{ card.title }}</strong>
-                <span class="ability-value">{{ card.value }}</span>
-                <p>{{ card.description }}</p>
-              </article>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="card-title">
-              <h2>快速问题</h2>
-            </div>
-            <div class="question-list">
-              <button
-                v-for="question in context.starterQuestions"
-                :key="question"
-                class="ghost-button"
-                type="button"
-                @click="useQuestion(question)"
-              >
-                {{ question }}
-              </button>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="card-title">
-              <h2>快捷入口</h2>
-              <span class="muted">{{ mergedQuickLinks.length }} 个</span>
-            </div>
-            <div class="link-list compact-links">
-              <button v-for="link in mergedQuickLinks" :key="link.title + link.url" class="link-card link-button" type="button" @click="openLink(link)">
-                <strong>{{ link.title }}</strong>
-                <span>{{ link.description }}</span>
-              </button>
-              <div v-if="!mergedQuickLinks.length" class="empty-card compact">暂无快捷入口</div>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="card-title">
-              <h2>项目上下文</h2>
-              <span class="muted">{{ context.appNames.length }} 个应用</span>
-            </div>
-            <div class="context-list">
-              <div class="context-row">
-                <span>AI 形象</span>
-                <strong>{{ context.mascot?.mascotName || 'AI' }} · {{ context.mascot?.mascotRole || '助手' }}</strong>
-              </div>
-              <div class="context-row">
-                <span>当前状态</span>
-                <strong>{{ context.mascot?.mascotMood || '在线' }}</strong>
-              </div>
-              <div class="app-chip-list">
-                <span v-for="appName in context.appNames" :key="appName" class="app-chip">{{ appName }}</span>
-                <span v-if="!context.appNames.length" class="app-chip muted-chip">暂无应用</span>
-              </div>
-            </div>
-          </section>
-
-          <section class="panel learning-panel">
-            <div class="card-title">
-              <h2>AI 自主学习</h2>
-              <button class="ghost-button small" type="button" :disabled="learningLoading" @click="refreshLearningPanel">
-                {{ learningLoading ? '刷新中...' : '刷新报告' }}
-              </button>
-            </div>
-            <div v-if="learningError" class="learning-error">{{ learningError }}</div>
-            <div v-else class="learning-grid">
-              <article class="meta-card">
-                <span>反馈总数</span>
-                <strong>{{ feedbackStats?.total ?? 0 }}</strong>
-              </article>
-              <article class="meta-card">
-                <span>满意度</span>
-                <strong>{{ feedbackStats?.satisfactionRate || '0%' }}</strong>
-              </article>
-              <article class="meta-card">
-                <span>知识库条目</span>
-                <strong>{{ selfLearningStatus?.knowledgeBaseSize ?? 0 }}</strong>
-              </article>
-              <article class="meta-card">
-                <span>跟踪主题</span>
-                <strong>{{ selfLearningStatus?.trackedTopics ?? 0 }}</strong>
-              </article>
-            </div>
-            <div v-if="learningReport?.suggestions?.length" class="learning-suggestions">
-              <div class="learning-suggestions-header">
-                <h3>优化建议</h3>
-                <div class="learning-suggestions-actions">
-                  <span class="muted">{{ learningReport.suggestions.length }} 条</span>
-                  <button class="ghost-button small" type="button" :disabled="learningLoading" @click="clearLearningSuggestions">清空</button>
-                </div>
-              </div>
-              <div class="learning-suggestions-list">
-                <article v-for="item in learningReport.suggestions" :key="item.id" class="learning-suggestion" :class="item.priority.toLowerCase()">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.description }}</p>
-                </article>
-              </div>
-            </div>
-            <p v-else class="learning-empty">提交回答反馈后，系统会自动积累知识并生成优化建议。</p>
-          </section>
-
-          <section class="panel">
-            <div class="card-title">
-              <h2>提问锚点</h2>
-              <span class="muted">{{ visibleQuestionAnchors.length }}/{{ questionAnchors.length }} 个</span>
-            </div>
-            <div class="anchor-tools">
-              <div class="anchor-filter" role="group" aria-label="锚点筛选">
-                <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'all' }" type="button" @click="anchorFilterMode = 'all'">全部</button>
-                <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'pending' }" type="button" @click="anchorFilterMode = 'pending'">仅看未回复</button>
-              </div>
-              <div class="anchor-search-row">
-                <input v-model.trim="anchorSearch" class="text-input small-input" type="search" placeholder="搜索问题关键词" aria-label="搜索提问锚点" />
-                <button v-if="anchorSearch" class="anchor-clear" type="button" title="清空搜索" @click="anchorSearch = ''">×</button>
-              </div>
-              <p class="anchor-tip">点击可快速定位到对应问答</p>
-            </div>
-            <div class="anchor-list">
-              <button
-                v-for="anchor in visibleQuestionAnchors"
-                :key="anchor.id"
-                class="anchor-item"
-                :class="{ active: activeAnchorId === anchor.id, pending: !anchor.answered, answered: anchor.answered, expanded: expandedAnchorIds.has(anchor.id) }"
-                type="button"
-                @mouseenter="previewAnchorId = anchor.id"
-                @mouseleave="previewAnchorId = ''"
-                @click="scrollToAnchor(anchor.id)"
-              >
-                <span class="anchor-top">
-                  <strong>{{ anchor.label }}</strong>
-                  <span class="anchor-status" :class="anchor.answered ? 'answered' : 'pending'">
-                    <i></i>{{ anchor.answered ? '已回复' : '待回复' }}
-                  </span>
-                </span>
-                <span class="anchor-question">{{ anchor.question }}</span>
-                <span class="anchor-meta">{{ anchor.responseTimeText || (anchor.answered ? '已生成回答' : '等待回复中') }}</span>
-                <span class="anchor-actions" @click.stop>
-                  <button class="anchor-link-button" type="button" @click="toggleAnchorText(anchor.id)">{{ expandedAnchorIds.has(anchor.id) ? '收起' : '展开' }}</button>
-                  <button class="anchor-link-button" type="button" @click="copyAnchorLink(anchor)">复制链接</button>
-                </span>
-              </button>
-              <div v-if="!visibleQuestionAnchors.length" class="empty-card compact">暂无匹配的提问锚点</div>
-            </div>
-          </section>
-
-          <section class="panel">
-            <div class="card-title">
-              <h2>会话时间线</h2>
-            </div>
-            <div class="timeline-list">
-              <button
-                v-for="item in timelineItems"
-                :key="item.id"
-                class="timeline-item"
-                :class="{ active: activeAnchorId === item.anchorId }"
-                type="button"
-                @click="scrollToAnchor(item.anchorId)"
-              >
-                <span>{{ item.label }}</span>
-                <strong>问答</strong>
-                <small>{{ item.question }}</small>
-              </button>
-              <div v-if="!timelineItems.length" class="empty-card compact">暂无会话节点</div>
-            </div>
-          </section>
-        </aside>
+        <ProjectAiSidebar
+          v-model:session-search="sessionSearch"
+          v-model:session-sort="sessionSort"
+          v-model:anchor-filter-mode="anchorFilterMode"
+          v-model:anchor-search="anchorSearch"
+          v-model:preview-anchor-id="previewAnchorId"
+          :context="context"
+          :visible-sessions="visibleSessions"
+          :active-session-id="activeSessionId"
+          :merged-quick-links="mergedQuickLinks"
+          :feedback-stats="feedbackStats"
+          :learning-report="learningReport"
+          :learning-loading="learningLoading"
+          :learning-error="learningError"
+          :question-anchors="questionAnchors"
+          :visible-question-anchors="visibleQuestionAnchors"
+          :active-anchor-id="activeAnchorId"
+          :expanded-anchor-ids="expandedAnchorIds"
+          :timeline-items="timelineItems"
+          @new-session="newSession"
+          @switch-session="switchSession"
+          @toggle-pin-session="togglePinSession"
+          @rename-session="renameSession"
+          @delete-session="deleteSession"
+          @use-question="useQuestion"
+          @open-link="openLink"
+          @refresh-learning="refreshLearningPanel"
+          @clear-learning-suggestions="clearLearningSuggestions"
+          @scroll-to-anchor="scrollToAnchor"
+          @toggle-anchor-text="toggleAnchorText"
+          @copy-anchor-link="copyAnchorLink"
+        />
 
         <div class="content-stack">
-          <section class="panel ask-workspace-panel">
-            <div v-if="questionAnchors.length" class="floating-anchors" aria-label="右侧问答锚点导航">
-              <div class="floating-anchor-head">问答</div>
-              <div class="floating-anchor-track" :style="{ height: `${floatingTrackHeight}px` }">
-                <button
-                  v-for="dot in floatingAnchorDots"
-                  :key="dot.id"
-                  class="floating-anchor-dot"
-                  :class="{ active: activeAnchorId === dot.id, pending: !dot.answered, answered: dot.answered }"
-                  type="button"
-                  :style="{ top: `${dot.top}px` }"
-                  :aria-label="`${dot.label} ${dot.question}`"
-                  @mouseenter="previewAnchorId = dot.id"
-                  @mouseleave="previewAnchorId = ''"
-                  @click="scrollToAnchor(dot.id)"
-                >
-                  <span class="floating-anchor-label">{{ dot.label }}</span>
-                  <span class="floating-anchor-tooltip">
-                    <strong>{{ dot.label }} · {{ dot.answered ? '已回复' : '待回复' }}</strong>
-                    <em>{{ dot.question }}</em>
-                    <small>{{ dot.responseTimeText || (dot.answered ? '已生成回答' : '等待回复中') }}</small>
-                  </span>
-                </button>
-              </div>
-            </div>
-            <div class="card-title">
-              <h2>提问</h2>
-            </div>
-            <div v-if="activeMessages.length" class="message-history">
-              <article
-                v-for="section in messageSections"
-                :id="section.startsQuestion ? section.anchorId : `ai-message-${section.id}`"
-                :key="section.id"
-                class="message-card"
-                :class="[
-                  section.message.role,
-                  {
-                    'anchor-section': section.startsQuestion,
-                    'qa-group-start': section.startsQuestion,
-                    'qa-group-end': section.endsAnswer,
-                    'is-active': activeAnchorId === section.anchorId,
-                    'is-preview': previewAnchorId === section.anchorId,
-                    'is-target': targetAnchorId === section.anchorId,
-                  },
-                ]"
-                :data-anchor-id="section.anchorId"
-              >
-                <button class="message-copy-button" type="button" :title="section.message.role === 'assistant' ? '复制回复内容' : '复制提问内容'" @click.stop="copyMessage(section.message.text, section.id)">
-                  {{ copiedMessageId === section.id ? '已复制' : '复制' }}
-                </button>
-                <div class="message-role">{{ section.message.role === 'user' ? '你' : 'AI' }}</div>
-                <div v-if="section.message.role === 'assistant'" class="message-text markdown-message" v-html="formatAssistantMessage(section.message.text)"></div>
-                <div v-else class="message-text">{{ section.message.text }}</div>
-                
-                <div v-if="section.message.role === 'assistant' && section.endsAnswer" class="message-actions">
-                  <button 
-                    class="message-action-btn" 
-                    type="button" 
-                    :disabled="feedbackSubmitting" 
-                    :class="{ active: getMessageFeedback(section.id) === 'helpful' }"
-                    :title="getMessageFeedback(section.id) === 'helpful' ? '已标记有帮助' : '有帮助'"
-                    @click.stop="submitMessageFeedback(section.id, section.message.text, 'helpful', 5)"
-                  >
-                    <span class="action-icon">👍</span>
-                  </button>
-                  <button 
-                    class="message-action-btn" 
-                    type="button" 
-                    :disabled="feedbackSubmitting" 
-                    :class="{ active: getMessageFeedback(section.id) === 'not_helpful' }"
-                    :title="getMessageFeedback(section.id) === 'not_helpful' ? '已标记没帮助' : '没帮助'"
-                    @click.stop="submitMessageFeedback(section.id, section.message.text, 'not_helpful', 1)"
-                  >
-                    <span class="action-icon">👎</span>
-                  </button>
-                  <button 
-                    class="message-action-btn" 
-                    type="button" 
-                    :disabled="feedbackSubmitting"
-                    title="标记为不正确"
-                    @click.stop="submitMessageFeedback(section.id, section.message.text, 'incorrect', 1, true)"
-                  >
-                    <span class="action-icon">⚠️</span>
-                  </button>
-                </div>
-              </article>
-            </div>
-            <form ref="askFormRef" class="ask-form" @submit.prevent="submitAsk">
-              <textarea
-                ref="askInputRef"
-                v-model="question"
-                class="text-area"
-                rows="6"
-                placeholder="例如：帮我总结当前项目的测试覆盖盲区，优先按风险排序。"
-                @keydown.enter.exact="handleAskEnter"
-              ></textarea>
-              <input ref="imageInput" class="hidden-input" type="file" accept="image/*" @change="handleImageChange" />
-              <div class="form-actions">
-                <div class="ask-tools">
-                  <button class="ghost-button" :class="{ active: Boolean(imageData) }" type="button" @click="selectImage">
-                    {{ imageData ? '已附图片' : '上传图片' }}
-                  </button>
-                  <button v-if="imageData" class="ghost-button" type="button" @click="clearImage">移除图片</button>
-                  <button class="ghost-button" :class="{ active: recording }" type="button" @click="toggleVoiceInput">语音输入</button>
-                </div>
-                <div class="ask-submit-actions">
-                  <button v-if="asking" class="danger-button control-button" type="button" @click="stopAsk">
-                    <span class="button-icon stop-icon"></span>
-                    停止生成
-                  </button>
-                  <button class="primary-button control-button send-button" type="submit" :class="{ loading: asking }" :disabled="asking">
-                    <span v-if="asking" class="button-spinner" aria-hidden="true"></span>
-                    <span v-else class="button-icon send-icon" aria-hidden="true"></span>
-                    {{ asking ? '生成中...' : '发送问题' }}
-                  </button>
-                  <button class="ghost-button control-button save-button" type="button" :disabled="asking" @click="saveSession">
-                    <span class="button-icon save-icon" aria-hidden="true"></span>
-                    保存会话状态
-                  </button>
-                </div>
-              </div>
-            </form>
-          </section>
+          <ProjectAiAskWorkspace
+            ref="askWorkspaceRef"
+            v-model:question="question"
+            v-model:preview-anchor-id="previewAnchorId"
+            :asking="asking"
+            :image-data="imageData"
+            :recording="recording"
+            :active-messages="activeMessages"
+            :message-sections="messageSections"
+            :question-anchors="questionAnchors"
+            :floating-anchor-dots="floatingAnchorDots"
+            :floating-track-height="floatingTrackHeight"
+            :active-anchor-id="activeAnchorId"
+            :target-anchor-id="targetAnchorId"
+            :copied-message-id="copiedMessageId"
+            :feedback-submitting="feedbackSubmitting"
+            :message-feedbacks="messageFeedbacks"
+            @scroll-to-anchor="scrollToAnchor"
+            @copy-message="copyMessage"
+            @submit-message-feedback="submitMessageFeedback"
+            @submit-ask="submitAsk"
+            @ask-enter="handleAskEnter"
+            @image-change="handleImageChange"
+            @select-image="selectImage"
+            @clear-image="clearImage"
+            @toggle-voice-input="toggleVoiceInput"
+            @stop-ask="stopAsk"
+            @save-session="saveSession"
+          />
 
-          <section class="panel" v-if="reply">
-            <div class="card-title">
-              <h2>回答</h2>
-              <span class="muted">{{ reply.topic || 'general' }}</span>
-            </div>
-            <div class="answer-block">{{ reply.answer || '暂无回答' }}</div>
-
-            <div v-if="reply.suggestions?.length" class="subsection">
-              <h3>追问建议</h3>
-              <div class="chip-list">
-                <button
-                  v-for="item in reply.suggestions"
-                  :key="item"
-                  class="ghost-button small"
-                  type="button"
-                  @click="useQuestion(item)"
-                >
-                  {{ item }}
-                </button>
-              </div>
-            </div>
-
-            <div v-if="reply.quickLinks?.length" class="subsection">
-              <h3>推荐链接</h3>
-              <div class="link-list">
-                <button v-for="link in reply.quickLinks" :key="link.title + link.url" class="link-card link-button" type="button" @click="openLink(link)">
-                  <strong>{{ link.title }}</strong>
-                  <span>{{ link.description }}</span>
-                </button>
-              </div>
-            </div>
-
-            <div v-if="reply.actions?.length" class="subsection">
-              <h3>建议动作</h3>
-              <div class="link-list">
-                <article v-for="action in reply.actions" :key="action.title + action.type" class="link-card">
-                  <strong>{{ action.title }}</strong>
-                  <span>{{ action.description }}</span>
-                  <button class="inline-link action-inline-button" type="button" @click="executeAction(action)">执行</button>
-                </article>
-              </div>
-            </div>
-
-            <div v-if="reply.visualizationSuggestions?.length" class="subsection">
-              <h3>可视化建议</h3>
-              <div class="visual-list">
-                <article v-for="item in reply.visualizationSuggestions" :key="String(item.title || item.type || JSON.stringify(item))" class="visual-card">
-                  <strong>{{ String(item.title || item.type || '数据图表') }}</strong>
-                  <code>{{ JSON.stringify(item) }}</code>
-                </article>
-              </div>
-            </div>
-
-            <div v-if="replyMetaEntries.length" class="subsection">
-              <h3>生成信息</h3>
-              <div class="meta-grid">
-                <article v-for="item in replyMetaEntries" :key="item.label" class="meta-card">
-                  <span>{{ item.label }}</span>
-                  <strong>{{ item.value }}</strong>
-                </article>
-              </div>
-            </div>
-          </section>
-
+          <ProjectAiReplyPanel :reply="reply" :reply-meta-entries="replyMetaEntries" @use-question="useQuestion" @open-link="openLink" @execute-action="executeAction" />
 
         </div>
       </div>
@@ -454,16 +91,20 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-
 import { clearAiLearningSuggestions, fetchAiFeedbackStats, fetchAiLearningReport, submitAiFeedback } from '@/api/bootstrap'
 import { backendApiUrl } from '@/api/http'
-import MascotCanvas from '@/components/MascotCanvas.vue'
 import { useDialog } from '@/composables/useDialog'
+import ProjectAiAskWorkspace from '@/features/ai/components/ProjectAiAskWorkspace.vue'
+import ProjectAiHero from '@/features/ai/components/ProjectAiHero.vue'
+import ProjectAiReplyPanel from '@/features/ai/components/ProjectAiReplyPanel.vue'
+import ProjectAiSidebar from '@/features/ai/components/ProjectAiSidebar.vue'
+import { useProjectAiAnchors } from '@/features/ai/composables/useProjectAiAnchors'
+import { useProjectAiSessions } from '@/features/ai/composables/useProjectAiSessions'
+import type { AiSessionMessage } from '@/features/ai/types'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
-import { renderMarkdown } from '@/utils/markdown'
 import type { AIAction, AIFeedbackPayload, AIFeedbackStats, AILearningReport, AIQuickLink } from '@/api/types'
 
 const route = useRoute()
@@ -474,10 +115,6 @@ const dialog = useDialog()
 const projectId = computed(() => String(route.params.projectId || ''))
 const context = computed(() => projectStore.aiContextByProjectId[projectId.value])
 const reply = computed(() => projectStore.aiLastReplyByProjectId[projectId.value])
-type SessionMessage = { id: string; role: 'user' | 'assistant'; text: string; responseTime?: number }
-type ChatSession = { id: string; title: string; messages: SessionMessage[]; updatedAt: number; pinned?: boolean }
-type QuestionAnchor = { id: string; label: string; question: string; answered: boolean; responseTime: number; responseTimeText: string; shareUrl: string; messageId: string }
-type MessageSection = { id: string; anchorId: string; message: SessionMessage; startsQuestion: boolean; endsAnswer: boolean }
 type SpeechRecognitionLike = {
   lang: string
   continuous: boolean
@@ -494,22 +131,12 @@ const loading = ref(false)
 const asking = ref(false)
 const error = ref('')
 const question = ref('')
-const askFormRef = ref<HTMLFormElement | null>(null)
-const askInputRef = ref<HTMLTextAreaElement | null>(null)
-const imageInput = ref<HTMLInputElement | null>(null)
+const askWorkspaceRef = ref<InstanceType<typeof ProjectAiAskWorkspace> | null>(null)
 const imageData = ref('')
 const recording = ref(false)
 let recognition: SpeechRecognitionLike | null = null
-const sessions = ref<ChatSession[]>([])
-const activeSessionId = ref('')
-const sessionSearch = ref('')
-const sessionSort = ref<'recent' | 'oldest' | 'name'>('recent')
 const anchorFilterMode = ref<'all' | 'pending'>('all')
 const anchorSearch = ref('')
-const activeAnchorId = ref('')
-const previewAnchorId = ref('')
-const targetAnchorId = ref('')
-const expandedAnchorIds = ref(new Set<string>())
 const copiedMessageId = ref('')
 const feedbackSubmitting = ref(false)
 const feedbackMessage = ref('')
@@ -518,17 +145,71 @@ const learningLoading = ref(false)
 const learningError = ref('')
 const feedbackStats = ref<AIFeedbackStats | null>(null)
 const learningReport = ref<AILearningReport | null>(null)
-const selfLearningStatus = computed(() => feedbackStats.value?.selfLearning || null)
 let askAbortController: AbortController | null = null
-let targetAnchorTimer: number | undefined
 let copiedMessageTimer: number | undefined
 
-function formatAssistantMessage(text: string) {
-  return renderMarkdown(text)
-}
-
-const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value) || null)
 const activeMessages = computed(() => activeSession.value?.messages || [])
+const {
+  activeAnchorId,
+  previewAnchorId,
+  targetAnchorId,
+  expandedAnchorIds,
+  messageSections,
+  questionAnchors,
+  visibleQuestionAnchors,
+  timelineItems,
+  floatingTrackHeight,
+  floatingAnchorDots,
+  resetAnchorState,
+  scrollToAnchor,
+  toggleAnchorText,
+  copyAnchorLink,
+  updateActiveAnchorFromScroll,
+  clearAnchorTimers,
+} = useProjectAiAnchors(activeMessages, anchorFilterMode, anchorSearch)
+
+const {
+  activeSessionId,
+  sessionSearch,
+  sessionSort,
+  activeSession,
+  visibleSessions,
+  createMessageId,
+  touchSession,
+  hydrateSessions,
+  buildSessionState,
+  syncSessionState,
+  ensureActiveSession,
+  switchSession: switchAiSession,
+  newSession,
+  renameSession,
+  deleteSession,
+  togglePinSession,
+} = useProjectAiSessions({
+  projectId,
+  persist: (id, state) => projectStore.persistAiSessionState(id, state),
+  onError: (message) => {
+    error.value = message
+  },
+  onSessionSwitched: () => {
+    resetAnchorState()
+    nextTick(updateActiveAnchorFromScroll)
+  },
+  promptTitle: (currentTitle) => dialog.prompt({
+    title: '重命名会话',
+    message: '请输入新的会话名称，便于在左侧会话列表中快速定位。',
+    defaultValue: currentTitle,
+    placeholder: '会话名称',
+    confirmText: '保存名称',
+  }),
+  confirmDelete: (title) => dialog.confirm({
+    title: '删除 AI 会话',
+    message: `确认删除会话「${title}」？该会话中的问题、回答和图片上下文将从当前项目记忆中移除。`,
+    confirmText: '确认删除',
+    tone: 'danger',
+  }),
+})
+
 const mergedQuickLinks = computed(() => mergeQuickLinks([...(context.value?.quickLinks || []), ...(reply.value?.quickLinks || [])]))
 const lastUserQuestion = computed(() => [...activeMessages.value].reverse().find((item) => item.role === 'user')?.text || reply.value?.question || '')
 const lastAssistantAnswer = computed(() => reply.value?.answer || [...activeMessages.value].reverse().find((item) => item.role === 'assistant')?.text || '')
@@ -545,92 +226,8 @@ const replyMetaEntries = computed(() => {
   if (routeName) entries.push({ label: '识别场景', value: String(routeName) })
   return entries
 })
-const visibleSessions = computed(() => {
-  const needle = sessionSearch.value.toLowerCase()
-  const filtered = sessions.value.filter((session) => {
-    if (!needle) return true
-    return [session.title, ...session.messages.map((message) => message.text)].join(' ').toLowerCase().includes(needle)
-  })
-  return [...filtered].sort((a, b) => {
-    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
-    if (sessionSort.value === 'name') return a.title.localeCompare(b.title)
-    return sessionSort.value === 'oldest' ? a.updatedAt - b.updatedAt : b.updatedAt - a.updatedAt
-  })
-})
-const messageSections = computed<MessageSection[]>(() => {
-  const sections: MessageSection[] = []
-  let questionIndex = 0
-  let currentAnchorId = ''
-  activeMessages.value.forEach((message, index) => {
-    const startsQuestion = message.role === 'user'
-    if (startsQuestion) {
-      questionIndex += 1
-      currentAnchorId = questionAnchorId(questionIndex)
-    }
-    const anchorId = currentAnchorId || `ai-message-${message.id}`
-    const nextMessage = activeMessages.value[index + 1]
-    sections.push({
-      id: message.id,
-      anchorId,
-      message,
-      startsQuestion,
-      endsAnswer: message.role === 'assistant' && (!nextMessage || nextMessage.role === 'user'),
-    })
-  })
-  return sections
-})
-const questionAnchors = computed<QuestionAnchor[]>(() => {
-  const anchors: QuestionAnchor[] = []
-  let pendingAnchor: QuestionAnchor | null = null
-  activeMessages.value.forEach((message) => {
-    if (message.role === 'user') {
-      pendingAnchor = createQuestionAnchor(message, anchors.length)
-      anchors.push(pendingAnchor)
-      return
-    }
-    if (message.role === 'assistant' && pendingAnchor) {
-      pendingAnchor.answered = true
-      pendingAnchor.responseTime = message.responseTime || pendingAnchor.responseTime
-      pendingAnchor.responseTimeText = formatResponseTime(pendingAnchor.responseTime)
-      pendingAnchor = null
-    }
-  })
-  return anchors
-})
-const visibleQuestionAnchors = computed(() => {
-  const keyword = anchorSearch.value.toLowerCase()
-  return questionAnchors.value.filter((anchor) => {
-    if (anchorFilterMode.value === 'pending' && anchor.answered) return false
-    if (!keyword) return true
-    return `${anchor.label} ${anchor.question}`.toLowerCase().includes(keyword)
-  })
-})
-const timelineItems = computed(() => questionAnchors.value.map((anchor) => ({
-  id: `timeline-${anchor.id}`,
-  anchorId: anchor.id,
-  label: anchor.label,
-  question: anchor.question,
-})))
-const floatingTrackHeight = computed(() => {
-  if (typeof window === 'undefined') return 260
-  return Math.max(180, Math.min(window.innerHeight - 360, 360))
-})
-const floatingAnchorDots = computed(() => {
-  const anchors = questionAnchors.value
-  const maxTop = Math.max(0, floatingTrackHeight.value - 16)
-  let lastTop = -18
-  const dots = anchors.map((anchor, index) => {
-    let top = Math.round(maxTop * (anchors.length <= 1 ? 0 : index / (anchors.length - 1)))
-    if (top - lastTop < 18) top = Math.min(maxTop, lastTop + 18)
-    lastTop = top
-    return { ...anchor, top }
-  })
-  for (let index = dots.length - 2; index >= 0; index -= 1) {
-    if (dots[index + 1].top - dots[index].top < 18) {
-      dots[index].top = Math.max(0, dots[index + 1].top - 18)
-    }
-  }
-  return dots
+watch(sessionSort, () => {
+  syncSessionState()
 })
 
 async function refreshLearningPanel() {
@@ -699,58 +296,8 @@ async function useQuestion(text: string) {
 
 async function focusAskForm() {
   await nextTick()
-  askFormRef.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  askInputRef.value?.focus({ preventScroll: true })
-}
-
-function uid() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
-}
-
-function createSession(title = '新会话'): ChatSession {
-  return {
-    id: uid(),
-    title,
-    messages: [],
-    updatedAt: Date.now(),
-  }
-}
-
-function normalizeSession(session: ChatSession): ChatSession {
-  return { ...session, updatedAt: session.updatedAt || Date.now(), pinned: Boolean(session.pinned) }
-}
-
-function touchSession(session: ChatSession | null) {
-  if (session) session.updatedAt = Date.now()
-}
-
-function formatSessionTime(value: number) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString()
-}
-
-function questionAnchorId(index: number) {
-  return `ai-question-anchor-${index}`
-}
-
-function formatResponseTime(ms: number) {
-  if (!ms || ms <= 0) return ''
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(ms >= 10000 ? 0 : 1)}s`
-}
-
-function createQuestionAnchor(message: SessionMessage, index: number): QuestionAnchor {
-  const anchorIndex = index + 1
-  return {
-    id: questionAnchorId(anchorIndex),
-    label: `Q${anchorIndex}`,
-    question: message.text || '未命名提问',
-    answered: false,
-    responseTime: message.responseTime || 0,
-    responseTimeText: formatResponseTime(message.responseTime || 0),
-    shareUrl: `${window.location.pathname}#${questionAnchorId(anchorIndex)}`,
-    messageId: message.id,
-  }
+  askWorkspaceRef.value?.scrollAskFormIntoView()
+  askWorkspaceRef.value?.focusAskInput()
 }
 
 function mergeQuickLinks(links: AIQuickLink[]) {
@@ -762,164 +309,8 @@ function mergeQuickLinks(links: AIQuickLink[]) {
   })
 }
 
-function hydrateSessions(rawState?: string) {
-  if (!rawState) {
-    const fresh = createSession()
-    sessions.value = [fresh]
-    activeSessionId.value = fresh.id
-    return
-  }
-  try {
-    const parsed = JSON.parse(rawState) as {
-      sessions?: ChatSession[]
-      history?: Array<{ id?: string; role?: 'user' | 'assistant'; message?: string; text?: string; responseTime?: number }>
-      title?: string
-      activeSessionId?: string
-      sessionSort?: 'recent' | 'oldest' | 'name'
-    }
-    if (parsed.sessions?.length) {
-      sessions.value = parsed.sessions.map(normalizeSession)
-      activeSessionId.value = parsed.activeSessionId && parsed.sessions.some((item) => item.id === parsed.activeSessionId)
-        ? parsed.activeSessionId
-        : parsed.sessions[0].id
-      sessionSort.value = parsed.sessionSort || 'recent'
-      return
-    }
-    if (parsed.history?.length) {
-      const legacyMessages = parsed.history
-        .filter((item) => item.role === 'user' || item.role === 'assistant')
-        .map((item) => ({
-          id: item.id || uid(),
-          role: item.role as 'user' | 'assistant',
-          text: item.text || item.message || '',
-          responseTime: item.responseTime,
-        }))
-      const fresh = createSession(parsed.title || '历史会话')
-      fresh.messages = legacyMessages
-      sessions.value = [fresh]
-      activeSessionId.value = fresh.id
-      return
-    }
-  } catch {
-    // ignore parse failure and rebuild local session state
-  }
-  const fresh = createSession()
-  sessions.value = [fresh]
-  activeSessionId.value = fresh.id
-}
-
-function buildSessionState() {
-  return JSON.stringify({
-    sessions: sessions.value,
-    activeSessionId: activeSessionId.value,
-    sessionSort: sessionSort.value,
-  })
-}
-
-async function syncSessionState() {
-  try {
-    await projectStore.persistAiSessionState(projectId.value, buildSessionState())
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '同步会话状态失败'
-  }
-}
-
-function ensureActiveSession() {
-  if (!activeSession.value) {
-    const fresh = createSession()
-    sessions.value = [fresh]
-    activeSessionId.value = fresh.id
-  }
-}
-
 function switchSession(sessionId: string) {
-  activeSessionId.value = sessionId
-  activeAnchorId.value = ''
-  previewAnchorId.value = ''
-  targetAnchorId.value = ''
-  syncSessionState()
-  nextTick(updateActiveAnchorFromScroll)
-}
-
-function newSession() {
-  const fresh = createSession()
-  sessions.value = [fresh, ...sessions.value]
-  activeSessionId.value = fresh.id
-  syncSessionState()
-}
-
-async function renameSession(sessionId: string) {
-  const session = sessions.value.find((item) => item.id === sessionId)
-  if (!session) return
-  const nextTitle = await dialog.prompt({
-    title: '重命名会话',
-    message: '请输入新的会话名称，便于在左侧会话列表中快速定位。',
-    defaultValue: session.title,
-    placeholder: '会话名称',
-    confirmText: '保存名称',
-  })
-  if (!nextTitle?.trim()) return
-  session.title = nextTitle.trim().slice(0, 40)
-  touchSession(session)
-  syncSessionState()
-}
-
-async function deleteSession(sessionId: string) {
-  const session = sessions.value.find((item) => item.id === sessionId)
-  if (!session) return
-  const confirmed = await dialog.confirm({
-    title: '删除 AI 会话',
-    message: `确认删除会话「${session.title}」？该会话中的问题、回答和图片上下文将从当前项目记忆中移除。`,
-    confirmText: '确认删除',
-    tone: 'danger',
-  })
-  if (!confirmed) return
-  sessions.value = sessions.value.filter((item) => item.id !== sessionId)
-  if (!sessions.value.length) {
-    const fresh = createSession()
-    sessions.value = [fresh]
-    activeSessionId.value = fresh.id
-  } else if (activeSessionId.value === sessionId) {
-    activeSessionId.value = visibleSessions.value[0]?.id || sessions.value[0].id
-  }
-  syncSessionState()
-}
-
-function togglePinSession(sessionId: string) {
-  const session = sessions.value.find((item) => item.id === sessionId)
-  if (!session) return
-  session.pinned = !session.pinned
-  touchSession(session)
-  syncSessionState()
-}
-
-function scrollToAnchor(anchorId: string) {
-  const target = document.getElementById(anchorId)
-  if (!target) return
-  activeAnchorId.value = anchorId
-  targetAnchorId.value = anchorId
-  target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${anchorId}`)
-  if (targetAnchorTimer) window.clearTimeout(targetAnchorTimer)
-  targetAnchorTimer = window.setTimeout(() => {
-    if (targetAnchorId.value === anchorId) targetAnchorId.value = ''
-  }, 1600)
-}
-
-function toggleAnchorText(anchorId: string) {
-  const next = new Set(expandedAnchorIds.value)
-  if (next.has(anchorId)) next.delete(anchorId)
-  else next.add(anchorId)
-  expandedAnchorIds.value = next
-}
-
-async function copyAnchorLink(anchor: QuestionAnchor) {
-  const url = `${window.location.origin}${anchor.shareUrl}`
-  try {
-    await navigator.clipboard?.writeText(url)
-  } catch {
-    window.prompt('复制问答锚点链接', url)
-  }
+  switchAiSession(sessionId)
 }
 
 async function copyMessage(text: string, messageId: string) {
@@ -936,24 +327,6 @@ async function copyMessage(text: string, messageId: string) {
   }
 }
 
-function updateActiveAnchorFromScroll() {
-  const anchors = questionAnchors.value
-  if (!anchors.length) {
-    activeAnchorId.value = ''
-    return
-  }
-  const activationLine = Math.max(120, Math.round(window.innerHeight * 0.24))
-  let nextActive = anchors[0].id
-  for (const anchor of anchors) {
-    const element = document.getElementById(anchor.id)
-    if (!element) continue
-    const rect = element.getBoundingClientRect()
-    if (rect.top <= activationLine) nextActive = anchor.id
-    else break
-  }
-  activeAnchorId.value = nextActive
-}
-
 async function submitAsk() {
   if (asking.value) return
   if (!question.value.trim() && !imageData.value) {
@@ -966,7 +339,7 @@ async function submitAsk() {
     ensureActiveSession()
     const currentQuestion = question.value.trim()
     activeSession.value?.messages.push({
-      id: uid(),
+      id: createMessageId(),
       role: 'user',
       text: currentQuestion || '[图片提问]',
     })
@@ -974,7 +347,7 @@ async function submitAsk() {
     if (activeSession.value && activeSession.value.title === '新会话') {
       activeSession.value.title = currentQuestion.slice(0, 20)
     }
-    const assistantMessage: SessionMessage = { id: uid(), role: 'assistant', text: '正在连接 AI 流式响应...' }
+    const assistantMessage: AiSessionMessage = { id: createMessageId(), role: 'assistant', text: '正在连接 AI 流式响应...' }
     activeSession.value?.messages.push(assistantMessage)
     const startedAt = performance.now()
     await askAiWithFallback(currentQuestion, assistantMessage)
@@ -1157,7 +530,7 @@ async function executeAutoAction(actions?: AIAction[]) {
 }
 
 
-async function askAiWithFallback(currentQuestion: string, assistantMessage: SessionMessage) {
+async function askAiWithFallback(currentQuestion: string, assistantMessage: AiSessionMessage) {
   try {
     await askAiStreaming(currentQuestion, assistantMessage)
   } catch (err) {
@@ -1189,7 +562,7 @@ function friendlyAiError(err: unknown) {
   return err instanceof Error ? err.message : 'AI 提问失败'
 }
 
-async function askAiStreaming(currentQuestion: string, assistantMessage: SessionMessage) {
+async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessionMessage) {
   askAbortController = new AbortController()
   const body = new URLSearchParams()
   body.set('question', currentQuestion)
@@ -1279,7 +652,7 @@ async function clearMemory() {
 
 
 function selectImage() {
-  imageInput.value?.click()
+  askWorkspaceRef.value?.selectImageFile()
 }
 
 function handleImageChange(event: Event) {
@@ -1353,1681 +726,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', updateActiveAnchorFromScroll)
   window.removeEventListener('resize', updateActiveAnchorFromScroll)
-  if (targetAnchorTimer) window.clearTimeout(targetAnchorTimer)
+  clearAnchorTimers()
   if (copiedMessageTimer) window.clearTimeout(copiedMessageTimer)
 })
 </script>
 
-<style scoped>
-.ai-page {
-  --ai-accent: #0f766e;
-  --ai-accent-strong: color-mix(in srgb, var(--ai-accent) 78%, #0f172a);
-  --ai-accent-soft: color-mix(in srgb, var(--ai-accent) 8%, transparent);
-  --ai-accent-surface: color-mix(in srgb, var(--ai-accent) 10%, white);
-  --ai-accent-surface-strong: color-mix(in srgb, var(--ai-accent) 16%, white);
-  --ai-accent-border: color-mix(in srgb, var(--ai-accent) 18%, transparent);
-  --ai-accent-border-strong: color-mix(in srgb, var(--ai-accent) 34%, transparent);
-  --hero-accent: var(--ai-accent);
-  --ai-card-radius: var(--oat-radius-xl);
-  --ai-control-height: 42px;
-  --ai-workspace-height: calc(100vh - 116px);
-  position: relative;
-  isolation: isolate;
-}
-
-.ai-page::before,
-.ai-page::after {
-  position: fixed;
-  z-index: -1;
-  content: '';
-  border-radius: 999px;
-  pointer-events: none;
-  filter: blur(2px);
-}
-
-.ai-page::before {
-  width: 360px;
-  height: 360px;
-  left: -120px;
-  top: 64px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--ai-accent) 14%, transparent), transparent 70%);
-}
-
-.ai-page::after {
-  width: 420px;
-  height: 420px;
-  right: -150px;
-  bottom: 40px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--ai-accent) 16%, white), transparent 72%);
-}
-
-.page-header,
-.header-actions,
-.card-title,
-.form-actions,
-.hero-actions,
-.ask-tools,
-.ask-submit-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.ai-page .page-header {
-  min-height: auto;
-  margin-bottom: var(--oat-space-4);
-  padding: var(--oat-space-4) var(--oat-space-5);
-  border-radius: var(--ai-card-radius);
-}
-
-.ai-page .page-header h1 {
-  margin: var(--oat-space-1) 0;
-  font-size: clamp(22px, 1.8vw, 28px);
-  line-height: 1.18;
-}
-
-.ai-page .page-header .subtext {
-  max-width: 780px;
-  margin: 0;
-  color: var(--oat-text-muted);
-  line-height: 1.45;
-}
-
-.ai-page .page-header > div:first-child,
-.hero-card > :first-child {
-  min-width: 0;
-}
-
-.ai-page .header-actions {
-  flex-shrink: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.eyebrow,
-.hero-kicker {
-  color: var(--ai-accent);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-.subtext,
-.muted,
-.link-card span,
-.ability-card p {
-  color: #64748b;
-}
-
-.action-button,
-.secondary-button,
-.primary-button,
-.danger-button,
-.ghost-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--oat-space-2);
-  min-height: var(--ai-control-height);
-  border: 0;
-  border-radius: 999px;
-  padding: 0 var(--oat-space-4);
-  font: inherit;
-  font-weight: 800;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease, opacity .16s ease;
-}
-
-.action-button,
-.secondary-button,
-.primary-button,
-.danger-button {
-  border: none;
-  color: #fff;
-}
-
-.action-button {
-  background: #0f172a;
-}
-
-.secondary-button {
-  background: #475569;
-}
-
-.primary-button {
-  background: var(--ai-accent);
-}
-
-.danger-button {
-  background: linear-gradient(135deg, #ef4444, #dc2626);
-  box-shadow: 0 12px 24px rgba(220, 38, 38, .18);
-}
-
-.primary-button:not(:disabled):hover,
-.action-button:not(:disabled):hover,
-.secondary-button:not(:disabled):hover,
-.danger-button:not(:disabled):hover,
-.ghost-button:not(:disabled):hover {
-  transform: translateY(-1px);
-}
-
-.primary-button:not(:disabled):active,
-.action-button:not(:disabled):active,
-.secondary-button:not(:disabled):active,
-.danger-button:not(:disabled):active,
-.ghost-button:not(:disabled):active {
-  transform: translateY(0) scale(.98);
-}
-
-.primary-button:disabled,
-.danger-button:disabled,
-.ghost-button:disabled,
-.action-button:disabled,
-.secondary-button:disabled {
-  cursor: not-allowed;
-  opacity: .62;
-  transform: none;
-}
-
-.ghost-button {
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 20%, transparent);
-  background: color-mix(in srgb, var(--ai-accent) 6%, transparent);
-  color: var(--ai-accent);
-}
-
-.ghost-button.small {
-  padding: 8px 12px;
-}
-
-.status-card,
-.panel {
-  padding: 18px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  box-shadow: 0 18px 45px rgba(15, 23, 42, .06);
-}
-
-.status-card.error {
-  color: #b91c1c;
-}
-
-.hero-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px minmax(300px, 340px);
-  align-items: center;
-  gap: var(--oat-space-4);
-  position: relative;
-  overflow: hidden;
-  padding: var(--oat-space-5) var(--oat-space-6);
-  border-radius: var(--ai-card-radius);
-  margin-bottom: var(--oat-space-4);
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, .13) 1px, transparent 1px),
-    linear-gradient(rgba(255, 255, 255, .13) 1px, transparent 1px),
-    radial-gradient(circle at top right, color-mix(in srgb, var(--hero-accent) 20%, white) 0%, transparent 36%),
-    linear-gradient(135deg, color-mix(in srgb, var(--hero-accent) 82%, #0f172a), #0f172a 68%);
-  background-size: 40px 40px, 40px 40px, auto, auto;
-  border: 1px solid color-mix(in srgb, var(--hero-accent) 28%, transparent);
-  color: #fff;
-  box-shadow: var(--oat-shadow-md);
-}
-
-.hero-card h2,
-.hero-card p,
-.hero-card .hero-kicker {
-  color: #fff;
-}
-
-.hero-card p {
-  max-width: 680px;
-  margin: var(--oat-space-2) 0 0;
-  opacity: .84;
-  line-height: 1.55;
-}
-
-.hero-card h2 {
-  max-width: 760px;
-  margin: var(--oat-space-2) 0 0;
-  font-size: clamp(20px, 1.7vw, 24px);
-  line-height: 1.42;
-  letter-spacing: -.02em;
-}
-
-.hero-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--oat-space-2);
-}
-
-.hero-chip {
-  min-width: 0;
-  min-height: 82px;
-  padding: var(--oat-space-3);
-  border-radius: var(--oat-radius-md);
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  backdrop-filter: blur(10px);
-}
-
-.hero-chip strong {
-  display: block;
-  font-size: 22px;
-  line-height: 1.15;
-}
-
-.hero-chip span {
-  display: block;
-  margin-top: var(--oat-space-1);
-  color: rgba(255, 255, 255, .86);
-  line-height: 1.35;
-  word-break: keep-all;
-}
-
-.page-grid {
-  display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: 18px;
-  align-items: stretch;
-  height: var(--ai-workspace-height);
-}
-
-.side-stack,
-.content-stack,
-.ability-list,
-.question-list,
-.link-list,
-.context-list,
-.visual-list,
-.session-list,
-.message-history {
-  display: grid;
-  gap: 12px;
-}
-
-.ability-card,
-.link-card {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, #ffffff, #f8fbfb);
-  border: 1px solid rgba(15, 23, 42, 0.06);
-}
-
-.compact-links {
-  gap: 8px;
-}
-
-.context-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid rgba(15, 23, 42, .06);
-  padding-bottom: 8px;
-}
-
-.context-row span {
-  color: #64748b;
-}
-
-.context-row strong {
-  color: #172033;
-  text-align: right;
-}
-
-.app-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.app-chip {
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 18%, transparent);
-  border-radius: 999px;
-  padding: 6px 10px;
-  background: color-mix(in srgb, var(--ai-accent) 6%, transparent);
-  color: var(--ai-accent);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.muted-chip {
-  border-color: rgba(100, 116, 139, .18);
-  background: rgba(148, 163, 184, .08);
-  color: #64748b;
-}
-
-.ability-card,
-.session-card,
-.message-card,
-.link-card {
-  min-width: 0;
-}
-
-.ability-panel {
-  padding-bottom: var(--oat-space-4);
-}
-
-.ability-list {
-  gap: var(--oat-space-2);
-}
-
-.ability-card {
-  gap: var(--oat-space-1);
-  padding: var(--oat-space-3) var(--oat-space-4);
-  border-radius: var(--oat-radius-md);
-}
-
-.ability-card p {
-  margin: var(--oat-space-2) 0 0;
-  line-height: 1.45;
-}
-
-.ability-value {
-  display: block;
-  color: var(--ai-accent);
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.session-card,
-.message-card {
-  display: grid;
-  gap: 6px;
-  padding: 14px;
-  border-radius: 16px;
-  background: #f8fbfb;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  text-align: left;
-}
-
-.session-card.active {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 10%, white), color-mix(in srgb, var(--ai-accent) 6%, white));
-  border-color: color-mix(in srgb, var(--ai-accent) 22%, transparent);
-}
-
-.session-card.pinned {
-  box-shadow: inset 3px 0 0 var(--ai-accent);
-}
-
-.side-stack {
-  position: sticky;
-  top: 92px;
-  height: 100%;
-  max-height: 100%;
-  overflow: auto;
-  padding-right: 4px;
-  scrollbar-gutter: stable;
-}
-
-.side-stack > .panel,
-.side-stack > .ask-panel {
-  position: static;
-}
-
-.session-tools {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 8px;
-  margin: 12px 0;
-}
-
-.text-input {
-  width: 100%;
-  border: 1px solid rgba(15, 23, 42, .12);
-  border-radius: 14px;
-  padding: 11px 13px;
-  background: rgba(255, 255, 255, .92);
-  color: #172033;
-  font: inherit;
-  outline: none;
-  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease;
-}
-
-.text-input:focus {
-  border-color: color-mix(in srgb, var(--ai-accent) 38%, transparent);
-  background: #fff;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ai-accent) 10%, transparent);
-}
-
-.small-input {
-  min-height: 38px;
-  border-radius: 999px;
-  padding: 9px 12px;
-}
-
-.session-main {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-  cursor: pointer;
-}
-
-.session-main strong {
-  color: #172033;
-  font-size: 14px;
-}
-
-.session-main span {
-  color: #64748b;
-  font-size: 12px;
-}
-
-.session-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.session-actions button,
-.timeline-item,
-.anchor-filter-button,
-.anchor-link-button {
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 16%, transparent);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .72);
-  color: var(--ai-accent);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.session-actions button {
-  padding: 6px 9px;
-}
-
-.session-actions button:hover,
-.timeline-item:hover,
-.anchor-filter-button:hover,
-.anchor-link-button:hover {
-  border-color: color-mix(in srgb, var(--ai-accent) 34%, transparent);
-  background: color-mix(in srgb, var(--ai-accent) 8%, transparent);
-}
-
-.anchor-tools {
-  display: grid;
-  gap: 10px;
-  margin: 12px 0;
-}
-
-.anchor-filter {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.anchor-filter-button {
-  padding: 7px 10px;
-}
-
-.anchor-filter-button.active,
-.anchor-item.active,
-.timeline-item.active {
-  border-color: color-mix(in srgb, var(--ai-accent) 34%, transparent);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 10%, white), color-mix(in srgb, var(--ai-accent) 6%, white));
-  box-shadow: inset 3px 0 0 var(--ai-accent), 0 10px 24px color-mix(in srgb, var(--ai-accent) 8%, transparent);
-}
-
-.anchor-search-row {
-  position: relative;
-}
-
-.anchor-search-row .text-input {
-  padding-right: 36px;
-}
-
-.anchor-clear {
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, .08);
-  color: #64748b;
-  cursor: pointer;
-  transform: translateY(-50%);
-}
-
-.anchor-tip {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.anchor-list {
-  display: grid;
-  gap: 10px;
-  max-height: 300px;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.anchor-item {
-  display: grid;
-  gap: 7px;
-  width: 100%;
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 18px;
-  padding: 10px 11px;
-  background: rgba(255, 255, 255, .82);
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease;
-}
-
-.anchor-item:hover {
-  transform: translateY(-1px);
-}
-
-.anchor-item.pending {
-  border-color: rgba(245, 158, 11, .26);
-  background: rgba(245, 158, 11, .06);
-}
-
-.anchor-item.answered {
-  border-color: color-mix(in srgb, var(--ai-accent) 16%, transparent);
-}
-
-.anchor-top,
-.anchor-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.anchor-top strong {
-  color: var(--ai-accent);
-  font-size: 12px;
-}
-
-.anchor-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.anchor-status i {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-}
-
-.anchor-status.answered {
-  background: color-mix(in srgb, var(--ai-accent) 12%, transparent);
-  color: var(--ai-accent);
-}
-
-.anchor-status.answered i {
-  background: var(--ai-accent);
-}
-
-.anchor-status.pending {
-  background: rgba(245, 158, 11, .16);
-  color: #92400e;
-}
-
-.anchor-status.pending i {
-  background: #f59e0b;
-}
-
-.anchor-question {
-  display: -webkit-box;
-  overflow: hidden;
-  color: #334155;
-  font-size: 12px;
-  line-height: 1.5;
-  word-break: break-word;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.anchor-item.expanded .anchor-question {
-  display: block;
-  overflow: visible;
-  -webkit-line-clamp: initial;
-}
-
-.anchor-meta {
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.anchor-actions {
-  justify-content: flex-start;
-  opacity: .76;
-}
-
-.anchor-item:hover .anchor-actions,
-.anchor-item.active .anchor-actions {
-  opacity: 1;
-}
-
-.anchor-link-button {
-  padding: 7px 9px;
-  border-style: dashed;
-  font-size: 11px;
-}
-
-.timeline-list {
-  display: grid;
-  gap: 8px;
-}
-
-.timeline-item {
-  display: grid;
-  grid-template-columns: 36px 38px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  text-align: left;
-}
-
-.timeline-item span {
-  display: inline-grid;
-  place-items: center;
-  min-width: 30px;
-  height: 22px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ai-accent) 10%, transparent);
-}
-
-.timeline-item small {
-  overflow: hidden;
-  color: #64748b;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.empty-card.compact {
-  padding: 12px;
-  border-radius: 14px;
-  color: #94a3b8;
-}
-
-.message-card.user {
-  background: color-mix(in srgb, var(--ai-accent) 6%, transparent);
-}
-
-.message-card.assistant {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, .96), rgba(248, 253, 252, .92));
-  border-color: color-mix(in srgb, var(--ai-accent) 18%, transparent);
-}
-
-.message-history {
-  flex: 1 1 auto;
-  min-height: 180px;
-  max-height: none;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.ask-workspace-panel {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 100%;
-  min-height: 0;
-  max-height: 100%;
-  padding-right: 54px;
-  margin-bottom: 0;
-  padding-bottom: 16px;
-  overflow: hidden;
-}
-
-.floating-anchors {
-  position: absolute;
-  z-index: 4;
-  top: 34px;
-  right: 12px;
-  width: 42px;
-  padding: 10px 8px;
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 12%, transparent);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .82);
-  box-shadow: 0 16px 38px rgba(15, 23, 42, .10);
-  backdrop-filter: blur(14px);
-  overflow: visible;
-}
-
-.floating-anchor-head {
-  margin-bottom: 8px;
-  color: var(--ai-accent);
-  font-size: 10px;
-  font-weight: 900;
-  text-align: center;
-}
-
-.floating-anchor-track {
-  position: relative;
-  width: 26px;
-}
-
-.floating-anchor-track::before {
-  position: absolute;
-  top: 7px;
-  bottom: 7px;
-  left: 12px;
-  width: 2px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 14%, transparent), color-mix(in srgb, var(--ai-accent) 28%, transparent));
-  content: '';
-}
-
-.floating-anchor-dot {
-  position: absolute;
-  left: 2px;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 22px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .92);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, .10);
-  color: var(--ai-accent);
-  font-size: 10px;
-  font-weight: 900;
-  cursor: pointer;
-  transition: transform .18s ease, background .18s ease, box-shadow .18s ease, color .18s ease;
-}
-
-.floating-anchor-dot::before {
-  position: absolute;
-  left: -1px;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--ai-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ai-accent) 12%, transparent);
-  content: '';
-  transform: translateY(-50%);
-  transition: box-shadow .18s ease, background .18s ease;
-}
-
-.floating-anchor-label {
-  position: relative;
-  z-index: 1;
-}
-
-.floating-anchor-dot.pending::before {
-  background: #f59e0b;
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, .14);
-}
-
-.floating-anchor-dot.pending {
-  color: #92400e;
-}
-
-.floating-anchor-dot:hover::before,
-.floating-anchor-dot:focus-visible::before {
-  box-shadow: 0 0 0 7px color-mix(in srgb, var(--ai-accent) 16%, transparent);
-}
-
-.floating-anchor-dot.active {
-  outline: 2px solid color-mix(in srgb, var(--ai-accent) 18%, transparent);
-  outline-offset: 2px;
-}
-
-.floating-anchor-dot:hover,
-.floating-anchor-dot:focus-visible {
-  background: var(--ai-accent);
-  box-shadow: 0 10px 20px color-mix(in srgb, var(--ai-accent) 22%, transparent);
-  color: #fff;
-  transform: translateX(-3px);
-}
-
-.floating-anchor-dot.pending:hover,
-.floating-anchor-dot.pending:focus-visible {
-  background: #f59e0b;
-  box-shadow: 0 10px 20px rgba(245, 158, 11, .22);
-  color: #fff;
-}
-
-.floating-anchor-dot.pending:hover::before,
-.floating-anchor-dot.pending:focus-visible::before {
-  box-shadow: 0 0 0 7px rgba(245, 158, 11, .18);
-}
-
-.floating-anchor-tooltip {
-  position: absolute;
-  right: 34px;
-  top: 50%;
-  display: grid;
-  gap: 4px;
-  width: 210px;
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 16%, transparent);
-  border-radius: 14px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, .96);
-  box-shadow: 0 18px 40px rgba(15, 23, 42, .14);
-  opacity: 0;
-  pointer-events: none;
-  text-align: left;
-  transform: translate(8px, -50%) scale(.98);
-  transition: opacity .18s ease, transform .18s ease;
-}
-
-.floating-anchor-dot:hover .floating-anchor-tooltip,
-.floating-anchor-dot:focus-visible .floating-anchor-tooltip {
-  opacity: 1;
-  transform: translate(0, -50%) scale(1);
-}
-
-.floating-anchor-tooltip strong {
-  color: var(--ai-accent);
-  font-size: 11px;
-}
-
-.floating-anchor-tooltip em {
-  display: -webkit-box;
-  overflow: hidden;
-  color: #334155;
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.5;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.floating-anchor-tooltip small {
-  color: #94a3b8;
-  font-size: 11px;
-}
-
-.message-card {
-  position: relative;
-  padding: 13px 14px 13px 44px;
-  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
-}
-
-.message-copy-button {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 1;
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 18%, transparent);
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: rgba(255, 255, 255, .84);
-  color: var(--ai-accent);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  line-height: 1;
-  cursor: pointer;
-  opacity: .62;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, .08);
-  transition: opacity .16s ease, transform .16s ease, background .16s ease, color .16s ease, border-color .16s ease;
-}
-
-.message-card:hover .message-copy-button,
-.message-copy-button:focus-visible {
-  opacity: 1;
-}
-
-.message-copy-button:hover,
-.message-copy-button:focus-visible {
-  border-color: color-mix(in srgb, var(--ai-accent) 32%, transparent);
-  background: var(--ai-accent);
-  color: #fff;
-  transform: translateY(-1px);
-}
-
-.message-card.assistant .message-copy-button {
-  opacity: .78;
-}
-
-.message-card .message-text {
-  padding-right: 58px;
-}
-
-.message-card.anchor-section {
-  scroll-margin-top: 96px;
-}
-
-.message-card.anchor-section::after {
-  position: absolute;
-  top: 12px;
-  bottom: 12px;
-  left: -8px;
-  width: 3px;
-  border-radius: 999px;
-  background: transparent;
-  content: '';
-  opacity: 0;
-  transition: opacity .18s ease, background .18s ease, box-shadow .18s ease;
-}
-
-.message-card.is-active::after,
-.message-card.is-target::after {
-  opacity: 1;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ai-accent) 95%, transparent), color-mix(in srgb, var(--ai-accent) 75%, white));
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ai-accent) 12%, transparent);
-}
-
-.message-card.is-preview::after {
-  opacity: 1;
-  background: linear-gradient(180deg, rgba(245, 158, 11, .95), rgba(245, 158, 11, .55));
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, .12);
-}
-
-.message-card.is-target,
-.message-card.is-preview,
-.message-card.is-active {
-  border-color: color-mix(in srgb, var(--ai-accent) 26%, transparent);
-  box-shadow: 0 16px 30px color-mix(in srgb, var(--ai-accent) 10%, transparent);
-}
-
-.message-card.qa-group-start {
-  margin-top: 4px;
-}
-
-.message-card.qa-group-end {
-  margin-bottom: 10px;
-}
-
-.message-card::before {
-  position: absolute;
-  left: 14px;
-  top: 14px;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: var(--ai-accent);
-  color: #fff;
-  content: 'AI';
-  font-size: 10px;
-  font-weight: 900;
-}
-
-.message-card.user::before {
-  background: #0f172a;
-  content: '我';
-}
-
-.message-role {
-  color: var(--ai-accent);
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.message-text {
-  white-space: pre-wrap;
-  line-height: 1.65;
-  color: #334155;
-}
-
-.markdown-message {
-  white-space: normal;
-  color: #243244;
-  font-size: 14px;
-}
-
-.markdown-message :deep(h1),
-.markdown-message :deep(h2),
-.markdown-message :deep(h3),
-.markdown-message :deep(h4) {
-  margin: 0 0 8px;
-  color: #0f172a;
-  font-weight: 850;
-  line-height: 1.38;
-}
-
-.markdown-message :deep(h1) { font-size: 17px; }
-.markdown-message :deep(h2) { font-size: 16px; }
-.markdown-message :deep(h3),
-.markdown-message :deep(h4) { font-size: 15px; }
-
-.markdown-message :deep(.markdown-lead) {
-  margin: 0;
-  color: #172033;
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 1.72;
-}
-
-.markdown-message :deep(p:first-child),
-.markdown-message :deep(ul:first-child),
-.markdown-message :deep(ol:first-child),
-.markdown-message :deep(blockquote:first-child),
-.markdown-message :deep(pre:first-child),
-.markdown-message :deep(.markdown-table-scroll:first-child) {
-  margin-top: 0;
-}
-
-.markdown-message :deep(p),
-.markdown-message :deep(ul),
-.markdown-message :deep(ol),
-.markdown-message :deep(blockquote),
-.markdown-message :deep(pre),
-.markdown-message :deep(.markdown-table-scroll) {
-  margin: 8px 0 0;
-}
-
-.markdown-message :deep(ul),
-.markdown-message :deep(ol) {
-  padding-left: 22px;
-}
-
-.markdown-message :deep(code) {
-  padding: 1px 6px;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--ai-accent) 10%, transparent);
-  color: var(--ai-accent);
-  font-size: .92em;
-}
-
-.markdown-message :deep(pre) {
-  overflow: auto;
-  padding: 12px;
-  border-radius: 14px;
-  background: #0f172a;
-  color: #e2e8f0;
-}
-
-.markdown-message :deep(pre code) {
-  padding: 0;
-  background: transparent;
-  color: inherit;
-}
-
-.markdown-message :deep(blockquote) {
-  padding: 10px 12px;
-  border-left: 3px solid color-mix(in srgb, var(--ai-accent) 35%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--ai-accent) 8%, white);
-}
-
-.markdown-message :deep(.markdown-table-scroll) {
-  overflow-x: auto;
-}
-
-.markdown-message :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.markdown-message :deep(th),
-.markdown-message :deep(td) {
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 16%, transparent);
-  text-align: left;
-  vertical-align: top;
-}
-
-.markdown-message :deep(th) {
-  background: color-mix(in srgb, var(--ai-accent) 10%, white);
-  color: var(--ai-accent);
-}
-
-.markdown-message :deep(a) {
-  color: var(--ai-accent);
-  font-weight: 700;
-}
-
-.ask-form {
-  display: grid;
-  flex: 0 0 auto;
-  gap: 10px;
-  margin-top: auto;
-  border: 1px solid color-mix(in srgb, var(--ai-accent) 12%, transparent);
-  border-radius: 20px;
-  padding: 14px;
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--ai-accent) 8%, transparent), transparent 32%),
-    rgba(255, 255, 255, .96);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, .08);
-}
-
-.text-area {
-  width: 100%;
-  border: 0;
-  border-radius: 14px;
-  padding: 10px 12px;
-  min-height: 190px;
-  max-height: 340px;
-  background: transparent;
-  resize: vertical;
-  font: inherit;
-}
-
-.text-area:focus {
-  outline: none;
-  box-shadow: none;
-}
-
-.answer-block {
-  white-space: pre-wrap;
-  line-height: 1.8;
-  color: #334155;
-}
-
-.subsection + .subsection {
-  margin-top: 18px;
-}
-
-.chip-list {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.meta-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-}
-
-.meta-card,
-.visual-card {
-  display: grid;
-  gap: 5px;
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 14px;
-  padding: 12px;
-  background: rgba(248, 250, 252, .92);
-}
-
-.meta-card span {
-  color: #64748b;
-  font-size: 12px;
-}
-
-.meta-card strong,
-.visual-card strong {
-  color: #172033;
-}
-
-.visual-card code {
-  max-height: 120px;
-  overflow: auto;
-  color: #475569;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.feedback-box {
-  border-top: 1px solid rgba(15, 23, 42, .08);
-  padding-top: 16px;
-}
-
-.feedback-message {
-  margin: 8px 0 0;
-  color: var(--ai-accent);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.message-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid rgba(15, 23, 42, .06);
-  opacity: 0;
-  transition: opacity .18s ease;
-}
-
-.message-card:hover .message-actions,
-.message-card:focus-within .message-actions {
-  opacity: 1;
-}
-
-.message-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  cursor: pointer;
-  transition: background .14s ease, transform .1s ease;
-  padding: 0;
-}
-
-.message-action-btn:hover {
-  background: rgba(15, 23, 42, .06);
-  transform: scale(1.1);
-}
-
-.message-action-btn:active {
-  transform: scale(.94);
-}
-
-.message-action-btn.active {
-  background: color-mix(in srgb, var(--ai-accent) 12%, transparent);
-}
-
-.message-action-btn:disabled {
-  opacity: .4;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.action-icon {
-  font-size: 14px;
-  line-height: 1;
-  pointer-events: none;
-}
-
-.learning-panel .card-title {
-  align-items: center;
-}
-
-.learning-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.learning-error,
-.learning-empty {
-  margin: 0;
-  color: #64748b;
-  font-size: 13px;
-}
-
-.learning-error {
-  color: #b91c1c;
-}
-
-.learning-suggestions {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.learning-suggestions-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.learning-suggestions-header h3 {
-  margin: 0;
-  font-size: 14px;
-}
-
-.learning-suggestions-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.learning-suggestions-list {
-  display: grid;
-  gap: 8px;
-  max-height: 280px;
-  overflow-y: auto;
-  padding-right: 2px;
-  scrollbar-gutter: stable;
-}
-
-.learning-suggestion {
-  border: 1px solid rgba(15, 23, 42, .08);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: rgba(248, 250, 252, .92);
-}
-
-.learning-suggestion strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #172033;
-}
-
-.learning-suggestion p {
-  margin: 0;
-  color: #475569;
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
-.learning-suggestion.high {
-  border-color: rgba(220, 38, 38, .18);
-  background: rgba(254, 242, 242, .9);
-}
-
-.learning-suggestion.medium {
-  border-color: rgba(217, 119, 6, .18);
-  background: rgba(255, 251, 235, .92);
-}
-
-.inline-link {
-  color: var(--ai-accent);
-  font-weight: 700;
-}
-
-.link-button,
-.action-inline-button {
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.link-button:hover,
-.action-inline-button:hover {
-  color: var(--ai-accent-strong);
-  text-decoration: underline;
-}
-
-@media (max-width: 960px) {
-  .hero-card,
-  .page-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .ai-page .page-header,
-  .header-actions,
-  .form-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-.hero-actions {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  margin-top: var(--oat-space-3);
-}
-
-.hero-actions .primary-button,
-.hero-actions .ghost-button,
-.ghost-link {
-  min-height: var(--ai-control-height);
-}
-
-.ghost-link {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 0 var(--oat-space-4);
-  background: rgba(255, 255, 255, .82);
-  color: var(--ai-accent);
-  font-weight: 800;
-  white-space: nowrap;
-}
-
-.hero-mascot {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 132px;
-}
-
-.stage-ring {
-  position: absolute;
-  border: 1px solid color-mix(in srgb, var(--hero-accent) 32%, transparent);
-  border-radius: 999px;
-  animation: stage-pulse 3.2s ease-in-out infinite;
-}
-
-.stage-ring.one {
-  width: 130px;
-  height: 130px;
-}
-
-.stage-ring.two {
-  width: 158px;
-  height: 158px;
-  animation-delay: -1.4s;
-}
-
-@keyframes stage-pulse {
-  0%, 100% { transform: scale(.92); opacity: .48; }
-  50% { transform: scale(1.04); opacity: .9; }
-}
-
-.form-actions {
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.ask-submit-actions {
-  justify-content: flex-end;
-}
-
-.ask-tools,
-.ask-submit-actions {
-  flex-wrap: wrap;
-}
-
-.control-button {
-  min-height: 44px;
-  padding: 11px 16px;
-  white-space: nowrap;
-}
-
-.send-button {
-  min-width: 118px;
-  box-shadow: 0 16px 30px color-mix(in srgb, var(--ai-accent) 18%, transparent);
-}
-
-.send-button.loading {
-  background: linear-gradient(135deg, var(--ai-accent), color-mix(in srgb, var(--ai-accent) 74%, white));
-}
-
-.save-button:disabled {
-  background: color-mix(in srgb, var(--ai-accent) 4%, transparent);
-  color: #7f9f9a;
-}
-
-.button-icon,
-.button-spinner {
-  position: relative;
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-}
-
-.send-icon::before {
-  position: absolute;
-  inset: 2px 1px 2px 3px;
-  border-style: solid;
-  border-width: 5px 0 5px 9px;
-  border-color: transparent transparent transparent currentColor;
-  content: '';
-}
-
-.save-icon::before {
-  position: absolute;
-  inset: 1px 2px 2px;
-  border: 2px solid currentColor;
-  border-radius: 3px;
-  content: '';
-}
-
-.save-icon::after {
-  position: absolute;
-  left: 5px;
-  right: 5px;
-  bottom: 4px;
-  height: 3px;
-  border-radius: 999px;
-  background: currentColor;
-  content: '';
-}
-
-.stop-icon::before {
-  position: absolute;
-  inset: 3px;
-  border-radius: 3px;
-  background: currentColor;
-  content: '';
-}
-
-.button-spinner {
-  border: 2px solid rgba(255, 255, 255, .45);
-  border-top-color: #fff;
-  border-radius: 999px;
-  animation: button-spin .8s linear infinite;
-}
-
-@keyframes button-spin {
-  to { transform: rotate(360deg); }
-}
-
-.ghost-button.active {
-  background: var(--ai-accent);
-  color: #fff;
-}
-
-.hidden-input {
-  display: none;
-}
-
-.hero-mascot :deep(.mascot-canvas) {
-  filter: drop-shadow(0 22px 36px rgba(0, 0, 0, .22));
-}
-
-.content-stack {
-  position: relative;
-  min-width: 0;
-  height: 100%;
-}
-
-.session-list,
-.timeline-list,
-.question-list {
-  max-height: 330px;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.ability-list {
-  max-height: 252px;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.question-list .ghost-button {
-  border-radius: 14px;
-  text-align: left;
-}
-
-.primary-button,
-.ghost-button,
-.secondary-button,
-.action-button {
-  font-weight: 800;
-}
-
-.form-actions,
-.ask-tools,
-.ask-submit-actions {
-  min-width: 0;
-}
-
-.ask-tools,
-.ask-submit-actions {
-  row-gap: 8px;
-}
-
-@media (max-width: 1200px) {
-  .side-stack,
-  .ask-panel {
-    position: static;
-  }
-
-  .floating-anchors {
-    display: none;
-  }
-
-  .hero-card {
-    grid-template-columns: minmax(0, 1fr) 120px minmax(260px, 300px);
-  }
-}
-
-@media (max-width: 980px) {
-  .page-grid,
-  .side-stack,
-  .content-stack,
-  .ask-workspace-panel {
-    height: auto;
-    max-height: none;
-  }
-
-  .ask-workspace-panel {
-    min-height: min(760px, calc(100vh - 138px));
-  }
-
-  .hero-card {
-    grid-template-columns: minmax(0, 1fr) 120px;
-  }
-
-  .hero-meta {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .ai-page .header-actions {
-    justify-content: stretch;
-  }
-
-  .ai-page .header-actions > *,
-  .hero-actions > * {
-    flex: 1 1 auto;
-  }
-
-  .ai-page .page-header,
-  .hero-card {
-    padding: var(--oat-space-4);
-    border-radius: var(--oat-radius-lg);
-  }
-
-  .hero-card {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-mascot {
-    display: none;
-  }
-
-  .hero-meta {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-chip {
-    min-height: 0;
-  }
-}
-
-</style>
+<style scoped src="@/features/ai/styles/project-ai-page.css"></style>

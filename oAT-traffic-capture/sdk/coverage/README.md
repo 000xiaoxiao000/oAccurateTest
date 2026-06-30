@@ -5,7 +5,7 @@
 这些 helper 用于把非 Java 覆盖率产物上送到 oAT：
 
 ```text
-POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
+POST /api/v2/ingest/coverage
 ```
 
 上送完成后，在 oAT 覆盖率中心使用相同版本号和 Commit 生成报告。
@@ -28,6 +28,8 @@ err := oatcover.PostProfile(ctx, oatcover.ReportOptions{
     CommitID: "git-sha",
     Branch: "main",
     CaseName: "case-name",
+    BuildID: "build-20260628",
+    TestStage: "unit",
 })
 ```
 
@@ -45,7 +47,9 @@ python python/oat_python_coverage_reporter.py \
   --app-id app-id \
   --coverage-json coverage.json \
   --version-number v1.0.0 \
-  --commit-id git-sha
+  --commit-id git-sha \
+  --build-id build-20260628 \
+  --test-stage unit
 ```
 
 ## C/C++
@@ -60,7 +64,9 @@ python native/oat_native_gcov_reporter.py \
   --app-id app-id \
   --coverage-json 'build/**/*.gcov.json.gz' \
   --version-number v1.0.0 \
-  --commit-id git-sha
+  --commit-id git-sha \
+  --build-id build-20260628 \
+  --test-stage unit
 ```
 
 脚本同时支持纯 JSON 和 gzip 压缩后的 JSON。
@@ -76,7 +82,7 @@ python native/oat_native_gcov_reporter.py \
 These helpers upload non-Java coverage artifacts to oAT:
 
 ```text
-POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
+POST /api/v2/ingest/coverage
 ```
 
 After upload, generate a report in the oAT coverage center with the same version number and commit.
@@ -99,6 +105,8 @@ err := oatcover.PostProfile(ctx, oatcover.ReportOptions{
     CommitID: "git-sha",
     Branch: "main",
     CaseName: "case-name",
+    BuildID: "build-20260628",
+    TestStage: "unit",
 })
 ```
 
@@ -116,7 +124,9 @@ python python/oat_python_coverage_reporter.py \
   --app-id app-id \
   --coverage-json coverage.json \
   --version-number v1.0.0 \
-  --commit-id git-sha
+  --commit-id git-sha \
+  --build-id build-20260628 \
+  --test-stage unit
 ```
 
 ## C/C++
@@ -131,7 +141,9 @@ python native/oat_native_gcov_reporter.py \
   --app-id app-id \
   --coverage-json 'build/**/*.gcov.json.gz' \
   --version-number v1.0.0 \
-  --commit-id git-sha
+  --commit-id git-sha \
+  --build-id build-20260628 \
+  --test-stage unit
 ```
 
 The script supports both plain JSON and gzip-compressed JSON.

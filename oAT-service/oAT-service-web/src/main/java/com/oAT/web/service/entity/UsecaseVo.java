@@ -18,6 +18,8 @@ public class UsecaseVo implements Serializable {
     private String snapshots[];
     // 绑定的系统快照id
     private String systemSnapshots[];
+    // 绑定的多语言覆盖率足迹快照 key
+    private String coverageFootprints[];
     // 绑定的测试缺陷id
     private String defects[];
     // 绑定的PRD需求id
@@ -41,6 +43,8 @@ public class UsecaseVo implements Serializable {
     private Integer snapshotCount;
     // 有效关联系统快照数量（过滤已删除数据）
     private Integer systemSnapshotCount;
+    // 关联覆盖率足迹数量
+    private Integer coverageFootprintCount;
 
 
     public String getId() {
@@ -105,6 +109,14 @@ public class UsecaseVo implements Serializable {
 
     public void setSystemSnapshots(String[] systemSnapshots) {
         this.systemSnapshots = systemSnapshots;
+    }
+
+    public String[] getCoverageFootprints() {
+        return coverageFootprints;
+    }
+
+    public void setCoverageFootprints(String[] coverageFootprints) {
+        this.coverageFootprints = coverageFootprints;
     }
 
     public String[] getDefects() {
@@ -209,6 +221,14 @@ public class UsecaseVo implements Serializable {
 
     public void setSystemSnapshotCount(Integer systemSnapshotCount) {
         this.systemSnapshotCount = systemSnapshotCount;
+    }
+
+    public Integer getCoverageFootprintCount() {
+        return coverageFootprintCount;
+    }
+
+    public void setCoverageFootprintCount(Integer coverageFootprintCount) {
+        this.coverageFootprintCount = coverageFootprintCount;
     }
 
 }

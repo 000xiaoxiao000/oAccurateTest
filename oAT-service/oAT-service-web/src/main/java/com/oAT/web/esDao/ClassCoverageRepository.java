@@ -120,16 +120,19 @@ public class ClassCoverageRepository {
         normalize(index);
         jdbcTemplate.update("""
                         INSERT INTO oat_class_coverage (
-                            id, report_id, app_id, class_name, source_type, total_methods, covered_methods,
+                            id, report_id, app_id, class_name, source_type, language, display_name, source_path, total_methods, covered_methods,
                             total_branches, covered_branches, total_branch_targets, covered_branch_targets,
                             total_lines, covered_lines, total_complexity, line_rate, branch_rate,
                             method_rate, has_code_changes, methods_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
                         ON DUPLICATE KEY UPDATE
                             report_id = VALUES(report_id),
                             app_id = VALUES(app_id),
                             class_name = VALUES(class_name),
                             source_type = VALUES(source_type),
+                            language = VALUES(language),
+                            display_name = VALUES(display_name),
+                            source_path = VALUES(source_path),
                             total_methods = VALUES(total_methods),
                             covered_methods = VALUES(covered_methods),
                             total_branches = VALUES(total_branches),
@@ -151,6 +154,9 @@ public class ClassCoverageRepository {
                 index.getAppId(),
                 index.getClassName(),
                 index.getSourceType(),
+                index.getLanguage(),
+                index.getDisplayName(),
+                index.getSourcePath(),
                 index.getTotalMethods(),
                 index.getCoveredMethods(),
                 index.getTotalBranches(),
@@ -371,6 +377,9 @@ public class ClassCoverageRepository {
         index.setAppId(rs.getString("app_id"));
         index.setClassName(rs.getString("class_name"));
         index.setSourceType(readStringIfExists(rs, "source_type"));
+        index.setLanguage(readStringIfExists(rs, "language"));
+        index.setDisplayName(readStringIfExists(rs, "display_name"));
+        index.setSourcePath(readStringIfExists(rs, "source_path"));
         index.setTotalMethods(rs.getInt("total_methods"));
         index.setCoveredMethods(rs.getInt("covered_methods"));
         index.setTotalBranches(rs.getInt("total_branches"));

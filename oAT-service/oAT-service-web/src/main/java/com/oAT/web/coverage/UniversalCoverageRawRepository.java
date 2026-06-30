@@ -26,8 +26,8 @@ public class UniversalCoverageRawRepository {
         jdbcTemplate.update("""
                         INSERT INTO oat_universal_coverage_report (
                             id, project_id, app_id, source_type, commit_id, version_number,
-                            branch, case_name, timestamp, coverage_data
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            branch, case_name, build_id, test_stage, timestamp, coverage_data
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 report.id,
                 report.projectId,
@@ -37,6 +37,8 @@ public class UniversalCoverageRawRepository {
                 report.versionNumber,
                 report.branch,
                 report.caseName,
+                report.buildId,
+                report.testStage,
                 report.timestamp,
                 report.coverageData);
         return report.id;
@@ -75,6 +77,70 @@ public class UniversalCoverageRawRepository {
                 """, appId, sourceType, versionNumber) > 0;
     }
 
+    public Long findLatestTimestampByAppAndType(String appId, String sourceType) {
+        if (!StringUtils.hasText(appId) || !StringUtils.hasText(sourceType)) {
+            return null;
+        }
+        List<Long> values = jdbcTemplate.query("""
+                        SELECT COALESCE(`timestamp`, UNIX_TIMESTAMP(create_time) * 1000) latest_time
+                        FROM oat_universal_coverage_report
+                        WHERE app_id = ? AND source_type = ?
+                        ORDER BY create_time DESC
+                        LIMIT 1
+                        """,
+                (rs, rowNum) -> rs.getLong("latest_time"),
+                appId,
+                sourceType);
+        return values.isEmpty() ? null : values.get(0);
+    }
+
+    public List<UniversalCoverageRawReport> findFootprints(String projectId, String appId, String sourceType,
+                                                           String versionNumber, String commitId) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT * FROM oat_universal_coverage_report
+                WHERE project_id = ?
+                """);
+        java.util.List<Object> args = new java.util.ArrayList<>();
+        args.add(projectId);
+        if (StringUtils.hasText(appId)) {
+            sql.append(" AND app_id = ?");
+            args.add(appId);
+        }
+        if (StringUtils.hasText(sourceType)) {
+            sql.append(" AND source_type = ?");
+            args.add(sourceType);
+        }
+        if (StringUtils.hasText(commitId)) {
+            sql.append(" AND commit_id = ?");
+            args.add(commitId);
+        } else if (StringUtils.hasText(versionNumber)) {
+            sql.append(" AND version_number = ?");
+            args.add(versionNumber);
+        }
+        sql.append(" ORDER BY COALESCE(`timestamp`, UNIX_TIMESTAMP(create_time) * 1000) DESC, create_time DESC LIMIT 500");
+        return jdbcTemplate.query(sql.toString(), this::mapRow, args.toArray());
+    }
+
+    public UniversalCoverageRawReport findById(String id) {
+        if (!StringUtils.hasText(id)) {
+            return null;
+        }
+        List<UniversalCoverageRawReport> reports = jdbcTemplate.query("""
+                        SELECT * FROM oat_universal_coverage_report
+                        WHERE id = ?
+                        LIMIT 1
+                        """,
+                this::mapRow, id);
+        return reports.isEmpty() ? null : reports.get(0);
+    }
+
+    public int deleteById(String id) {
+        if (!StringUtils.hasText(id)) {
+            return 0;
+        }
+        return jdbcTemplate.update("DELETE FROM oat_universal_coverage_report WHERE id = ?", id);
+    }
+
     private int count(String sql, Object... args) {
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, args);
         return count == null ? 0 : count;
@@ -90,7 +156,12 @@ public class UniversalCoverageRawRepository {
         report.versionNumber = rs.getString("version_number");
         report.branch = rs.getString("branch");
         report.caseName = rs.getString("case_name");
+        report.buildId = rs.getString("build_id");
+        report.testStage = rs.getString("test_stage");
         report.timestamp = rs.getLong("timestamp");
+        if (rs.wasNull()) {
+            report.timestamp = null;
+        }
         report.coverageData = rs.getString("coverage_data");
         return report;
     }
@@ -104,6 +175,8 @@ public class UniversalCoverageRawRepository {
         public String versionNumber;
         public String branch;
         public String caseName;
+        public String buildId;
+        public String testStage;
         public Long timestamp;
         public String coverageData;
     }

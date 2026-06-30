@@ -1,13 +1,15 @@
 package com.oAT.web.control.api;
 
-import com.oAT.web.control.TraceGraphParse;
+import com.oAT.web.api.share.ShareApiPayloads.*;
+import com.oAT.web.api.common.ApiSummaries.*;
+import com.oAT.web.api.usecase.UsecaseApiPayloads;
+import com.oAT.web.api.snapshot.GraphNodeDetailMapper;
+import com.oAT.web.api.snapshot.GraphNodeDetailPayload;
+import com.oAT.web.api.snapshot.TraceGraphViewService;
 import com.oAT.web.control.entity.GraphNode;
 import com.oAT.web.control.entity.GraphView;
 import com.oAT.web.control.entity.ResultNotified;
-import com.oAT.web.domain.RemoteCallResolver;
-import com.oAT.web.esDao.ApiEndpointRepository;
 import com.oAT.web.esDao.CaseCenterRepository;
-import com.oAT.web.esDao.entity.ApiEndpointIndex;
 import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.esDao.entity.LabelGroup;
 import com.oAT.web.esDao.entity.SystemSnapshot;
@@ -37,7 +39,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,8 +58,8 @@ public class ShareApiControl {
     private final ProjectService projectService;
     private final UserService userService;
     private final AppService appService;
-    private final ApiEndpointRepository apiEndpointRepository;
     private final CaseCenterRepository caseCenterRepository;
+    private final TraceGraphViewService traceGraphViewService;
 
     public ShareApiControl(SnapshotService snapshotService,
                            UsecaseService usecaseService,
@@ -66,16 +67,16 @@ public class ShareApiControl {
                            ProjectService projectService,
                            UserService userService,
                            AppService appService,
-                           ApiEndpointRepository apiEndpointRepository,
-                           CaseCenterRepository caseCenterRepository) {
+                           CaseCenterRepository caseCenterRepository,
+                           TraceGraphViewService traceGraphViewService) {
         this.snapshotService = snapshotService;
         this.usecaseService = usecaseService;
         this.systemSnapshotService = systemSnapshotService;
         this.projectService = projectService;
         this.userService = userService;
         this.appService = appService;
-        this.apiEndpointRepository = apiEndpointRepository;
         this.caseCenterRepository = caseCenterRepository;
+        this.traceGraphViewService = traceGraphViewService;
     }
 
     @GetMapping("/snapshot/{id}")
@@ -111,19 +112,18 @@ public class ShareApiControl {
     }
 
     @GetMapping("/snapshot/{id}/graph/nodes/{nodeId}")
-    public ResultNotified<SnapshotApiControl.GraphNodeDetailPayload> snapshotGraphNode(@PathVariable String id,
-                                                                                        @PathVariable String nodeId) {
+    public ResultNotified<GraphNodeDetailPayload> snapshotGraphNode(@PathVariable String id,
+                                                                    @PathVariable String nodeId) {
         SnapshotVo snapshot = snapshotService.get(id);
-        ResultNotified<SnapshotApiControl.GraphNodeDetailPayload> accessDenied = validateSnapshotShare(snapshot);
+        ResultNotified<GraphNodeDetailPayload> accessDenied = validateSnapshotShare(snapshot);
         if (accessDenied != null) {
             return accessDenied;
         }
-        TraceGraphParse parse = new TraceGraphParse(buildTraceNodeMap(snapshot.getTraceId()), buildRemoteCallResolver(snapshot.getProjectId()));
-        GraphNode graphNode = parse.getGraphNode(nodeId);
+        GraphNode graphNode = traceGraphViewService.getGraphNode(snapshot.getProjectId(), snapshot.getTraceId(), nodeId);
         if (graphNode == null) {
             return new ResultNotified<>(false, "找不到节点 id=" + nodeId);
         }
-        return new ResultNotified<>(true, "获取共享快照节点成功", SnapshotApiControl.toGraphNodeDetail(graphNode));
+        return new ResultNotified<>(true, "获取共享快照节点成功", GraphNodeDetailMapper.toGraphNodeDetail(graphNode));
     }
 
     @GetMapping("/usecase/{id}")
@@ -177,29 +177,7 @@ public class ShareApiControl {
     }
 
     private GraphView buildTraceGraph(SnapshotVo snapshot) {
-        return new TraceGraphParse(buildTraceNodeMap(snapshot.getTraceId()), buildRemoteCallResolver(snapshot.getProjectId())).getGraphView();
-    }
-
-    private Map<String, com.oAT.agent.model.TraceNode> buildTraceNodeMap(String traceId) {
-        Collection<com.oAT.agent.model.TraceNode> nodes = snapshotService.getTraceNodes(traceId);
-        Map<String, com.oAT.agent.model.TraceNode> nodeMap = new LinkedHashMap<>();
-        if (nodes == null) {
-            return nodeMap;
-        }
-        for (com.oAT.agent.model.TraceNode node : nodes) {
-            if (node != null && StringUtils.hasText(node.getTraceNodeId())) {
-                nodeMap.put(node.getTraceNodeId(), node);
-            }
-        }
-        return nodeMap;
-    }
-
-    private RemoteCallResolver buildRemoteCallResolver(String projectId) {
-        List<AppVo> apps = appService.getAppList(projectId);
-        List<ApiEndpointIndex> endpoints = apps.stream()
-                .flatMap(app -> apiEndpointRepository.findByAppIdOrderByEndpointTypeAscUrlAsc(app.getId()).stream())
-                .collect(Collectors.toList());
-        return new RemoteCallResolver(apps, endpoints);
+        return traceGraphViewService.buildGraphView(snapshot.getProjectId(), snapshot.getTraceId());
     }
 
     private SimpleRelationOption getSystemSnapshotOption(String snapshotId) {
@@ -222,11 +200,11 @@ public class ShareApiControl {
         );
     }
 
-    private FrontendContextApiControl.UserSummary toUserSummary(UserVo user) {
+    private UserSummary toUserSummary(UserVo user) {
         if (user == null) {
             return null;
         }
-        FrontendContextApiControl.UserSummary summary = new FrontendContextApiControl.UserSummary();
+        UserSummary summary = new UserSummary();
         summary.setId(user.getId());
         summary.setName(user.getName());
         summary.setNickname(user.getNickname());
@@ -244,17 +222,4 @@ public class ShareApiControl {
         return value.substring(0, maxLength) + "...";
     }
 
-    public static class PublicSnapshotPayload extends SnapshotApiControl.MySnapshotDetailPayload {
-        private String projectId;
-
-        public String getProjectId() { return projectId; }
-        public void setProjectId(String projectId) { this.projectId = projectId; }
-    }
-
-    public static class PublicUsecasePayload extends UsecaseApiControl.UsecaseDetailPayload {
-        private String projectId;
-
-        public String getProjectId() { return projectId; }
-        public void setProjectId(String projectId) { this.projectId = projectId; }
-    }
 }

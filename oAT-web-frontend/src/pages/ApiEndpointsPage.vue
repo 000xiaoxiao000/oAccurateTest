@@ -218,7 +218,6 @@ const viewMode = ref<'detail' | 'group'>('detail')
 const currentPage = ref(1)
 const pageSize = ref(10)
 const expandedKeys = ref(new Set<string>())
-
 const storageKey = computed(() => `api-endpoints-view-state-${projectId.value}-${appId.value}`)
 
 const endpointTypes = computed(() => unique(endpoints.value.map((item) => item.endpointType)))
@@ -504,7 +503,6 @@ function persistViewState() {
     expandedKeys: Array.from(expandedKeys.value).slice(0, 500),
   }))
 }
-
 function restoreViewState() {
   try {
     const raw = localStorage.getItem(storageKey.value)
@@ -519,7 +517,6 @@ function restoreViewState() {
     pageSize.value = state.pageSize && state.pageSize > 0 ? state.pageSize : 10
     expandedKeys.value = new Set(state.expandedKeys || [])
   } catch {
-    // Ignore incompatible persisted state.
   }
 }
 
@@ -534,7 +531,6 @@ onMounted(() => {
 .header-actions,
 .panel-head,
 .endpoint-main,
-.pagination,
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -788,10 +784,6 @@ onMounted(() => {
   word-break: break-all;
 }
 
-.pagination {
-  margin-top: 6px;
-}
-
 @media (max-width: 900px) {
   .hero-grid,
   .summary-panel {
@@ -799,8 +791,7 @@ onMounted(() => {
   }
 
   .page-header,
-  .endpoint-main,
-  .pagination {
+  .endpoint-main {
     align-items: flex-start;
     flex-direction: column;
   }

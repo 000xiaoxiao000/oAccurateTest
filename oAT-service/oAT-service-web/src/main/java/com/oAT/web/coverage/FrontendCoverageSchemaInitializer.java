@@ -16,6 +16,22 @@ public class FrontendCoverageSchemaInitializer {
     public void initialize() {
         ensureSourceTypeColumn("oat_coverage_report", "create_time");
         ensureSourceTypeColumn("oat_class_coverage", "class_name");
+        ensureColumn("oat_coverage_report", "language",
+                "ALTER TABLE `oat_coverage_report` ADD COLUMN `language` VARCHAR(32) DEFAULT 'JAVA' AFTER `source_type`");
+        ensureColumn("oat_coverage_report", "build_id",
+                "ALTER TABLE `oat_coverage_report` ADD COLUMN `build_id` VARCHAR(128) DEFAULT NULL AFTER `language`");
+        ensureColumn("oat_coverage_report", "test_stage",
+                "ALTER TABLE `oat_coverage_report` ADD COLUMN `test_stage` VARCHAR(64) DEFAULT NULL AFTER `build_id`");
+        ensureColumn("oat_class_coverage", "language",
+                "ALTER TABLE `oat_class_coverage` ADD COLUMN `language` VARCHAR(32) DEFAULT 'JAVA' AFTER `source_type`");
+        ensureColumn("oat_class_coverage", "display_name",
+                "ALTER TABLE `oat_class_coverage` ADD COLUMN `display_name` VARCHAR(512) DEFAULT NULL AFTER `language`");
+        ensureColumn("oat_class_coverage", "source_path",
+                "ALTER TABLE `oat_class_coverage` ADD COLUMN `source_path` VARCHAR(1024) DEFAULT NULL AFTER `display_name`");
+        ensureColumn("oat_app", "language",
+                "ALTER TABLE `oat_app` ADD COLUMN `language` VARCHAR(32) DEFAULT 'JAVA' AFTER `src_name`");
+        ensureColumn("oat_app", "language_config_json",
+                "ALTER TABLE `oat_app` ADD COLUMN `language_config_json` JSON DEFAULT NULL AFTER `language`");
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS `oat_frontend_coverage_report` (
                   `id` VARCHAR(64) PRIMARY KEY,
@@ -26,6 +42,8 @@ public class FrontendCoverageSchemaInitializer {
                   `version_number` VARCHAR(64),
                   `branch` VARCHAR(128),
                   `case_name` VARCHAR(255),
+                  `build_id` VARCHAR(128),
+                  `test_stage` VARCHAR(64),
                   `timestamp` BIGINT,
                   `coverage_json` LONGTEXT NOT NULL,
                   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -37,8 +55,14 @@ public class FrontendCoverageSchemaInitializer {
                 """);
         ensureColumn("oat_frontend_coverage_report", "request_id",
                 "ALTER TABLE `oat_frontend_coverage_report` ADD COLUMN `request_id` VARCHAR(128) AFTER `id`");
+        ensureColumn("oat_frontend_coverage_report", "build_id",
+                "ALTER TABLE `oat_frontend_coverage_report` ADD COLUMN `build_id` VARCHAR(128) DEFAULT NULL AFTER `case_name`");
+        ensureColumn("oat_frontend_coverage_report", "test_stage",
+                "ALTER TABLE `oat_frontend_coverage_report` ADD COLUMN `test_stage` VARCHAR(64) DEFAULT NULL AFTER `build_id`");
         ensureIndex("oat_frontend_coverage_report", "idx_frontend_cov_request_id",
                 "CREATE INDEX `idx_frontend_cov_request_id` ON `oat_frontend_coverage_report` (`request_id`)");
+        ensureIndex("oat_frontend_coverage_report", "idx_frontend_cov_build_stage",
+                "CREATE INDEX `idx_frontend_cov_build_stage` ON `oat_frontend_coverage_report` (`app_id`, `build_id`, `test_stage`)");
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS `oat_universal_coverage_report` (
                   `id` VARCHAR(64) PRIMARY KEY,
@@ -49,6 +73,8 @@ public class FrontendCoverageSchemaInitializer {
                   `version_number` VARCHAR(64),
                   `branch` VARCHAR(128),
                   `case_name` VARCHAR(255),
+                  `build_id` VARCHAR(128),
+                  `test_stage` VARCHAR(64),
                   `timestamp` BIGINT,
                   `coverage_data` LONGTEXT NOT NULL,
                   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -57,6 +83,12 @@ public class FrontendCoverageSchemaInitializer {
                   INDEX `idx_universal_cov_create_time` (`create_time`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='多语言覆盖率原始上报表'
                 """);
+        ensureColumn("oat_universal_coverage_report", "build_id",
+                "ALTER TABLE `oat_universal_coverage_report` ADD COLUMN `build_id` VARCHAR(128) DEFAULT NULL AFTER `case_name`");
+        ensureColumn("oat_universal_coverage_report", "test_stage",
+                "ALTER TABLE `oat_universal_coverage_report` ADD COLUMN `test_stage` VARCHAR(64) DEFAULT NULL AFTER `build_id`");
+        ensureIndex("oat_universal_coverage_report", "idx_universal_cov_build_stage",
+                "CREATE INDEX `idx_universal_cov_build_stage` ON `oat_universal_coverage_report` (`app_id`, `source_type`, `build_id`, `test_stage`)");
     }
 
     private void ensureSourceTypeColumn(String tableName, String afterColumn) {

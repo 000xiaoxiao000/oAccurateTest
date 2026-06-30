@@ -1,5 +1,7 @@
 package com.oAT.web.control.api;
 
+import com.oAT.web.api.account.AccountApiPayloads.*;
+import com.oAT.web.api.common.ApiSummaries.*;
 import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.exceptions.UserOperationException;
 import com.oAT.web.service.UserService;
@@ -24,12 +26,12 @@ public class AccountApiControl {
     }
 
     @GetMapping("/profile")
-    public ResultNotified<FrontendContextApiControl.UserSummary> profile(@SessionAttribute UserVo user) {
+    public ResultNotified<UserSummary> profile(@SessionAttribute UserVo user) {
         return new ResultNotified<>(true, "获取账户信息成功", toUserSummary(loadEffectiveUser(user)));
     }
 
     @PostMapping("/profile")
-    public ResultNotified<FrontendContextApiControl.UserSummary> updateProfile(@SessionAttribute UserVo user,
+    public ResultNotified<UserSummary> updateProfile(@SessionAttribute UserVo user,
                                                                                @RequestBody UpdateProfileRequest request,
                                                                                HttpSession session) {
         Assert.notNull(request, "请求体不能为空");
@@ -74,8 +76,8 @@ public class AccountApiControl {
         return latest != null ? latest : user;
     }
 
-    private FrontendContextApiControl.UserSummary toUserSummary(UserVo user) {
-        FrontendContextApiControl.UserSummary summary = new FrontendContextApiControl.UserSummary();
+    private UserSummary toUserSummary(UserVo user) {
+        UserSummary summary = new UserSummary();
         summary.setId(user.getId());
         summary.setName(user.getName());
         summary.setNickname(user.getNickname());
@@ -86,81 +88,4 @@ public class AccountApiControl {
         return summary;
     }
 
-    public static class UpdateProfileRequest {
-        private String name;
-        private String nickname;
-        private String email;
-        private String phone;
-        private String readme;
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getNickname() {
-            return nickname;
-        }
-
-        public void setNickname(String nickname) {
-            this.nickname = nickname;
-        }
-
-        public String getEmail() {
-            return email;
-        }
-
-        public void setEmail(String email) {
-            this.email = email;
-        }
-
-        public String getPhone() {
-            return phone;
-        }
-
-        public void setPhone(String phone) {
-            this.phone = phone;
-        }
-
-        public String getReadme() {
-            return readme;
-        }
-
-        public void setReadme(String readme) {
-            this.readme = readme;
-        }
-    }
-
-    public static class UpdatePasswordRequest {
-        private String oldPassword;
-        private String newPassword;
-        private String newPasswordConfirm;
-
-        public String getOldPassword() {
-            return oldPassword;
-        }
-
-        public void setOldPassword(String oldPassword) {
-            this.oldPassword = oldPassword;
-        }
-
-        public String getNewPassword() {
-            return newPassword;
-        }
-
-        public void setNewPassword(String newPassword) {
-            this.newPassword = newPassword;
-        }
-
-        public String getNewPasswordConfirm() {
-            return newPasswordConfirm;
-        }
-
-        public void setNewPasswordConfirm(String newPasswordConfirm) {
-            this.newPasswordConfirm = newPasswordConfirm;
-        }
-    }
 }

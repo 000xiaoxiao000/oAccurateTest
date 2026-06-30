@@ -70,7 +70,7 @@ public class CoverageReportRepository {
         jdbcTemplate.update("""
                         INSERT INTO oat_coverage_report (
                             id, app_id, version_number, repo_branch, repo_commit_id, create_time, source_type,
-                            last_processed_time, total_classes, covered_classes, total_methods,
+                            language, build_id, test_stage, last_processed_time, total_classes, covered_classes, total_methods,
                             covered_methods, total_branches, covered_branches, total_branch_targets,
                             covered_branch_targets, total_lines, covered_lines, total_complexity,
                             report_type, base_version_number, base_repo_commit_id, snapshot_fingerprint,
@@ -78,7 +78,7 @@ public class CoverageReportRepository {
                             inc_covered_classes, inc_total_lines, inc_covered_lines, inc_total_methods,
                             inc_covered_methods, inc_total_branches, inc_covered_branches,
                             inc_total_branch_targets, inc_covered_branch_targets, inc_total_complexity
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON DUPLICATE KEY UPDATE
                             app_id = VALUES(app_id),
                             version_number = VALUES(version_number),
@@ -86,6 +86,9 @@ public class CoverageReportRepository {
                             repo_commit_id = VALUES(repo_commit_id),
                             create_time = VALUES(create_time),
                             source_type = VALUES(source_type),
+                            language = VALUES(language),
+                            build_id = VALUES(build_id),
+                            test_stage = VALUES(test_stage),
                             last_processed_time = VALUES(last_processed_time),
                             total_classes = VALUES(total_classes),
                             covered_classes = VALUES(covered_classes),
@@ -124,6 +127,9 @@ public class CoverageReportRepository {
                 report.getRepoCommitId(),
                 toTimestamp(report.getCreateTime()),
                 report.getSourceType(),
+                report.getLanguage(),
+                report.getBuildId(),
+                report.getTestStage(),
                 report.getLastProcessedTime(),
                 report.getTotalClasses(),
                 report.getCoveredClasses(),
@@ -189,6 +195,9 @@ public class CoverageReportRepository {
         report.setRepoCommitId(rs.getString("repo_commit_id"));
         report.setCreateTime(toDate(rs.getTimestamp("create_time")));
         report.setSourceType(readStringIfExists(rs, "source_type"));
+        report.setLanguage(readStringIfExists(rs, "language"));
+        report.setBuildId(readStringIfExists(rs, "build_id"));
+        report.setTestStage(readStringIfExists(rs, "test_stage"));
         report.setLastProcessedTime(rs.getString("last_processed_time"));
         report.setTotalClasses(rs.getLong("total_classes"));
         report.setCoveredClasses(rs.getLong("covered_classes"));
