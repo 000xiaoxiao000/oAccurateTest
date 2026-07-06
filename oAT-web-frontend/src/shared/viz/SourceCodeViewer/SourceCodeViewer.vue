@@ -65,6 +65,7 @@ defineExpose({
   tableRef,
   scrollToTop,
   scrollToLine,
+  scrollToRange,
   element: rootRef,
 })
 
@@ -156,9 +157,7 @@ function scrollToLine(lineNumber?: number) {
   if (!target) {
     return false
   }
-  container.querySelectorAll<HTMLElement>('[data-source-jump-highlight="true"]').forEach((node) => {
-    delete node.dataset.sourceJumpHighlight
-  })
+  clearJumpHighlights(container)
   target.dataset.sourceJumpHighlight = 'true'
   const sourceRect = container.getBoundingClientRect()
   const targetRect = target.getBoundingClientRect()
@@ -166,6 +165,42 @@ function scrollToLine(lineNumber?: number) {
   container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
   container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   return true
+}
+
+function scrollToRange(startLine?: number, endLine?: number) {
+  if (!startLine || startLine <= 0) {
+    return false
+  }
+  const container = htmlRef.value || tableRef.value
+  if (!container) {
+    return false
+  }
+  const normalizedEnd = Math.max(startLine, endLine || startLine)
+  const target = container.querySelector<HTMLElement>(`[data-source-line="${startLine}"]`)
+  if (!target) {
+    return scrollToLine(startLine)
+  }
+  clearJumpHighlights(container)
+  for (const row of Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))) {
+    const line = Number(row.dataset.sourceLine || 0)
+    if (line >= startLine && line <= normalizedEnd) {
+      row.dataset.sourceJumpHighlight = 'true'
+      row.dataset.sourceRangeHighlight = 'true'
+    }
+  }
+  const sourceRect = container.getBoundingClientRect()
+  const targetRect = target.getBoundingClientRect()
+  const nextTop = container.scrollTop + targetRect.top - sourceRect.top - 24
+  container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
+  container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  return true
+}
+
+function clearJumpHighlights(container: HTMLElement) {
+  container.querySelectorAll<HTMLElement>('[data-source-jump-highlight="true"], [data-source-range-highlight="true"]').forEach((node) => {
+    delete node.dataset.sourceJumpHighlight
+    delete node.dataset.sourceRangeHighlight
+  })
 }
 
 onBeforeUnmount(() => {

@@ -232,6 +232,7 @@
 
 .method-table tbody tr {
   height: 50px;
+  cursor: pointer;
 }
 
 .method-table tbody tr:hover {

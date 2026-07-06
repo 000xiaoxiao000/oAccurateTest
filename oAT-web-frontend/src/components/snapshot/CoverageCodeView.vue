@@ -57,10 +57,11 @@
                   :data-method-summary="methodContextSummary(item.method)"
                   :data-method-index="item.index"
                   :class="[item.method.hasCodeChanges && 'method-row-changed', activeMethodIndex === item.index && 'method-row-active']"
+                  @click="jumpToMethodRow(item.method, item.index)"
                 >
                   <td class="method-name">
                     <div class="method-mainline">
-                      <button class="method-jump" type="button" :title="item.method.methodName" @click="jumpToMethodRow(item.method)">{{ item.method.methodName }}</button>
+                      <button class="method-jump" type="button" :title="item.method.methodName" @click.stop="jumpToMethodRow(item.method, item.index)">{{ item.method.methodName }}</button>
                       <span
                         v-if="item.method.hasCodeChanges"
                         class="method-change-badge"
@@ -187,9 +188,14 @@ function clearFilters() {
   statusFilter.value = ''
 }
 
-function jumpToMethodRow(method: CoverageMethodSummary) {
-  activeMethodIndex.value = props.methods?.indexOf(method) ?? null
-  if (sourceViewerRef.value?.scrollToLine?.(method.startLine)) {
+function jumpToMethodRow(method: CoverageMethodSummary, index = props.methods?.indexOf(method) ?? -1) {
+  activeMethodIndex.value = index >= 0 ? index : null
+  const startLine = method.startLine || methodStartFromDesc(method.methodDesc)
+  const endLine = method.endLine || methodEndFromDesc(method.methodDesc) || startLine
+  if (sourceViewerRef.value?.scrollToRange?.(startLine, endLine)) {
+    return
+  }
+  if (sourceViewerRef.value?.scrollToLine?.(startLine)) {
     return
   }
   jumpToMethod(method.methodName)
