@@ -281,9 +281,10 @@ public class CoverageCoreQueryService {
                 .toList());
 
         List<SourceCoverageBranch> branches = new ArrayList<>();
-        unit.getBranches().forEach(branch -> branches.add(toSourceBranch(branch.getLine(), branch.getGroupId(), branch.getBranchIndex(), branch.getHits())));
-        unit.getFunctions().forEach(function ->
-                function.getBranches().forEach(branch -> branches.add(toSourceBranch(branch.getLine(), branch.getGroupId(), branch.getBranchIndex(), branch.getHits()))));
+        List<CoverageBranch> sourceBranches = !unit.getBranches().isEmpty()
+                ? unit.getBranches()
+                : unit.getFunctions().stream().flatMap(function -> function.getBranches().stream()).toList();
+        sourceBranches.forEach(branch -> branches.add(toSourceBranch(branch.getLine(), branch.getGroupId(), branch.getBranchIndex(), branch.getHits())));
         payload.setBranches(branches.stream()
                 .sorted(Comparator.comparing(SourceCoverageBranch::getLine).thenComparing(SourceCoverageBranch::getBranchIndex))
                 .toList());
@@ -467,6 +468,8 @@ public class CoverageCoreQueryService {
                 : null);
         summary.setComplexity(function.getComplexity());
         summary.setCovered(summary.getCoveredLines() > 0 || summary.getCoveredBranchTargets() > 0);
+        summary.setStartLine(function.getStartLine());
+        summary.setEndLine(function.getEndLine());
         return summary;
     }
 

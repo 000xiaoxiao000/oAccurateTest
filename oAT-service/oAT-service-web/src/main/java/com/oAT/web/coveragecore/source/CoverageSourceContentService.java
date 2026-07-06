@@ -135,8 +135,19 @@ public class CoverageSourceContentService {
         }
         String normalized = value.replace('\\', '/').replaceAll("^/+", "");
         candidates.add(normalized);
+        addPathSuffixCandidates(candidates, normalized);
         if (!normalized.contains("/") && normalized.contains(".")) {
             candidates.addAll(CoverageSourceClassUtil.buildSourcePathCandidates(normalized));
+        }
+    }
+
+    private void addPathSuffixCandidates(Set<String> candidates, String normalized) {
+        String[] markers = {"/src/", "/app/", "/packages/"};
+        for (String marker : markers) {
+            int index = normalized.indexOf(marker);
+            if (index >= 0 && index + 1 < normalized.length()) {
+                candidates.add(normalized.substring(index + 1));
+            }
         }
     }
 

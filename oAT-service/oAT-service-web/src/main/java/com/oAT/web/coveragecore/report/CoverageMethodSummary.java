@@ -15,6 +15,8 @@ public class CoverageMethodSummary implements Serializable {
     private int coveredBranchTargets;
     private Double branchRate;
     private boolean hasCodeChanges;
+    private int startLine;
+    private int endLine;
 
     public String getMethodName() { return methodName; }
     public void setMethodName(String methodName) { this.methodName = methodName; }
@@ -40,4 +42,8 @@ public class CoverageMethodSummary implements Serializable {
     public void setBranchRate(Double branchRate) { this.branchRate = branchRate; }
     public boolean isHasCodeChanges() { return hasCodeChanges; }
     public void setHasCodeChanges(boolean hasCodeChanges) { this.hasCodeChanges = hasCodeChanges; }
+    public int getStartLine() { return startLine; }
+    public void setStartLine(int startLine) { this.startLine = startLine; }
+    public int getEndLine() { return endLine; }
+    public void setEndLine(int endLine) { this.endLine = endLine; }
 }

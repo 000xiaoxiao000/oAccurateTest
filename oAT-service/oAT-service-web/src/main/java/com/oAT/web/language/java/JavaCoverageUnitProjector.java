@@ -44,9 +44,55 @@ public class JavaCoverageUnitProjector {
             function.setStartLine(minLine(method.getTotalLineNumbers()));
             function.setEndLine(maxLine(method.getTotalLineNumbers()));
             function.setComplexity(method.getComplexity());
+            function.setLines(projectMethodLines(method));
+            function.setBranches(projectMethodBranches(method));
             functions.add(function);
         }
         return functions;
+    }
+
+    private List<CoverageLine> projectMethodLines(ClassCoverageIndex.MethodCoverageDetail method) {
+        Set<Integer> coveredLines = method.getCoveredLineNumbers() == null ? Set.of() : new LinkedHashSet<>(method.getCoveredLineNumbers());
+        List<CoverageLine> lines = new ArrayList<>();
+        if (method.getTotalLineNumbers() == null) {
+            return lines;
+        }
+        for (Integer lineNumber : method.getTotalLineNumbers()) {
+            if (lineNumber == null || lineNumber <= 0) {
+                continue;
+            }
+            CoverageLine line = new CoverageLine();
+            line.setLine(lineNumber);
+            line.setHits(coveredLines.contains(lineNumber) ? 1 : 0);
+            line.getFootprints().addAll(toFootprints(method.getLineFootprints() == null ? List.of() : method.getLineFootprints().get(lineNumber)));
+            lines.add(line);
+        }
+        return lines;
+    }
+
+    private List<CoverageBranch> projectMethodBranches(ClassCoverageIndex.MethodCoverageDetail method) {
+        List<CoverageBranch> branches = new ArrayList<>();
+        if (method.getTotalBranchTargetProbeMap() == null) {
+            return branches;
+        }
+        Map<String, List<Integer>> coveredMap = method.getCoveredBranchTargetProbeMap();
+        for (Map.Entry<String, List<Integer>> entry : method.getTotalBranchTargetProbeMap().entrySet()) {
+            List<Integer> targets = entry.getValue();
+            if (targets == null) {
+                continue;
+            }
+            List<Integer> coveredTargets = coveredMap == null ? List.of() : coveredMap.getOrDefault(entry.getKey(), List.of());
+            for (Integer target : targets) {
+                CoverageBranch branch = new CoverageBranch();
+                branch.setLine(parseLine(entry.getKey()));
+                branch.setGroupId(entry.getKey());
+                branch.setBranchIndex(target == null ? 0 : target);
+                branch.setHits(coveredTargets.contains(target) ? 1 : 0);
+                branch.getFootprints().addAll(toFootprints(method.getBranchFootprints() == null ? List.of() : method.getBranchFootprints().get(branchKey(entry.getKey(), target))));
+                branches.add(branch);
+            }
+        }
+        return branches;
     }
 
     private List<CoverageLine> projectLines(List<ClassCoverageIndex.MethodCoverageDetail> methods) {

@@ -59,7 +59,7 @@
                 >
                   <td class="method-name">
                     <div class="method-mainline">
-                      <button class="method-jump" type="button" :title="item.method.methodName" @click="jumpToMethod(item.method.methodName)">{{ item.method.methodName }}</button>
+                      <button class="method-jump" type="button" :title="item.method.methodName" @click="jumpToMethodRow(item.method)">{{ item.method.methodName }}</button>
                       <span
                         v-if="item.method.hasCodeChanges"
                         class="method-change-badge"
@@ -181,6 +181,13 @@ watch(filteredMethods, () => {
 function clearFilters() {
   methodKeyword.value = ''
   statusFilter.value = ''
+}
+
+function jumpToMethodRow(method: CoverageMethodSummary) {
+  if (sourceViewerRef.value?.scrollToLine?.(method.startLine)) {
+    return
+  }
+  jumpToMethod(method.methodName)
 }
 
 function methodBaseName(methodName: string) {

@@ -12,12 +12,13 @@
     </header>
 
     <div v-if="html" ref="htmlRef" class="source-html" v-html="html"></div>
-    <div v-else class="source-table" role="table" aria-label="源码覆盖率">
+    <div v-else ref="tableRef" class="source-table" role="table" aria-label="源码覆盖率">
       <div
         v-for="line in sourceLines"
         :key="line.line"
         class="source-row"
         :class="[lineTone(line), { changed: line.changed }]"
+        :data-source-line="line.line"
         role="row"
       >
         <span class="line-number" role="cell">{{ line.line }}</span>
@@ -27,7 +28,7 @@
           {{ line.cases.length }} cases
         </span>
         <span v-if="branchesByLine[line.line]?.length" class="line-branches" role="cell">
-          {{ coveredBranchesByLine(line.line) }}/{{ branchesByLine[line.line].length }} branches
+          {{ coveredBranchesByLine(line.line) }}/{{ branchesByLine[line.line].length }} 分支
         </span>
       </div>
     </div>
@@ -45,12 +46,14 @@ const props = defineProps<{
 
 const htmlRef = ref<HTMLElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
+const tableRef = ref<HTMLElement | null>(null)
 const payload = computed<SourceCoveragePayload>(() => props.payload || { lines: [] })
 const sourceLines = computed(() => payload.value.lines || [])
 
 defineExpose({
   htmlRef,
   scrollToTop,
+  scrollToLine,
   element: rootRef,
 })
 
@@ -83,8 +86,32 @@ function lineTone(line: SourceCoverageLine) {
 }
 
 function scrollToTop() {
-  const target = htmlRef.value || rootRef.value?.querySelector('.source-table')
+  const target = htmlRef.value || tableRef.value
   target?.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
+}
+
+function scrollToLine(lineNumber?: number) {
+  if (!lineNumber || lineNumber <= 0) {
+    return false
+  }
+  const container = htmlRef.value || tableRef.value
+  if (!container) {
+    return false
+  }
+  const target = container.querySelector<HTMLElement>(`[data-source-line="${lineNumber}"]`)
+  if (!target) {
+    return false
+  }
+  container.querySelectorAll<HTMLElement>('[data-source-jump-highlight="true"]').forEach((node) => {
+    delete node.dataset.sourceJumpHighlight
+  })
+  target.dataset.sourceJumpHighlight = 'true'
+  const sourceRect = container.getBoundingClientRect()
+  const targetRect = target.getBoundingClientRect()
+  const nextTop = container.scrollTop + targetRect.top - sourceRect.top - container.clientHeight / 2 + targetRect.height / 2
+  container.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' })
+  container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  return true
 }
 </script>
 
@@ -111,6 +138,7 @@ function scrollToTop() {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
   min-width: 0;
 }
 
@@ -152,7 +180,9 @@ function scrollToTop() {
 
 .source-row {
   display: grid;
-  grid-template-columns: 64px 56px minmax(0, 1fr) auto auto;
+  grid-template-columns: 64px 56px minmax(max-content, 1fr) auto auto;
+  width: max-content;
+  min-width: 100%;
   min-height: 28px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.04);
 }
@@ -167,6 +197,11 @@ function scrollToTop() {
 
 .source-row.changed {
   box-shadow: inset 3px 0 #d97706;
+}
+
+.source-row[data-source-jump-highlight="true"] {
+  outline: 2px solid rgba(37, 99, 235, 0.5);
+  outline-offset: -2px;
 }
 
 .line-number,
@@ -193,6 +228,12 @@ function scrollToTop() {
   padding: 5px 12px;
   color: #0f172a;
   white-space: pre;
+}
+
+.line-branches {
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 760px) {

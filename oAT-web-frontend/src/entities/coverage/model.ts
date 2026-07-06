@@ -82,6 +82,8 @@ export interface CoverageMethodSummary {
   coveredBranchTargets: number
   branchRate?: number
   hasCodeChanges?: boolean
+  startLine?: number
+  endLine?: number
 }
 
 export interface CoverageUnit {
