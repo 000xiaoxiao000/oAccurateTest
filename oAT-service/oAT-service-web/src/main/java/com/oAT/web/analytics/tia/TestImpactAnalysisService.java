@@ -68,15 +68,18 @@ public class TestImpactAnalysisService {
                     if (footprint == null) {
                         continue;
                     }
+                    footprintCount++;
                     String identity = footprintIdentity(footprint);
-                    if (!StringUtils.hasText(identity)) {
+                    List<UsecaseImpact> footprintUsecases = mergeUsecases(
+                            usecaseResolver.findUsecases(footprint.getTraceId()),
+                            usecaseResolver.findCoverageFootprintUsecases(footprint));
+                    if (footprintUsecases.isEmpty() && StringUtils.hasText(identity)) {
+                        MutableImpactCase impacted = impactMap.computeIfAbsent(identity, ignored -> new MutableImpactCase(footprint));
+                        impacted.coveredChangedLines++;
+                        impacted.impactedUnits.add(unitKey + ":" + line.getLine());
                         continue;
                     }
-                    footprintCount++;
-                    MutableImpactCase impacted = impactMap.computeIfAbsent(identity, ignored -> new MutableImpactCase(footprint));
-                    impacted.coveredChangedLines++;
-                    impacted.impactedUnits.add(unitKey + ":" + line.getLine());
-                    for (UsecaseImpact usecase : usecaseResolver.findUsecases(footprint.getTraceId())) {
+                    for (UsecaseImpact usecase : footprintUsecases) {
                         String usecaseIdentity = "usecase:" + usecase.id();
                         MutableImpactCase usecaseImpact = impactMap.computeIfAbsent(usecaseIdentity,
                                 ignored -> new MutableImpactCase(footprint, usecase));
@@ -177,6 +180,25 @@ public class TestImpactAnalysisService {
         return firstText(footprint.getCaseName(), footprint.getTraceId(), footprint.getBuildId());
     }
 
+    private List<UsecaseImpact> mergeUsecases(List<UsecaseImpact> first, List<UsecaseImpact> second) {
+        LinkedHashMap<String, UsecaseImpact> result = new LinkedHashMap<>();
+        if (first != null) {
+            for (UsecaseImpact usecase : first) {
+                if (usecase != null && StringUtils.hasText(usecase.id())) {
+                    result.putIfAbsent(usecase.id(), usecase);
+                }
+            }
+        }
+        if (second != null) {
+            for (UsecaseImpact usecase : second) {
+                if (usecase != null && StringUtils.hasText(usecase.id())) {
+                    result.putIfAbsent(usecase.id(), usecase);
+                }
+            }
+        }
+        return new ArrayList<>(result.values());
+    }
+
     private String firstText(String... values) {
         if (values == null) {
             return null;
@@ -228,12 +250,19 @@ public class TestImpactAnalysisService {
 
     private class SnapshotUsecaseResolver {
         private final String projectId;
+        private final String appId;
+        private final String language;
+        private final String commitId;
         private final Map<String, List<SystemSnapshot>> snapshotsByTraceId = new HashMap<>();
         private final Map<String, List<UsecaseImpact>> usecasesByTraceId = new HashMap<>();
+        private final Map<String, List<UsecaseImpact>> usecasesByCoverageFootprintKey = new HashMap<>();
         private boolean loadedSnapshots;
 
         private SnapshotUsecaseResolver(CoverageReportIndex reportIndex) {
             this.projectId = resolveProjectId(reportIndex);
+            this.appId = reportIndex == null ? null : reportIndex.getAppId();
+            this.language = reportIndex == null ? null : firstText(reportIndex.getLanguage(), reportIndex.getSourceType());
+            this.commitId = reportIndex == null ? null : reportIndex.getRepoCommitId();
             loadReportSnapshots(reportIndex);
         }
 
@@ -242,6 +271,14 @@ public class TestImpactAnalysisService {
                 return Collections.emptyList();
             }
             return usecasesByTraceId.computeIfAbsent(traceId, this::loadUsecasesByTraceId);
+        }
+
+        private List<UsecaseImpact> findCoverageFootprintUsecases(CoverageFootprint footprint) {
+            String footprintKey = coverageFootprintKey(footprint);
+            if (!StringUtils.hasText(footprintKey) || !StringUtils.hasText(projectId)) {
+                return Collections.emptyList();
+            }
+            return usecasesByCoverageFootprintKey.computeIfAbsent(footprintKey, this::loadUsecasesByCoverageFootprintKey);
         }
 
         private boolean hasSystemSnapshots() {
@@ -261,6 +298,37 @@ public class TestImpactAnalysisService {
                 }
             }
             return new ArrayList<>(result.values());
+        }
+
+        private List<UsecaseImpact> loadUsecasesByCoverageFootprintKey(String footprintKey) {
+            List<UsecaseImpact> result = new ArrayList<>();
+            for (CaseCenterIndex index : caseCenterRepository
+                    .findByUsecase_ProjectIdAndUsecase_CoverageFootprintsContaining(projectId, footprintKey)) {
+                Usecase usecase = index == null ? null : index.getUsecase();
+                if (usecase == null || !StringUtils.hasText(index.getId())) {
+                    continue;
+                }
+                String title = firstText(usecase.getTitle(), index.getId());
+                result.add(new UsecaseImpact(index.getId(), title, null));
+            }
+            return result;
+        }
+
+        private String coverageFootprintKey(CoverageFootprint footprint) {
+            if (footprint == null || !StringUtils.hasText(appId) || !StringUtils.hasText(language)) {
+                return null;
+            }
+            return String.join("|",
+                    text(appId),
+                    text(language),
+                    text(footprint.getBuildId()),
+                    text(footprint.getTestStage()),
+                    text(footprint.getCaseName()),
+                    text(commitId));
+        }
+
+        private String text(String value) {
+            return StringUtils.hasText(value) ? value : "";
         }
 
         private List<UsecaseImpact> loadUsecasesByTraceId(String traceId) {
