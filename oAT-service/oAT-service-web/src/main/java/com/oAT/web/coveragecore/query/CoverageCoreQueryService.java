@@ -437,7 +437,25 @@ public class CoverageCoreQueryService {
     private boolean matchesClassCoverage(ClassCoverageIndex index, String unitKey) {
         return unitKey.equals(index.getClassName())
                 || unitKey.equals(index.getDisplayName())
-                || unitKey.equals(index.getSourcePath());
+                || unitKey.equals(index.getSourcePath())
+                || unitKey.equals(normalizeSourcePath(index.getClassName()))
+                || unitKey.equals(normalizeSourcePath(index.getDisplayName()))
+                || unitKey.equals(normalizeSourcePath(index.getSourcePath()));
+    }
+
+    private String normalizeSourcePath(String value) {
+        if (value == null || value.isBlank()) {
+            return value;
+        }
+        String normalized = value.trim().replace('\\', '/');
+        String[] sourceRoots = {"/src/", "/packages/", "/apps/", "/lib/", "/components/", "/views/", "/pages/"};
+        for (String sourceRoot : sourceRoots) {
+            int index = normalized.indexOf(sourceRoot);
+            if (index >= 0) {
+                return normalized.substring(index + 1);
+            }
+        }
+        return normalized;
     }
 
     private UnitProjection getUnitProjection(String reportId, String unitKey) {

@@ -21,9 +21,10 @@ public class ClassCoverageUnitProjector {
     public CoverageUnit project(ClassCoverageIndex index, CoverageLanguage language) {
         CoverageUnit unit = new CoverageUnit();
         unit.setLanguage(language);
-        unit.setUnitKey(index.getClassName());
-        unit.setDisplayName(StringUtils.hasText(index.getDisplayName()) ? index.getDisplayName() : index.getClassName());
-        unit.setSourcePath(StringUtils.hasText(index.getSourcePath()) ? index.getSourcePath() : index.getClassName());
+        String sourcePath = normalizeSourcePath(StringUtils.hasText(index.getSourcePath()) ? index.getSourcePath() : index.getClassName());
+        unit.setUnitKey(normalizeSourcePath(index.getClassName()));
+        unit.setDisplayName(normalizeSourcePath(StringUtils.hasText(index.getDisplayName()) ? index.getDisplayName() : index.getClassName()));
+        unit.setSourcePath(sourcePath);
         unit.setFunctions(projectFunctions(index.getMethods()));
         unit.setLines(projectLines(index.getMethods()));
         unit.setBranches(projectBranches(index.getMethods()));
@@ -177,6 +178,21 @@ public class ClassCoverageUnitProjector {
 
     private String branchKey(String groupId, Integer branchIndex) {
         return (StringUtils.hasText(groupId) ? groupId : "0") + ":" + (branchIndex == null ? 0 : branchIndex);
+    }
+
+    private String normalizeSourcePath(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        String normalized = value.trim().replace('\\', '/');
+        String[] sourceRoots = {"/src/", "/packages/", "/apps/", "/lib/", "/components/", "/views/", "/pages/"};
+        for (String sourceRoot : sourceRoots) {
+            int index = normalized.indexOf(sourceRoot);
+            if (index >= 0) {
+                return normalized.substring(index + 1);
+            }
+        }
+        return normalized;
     }
 
     private List<ClassCoverageIndex.CoverageFootprintRecord> lineFootprints(List<ClassCoverageIndex.MethodCoverageDetail> methods, Integer lineNumber) {

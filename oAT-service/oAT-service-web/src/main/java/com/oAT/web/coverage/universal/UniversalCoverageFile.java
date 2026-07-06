@@ -107,6 +107,9 @@ public class UniversalCoverageFile implements Serializable {
             method.setLineFootprints(lineFootprintsFor(function));
             methods.add(method);
         }
+        if (methods.isEmpty() && (!totalLines.isEmpty() || !branches.isEmpty())) {
+            methods.add(syntheticFileMethod(totalLines, coveredLines));
+        }
 
         Set<String> branchGroups = new LinkedHashSet<>();
         Set<String> coveredBranchGroups = new LinkedHashSet<>();
@@ -120,7 +123,7 @@ public class UniversalCoverageFile implements Serializable {
             }
         }
         if (!methods.isEmpty()) {
-            methods.get(0).setBranchFootprints(new LinkedHashMap<>(branchFootprints));
+            applyBranchesToMethod(methods.get(0));
         }
 
         index.setMethods(methods);
@@ -174,6 +177,58 @@ public class UniversalCoverageFile implements Serializable {
             }
         }
         return result;
+    }
+
+    private ClassCoverageIndex.MethodCoverageDetail syntheticFileMethod(Set<Integer> totalLines, Set<Integer> coveredLines) {
+        ClassCoverageIndex.MethodCoverageDetail method = new ClassCoverageIndex.MethodCoverageDetail();
+        List<Integer> totalLineNumbers = new ArrayList<>(totalLines);
+        List<Integer> coveredLineNumbers = new ArrayList<>(coveredLines);
+        method.setMethodName("(file)");
+        method.setMethodDesc("");
+        method.setTotalLineNumbers(totalLineNumbers);
+        method.setCoveredLineNumbers(coveredLineNumbers);
+        method.setLineFootprints(new LinkedHashMap<>(lineFootprints));
+        method.setTotalLines(totalLineNumbers.size());
+        method.setCoveredLines(coveredLineNumbers.size());
+        method.setCovered(!coveredLineNumbers.isEmpty());
+        method.setComplexity(1);
+        method.setTotalBranches(0);
+        method.setCoveredBranches(0);
+        method.setTotalBranchTargets(0);
+        method.setCoveredBranchTargets(0);
+        method.setBranchRate(0D);
+        return method;
+    }
+
+    private void applyBranchesToMethod(ClassCoverageIndex.MethodCoverageDetail method) {
+        Map<String, List<Integer>> totalTargetMap = new LinkedHashMap<>();
+        Map<String, List<Integer>> coveredTargetMap = new LinkedHashMap<>();
+        Set<String> totalGroups = new LinkedHashSet<>();
+        Set<String> coveredGroups = new LinkedHashSet<>();
+        Set<Integer> coveredBranchLines = new LinkedHashSet<>();
+        int coveredTargets = 0;
+        for (BranchCoverage branch : branches) {
+            String groupKey = branch.branchGroupKey();
+            totalGroups.add(groupKey);
+            totalTargetMap.computeIfAbsent(groupKey, ignored -> new ArrayList<>()).add(branch.getBranchIndex());
+            if (branch.getCoveredCount() > 0) {
+                coveredGroups.add(groupKey);
+                coveredBranchLines.add(branch.getLine());
+                coveredTargetMap.computeIfAbsent(groupKey, ignored -> new ArrayList<>()).add(branch.getBranchIndex());
+                coveredTargets++;
+            }
+        }
+        method.setTotalBranches(totalGroups.size());
+        method.setCoveredBranches(coveredGroups.size());
+        method.setCoveredBranchLines(new ArrayList<>(coveredBranchLines));
+        method.setTotalBranchTargetProbeMap(totalTargetMap);
+        method.setCoveredBranchTargetProbeMap(coveredTargetMap);
+        method.setBranchFootprints(new LinkedHashMap<>(branchFootprints));
+        method.setTotalBranchTargets(branches.size());
+        method.setCoveredBranchTargets(coveredTargets);
+        method.setBranchRate(rate(coveredTargets, branches.size()));
+        method.setCovered(method.isCovered() || coveredTargets > 0);
+        method.setComplexity(Math.max(method.getComplexity(), 1) + totalGroups.size());
     }
 
     private <K> void mergeFootprints(Map<K, List<ClassCoverageIndex.CoverageFootprintRecord>> target,
@@ -299,7 +354,7 @@ public class UniversalCoverageFile implements Serializable {
         }
 
         String branchGroupKey() {
-            return StringUtils.hasText(groupId) ? groupId : String.valueOf(line);
+            return line + ":" + (StringUtils.hasText(groupId) ? groupId : line);
         }
 
         public int getLine() { return line; }

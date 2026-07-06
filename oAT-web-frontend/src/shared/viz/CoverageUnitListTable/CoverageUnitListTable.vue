@@ -16,9 +16,9 @@
         </thead>
         <tbody>
           <tr v-for="unit in visibleUnits" :key="unitKey(unit)">
-            <td :title="unit.sourcePath || unit.unitKey || unit.displayName">
-              <strong>{{ unit.displayName || unit.sourcePath || unit.unitKey || '未命名单元' }}</strong>
-              <small v-if="unit.sourcePath">{{ unit.sourcePath }}</small>
+            <td :title="unitTitle(unit)">
+              <strong>{{ unitPrimaryName(unit) }}</strong>
+              <small v-if="unitSecondaryName(unit)">{{ unitSecondaryName(unit) }}</small>
             </td>
             <td>{{ coveredFunctions(unit) }} / {{ unit.functions?.length || 0 }}</td>
             <td>{{ coveredLines(unit) }} / {{ totalLines(unit) }}</td>
@@ -71,6 +71,36 @@ const visibleUnits = computed(() => {
 
 function unitKey(unit: CoverageUnit) {
   return unit.unitKey || unit.sourcePath || unit.displayName || JSON.stringify(unit)
+}
+
+function unitPrimaryName(unit: CoverageUnit) {
+  return normalizeSourcePath(unit.displayName || unit.sourcePath || unit.unitKey) || '未命名单元'
+}
+
+function unitSecondaryName(unit: CoverageUnit) {
+  const primary = unitPrimaryName(unit)
+  const secondary = normalizeSourcePath(unit.sourcePath)
+  return secondary && secondary !== primary ? secondary : ''
+}
+
+function unitTitle(unit: CoverageUnit) {
+  return [unitPrimaryName(unit), unitSecondaryName(unit)].filter(Boolean).join('\n')
+}
+
+function normalizeSourcePath(value?: string) {
+  if (!value) return ''
+  let normalized = value.trim().replace(/\\/g, '/')
+  const queryIndex = normalized.indexOf('?')
+  if (queryIndex >= 0) normalized = normalized.slice(0, queryIndex)
+  const loaderIndex = normalized.lastIndexOf('!')
+  if (loaderIndex >= 0 && loaderIndex < normalized.length - 1) normalized = normalized.slice(loaderIndex + 1)
+  while (normalized.startsWith('./')) normalized = normalized.slice(2)
+  const sourceRoots = ['/src/', '/packages/', '/apps/', '/lib/', '/components/', '/views/', '/pages/']
+  for (const sourceRoot of sourceRoots) {
+    const index = normalized.indexOf(sourceRoot)
+    if (index >= 0) return normalized.slice(index + 1)
+  }
+  return normalized
 }
 
 function totalLines(unit: CoverageUnit) {

@@ -30,7 +30,7 @@ public class IstanbulCoverageParser implements CoverageParser {
             Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
             while (fields.hasNext()) {
                 Map.Entry<String, JsonNode> entry = fields.next();
-                UniversalCoverageFile file = parseFile(firstText(text(entry.getValue().get("path")), entry.getKey()), entry.getValue());
+                UniversalCoverageFile file = parseFile(normalizeSourcePath(firstText(text(entry.getValue().get("path")), entry.getKey())), entry.getValue());
                 if (StringUtils.hasText(file.getFilePath())) {
                     files.add(file);
                 }
@@ -144,5 +144,35 @@ public class IstanbulCoverageParser implements CoverageParser {
             }
         }
         return null;
+    }
+
+    private String normalizeSourcePath(String value) {
+        if (!StringUtils.hasText(value)) {
+            return value;
+        }
+        String normalized = value.trim().replace('\\', '/');
+        int queryIndex = normalized.indexOf('?');
+        if (queryIndex >= 0) {
+            normalized = normalized.substring(0, queryIndex);
+        }
+        int loaderIndex = normalized.lastIndexOf('!');
+        if (loaderIndex >= 0 && loaderIndex < normalized.length() - 1) {
+            normalized = normalized.substring(loaderIndex + 1);
+        }
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
+        String[] sourceRoots = {"/src/", "/packages/", "/apps/", "/lib/", "/components/", "/views/", "/pages/"};
+        for (String sourceRoot : sourceRoots) {
+            int index = normalized.indexOf(sourceRoot);
+            if (index >= 0) {
+                return normalized.substring(index + 1);
+            }
+        }
+        if (normalized.startsWith("/")) {
+            int slash = normalized.lastIndexOf('/');
+            return slash >= 0 && slash < normalized.length() - 1 ? normalized.substring(slash + 1) : normalized;
+        }
+        return normalized;
     }
 }

@@ -240,12 +240,12 @@ const coverageUnitTreeCount = computed(() => {
   return units.length + units.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0)
 })
 const topRiskUnit = computed(() => testGap.value?.units?.[0])
-const topRiskName = computed(() => topRiskUnit.value?.displayName || topRiskUnit.value?.unitKey || topRiskUnit.value?.sourcePath || '-')
+const topRiskName = computed(() => normalizeSourcePath(topRiskUnit.value?.displayName || topRiskUnit.value?.unitKey || topRiskUnit.value?.sourcePath) || '-')
 const topRiskDetail = computed(() => {
   const unit = topRiskUnit.value
   if (!unit) return '暂无风险类'
   const parts = [`${unit.uncoveredLines || 0} 行未覆盖`]
-  const source = unit.sourcePath || unit.unitKey
+  const source = normalizeSourcePath(unit.sourcePath || unit.unitKey)
   if (source && source !== topRiskName.value) parts.push(source)
   return parts.join(' · ')
 })
@@ -270,6 +270,22 @@ function readableTestImpactReason(reason: string) {
   return reason
     .replace(/changedLines/g, '变更行范围')
     .replace(/footprint/g, '用例或链路关联数据')
+}
+
+function normalizeSourcePath(value?: string) {
+  if (!value) return ''
+  let normalized = value.trim().replace(/\\/g, '/')
+  const queryIndex = normalized.indexOf('?')
+  if (queryIndex >= 0) normalized = normalized.slice(0, queryIndex)
+  const loaderIndex = normalized.lastIndexOf('!')
+  if (loaderIndex >= 0 && loaderIndex < normalized.length - 1) normalized = normalized.slice(loaderIndex + 1)
+  while (normalized.startsWith('./')) normalized = normalized.slice(2)
+  const sourceRoots = ['/src/', '/packages/', '/apps/', '/lib/', '/components/', '/views/', '/pages/']
+  for (const sourceRoot of sourceRoots) {
+    const index = normalized.indexOf(sourceRoot)
+    if (index >= 0) return normalized.slice(index + 1)
+  }
+  return normalized
 }
 
 function formatRate(value?: number) {
