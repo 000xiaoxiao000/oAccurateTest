@@ -83,7 +83,7 @@
           <strong>{{ coverageUnitFunctionCount }}</strong>
         </div>
         <div>
-          <span>源码单元</span>
+          <span>源码类</span>
           <strong>{{ coverageSourceUnitCount }}</strong>
         </div>
       </section>
@@ -102,7 +102,7 @@
         <div>
           <span>未覆盖行</span>
           <strong>{{ testGap?.uncoveredLines || 0 }}</strong>
-          <small>{{ testGap?.riskyUnits || 0 }} 个风险单元</small>
+          <small>{{ testGap?.riskyUnits || 0 }} 个风险类</small>
         </div>
         <div class="risk-summary-card" :title="topRiskTitle">
           <span>最高风险</span>
@@ -130,7 +130,7 @@
           :page="currentPage + 1"
           :page-size="pageSize"
           :total="coverageUnits?.totalElements || 0"
-          item-name="源码单元"
+          item-name="源码类"
           @update:page="goPage($event - 1)"
           @update:page-size="changePageSize"
         />
@@ -243,7 +243,7 @@ const topRiskUnit = computed(() => testGap.value?.units?.[0])
 const topRiskName = computed(() => topRiskUnit.value?.displayName || topRiskUnit.value?.unitKey || topRiskUnit.value?.sourcePath || '-')
 const topRiskDetail = computed(() => {
   const unit = topRiskUnit.value
-  if (!unit) return '暂无风险单元'
+  if (!unit) return '暂无风险类'
   const parts = [`${unit.uncoveredLines || 0} 行未覆盖`]
   const source = unit.sourcePath || unit.unitKey
   if (source && source !== topRiskName.value) parts.push(source)
@@ -255,14 +255,22 @@ const testImpactSummary = computed(() => {
   if (!report) return '等待分析'
   if (report.impactedCaseCount) return `${report.impactedCaseCount} 个用例受影响`
   if (report.impactedTraceCount) return `${report.impactedTraceCount} 条链路受影响`
-  return report.reasons?.join('；') || '暂无可归因快照'
+  if (report.reasons?.some((reason) => reason.includes('缺少') || reason.includes('无法推荐'))) return '暂无可推荐用例'
+  if (report.reasons?.some((reason) => reason.includes('未提供'))) return '未提供变更行范围'
+  return '暂无受影响用例'
 })
 const testImpactTitle = computed(() => {
   const report = testImpact.value
   if (!report) return testImpactSummary.value
   const changedLineText = report.changedLineCount === undefined ? '' : `变更行 ${report.changedLineCount}`
-  return [testImpactSummary.value, changedLineText, ...(report.reasons || [])].filter(Boolean).join('\n')
+  return [testImpactSummary.value, changedLineText, ...(report.reasons || []).map(readableTestImpactReason)].filter(Boolean).join('\n')
 })
+
+function readableTestImpactReason(reason: string) {
+  return reason
+    .replace(/changedLines/g, '变更行范围')
+    .replace(/footprint/g, '用例或链路关联数据')
+}
 
 function formatRate(value?: number) {
   return value === undefined || value === null ? '-' : `${value.toFixed(1)}%`

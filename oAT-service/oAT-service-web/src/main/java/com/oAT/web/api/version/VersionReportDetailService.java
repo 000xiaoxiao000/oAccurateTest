@@ -81,7 +81,7 @@ public class VersionReportDetailService {
         if (coverageReport == null || !StringUtils.hasText(coverageReport.getId())) {
             TestImpactAnalysisReport fallback = new TestImpactAnalysisReport();
             fallback.setChangedLineCount(0);
-            fallback.getReasons().add("未找到目标版本或目标 Commit 对应的覆盖率报告，无法执行 footprint TIA");
+            fallback.getReasons().add("未找到目标版本或目标 Commit 对应的覆盖率报告，无法执行测试影响分析");
             return fallback;
         }
         TestImpactAnalysisReport impact = testImpactAnalysisService.analyze(coverageReport.getId(), buildChangedLines(report));

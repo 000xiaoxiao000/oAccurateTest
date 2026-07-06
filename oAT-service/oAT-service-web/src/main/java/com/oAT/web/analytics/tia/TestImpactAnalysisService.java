@@ -66,10 +66,10 @@ public class TestImpactAnalysisService {
         report.setImpactedCaseCount((int) impactedCases.stream().filter(item -> StringUtils.hasText(item.getCaseName())).count());
         report.setImpactedTraceCount((int) impactedCases.stream().filter(item -> StringUtils.hasText(item.getTraceId())).count());
         if (!scopedToChangedLines) {
-            report.getReasons().add("未提供 changedLines，结果基于当前报告内所有带 footprint 的已覆盖行");
+            report.getReasons().add("未提供变更行范围，已按当前报告内可关联用例或链路的已覆盖行估算");
         }
         if (footprintCount == 0) {
-            report.getReasons().add("当前报告缺少可归因 footprint，无法推荐受影响用例");
+            report.getReasons().add("当前报告缺少用例或链路关联数据，无法推荐受影响用例");
         }
         return report;
     }

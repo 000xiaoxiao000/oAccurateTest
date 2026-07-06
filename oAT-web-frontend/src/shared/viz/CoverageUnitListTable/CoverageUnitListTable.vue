@@ -4,7 +4,7 @@
       <table class="report-table coverage-unit-list-table">
         <thead>
           <tr>
-            <th>源码单元</th>
+            <th>源码类</th>
             <th>函数</th>
             <th>代码行</th>
             <th>行覆盖率</th>
@@ -33,7 +33,7 @@
         </tbody>
       </table>
     </div>
-    <div v-if="!visibleUnits.length" class="empty-card">暂无统一模型源码单元</div>
+    <div v-if="!visibleUnits.length" class="empty-card">暂无统一模型源码类</div>
   </div>
 </template>
 
