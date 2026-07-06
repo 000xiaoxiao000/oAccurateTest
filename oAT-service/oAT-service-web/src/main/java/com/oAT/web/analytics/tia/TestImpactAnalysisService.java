@@ -112,6 +112,8 @@ public class TestImpactAnalysisService {
             report.getReasons().add("当前报告缺少行级覆盖足迹，已按系统快照关联用例兜底推荐");
         } else if (footprintCount == 0) {
             report.getReasons().add("当前报告缺少用例或链路关联数据，无法推荐受影响用例");
+        } else if (impactMap.isEmpty()) {
+            report.getReasons().add("当前报告有覆盖足迹，但未记录测试用例名称，也未关联到测试用例");
         } else if (report.getImpactedCaseCount() == 0 && usecaseResolver.hasSystemSnapshots()) {
             report.getReasons().add("当前报告命中了系统快照链路，但这些快照未关联到测试用例");
         }

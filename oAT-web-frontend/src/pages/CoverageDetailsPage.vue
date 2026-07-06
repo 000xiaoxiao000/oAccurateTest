@@ -128,7 +128,7 @@
           <span>{{ coverageUnits?.totalElements ?? coverageCoreUnits.length }}</span>
         </div>
         <CoverageUnitListTable
-          :units="coverageCoreUnits"
+          :units="coverageListUnits"
           :open-code-route="buildCoverageUnitCodeRoute"
         />
         <AppPagination
@@ -148,7 +148,7 @@
           <span>{{ coverageUnitTreeCount }}</span>
         </div>
         <CoverageTreeTable
-          :units="coverageUnits?.units || []"
+          :units="coverageTreeUnits"
           :modules="coverageModules?.modules || []"
           :language="coverageLanguage"
           :open-code-route="buildCoverageUnitCodeRoute"
@@ -169,7 +169,7 @@
         <div class="tia-modal-stats">
           <div>
             <span>受影响用例</span>
-            <strong>{{ tiaImpactRows.length }}</strong>
+            <strong>{{ testImpact?.impactedCaseCount || 0 }}</strong>
           </div>
           <div>
             <span>变更行</span>
@@ -182,8 +182,16 @@
         </div>
 
         <div class="tia-modal-body">
-          <div v-if="tiaImpactRows.length" class="tia-impact-list">
-            <article v-for="row in tiaImpactRows" :key="row.key" class="tia-impact-row">
+          <div v-if="tiaImpactRows.length" class="tia-impact-toolbar">
+            <span>显示 {{ tiaVisibleStart }}-{{ tiaVisibleEnd }} / {{ tiaImpactRows.length }} 条映射</span>
+            <div class="tia-impact-pager">
+              <button type="button" :disabled="tiaSafePage <= 1" @click="tiaPage = tiaSafePage - 1">上一页</button>
+              <span>{{ tiaSafePage }} / {{ tiaTotalPages }}</span>
+              <button type="button" :disabled="tiaSafePage >= tiaTotalPages" @click="tiaPage = tiaSafePage + 1">下一页</button>
+            </div>
+          </div>
+          <div v-if="tiaPagedRows.length" class="tia-impact-list">
+            <article v-for="row in tiaPagedRows" :key="row.key" class="tia-impact-row">
               <div class="tia-case-cell">
                 <strong>{{ row.caseName }}</strong>
                 <span>{{ row.meta }}</span>
@@ -195,11 +203,12 @@
                   :key="unit.key"
                   class="tia-class-link"
                   :to="buildCodeRoute(unit.className)"
+                  :title="unit.title"
                 >
                   <span>{{ unit.displayName }}</span>
-                  <small v-if="unit.line">L{{ unit.line }}</small>
+                  <small>{{ unit.lineCount > 1 ? `${unit.lineCount} 行` : unit.firstLine ? `L${unit.firstLine}` : '类' }}</small>
                 </RouterLink>
-                <span v-if="!row.units.length" class="tia-empty-chip">暂无关联类</span>
+                <span v-if="!row.classCount" class="tia-empty-chip">暂无关联类</span>
               </div>
             </article>
           </div>
@@ -240,8 +249,10 @@ import type {
 type TiaImpactUnit = {
   key: string
   className: string
-  line?: string
   displayName: string
+  firstLine?: string
+  lineCount: number
+  title: string
 }
 
 type TiaImpactRow = {
@@ -250,6 +261,7 @@ type TiaImpactRow = {
   meta: string
   coveredChangedLines: number
   units: TiaImpactUnit[]
+  classCount: number
 }
 
 const route = useRoute()
@@ -276,6 +288,8 @@ const testGap = ref<TestGapReport | null>(null)
 const qualityGate = ref<QualityGateResult | null>(null)
 const testImpact = ref<TestImpactAnalysisReport | null>(null)
 const tiaDialogOpen = ref(false)
+const tiaPage = ref(1)
+const tiaPageSize = 20
 const loading = ref(false)
 const error = ref('')
 const filters = reactive({
@@ -304,6 +318,8 @@ const advancedFilterCount = computed(
     ].filter((value) => value !== undefined && value !== null).length,
 )
 const coverageCoreUnits = computed(() => coverageModules.value?.modules.flatMap((module) => module.units || []) || coverageUnits.value?.units || [])
+const coverageListUnits = computed(() => coverageUnits.value?.units || [])
+const coverageTreeUnits = computed(() => coverageModules.value?.modules.flatMap((module) => module.units || []) || coverageUnits.value?.units || [])
 const reportSummary = computed<CoverageReportSummary | undefined>(() => reportMetadata.value?.report)
 const reportApp = computed<CoverageAppSummary | undefined>(() => reportMetadata.value?.app)
 const coverageLanguage = computed(() => coverageUnits.value?.language || reportSummary.value?.language || reportSummary.value?.sourceType || reportApp.value?.language || 'JAVA')
@@ -317,7 +333,7 @@ const coverageSourceUnitCount = computed(() => {
   return count || '-'
 })
 const coverageUnitTreeCount = computed(() => {
-  const units = coverageCoreUnits.value
+  const units = coverageTreeUnits.value
   return units.length + units.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0)
 })
 const topRiskUnit = computed(() => testGap.value?.units?.[0])
@@ -347,17 +363,30 @@ const testImpactTitle = computed(() => {
   return [testImpactSummary.value, changedLineText, ...(report.reasons || []).map(readableTestImpactReason)].filter(Boolean).join('\n')
 })
 const tiaImpactRows = computed<TiaImpactRow[]>(() =>
-  (testImpact.value?.impactedCases || []).map((item, index) => ({
-    key: tiaCaseKey(item, index),
-    caseName: tiaCaseTitle(item),
-    meta: tiaCaseMeta(item),
-    coveredChangedLines: item.coveredChangedLines || 0,
-    units: (item.impactedUnits || []).map(parseImpactUnit),
-  })),
+  (testImpact.value?.impactedCases || []).map((item, index) => {
+    const impactedUnits = item.impactedUnits || []
+    const groupedUnits = groupImpactUnitsByClass(impactedUnits)
+    return {
+      key: tiaCaseKey(item, index),
+      caseName: tiaCaseTitle(item),
+      meta: tiaCaseMeta(item),
+      coveredChangedLines: item.coveredChangedLines || 0,
+      units: groupedUnits,
+      classCount: groupedUnits.length,
+    }
+  }),
+)
+const tiaTotalPages = computed(() => Math.max(1, Math.ceil(tiaImpactRows.value.length / tiaPageSize)))
+const tiaSafePage = computed(() => Math.min(Math.max(1, tiaPage.value), tiaTotalPages.value))
+const tiaVisibleStart = computed(() => tiaImpactRows.value.length ? (tiaSafePage.value - 1) * tiaPageSize + 1 : 0)
+const tiaVisibleEnd = computed(() => Math.min(tiaImpactRows.value.length, tiaSafePage.value * tiaPageSize))
+const tiaPagedRows = computed(() =>
+  tiaImpactRows.value.slice(tiaVisibleStart.value - 1, tiaVisibleEnd.value),
 )
 const tiaReasonLines = computed(() => (testImpact.value?.reasons || []).map(readableTestImpactReason))
 
 function openTiaDialog() {
+  tiaPage.value = 1
   tiaDialogOpen.value = true
 }
 
@@ -370,16 +399,46 @@ function tiaCaseKey(item: TestImpactCase, index: number) {
 }
 
 function tiaCaseTitle(item: TestImpactCase) {
-  return item.caseName || item.traceId || item.buildId || '未命名用例'
+  if (item.usecaseId && item.caseName) return item.caseName
+  if (item.caseName) return item.caseName
+  return '未关联用例'
 }
 
 function tiaCaseMeta(item: TestImpactCase) {
   const parts = [
+    item.usecaseId ? `用例 ${item.usecaseId}` : '',
+    !item.usecaseId && item.caseName ? `执行 ${item.caseName}` : '',
     item.testStage ? `阶段 ${item.testStage}` : '',
     item.buildId ? `构建 ${item.buildId}` : '',
     item.traceId ? `Trace ${item.traceId}` : '',
   ].filter(Boolean)
   return parts.join(' · ') || '未记录执行上下文'
+}
+
+function groupImpactUnitsByClass(rawUnits: string[]): TiaImpactUnit[] {
+  const groups = new Map<string, { className: string; displayName: string; lines: string[] }>()
+  for (const raw of rawUnits) {
+    const parsed = parseImpactUnit(raw)
+    const key = parsed.className || parsed.displayName
+    if (!key) continue
+    const group = groups.get(key) || { className: parsed.className, displayName: parsed.displayName, lines: [] }
+    if (parsed.firstLine && !group.lines.includes(parsed.firstLine)) group.lines.push(parsed.firstLine)
+    groups.set(key, group)
+  }
+  return Array.from(groups.values()).map((group) => {
+    const sortedLines = group.lines.sort((left, right) => Number(left) - Number(right))
+    const titleLines = sortedLines.length
+      ? `行号：${sortedLines.slice(0, 80).join(', ')}${sortedLines.length > 80 ? ` ... +${sortedLines.length - 80}` : ''}`
+      : '未记录具体行号'
+    return {
+      key: `${group.className}:${sortedLines.join(',')}`,
+      className: group.className,
+      displayName: group.displayName,
+      firstLine: sortedLines[0],
+      lineCount: sortedLines.length,
+      title: `${group.displayName}\n${titleLines}`,
+    }
+  })
 }
 
 function parseImpactUnit(raw: string): TiaImpactUnit {
@@ -390,8 +449,10 @@ function parseImpactUnit(raw: string): TiaImpactUnit {
   return {
     key: value || `${className}:${line || 'unknown'}`,
     className,
-    line,
     displayName: normalizeSourcePath(className) || className || '-',
+    firstLine: line,
+    lineCount: line ? 1 : 0,
+    title: value,
   }
 }
 
@@ -548,6 +609,7 @@ async function load() {
     testGap.value = gap
     qualityGate.value = gate
     testImpact.value = impact
+    tiaPage.value = 1
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载覆盖率明细失败'
   } finally {
@@ -562,6 +624,12 @@ watch(
     load()
   },
 )
+
+watch(tiaTotalPages, () => {
+  if (tiaPage.value > tiaTotalPages.value) {
+    tiaPage.value = tiaTotalPages.value
+  }
+})
 
 onMounted(() => {
   syncFiltersFromRoute()
@@ -975,6 +1043,51 @@ onMounted(() => {
   padding: 14px 20px 20px;
 }
 
+.tia-impact-toolbar {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: -14px -20px 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.tia-impact-toolbar > span,
+.tia-impact-pager span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tia-impact-pager {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tia-impact-pager button {
+  min-height: 30px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(15, 118, 110, 0.06);
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tia-impact-pager button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .tia-impact-list {
   display: grid;
   gap: 10px;
@@ -1140,9 +1253,15 @@ onMounted(() => {
 
   .tia-modal-head,
   .tia-modal-stats,
-  .tia-modal-body {
+  .tia-modal-body,
+  .tia-impact-toolbar {
     padding-right: 14px;
     padding-left: 14px;
+  }
+
+  .tia-impact-toolbar {
+    margin-right: -14px;
+    margin-left: -14px;
   }
 
   .tia-modal-stats {
