@@ -11,8 +11,8 @@
       </div>
     </header>
 
-    <div v-if="html" ref="htmlRef" class="source-html" v-html="html"></div>
-    <div v-else ref="tableRef" class="source-table" role="table" aria-label="源码覆盖率">
+    <div v-if="html" ref="htmlRef" class="source-html" v-html="html" @scroll="handleSourceScroll"></div>
+    <div v-else ref="tableRef" class="source-table" role="table" aria-label="源码覆盖率" @scroll="handleSourceScroll">
       <div
         v-for="line in sourceLines"
         :key="line.line"
@@ -27,7 +27,12 @@
         <span v-if="line.cases?.length" class="line-cases" role="cell" :title="line.cases.join('\\n')">
           {{ line.cases.length }} cases
         </span>
-        <span v-if="branchesByLine[line.line]?.length" class="line-branches" role="cell">
+        <span
+          v-if="branchesByLine[line.line]?.length"
+          class="line-branches"
+          :class="branchTone(line.line)"
+          role="cell"
+        >
           {{ coveredBranchesByLine(line.line) }}/{{ branchesByLine[line.line].length }} 分支
         </span>
       </div>
@@ -36,12 +41,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import type { SourceCoverageLine, SourceCoveragePayload } from './types'
 
 const props = defineProps<{
   payload?: SourceCoveragePayload
   html?: string
+}>()
+const emit = defineEmits<{
+  visibleLineChange: [line: number]
 }>()
 
 const htmlRef = ref<HTMLElement | null>(null)
@@ -49,9 +57,12 @@ const rootRef = ref<HTMLElement | null>(null)
 const tableRef = ref<HTMLElement | null>(null)
 const payload = computed<SourceCoveragePayload>(() => props.payload || { lines: [] })
 const sourceLines = computed(() => payload.value.lines || [])
+let scrollFrame = 0
+let lastVisibleLine = 0
 
 defineExpose({
   htmlRef,
+  tableRef,
   scrollToTop,
   scrollToLine,
   element: rootRef,
@@ -79,10 +90,53 @@ function coveredBranchesByLine(line: number) {
   return (branchesByLine.value[line] || []).filter((branch) => Number(branch.hits || 0) > 0).length
 }
 
+function branchTone(line: number) {
+  const total = branchesByLine.value[line]?.length || 0
+  const covered = coveredBranchesByLine(line)
+  if (!total || covered <= 0) return 'branch-none'
+  if (covered < total) return 'branch-partial'
+  return 'branch-full'
+}
+
 function lineTone(line: SourceCoverageLine) {
   if (Number(line.hits || 0) > 0) return 'covered'
   if (line.text.trim()) return 'uncovered'
   return 'neutral'
+}
+
+function handleSourceScroll(event: Event) {
+  const container = event.currentTarget as HTMLElement | null
+  if (!container || scrollFrame) {
+    return
+  }
+  scrollFrame = window.requestAnimationFrame(() => {
+    scrollFrame = 0
+    const nextLine = findVisibleLine(container)
+    if (nextLine && nextLine !== lastVisibleLine) {
+      lastVisibleLine = nextLine
+      emit('visibleLineChange', nextLine)
+    }
+  })
+}
+
+function findVisibleLine(container: HTMLElement) {
+  const containerRect = container.getBoundingClientRect()
+  const targetTop = containerRect.top + 40
+  let fallback = 0
+  for (const row of Array.from(container.querySelectorAll<HTMLElement>('[data-source-line]'))) {
+    const rect = row.getBoundingClientRect()
+    const line = Number(row.dataset.sourceLine || 0)
+    if (!fallback && rect.bottom >= containerRect.top) {
+      fallback = line
+    }
+    if (rect.top <= targetTop && rect.bottom >= targetTop) {
+      return line
+    }
+    if (rect.top > targetTop) {
+      return fallback || line
+    }
+  }
+  return fallback
 }
 
 function scrollToTop() {
@@ -113,6 +167,12 @@ function scrollToLine(lineNumber?: number) {
   container.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   return true
 }
+
+onBeforeUnmount(() => {
+  if (scrollFrame) {
+    window.cancelAnimationFrame(scrollFrame)
+  }
+})
 </script>
 
 <style scoped>
@@ -184,15 +244,19 @@ function scrollToLine(lineNumber?: number) {
   width: max-content;
   min-width: 100%;
   min-height: 28px;
-  border-bottom: 1px solid rgba(15, 23, 42, 0.04);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
 .source-row.covered {
-  background: rgba(15, 118, 110, 0.06);
+  background: #e6f6f1;
 }
 
 .source-row.uncovered {
-  background: rgba(185, 28, 28, 0.05);
+  background: #fdebea;
+}
+
+.source-row.neutral {
+  background: #f8fafc;
 }
 
 .source-row.changed {
@@ -220,7 +284,8 @@ function scrollToLine(lineNumber?: number) {
 .line-number,
 .line-hits {
   justify-content: flex-end;
-  border-right: 1px solid rgba(15, 23, 42, 0.06);
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.42);
 }
 
 .line-code {
@@ -232,8 +297,26 @@ function scrollToLine(lineNumber?: number) {
 
 .line-branches {
   max-width: 168px;
+  margin: 4px 8px 4px 0;
+  border-radius: 999px;
+  font-weight: 900;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.line-branches.branch-full {
+  background: rgba(22, 163, 74, 0.16);
+  color: #166534;
+}
+
+.line-branches.branch-partial {
+  background: rgba(217, 119, 6, 0.18);
+  color: #92400e;
+}
+
+.line-branches.branch-none {
+  background: rgba(220, 38, 38, 0.16);
+  color: #991b1b;
 }
 
 @media (max-width: 760px) {
