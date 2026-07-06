@@ -255,6 +255,7 @@ export interface QualityGateResult {
 }
 
 export interface TestImpactCase {
+  usecaseId?: string
   caseName?: string
   testStage?: string
   buildId?: string

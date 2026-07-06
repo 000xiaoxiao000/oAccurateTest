@@ -4,23 +4,44 @@ import com.oAT.web.coveragecore.model.CoverageFootprint;
 import com.oAT.web.coveragecore.model.CoverageLine;
 import com.oAT.web.coveragecore.model.CoverageUnit;
 import com.oAT.web.coveragecore.query.CoverageCoreQueryService;
+import com.oAT.web.esDao.CaseCenterRepository;
+import com.oAT.web.esDao.SystemSnapshotRepository;
+import com.oAT.web.esDao.entity.CaseCenterIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
+import com.oAT.web.esDao.entity.SystemSnapshot;
+import com.oAT.web.esDao.entity.Usecase;
+import com.oAT.web.service.AppService;
+import com.oAT.web.service.entity.AppVo;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class TestImpactAnalysisService {
     private final CoverageCoreQueryService coverageCoreQueryService;
+    private final SystemSnapshotRepository systemSnapshotRepository;
+    private final CaseCenterRepository caseCenterRepository;
+    private final AppService appService;
 
-    public TestImpactAnalysisService(CoverageCoreQueryService coverageCoreQueryService) {
+    public TestImpactAnalysisService(CoverageCoreQueryService coverageCoreQueryService,
+                                     SystemSnapshotRepository systemSnapshotRepository,
+                                     CaseCenterRepository caseCenterRepository,
+                                     AppService appService) {
         this.coverageCoreQueryService = coverageCoreQueryService;
+        this.systemSnapshotRepository = systemSnapshotRepository;
+        this.caseCenterRepository = caseCenterRepository;
+        this.appService = appService;
     }
 
     public TestImpactAnalysisReport analyze(String reportId, String changedLines) {
@@ -34,6 +55,7 @@ public class TestImpactAnalysisService {
         report.setLanguage(reportIndex.getLanguage() == null ? reportIndex.getSourceType() : reportIndex.getLanguage());
         report.setChangedLineCount(changedLineMap.values().stream().mapToInt(Set::size).sum());
 
+        SnapshotUsecaseResolver usecaseResolver = new SnapshotUsecaseResolver(reportIndex);
         Map<String, MutableImpactCase> impactMap = new LinkedHashMap<>();
         int footprintCount = 0;
         for (CoverageUnit unit : units) {
@@ -54,6 +76,13 @@ public class TestImpactAnalysisService {
                     MutableImpactCase impacted = impactMap.computeIfAbsent(identity, ignored -> new MutableImpactCase(footprint));
                     impacted.coveredChangedLines++;
                     impacted.impactedUnits.add(unitKey + ":" + line.getLine());
+                    for (UsecaseImpact usecase : usecaseResolver.findUsecases(footprint.getTraceId())) {
+                        String usecaseIdentity = "usecase:" + usecase.id();
+                        MutableImpactCase usecaseImpact = impactMap.computeIfAbsent(usecaseIdentity,
+                                ignored -> new MutableImpactCase(footprint, usecase));
+                        usecaseImpact.coveredChangedLines++;
+                        usecaseImpact.impactedUnits.add(unitKey + ":" + line.getLine());
+                    }
                 }
             }
         }
@@ -70,6 +99,8 @@ public class TestImpactAnalysisService {
         }
         if (footprintCount == 0) {
             report.getReasons().add("当前报告缺少用例或链路关联数据，无法推荐受影响用例");
+        } else if (report.getImpactedCaseCount() == 0 && usecaseResolver.hasSystemSnapshots()) {
+            report.getReasons().add("当前报告命中了系统快照链路，但这些快照未关联到测试用例");
         }
         return report;
     }
@@ -154,16 +185,23 @@ public class TestImpactAnalysisService {
 
     private static class MutableImpactCase {
         private final CoverageFootprint footprint;
+        private final UsecaseImpact usecase;
         private int coveredChangedLines;
         private final Set<String> impactedUnits = new LinkedHashSet<>();
 
         private MutableImpactCase(CoverageFootprint footprint) {
+            this(footprint, null);
+        }
+
+        private MutableImpactCase(CoverageFootprint footprint, UsecaseImpact usecase) {
             this.footprint = footprint;
+            this.usecase = usecase;
         }
 
         private TestImpactCase toImpactCase() {
             TestImpactCase item = new TestImpactCase();
-            item.setCaseName(footprint.getCaseName());
+            item.setUsecaseId(usecase == null ? null : usecase.id());
+            item.setCaseName(usecase == null ? footprint.getCaseName() : usecase.title());
             item.setTestStage(footprint.getTestStage());
             item.setBuildId(footprint.getBuildId());
             item.setTraceId(footprint.getTraceId());
@@ -172,4 +210,113 @@ public class TestImpactAnalysisService {
             return item;
         }
     }
+
+    private class SnapshotUsecaseResolver {
+        private final String projectId;
+        private final Map<String, List<SystemSnapshot>> snapshotsByTraceId = new HashMap<>();
+        private final Map<String, List<UsecaseImpact>> usecasesByTraceId = new HashMap<>();
+        private boolean loadedSnapshots;
+
+        private SnapshotUsecaseResolver(CoverageReportIndex reportIndex) {
+            this.projectId = resolveProjectId(reportIndex);
+            loadReportSnapshots(reportIndex);
+        }
+
+        private List<UsecaseImpact> findUsecases(String traceId) {
+            if (!StringUtils.hasText(traceId) || !StringUtils.hasText(projectId)) {
+                return Collections.emptyList();
+            }
+            return usecasesByTraceId.computeIfAbsent(traceId, this::loadUsecasesByTraceId);
+        }
+
+        private boolean hasSystemSnapshots() {
+            return loadedSnapshots || !snapshotsByTraceId.isEmpty();
+        }
+
+        private List<UsecaseImpact> loadUsecasesByTraceId(String traceId) {
+            List<SystemSnapshot> snapshots = snapshotsByTraceId.get(traceId);
+            if ((snapshots == null || snapshots.isEmpty()) && StringUtils.hasText(projectId)) {
+                snapshots = systemSnapshotRepository.findByProjectIdAndTraceId(projectId, traceId);
+                addSnapshots(snapshots);
+            }
+            if (snapshots == null || snapshots.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            LinkedHashMap<String, UsecaseImpact> result = new LinkedHashMap<>();
+            for (SystemSnapshot snapshot : snapshots) {
+                if (snapshot == null || !StringUtils.hasText(snapshot.getId())) {
+                    continue;
+                }
+                List<CaseCenterIndex> indexes = caseCenterRepository
+                        .findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshot.getId());
+                for (CaseCenterIndex index : indexes) {
+                    Usecase usecase = index == null ? null : index.getUsecase();
+                    if (usecase == null || !StringUtils.hasText(index.getId())) {
+                        continue;
+                    }
+                    String title = firstText(usecase.getTitle(), index.getId());
+                    result.putIfAbsent(index.getId(), new UsecaseImpact(index.getId(), title));
+                }
+            }
+            return new ArrayList<>(result.values());
+        }
+
+        private void loadReportSnapshots(CoverageReportIndex reportIndex) {
+            List<String> snapshotIds = parseSnapshotIds(reportIndex == null ? null : reportIndex.getSnapshotIds());
+            if (snapshotIds.isEmpty()) {
+                return;
+            }
+            addSnapshots(systemSnapshotRepository.findAllById(snapshotIds));
+        }
+
+        private void addSnapshots(List<SystemSnapshot> snapshots) {
+            if (snapshots == null || snapshots.isEmpty()) {
+                return;
+            }
+            loadedSnapshots = true;
+            for (SystemSnapshot snapshot : snapshots) {
+                if (snapshot == null || !StringUtils.hasText(snapshot.getTraceId())) {
+                    continue;
+                }
+                snapshotsByTraceId.computeIfAbsent(snapshot.getTraceId(), ignored -> new ArrayList<>()).add(snapshot);
+            }
+        }
+
+        private String resolveProjectId(CoverageReportIndex reportIndex) {
+            List<String> snapshotIds = parseSnapshotIds(reportIndex == null ? null : reportIndex.getSnapshotIds());
+            if (!snapshotIds.isEmpty()) {
+                Optional<SystemSnapshot> snapshot = systemSnapshotRepository.findAllById(snapshotIds).stream()
+                        .filter(item -> item != null && StringUtils.hasText(item.getProjectId()))
+                        .findFirst();
+                if (snapshot.isPresent()) {
+                    return snapshot.get().getProjectId();
+                }
+            }
+            if (reportIndex != null && StringUtils.hasText(reportIndex.getAppId())) {
+                try {
+                    AppVo app = appService.getApp(reportIndex.getAppId());
+                    if (app != null && StringUtils.hasText(app.getCreateProjectId())) {
+                        return app.getCreateProjectId();
+                    }
+                } catch (RuntimeException ignored) {
+                    // TIA should still work for coverage footprints that already carry case names.
+                }
+            }
+            return null;
+        }
+
+        private List<String> parseSnapshotIds(String raw) {
+            if (!StringUtils.hasText(raw)) {
+                return Collections.emptyList();
+            }
+            return java.util.Arrays.stream(raw.split(","))
+                    .map(String::trim)
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .collect(Collectors.toList());
+        }
+    }
+
+    private record UsecaseImpact(String id, String title) {}
 }

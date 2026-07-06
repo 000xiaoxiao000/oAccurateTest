@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class TestImpactCase implements Serializable {
+    private String usecaseId;
     private String caseName;
     private String testStage;
     private String buildId;
@@ -12,6 +13,8 @@ public class TestImpactCase implements Serializable {
     private int coveredChangedLines;
     private List<String> impactedUnits = new ArrayList<>();
 
+    public String getUsecaseId() { return usecaseId; }
+    public void setUsecaseId(String usecaseId) { this.usecaseId = usecaseId; }
     public String getCaseName() { return caseName; }
     public void setCaseName(String caseName) { this.caseName = caseName; }
     public String getTestStage() { return testStage; }

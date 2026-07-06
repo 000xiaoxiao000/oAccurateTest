@@ -4,7 +4,7 @@
       <div>
         <div class="eyebrow">Quality Gate CI</div>
         <h1>质量门禁 CI 集成</h1>
-        <p class="subtext">校验覆盖率质量门禁，并生成可复制到流水线的 GitHub Actions、Jenkins 和 curl 调用。</p>
+        <p class="subtext">校验覆盖率质量门禁，并生成可复制到流水线的 Git、Jenkins 和 curl 调用。</p>
       </div>
       <div class="header-actions">
         <RouterLink class="ghost-button" :to="`/p/${projectId}/coverage`">覆盖率中心</RouterLink>
@@ -117,7 +117,7 @@ import type { QualityGateResult } from '@/entities/coverage/model'
 import { useProjectStore } from '@/stores/project'
 
 type Mode = 'app' | 'report'
-type SnippetTab = 'curl' | 'github' | 'jenkins'
+type SnippetTab = 'curl' | 'git' | 'jenkins'
 
 const route = useRoute()
 const projectStore = useProjectStore()
@@ -125,7 +125,7 @@ const projectId = computed(() => String(route.params.projectId || ''))
 const context = computed(() => projectStore.contextByProjectId[projectId.value])
 const apps = computed<AppSummary[]>(() => context.value?.apps || [])
 const mode = ref<Mode>(String(route.query.reportId || '') ? 'report' : 'app')
-const snippetTab = ref<SnippetTab>('github')
+const snippetTab = ref<SnippetTab>('git')
 const checking = ref(false)
 const error = ref('')
 const gateResult = ref<QualityGateResult | null>(null)
@@ -141,7 +141,7 @@ const form = reactive({
 })
 
 const snippetTabs: Array<{ key: SnippetTab; label: string }> = [
-  { key: 'github', label: 'GitHub Actions' },
+  { key: 'git', label: 'Git' },
   { key: 'jenkins', label: 'Jenkins' },
   { key: 'curl', label: 'curl' },
 ]
@@ -153,17 +153,18 @@ const endpointPath = computed(() => mode.value === 'report'
   : `/api/v2/coverage/apps/${encodeURIComponent(form.appId || '${APP_ID}')}/quality-gate`)
 const endpointUrl = computed(() => `${baseUrl.value}${endpointPath.value}?${ciQuery.value}`)
 const ciQuery = computed(() => {
-  const query = new URLSearchParams({ projectId: projectId.value || '${PROJECT_ID}', minLineCoverageRate: String(form.minLineCoverageRate || 80) })
+  const params: Array<[string, string]> = [
+    ['projectId', projectId.value || '${PROJECT_ID}'],
+    ['minLineCoverageRate', String(form.minLineCoverageRate || 80)],
+  ]
   if (mode.value === 'app') {
-    if (form.versionNumber) query.set('versionNumber', form.versionNumber)
-    else query.set('versionNumber', '${VERSION_NUMBER}')
-    if (form.commitId) query.set('commitId', form.commitId)
-    else query.set('commitId', '${COMMIT_ID}')
-    if (form.buildId) query.set('buildId', form.buildId)
-    if (form.testStage) query.set('testStage', form.testStage)
-    if (form.reportType !== undefined) query.set('reportType', String(form.reportType))
+    params.push(['versionNumber', form.versionNumber || '${VERSION_NUMBER}'])
+    params.push(['commitId', form.commitId || '${COMMIT_ID}'])
+    if (form.buildId) params.push(['buildId', form.buildId])
+    if (form.testStage) params.push(['testStage', form.testStage])
+    if (form.reportType !== undefined) params.push(['reportType', String(form.reportType)])
   }
-  return query.toString()
+  return params.map(([key, value]) => `${encodeURIComponent(key)}=${encodeCiQueryValue(value)}`).join('&')
 })
 
 const curlSnippet = computed(() => [
@@ -175,19 +176,15 @@ const curlSnippet = computed(() => [
   'test "$passed" = "true"',
 ].join('\n'))
 
-const githubSnippet = computed(() => `jobs:
-  oat-quality-gate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check oAT quality gate
-        env:
-          OAT_COOKIE: \${{ secrets.OAT_COOKIE }}
-          PROJECT_ID: ${projectId.value || '${{ vars.OAT_PROJECT_ID }}'}
-          APP_ID: ${form.appId || '${{ vars.OAT_APP_ID }}'}
-          VERSION_NUMBER: \${{ github.ref_name }}
-          COMMIT_ID: \${{ github.sha }}
-        run: |
-${indent(curlSnippet.value, 10)}`)
+const gitSnippet = computed(() => `#!/usr/bin/env sh
+set -e
+
+export PROJECT_ID="${projectId.value || '${OAT_PROJECT_ID}'}"
+export APP_ID="${form.appId || '${OAT_APP_ID}'}"
+export VERSION_NUMBER="\${VERSION_NUMBER:-$(git rev-parse --abbrev-ref HEAD)}"
+export COMMIT_ID="\${COMMIT_ID:-$(git rev-parse HEAD)}"
+
+${curlSnippet.value}`)
 
 const jenkinsSnippet = computed(() => `stage('oAT Quality Gate') {
   steps {
@@ -202,7 +199,7 @@ ${indent(curlSnippet.value, 8)}
 const activeSnippet = computed(() => {
   if (snippetTab.value === 'curl') return curlSnippet.value
   if (snippetTab.value === 'jenkins') return jenkinsSnippet.value
-  return githubSnippet.value
+  return gitSnippet.value
 })
 
 watch(apps, (items) => {
@@ -257,6 +254,10 @@ function formatRate(value?: number) {
 
 function emptyToUndefined(value: string) {
   return value.trim() || undefined
+}
+
+function encodeCiQueryValue(value: string) {
+  return /^\$\{[A-Z0-9_]+\}$/.test(value) ? value : encodeURIComponent(value)
 }
 
 function indent(value: string, spaces: number) {
