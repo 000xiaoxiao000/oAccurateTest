@@ -109,11 +109,17 @@
           <strong>{{ topRiskName }}</strong>
           <small>{{ topRiskDetail }}</small>
         </div>
-        <div class="tia-summary-card" :title="testImpactTitle">
+        <button
+          type="button"
+          class="tia-summary-card tia-summary-button"
+          :title="testImpactTitle"
+          aria-label="查看 TIA 选测明细"
+          @click="openTiaDialog"
+        >
           <span>TIA 选测</span>
           <strong>{{ testImpact?.impactedCaseCount || testImpact?.impactedTraceCount || 0 }}</strong>
           <small>{{ testImpactSummary }}</small>
-        </div>
+        </button>
       </section>
 
       <section v-if="viewType === 'list'" class="panel">
@@ -149,6 +155,64 @@
         />
       </section>
     </template>
+
+    <div v-if="tiaDialogOpen" class="tia-modal-backdrop" @click.self="closeTiaDialog">
+      <section class="tia-modal" role="dialog" aria-modal="true" aria-labelledby="tia-modal-title">
+        <header class="tia-modal-head">
+          <div>
+            <span>TIA 选测</span>
+            <h2 id="tia-modal-title">用例与类映射</h2>
+          </div>
+          <button type="button" class="modal-close" aria-label="关闭 TIA 选测明细" @click="closeTiaDialog">关闭</button>
+        </header>
+
+        <div class="tia-modal-stats">
+          <div>
+            <span>受影响用例</span>
+            <strong>{{ tiaImpactRows.length }}</strong>
+          </div>
+          <div>
+            <span>变更行</span>
+            <strong>{{ testImpact?.changedLineCount ?? '-' }}</strong>
+          </div>
+          <div>
+            <span>链路</span>
+            <strong>{{ testImpact?.impactedTraceCount ?? 0 }}</strong>
+          </div>
+        </div>
+
+        <div class="tia-modal-body">
+          <div v-if="tiaImpactRows.length" class="tia-impact-list">
+            <article v-for="row in tiaImpactRows" :key="row.key" class="tia-impact-row">
+              <div class="tia-case-cell">
+                <strong>{{ row.caseName }}</strong>
+                <span>{{ row.meta }}</span>
+                <em>{{ row.coveredChangedLines }} 行变更已覆盖</em>
+              </div>
+              <div class="tia-class-list">
+                <RouterLink
+                  v-for="unit in row.units"
+                  :key="unit.key"
+                  class="tia-class-link"
+                  :to="buildCodeRoute(unit.className)"
+                >
+                  <span>{{ unit.displayName }}</span>
+                  <small v-if="unit.line">L{{ unit.line }}</small>
+                </RouterLink>
+                <span v-if="!row.units.length" class="tia-empty-chip">暂无关联类</span>
+              </div>
+            </article>
+          </div>
+          <div v-else class="tia-empty-state">
+            {{ testImpactSummary }}
+          </div>
+
+          <div v-if="tiaReasonLines.length" class="tia-reason-list">
+            <span v-for="reason in tiaReasonLines" :key="reason">{{ reason }}</span>
+          </div>
+        </div>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -169,8 +233,24 @@ import type {
   CoverageUnitsPayload,
   QualityGateResult,
   TestGapReport,
+  TestImpactCase,
   TestImpactAnalysisReport,
 } from '@/entities/coverage/model'
+
+type TiaImpactUnit = {
+  key: string
+  className: string
+  line?: string
+  displayName: string
+}
+
+type TiaImpactRow = {
+  key: string
+  caseName: string
+  meta: string
+  coveredChangedLines: number
+  units: TiaImpactUnit[]
+}
 
 const route = useRoute()
 const router = useRouter()
@@ -195,6 +275,7 @@ const coverageModules = ref<CoverageModulesPayload | null>(null)
 const testGap = ref<TestGapReport | null>(null)
 const qualityGate = ref<QualityGateResult | null>(null)
 const testImpact = ref<TestImpactAnalysisReport | null>(null)
+const tiaDialogOpen = ref(false)
 const loading = ref(false)
 const error = ref('')
 const filters = reactive({
@@ -265,6 +346,54 @@ const testImpactTitle = computed(() => {
   const changedLineText = report.changedLineCount === undefined ? '' : `变更行 ${report.changedLineCount}`
   return [testImpactSummary.value, changedLineText, ...(report.reasons || []).map(readableTestImpactReason)].filter(Boolean).join('\n')
 })
+const tiaImpactRows = computed<TiaImpactRow[]>(() =>
+  (testImpact.value?.impactedCases || []).map((item, index) => ({
+    key: tiaCaseKey(item, index),
+    caseName: tiaCaseTitle(item),
+    meta: tiaCaseMeta(item),
+    coveredChangedLines: item.coveredChangedLines || 0,
+    units: (item.impactedUnits || []).map(parseImpactUnit),
+  })),
+)
+const tiaReasonLines = computed(() => (testImpact.value?.reasons || []).map(readableTestImpactReason))
+
+function openTiaDialog() {
+  tiaDialogOpen.value = true
+}
+
+function closeTiaDialog() {
+  tiaDialogOpen.value = false
+}
+
+function tiaCaseKey(item: TestImpactCase, index: number) {
+  return [item.caseName, item.traceId, item.buildId, item.testStage, index].filter(Boolean).join(':')
+}
+
+function tiaCaseTitle(item: TestImpactCase) {
+  return item.caseName || item.traceId || item.buildId || '未命名用例'
+}
+
+function tiaCaseMeta(item: TestImpactCase) {
+  const parts = [
+    item.testStage ? `阶段 ${item.testStage}` : '',
+    item.buildId ? `构建 ${item.buildId}` : '',
+    item.traceId ? `Trace ${item.traceId}` : '',
+  ].filter(Boolean)
+  return parts.join(' · ') || '未记录执行上下文'
+}
+
+function parseImpactUnit(raw: string): TiaImpactUnit {
+  const value = String(raw || '').trim()
+  const match = value.match(/^(.*):(\d+)$/)
+  const className = (match?.[1] || value).trim()
+  const line = match?.[2]
+  return {
+    key: value || `${className}:${line || 'unknown'}`,
+    className,
+    line,
+    displayName: normalizeSourcePath(className) || className || '-',
+  }
+}
 
 function readableTestImpactReason(reason: string) {
   return reason
@@ -667,7 +796,8 @@ onMounted(() => {
 }
 
 .core-summary div,
-.analytics-summary div {
+.analytics-summary div,
+.analytics-summary .tia-summary-card {
   display: grid;
   gap: 4px;
   padding: 12px;
@@ -705,6 +835,30 @@ onMounted(() => {
   align-content: start;
 }
 
+.tia-summary-button {
+  width: 100%;
+  min-height: 94px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    transform 0.16s ease;
+}
+
+.tia-summary-button:hover,
+.tia-summary-button:focus-visible {
+  border-color: rgba(15, 118, 110, 0.34);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.tia-summary-button:focus-visible {
+  outline: 3px solid rgba(20, 184, 166, 0.24);
+  outline-offset: 2px;
+}
+
 .analytics-summary .gate-card.passed {
   border-color: rgba(15, 118, 110, 0.24);
   background: rgba(15, 118, 110, 0.08);
@@ -723,6 +877,218 @@ onMounted(() => {
   color: #b91c1c;
 }
 
+.tia-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.tia-modal {
+  width: min(960px, 100%);
+  max-height: min(82vh, 760px);
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+}
+
+.tia-modal-head,
+.tia-modal-stats,
+.tia-impact-row,
+.tia-class-link,
+.tia-reason-list {
+  display: flex;
+}
+
+.tia-modal-head {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.tia-modal-head span,
+.tia-modal-stats span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tia-modal-head h2 {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.modal-close {
+  flex-shrink: 0;
+  min-height: 34px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(248, 250, 252, 0.96);
+  color: #0f172a;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.modal-close:hover,
+.modal-close:focus-visible {
+  border-color: rgba(15, 118, 110, 0.28);
+  color: #0f766e;
+}
+
+.tia-modal-stats {
+  gap: 10px;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.tia-modal-stats div {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tia-modal-stats strong {
+  color: #0f172a;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+
+.tia-modal-body {
+  max-height: calc(min(82vh, 760px) - 162px);
+  overflow: auto;
+  padding: 14px 20px 20px;
+}
+
+.tia-impact-list {
+  display: grid;
+  gap: 10px;
+}
+
+.tia-impact-row {
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.tia-impact-row:last-child {
+  border-bottom: none;
+}
+
+.tia-case-cell {
+  display: grid;
+  flex: 0 0 280px;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tia-case-cell strong {
+  color: #0f172a;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.tia-case-cell span,
+.tia-case-cell em {
+  color: #64748b;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.tia-class-list {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tia-class-link,
+.tia-empty-chip {
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.tia-class-link {
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  text-decoration: none;
+}
+
+.tia-class-link:hover,
+.tia-class-link:focus-visible {
+  border-color: rgba(15, 118, 110, 0.34);
+  background: rgba(15, 118, 110, 0.12);
+}
+
+.tia-class-link span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tia-class-link small {
+  flex-shrink: 0;
+  color: #0f766e;
+  font-size: 11px;
+}
+
+.tia-empty-chip {
+  display: inline-flex;
+  background: rgba(148, 163, 184, 0.12);
+  color: #64748b;
+}
+
+.tia-empty-state {
+  padding: 24px 0;
+  color: #64748b;
+  font-weight: 800;
+  text-align: center;
+}
+
+.tia-reason-list {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.tia-reason-list span {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 @media (max-width: 980px) {
   .quick-filters,
   .filter-actions {
@@ -736,6 +1102,14 @@ onMounted(() => {
   .core-summary,
   .analytics-summary {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  .tia-impact-row {
+    display: grid;
+  }
+
+  .tia-case-cell {
+    flex-basis: auto;
   }
 }
 
@@ -753,6 +1127,31 @@ onMounted(() => {
   .core-summary,
   .analytics-summary {
     grid-template-columns: 1fr;
+  }
+
+  .tia-modal-backdrop {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .tia-modal {
+    max-height: 100%;
+  }
+
+  .tia-modal-head,
+  .tia-modal-stats,
+  .tia-modal-body {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .tia-modal-stats {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .tia-modal-body {
+    max-height: calc(100vh - 210px);
   }
 }
 </style>

@@ -137,6 +137,11 @@ const router = createRouter({
           component: () => import('@/pages/CoverageHubPage.vue'),
         },
         {
+          path: 'p/:projectId/quality-gate-ci',
+          name: 'quality-gate-ci',
+          component: () => import('@/pages/QualityGateCiPage.vue'),
+        },
+        {
           path: 'p/:projectId/apps/:appId/coverage',
           name: 'coverage-overview',
           component: () => import('@/pages/CoverageOverviewPage.vue'),

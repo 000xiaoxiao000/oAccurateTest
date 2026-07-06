@@ -15,6 +15,7 @@
               <RouterLink :to="`/p/${projectId}/my-snapshots`" @click="closeMenus">我的快照</RouterLink>
               <RouterLink :to="systemSnapshotRoute" @click="closeMenus">系统快照</RouterLink>
               <RouterLink :to="`/p/${projectId}/map/home`" @click="closeMenus">链路地图</RouterLink>
+              <RouterLink :to="`/p/${projectId}/quality-gate-ci`" @click="closeMenus">质量门禁 CI</RouterLink>
             </div>
           </div>
           <div v-if="projectId" class="nav-dropdown app-center" :class="{ open: openMenu === 'app' }" @mouseenter="openNavMenu('app')" @mouseleave="closeMenus">

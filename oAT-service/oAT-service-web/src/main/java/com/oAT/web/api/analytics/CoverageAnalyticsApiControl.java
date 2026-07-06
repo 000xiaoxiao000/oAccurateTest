@@ -75,7 +75,10 @@ public class CoverageAnalyticsApiControl {
                                                             @SessionAttribute UserVo user) {
         ensureAppAccess(projectId, appId, user);
         CoverageReportIndex report = selectQualityGateReport(appId, versionNumber, commitId, buildId, testStage, reportType);
-        Assert.notNull(report, "未找到匹配的覆盖率报告，无法执行质量门禁");
+        if (report == null) {
+            return new ResultNotified<>(true, "未找到匹配的覆盖率报告",
+                    unmatchedQualityGateResult(appId, versionNumber, commitId, buildId, testStage, minLineCoverageRate));
+        }
         return new ResultNotified<>(true, "获取应用质量门禁结果成功",
                 testGapAnalysisService.evaluateGate(report.getId(), minLineCoverageRate));
     }
@@ -122,6 +125,25 @@ public class CoverageAnalyticsApiControl {
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
         return reports.isEmpty() ? null : reports.get(0);
+    }
+
+    private QualityGateResult unmatchedQualityGateResult(String appId,
+                                                         String versionNumber,
+                                                         String commitId,
+                                                         String buildId,
+                                                         String testStage,
+                                                         double minLineCoverageRate) {
+        QualityGateResult result = new QualityGateResult();
+        result.setAppId(appId);
+        result.setVersionNumber(versionNumber);
+        result.setRepoCommitId(commitId);
+        result.setBuildId(buildId);
+        result.setTestStage(testStage);
+        result.setPassed(false);
+        result.setMinLineCoverageRate(minLineCoverageRate);
+        result.getReasons().add("未找到匹配的覆盖率报告，无法执行质量门禁");
+        result.getReasons().add("请检查应用、版本、Commit、Build、测试阶段或报告类型是否与报告元数据一致");
+        return result;
     }
 
     private boolean matches(String expected, String actual) {
