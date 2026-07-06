@@ -115,6 +115,42 @@ public class FrontendCoverageReportRepository {
         return values.isEmpty() ? null : values.get(0);
     }
 
+    public Long findLatestTimestampByAppAndVersion(String appId, String versionNumber, String commitId) {
+        if (!StringUtils.hasText(appId)) {
+            return null;
+        }
+        List<Long> values;
+        if (StringUtils.hasText(commitId)) {
+            values = jdbcTemplate.query("""
+                            SELECT COALESCE(`timestamp`, UNIX_TIMESTAMP(create_time) * 1000) latest_time
+                            FROM oat_frontend_coverage_report
+                            WHERE app_id = ? AND commit_id = ?
+                            ORDER BY latest_time DESC
+                            LIMIT 1
+                            """,
+                    (rs, rowNum) -> rs.getLong("latest_time"),
+                    appId,
+                    commitId);
+            if (!values.isEmpty()) {
+                return values.get(0);
+            }
+        }
+        if (!StringUtils.hasText(versionNumber)) {
+            return null;
+        }
+        values = jdbcTemplate.query("""
+                        SELECT COALESCE(`timestamp`, UNIX_TIMESTAMP(create_time) * 1000) latest_time
+                        FROM oat_frontend_coverage_report
+                        WHERE app_id = ? AND version_number = ?
+                        ORDER BY latest_time DESC
+                        LIMIT 1
+                        """,
+                (rs, rowNum) -> rs.getLong("latest_time"),
+                appId,
+                versionNumber);
+        return values.isEmpty() ? null : values.get(0);
+    }
+
     public List<FrontendCoverageReport> findFootprints(String projectId, String appId, String versionNumber, String commitId) {
         StringBuilder sql = new StringBuilder("""
                 SELECT * FROM oat_frontend_coverage_report

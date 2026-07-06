@@ -2,6 +2,7 @@ package com.oAT.web.coveragecore.report;
 
 import com.oAT.web.common.Job;
 import com.oAT.web.coverage.universal.SourceType;
+import com.oAT.web.coveragecore.model.CoverageLanguage;
 import com.oAT.web.esDao.CoverageReportRepository;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.common.FriendlyErrorMessageUtil;
@@ -44,12 +45,12 @@ public class CoverageReportCommandService {
     }
 
     public String startCurrentCommitReport(String appId, String versionNumber, String branch, String commitId) {
-        return startJavaReport(appId, versionNumber, branch, commitId,
+        return startReport(appId, versionNumber, branch, commitId,
                 JavaCoverageReportEngine.REPORT_TYPE_CURRENT_COMMIT, null, null);
     }
 
     public String startVersionFullReport(String appId, String versionNumber, String branch, String commitId) {
-        return startJavaReport(appId, versionNumber, branch, commitId,
+        return startReport(appId, versionNumber, branch, commitId,
                 JavaCoverageReportEngine.REPORT_TYPE_VERSION_FULL, null, null);
     }
 
@@ -59,7 +60,7 @@ public class CoverageReportCommandService {
                                          String commitId,
                                          String baseVersionNumber,
                                          String baseCommitId) {
-        return startJavaReport(appId, versionNumber, branch, commitId,
+        return startReport(appId, versionNumber, branch, commitId,
                 JavaCoverageReportEngine.REPORT_TYPE_INCREMENTAL, baseVersionNumber, baseCommitId);
     }
 
@@ -110,17 +111,18 @@ public class CoverageReportCommandService {
         coverageReportExportService.exportMethodReport(reportId, response);
     }
 
-    private String startJavaReport(String appId,
-                                   String versionNumber,
-                                   String branch,
-                                   String commitId,
-                                   Integer reportType,
-                                   String baseVersionNumber,
-                                   String baseCommitId) {
+    private String startReport(String appId,
+                               String versionNumber,
+                               String branch,
+                               String commitId,
+                               Integer reportType,
+                               String baseVersionNumber,
+                               String baseCommitId) {
         String taskKey = buildReportGenerationKey(appId, versionNumber, commitId, reportType, baseVersionNumber, baseCommitId);
+        AppVo app = null;
         String appDisplayName = appId;
         try {
-            AppVo app = appService.getApp(appId);
+            app = appService.getApp(appId);
             if (app != null) {
                 appDisplayName = String.format("%s(%s)", appId, app.getName());
             }
@@ -130,12 +132,49 @@ public class CoverageReportCommandService {
         String finalAppDisplayName = appDisplayName;
         String jobName = finalAppDisplayName + ":" + versionNumber + " (" + reportTypeName(reportType) + ")";
         String startMessage = "开始为应用 [" + finalAppDisplayName + "] 生成" + reportTypeName(reportType) + "覆盖率报告...";
+        AppVo finalApp = app;
         return coverageReportJobService.startReportGeneration(
                 taskKey,
                 jobName,
                 startMessage,
-                job -> javaCoverageReportEngine.generateReport(appId, versionNumber, branch, commitId, reportType, baseVersionNumber, baseCommitId, job),
+                job -> {
+                    CoverageLanguage language = resolveAppLanguage(finalApp);
+                    if (language == CoverageLanguage.JAVA) {
+                        return javaCoverageReportEngine.generateReport(appId, versionNumber, branch, commitId, reportType, baseVersionNumber, baseCommitId, job);
+                    }
+                    job.getProgress().next("合并" + language.name() + "覆盖率上报数据", 80);
+                    CoverageReportGenerationRequest request = buildMultiLanguageRequest(
+                            versionNumber, branch, commitId, reportType, baseVersionNumber, baseCommitId);
+                    String projectId = finalApp == null ? null : finalApp.getCreateProjectId();
+                    CoverageReportIndex report = language == CoverageLanguage.FRONTEND
+                            ? multiLanguageCoverageReportService.generateFrontendReport(projectId, appId, request)
+                            : multiLanguageCoverageReportService.generateUniversalReport(projectId, appId, language.toSourceType(), request);
+                    return report.getId();
+                },
                 e -> FriendlyErrorMessageUtil.general(new RuntimeException(e.getMessage())));
+    }
+
+    private CoverageReportGenerationRequest buildMultiLanguageRequest(String versionNumber,
+                                                                      String branch,
+                                                                      String commitId,
+                                                                      Integer reportType,
+                                                                      String baseVersionNumber,
+                                                                      String baseCommitId) {
+        CoverageReportGenerationRequest request = new CoverageReportGenerationRequest();
+        request.setVersionNumber(versionNumber);
+        request.setBranch(branch);
+        request.setCommitId(commitId);
+        request.setReportType(normalizeReportType(reportType));
+        request.setBaseVersionNumber(baseVersionNumber);
+        request.setBaseCommitId(baseCommitId);
+        return request;
+    }
+
+    private CoverageLanguage resolveAppLanguage(AppVo app) {
+        if (app == null) {
+            return CoverageLanguage.JAVA;
+        }
+        return CoverageLanguage.from(app.getLanguage());
     }
 
     private String buildReportGenerationKey(String appId,

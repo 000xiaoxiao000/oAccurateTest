@@ -120,7 +120,10 @@ public class FrontendCoverageService {
         report.setLanguage(SourceType.FRONTEND.name());
         report.setBuildId(request == null ? null : request.getBuildId());
         report.setTestStage(request == null ? null : request.getTestStage());
-        report.setReportType(0);
+        int reportType = request == null || request.getReportType() == null ? 0 : request.getReportType();
+        report.setReportType(reportType);
+        report.setBaseVersionNumber(reportType == 1 && request != null ? request.getBaseVersionNumber() : null);
+        report.setBaseRepoCommitId(reportType == 1 && request != null ? request.getBaseCommitId() : null);
         report.setLastProcessedTime(lastTimestamp > 0 ? String.valueOf(lastTimestamp) : String.valueOf(System.currentTimeMillis()));
 
         universalCoverageService.saveReport(report, appId, coverageMap);
@@ -215,6 +218,9 @@ public class FrontendCoverageService {
         private String commitId;
         private String buildId;
         private String testStage;
+        private Integer reportType;
+        private String baseVersionNumber;
+        private String baseCommitId;
 
         public String getVersionNumber() { return versionNumber; }
         public void setVersionNumber(String versionNumber) { this.versionNumber = versionNumber; }
@@ -226,5 +232,11 @@ public class FrontendCoverageService {
         public void setBuildId(String buildId) { this.buildId = buildId; }
         public String getTestStage() { return testStage; }
         public void setTestStage(String testStage) { this.testStage = testStage; }
+        public Integer getReportType() { return reportType; }
+        public void setReportType(Integer reportType) { this.reportType = reportType; }
+        public String getBaseVersionNumber() { return baseVersionNumber; }
+        public void setBaseVersionNumber(String baseVersionNumber) { this.baseVersionNumber = baseVersionNumber; }
+        public String getBaseCommitId() { return baseCommitId; }
+        public void setBaseCommitId(String baseCommitId) { this.baseCommitId = baseCommitId; }
     }
 }

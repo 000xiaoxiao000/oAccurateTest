@@ -128,7 +128,7 @@ public class VersionCenterPayloadService {
         summary.setCurrentBranch(app.getCurrentBranch());
         summary.setCurrentCommitId(app.getCurrentCommitId());
         summary.setRepoConfigured(StringUtils.hasText(app.getRepoAddress()));
-        summary.setSourceType("JAVA");
+        summary.setSourceType(StringUtils.hasText(app.getLanguage()) ? app.getLanguage() : "JAVA");
         return summary;
     }
 

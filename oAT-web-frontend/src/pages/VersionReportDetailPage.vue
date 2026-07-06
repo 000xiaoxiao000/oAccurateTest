@@ -201,7 +201,7 @@
                 <span class="method-badge">{{ item.testStage || 'TIA' }}</span>
                 <strong>{{ item.caseName || item.traceId || item.buildId || '未命名来源' }}</strong>
               </div>
-              <p>{{ item.buildId || 'legacy build' }} · 命中变更行 {{ item.coveredChangedLines || 0 }}</p>
+              <p>{{ item.buildId || '历史构建' }} · 命中变更行 {{ item.coveredChangedLines || 0 }}</p>
               <div class="meta-list">
                 <span v-for="unit in item.impactedUnits || []" :key="unit">{{ unit }}</span>
                 <span v-if="!(item.impactedUnits || []).length">暂无影响点明细</span>

@@ -38,10 +38,12 @@
         :can-generate-version-type="canGenerateVersionType"
         :is-generating-version="isGeneratingVersion"
         :generate-disabled-title="generateDisabledTitle"
+        :generate-action-label="generateActionLabel"
         @refresh="refreshVersionsList"
         @show-time-tooltip="showTimeTooltip"
         @hide-time-tooltip="hideTimeTooltip"
         @generate-full="generateVersionFull"
+        @generate-current="generateVersionCurrent"
         @generate-frontend="generateFrontendCoverage"
         @generate-universal="generateUniversalCoverage"
         @open-incremental="openIncrementalDialog"
@@ -111,6 +113,8 @@ import {
 import {
   deleteCoverageReportV2,
   fetchCoverageJobV2,
+  triggerCoverageGenerateFullV2,
+  triggerCoverageGenerateBySourceV2,
   triggerCoverageGenerateCurrentV2,
   triggerCoverageGenerateIncrementalV2,
   triggerFrontendCoverageGenerateV2,
@@ -268,6 +272,25 @@ function hasRawCoverageSource(version: VersionItemSummary, sourceType: string) {
   return rawCoverageSourceTypes(version).includes(normalizeSourceType(sourceType))
 }
 
+function selectedAppSourceType() {
+  return normalizeSourceType(selectedCenter.value?.app?.language || selectedCenter.value?.app?.sourceType || 'JAVA')
+}
+
+function reportSourceType(version: VersionItemSummary) {
+  const selectedType = normalizeSourceType(selectedSourceType.value)
+  if (selectedType !== 'ALL') return selectedType
+  const appType = selectedAppSourceType()
+  if (appType !== 'JAVA') return appType
+  const rawTypes = rawCoverageSourceTypes(version)
+  return rawTypes[0] || 'JAVA'
+}
+
+function hasCoverageInput(version: VersionItemSummary, sourceType = reportSourceType(version)) {
+  const normalizedType = normalizeSourceType(sourceType)
+  if (normalizedType === 'JAVA') return Boolean(version.hasReport)
+  return hasRawCoverageSource(version, normalizedType)
+}
+
 function coverageDataStatus(version: VersionItemSummary) {
   const reports = reportsForVersion(version)
   const rawSourceTypes = new Set(rawCoverageSourceTypes(version))
@@ -391,7 +414,7 @@ function canGenerateVersion(version: VersionItemSummary) {
 
 function canGenerateVersionType(version: VersionItemSummary, type: VersionGenerateType) {
   if (!canGenerateVersion(version)) return false
-  if (type === 'full' || type === 'incremental') return Boolean(version.hasReport)
+  if (type === 'full' || type === 'current' || type === 'incremental') return hasCoverageInput(version)
   if (type === 'frontend') return hasRawCoverageSource(version, 'FRONTEND')
   return hasRawCoverageSource(version, type)
 }
@@ -408,13 +431,23 @@ function generateDisabledTitle(version: VersionItemSummary, type: VersionGenerat
     if (type === 'GO') return '没有可生成的 Go 覆盖率上报数据'
     if (type === 'PYTHON') return '没有可生成的 Python 覆盖率上报数据'
     if (type === 'CPP') return '没有可生成的 C/C++ 覆盖率上报数据'
-    return '没有可生成的 Java 覆盖率数据'
+    return `没有可生成的${sourceTypeLabel(reportSourceType(version))}覆盖率数据`
   }
   if (type === 'frontend') return '合并已上报的 Istanbul 前端覆盖率数据，生成前端覆盖率报告'
   if (type === 'GO') return '合并已上报的 Go cover profile 数据，生成 Go 覆盖率报告'
   if (type === 'PYTHON') return '合并已上报的 coverage.py JSON 数据，生成 Python 覆盖率报告'
   if (type === 'CPP') return '合并已上报的 gcov/llvm-cov JSON 数据，生成 C/C++ 覆盖率报告'
-  return type === 'full' ? '生成当前版本的版本全量报告' : '选择基准后生成当前版本的版本增量报告'
+  if (type === 'full') return `生成当前版本的${sourceTypeLabel(reportSourceType(version))}版本全量报告`
+  if (type === 'current') return `生成当前 Commit 的${sourceTypeLabel(reportSourceType(version))}覆盖率报告`
+  return `选择基准后生成当前版本的${sourceTypeLabel(reportSourceType(version))}版本增量报告`
+}
+
+function generateActionLabel(version: VersionItemSummary, type: VersionGenerateType) {
+  const sourceLabel = sourceTypeLabel(reportSourceType(version))
+  if (type === 'full') return `生成${sourceLabel}版本全量`
+  if (type === 'current') return `生成${sourceLabel}本次Commit`
+  if (type === 'incremental') return `生成${sourceLabel}版本增量`
+  return `生成${sourceLabel}报告`
 }
 
 function generationPayload(version: VersionItemSummary) {
@@ -468,20 +501,68 @@ async function generateVersionFull(version: VersionItemSummary) {
   error.value = ''
   try {
     const payload = generationPayload(version)
-    const jobId = await triggerCoverageGenerateCurrentV2(projectId.value, payload.appId, {
-      versionNumber: payload.versionNumber,
-      branch: payload.branch,
-      commitId: payload.commitId,
-    })
-    const success = await pollCoverageJob(jobId, '版本全量报告生成')
-    generationFailed.value = !success
-    if (success) {
-      generationNotice.value = '版本全量报告生成完成，已刷新报告列表'
+    const sourceType = reportSourceType(version)
+    if (sourceType === 'JAVA') {
+      const jobId = await triggerCoverageGenerateFullV2(projectId.value, payload.appId, {
+        versionNumber: payload.versionNumber,
+        branch: payload.branch,
+        commitId: payload.commitId,
+      })
+      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}版本全量报告生成`)
+      generationFailed.value = !success
+      if (!success) return
+    } else {
+      await triggerCoverageGenerateBySourceV2(projectId.value, selectedAppId.value, sourceType as 'FRONTEND' | 'GO' | 'PYTHON' | 'CPP', {
+        versionNumber: version.versionNumber,
+        branch: version.repoBranch || undefined,
+        commitId: version.repoCommitId || undefined,
+      })
+    }
+    if (!generationFailed.value) {
+      generationNotice.value = `${sourceTypeLabel(sourceType)}版本全量报告生成完成，已刷新报告列表`
       await refreshCenter(selectedAppId.value)
     }
   } catch (err) {
     generationFailed.value = true
     generationNotice.value = err instanceof Error ? err.message : '生成版本全量报告失败'
+  } finally {
+    generatingVersionKey.value = ''
+  }
+}
+
+async function generateVersionCurrent(version: VersionItemSummary) {
+  if (!canGenerateVersionType(version, 'current') || generatingVersionKey.value) return
+  generatingVersionKey.value = versionActionKey(version, 'current')
+  generationFailed.value = false
+  generationNotice.value = ''
+  error.value = ''
+  try {
+    const payload = generationPayload(version)
+    const sourceType = reportSourceType(version)
+    if (sourceType === 'JAVA') {
+      const jobId = await triggerCoverageGenerateCurrentV2(projectId.value, payload.appId, {
+        versionNumber: payload.versionNumber,
+        branch: payload.branch,
+        commitId: payload.commitId,
+      })
+      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}本次 Commit 报告生成`)
+      generationFailed.value = !success
+      if (!success) return
+    } else {
+      await triggerCoverageGenerateBySourceV2(projectId.value, selectedAppId.value, sourceType as 'FRONTEND' | 'GO' | 'PYTHON' | 'CPP', {
+        versionNumber: version.versionNumber,
+        branch: version.repoBranch || undefined,
+        commitId: version.repoCommitId || undefined,
+        reportType: 2,
+      })
+    }
+    if (!generationFailed.value) {
+      generationNotice.value = `${sourceTypeLabel(sourceType)}本次 Commit 报告生成完成，已刷新报告列表`
+      await refreshCenter(selectedAppId.value)
+    }
+  } catch (err) {
+    generationFailed.value = true
+    generationNotice.value = err instanceof Error ? err.message : '生成本次 Commit 报告失败'
   } finally {
     generatingVersionKey.value = ''
   }
@@ -545,18 +626,31 @@ async function generateVersionIncremental(base: { baseVersionNumber: string; bas
   incrementalError.value = ''
   try {
     const payload = generationPayload(version)
-    const jobId = await triggerCoverageGenerateIncrementalV2(projectId.value, payload.appId, {
-      versionNumber: payload.versionNumber,
-      branch: payload.branch,
-      commitId: payload.commitId,
-      baseVersionNumber: base.baseVersionNumber,
-      baseCommitId: base.baseCommitId || undefined,
-    })
+    const sourceType = reportSourceType(version)
     incrementalDialogOpen.value = false
-    const success = await pollCoverageJob(jobId, '版本增量报告生成')
-    generationFailed.value = !success
-    if (success) {
-      generationNotice.value = '版本增量报告生成完成，已刷新报告列表'
+    if (sourceType === 'JAVA') {
+      const jobId = await triggerCoverageGenerateIncrementalV2(projectId.value, payload.appId, {
+        versionNumber: payload.versionNumber,
+        branch: payload.branch,
+        commitId: payload.commitId,
+        baseVersionNumber: base.baseVersionNumber,
+        baseCommitId: base.baseCommitId || undefined,
+      })
+      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}版本增量报告生成`)
+      generationFailed.value = !success
+      if (!success) return
+    } else {
+      await triggerCoverageGenerateBySourceV2(projectId.value, selectedAppId.value, sourceType as 'FRONTEND' | 'GO' | 'PYTHON' | 'CPP', {
+        versionNumber: version.versionNumber,
+        branch: version.repoBranch || undefined,
+        commitId: version.repoCommitId || undefined,
+        reportType: 1,
+        baseVersionNumber: base.baseVersionNumber,
+        baseCommitId: base.baseCommitId || undefined,
+      })
+    }
+    if (!generationFailed.value) {
+      generationNotice.value = `${sourceTypeLabel(sourceType)}版本增量报告生成完成，已刷新报告列表`
       await refreshCenter(selectedAppId.value)
     }
   } catch (err) {

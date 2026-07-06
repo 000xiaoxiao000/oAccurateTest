@@ -3,6 +3,8 @@ package com.oAT.web.coveragecore.report;
 import com.oAT.web.esDao.CoverageReportRepository;
 import com.oAT.web.esDao.SnapshotCommitMappingRepository;
 import com.oAT.web.esDao.SystemSnapshotRepository;
+import com.oAT.web.coverage.FrontendCoverageReportRepository;
+import com.oAT.web.coverage.UniversalCoverageRawRepository;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.esDao.entity.SnapshotCommitMapping;
 import com.oAT.web.esDao.entity.SystemSnapshot;
@@ -39,15 +41,21 @@ public class CoverageFreshnessService {
     private final CoverageReportRepository coverageReportRepository;
     private final SystemSnapshotRepository systemSnapshotRepository;
     private final SnapshotCommitMappingRepository snapshotCommitMappingRepository;
+    private final FrontendCoverageReportRepository frontendCoverageReportRepository;
+    private final UniversalCoverageRawRepository universalCoverageRawRepository;
 
     public CoverageFreshnessService(AppService appService,
                                     CoverageReportRepository coverageReportRepository,
                                     SystemSnapshotRepository systemSnapshotRepository,
-                                    SnapshotCommitMappingRepository snapshotCommitMappingRepository) {
+                                    SnapshotCommitMappingRepository snapshotCommitMappingRepository,
+                                    FrontendCoverageReportRepository frontendCoverageReportRepository,
+                                    UniversalCoverageRawRepository universalCoverageRawRepository) {
         this.appService = appService;
         this.coverageReportRepository = coverageReportRepository;
         this.systemSnapshotRepository = systemSnapshotRepository;
         this.snapshotCommitMappingRepository = snapshotCommitMappingRepository;
+        this.frontendCoverageReportRepository = frontendCoverageReportRepository;
+        this.universalCoverageRawRepository = universalCoverageRawRepository;
     }
 
     public boolean hasNewerData(String appId, String versionNumber, CoverageReportIndex report) {
@@ -55,6 +63,15 @@ public class CoverageFreshnessService {
             AppVo app = appService.getApp(appId);
             SnapshotCoverageContext latestSnapshotContext = buildSnapshotCoverageContext(app, versionNumber, null, null);
             return !latestSnapshotContext.getSnapshotIds().isEmpty();
+        }
+
+        if (!isJavaReport(report)) {
+            Long latestRawTime = latestRawCoverageTime(report);
+            if (latestRawTime == null) {
+                return false;
+            }
+            Long lastProcessedTime = parseLong(report.getLastProcessedTime());
+            return lastProcessedTime == null || latestRawTime > lastProcessedTime;
         }
 
         if (normalizeReportType(report.getReportType()) == REPORT_TYPE_VERSION_FULL) {
@@ -78,6 +95,38 @@ public class CoverageFreshnessService {
             return true;
         }
         return !Objects.equals(report.getSnapshotLastUpdateTime(), latestSnapshotContext.getLastSnapshotTime());
+    }
+
+    private boolean isJavaReport(CoverageReportIndex report) {
+        String sourceType = report == null ? null : report.getSourceType();
+        String language = report == null ? null : report.getLanguage();
+        return !StringUtils.hasText(sourceType) && !StringUtils.hasText(language)
+                || "JAVA".equalsIgnoreCase(sourceType)
+                || "JAVA".equalsIgnoreCase(language);
+    }
+
+    private Long latestRawCoverageTime(CoverageReportIndex report) {
+        String sourceType = StringUtils.hasText(report.getSourceType()) ? report.getSourceType() : report.getLanguage();
+        if ("FRONTEND".equalsIgnoreCase(sourceType)) {
+            return frontendCoverageReportRepository.findLatestTimestampByAppAndVersion(
+                    report.getAppId(), report.getVersionNumber(), report.getRepoCommitId());
+        }
+        if (StringUtils.hasText(sourceType)) {
+            return universalCoverageRawRepository.findLatestTimestampByAppTypeAndVersion(
+                    report.getAppId(), sourceType.toUpperCase(Locale.ROOT), report.getVersionNumber(), report.getRepoCommitId());
+        }
+        return null;
+    }
+
+    private Long parseLong(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     private List<CoverageReportIndex> selectVersionCommitReports(String appId, String versionNumber) {

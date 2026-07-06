@@ -101,6 +101,9 @@ public class FrontendCoverageBackend implements CoverageIngestBackend, CoverageR
             legacyRequest.setCommitId(request.getCommitId());
             legacyRequest.setBuildId(request.getBuildId());
             legacyRequest.setTestStage(request.getTestStage());
+            legacyRequest.setReportType(request.getReportType());
+            legacyRequest.setBaseVersionNumber(request.getBaseVersionNumber());
+            legacyRequest.setBaseCommitId(request.getBaseCommitId());
         }
         return frontendCoverageService.generateReport(projectId, appId, legacyRequest);
     }

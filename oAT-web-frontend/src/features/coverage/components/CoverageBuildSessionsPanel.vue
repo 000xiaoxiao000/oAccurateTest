@@ -10,7 +10,7 @@
     <div v-if="sessions.length" class="build-session-list">
       <article v-for="session in visibleSessions" :key="session.buildId || `${session.versionNumber}-${session.repoCommitId}`" class="build-session-item">
         <div class="build-session-main">
-          <strong>{{ session.buildId || 'legacy build' }}</strong>
+          <strong>{{ session.buildId || '历史构建' }}</strong>
           <span>{{ session.versionNumber || '-' }} · {{ shortHash(session.repoCommitId) }}</span>
         </div>
         <div class="build-session-meta">

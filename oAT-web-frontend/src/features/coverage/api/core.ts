@@ -40,6 +40,39 @@ export function fetchCoverageOverviewV2(projectId: string, appId: string, params
   return apiGet<CoverageOverviewPayload>(`/api/v2/coverage/apps/${encodeURIComponent(appId)}/overview?${query.toString()}`)
 }
 
+export function triggerCoverageGenerateFullV2(
+  projectId: string,
+  appId: string,
+  payload: { versionNumber: string; branch?: string; commitId?: string },
+) {
+  const body = new URLSearchParams({ appId, versionNumber: payload.versionNumber })
+  if (payload.branch) body.set('branch', payload.branch)
+  if (payload.commitId) body.set('commitId', payload.commitId)
+  return apiPost<string>(
+    `/api/projects/${encodeURIComponent(projectId)}/coverage/generate`,
+    body.toString(),
+    'application/x-www-form-urlencoded;charset=UTF-8',
+  )
+}
+
+export function triggerCoverageGenerateBySourceV2(
+  projectId: string,
+  appId: string,
+  sourceType: 'FRONTEND' | 'GO' | 'PYTHON' | 'CPP',
+  payload: {
+    versionNumber?: string
+    branch?: string
+    commitId?: string
+    reportType?: number
+    baseVersionNumber?: string
+    baseCommitId?: string
+  },
+) {
+  return sourceType === 'FRONTEND'
+    ? triggerFrontendCoverageGenerateV2(projectId, appId, payload)
+    : triggerUniversalCoverageGenerateV2(projectId, appId, sourceType, payload)
+}
+
 export function triggerCoverageGenerateCurrentV2(
   projectId: string,
   appId: string,

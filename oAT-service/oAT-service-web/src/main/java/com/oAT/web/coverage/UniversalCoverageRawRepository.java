@@ -94,6 +94,44 @@ public class UniversalCoverageRawRepository {
         return values.isEmpty() ? null : values.get(0);
     }
 
+    public Long findLatestTimestampByAppTypeAndVersion(String appId, String sourceType, String versionNumber, String commitId) {
+        if (!StringUtils.hasText(appId) || !StringUtils.hasText(sourceType)) {
+            return null;
+        }
+        List<Long> values;
+        if (StringUtils.hasText(commitId)) {
+            values = jdbcTemplate.query("""
+                            SELECT COALESCE(`timestamp`, UNIX_TIMESTAMP(create_time) * 1000) latest_time
+                            FROM oat_universal_coverage_report
+                            WHERE app_id = ? AND source_type = ? AND commit_id = ?
+                            ORDER BY latest_time DESC
+                            LIMIT 1
+                            """,
+                    (rs, rowNum) -> rs.getLong("latest_time"),
+                    appId,
+                    sourceType,
+                    commitId);
+            if (!values.isEmpty()) {
+                return values.get(0);
+            }
+        }
+        if (!StringUtils.hasText(versionNumber)) {
+            return null;
+        }
+        values = jdbcTemplate.query("""
+                        SELECT COALESCE(`timestamp`, UNIX_TIMESTAMP(create_time) * 1000) latest_time
+                        FROM oat_universal_coverage_report
+                        WHERE app_id = ? AND source_type = ? AND version_number = ?
+                        ORDER BY latest_time DESC
+                        LIMIT 1
+                        """,
+                (rs, rowNum) -> rs.getLong("latest_time"),
+                appId,
+                sourceType,
+                versionNumber);
+        return values.isEmpty() ? null : values.get(0);
+    }
+
     public List<UniversalCoverageRawReport> findFootprints(String projectId, String appId, String sourceType,
                                                            String versionNumber, String commitId) {
         StringBuilder sql = new StringBuilder("""

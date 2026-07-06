@@ -94,7 +94,7 @@ public class CoverageApiPayloadMapper {
         summary.setCurrentVersion(app.getCurrentVersion());
         summary.setCurrentBranch(app.getCurrentBranch());
         summary.setCurrentCommitId(app.getCurrentCommitId());
-        summary.setSourceType("JAVA");
+        summary.setSourceType(StringUtils.hasText(app.getLanguage()) ? app.getLanguage() : "JAVA");
         return summary;
     }
 

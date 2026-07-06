@@ -64,27 +64,16 @@
             :title="generateDisabledTitle(version, 'full')"
             @click="$emit('generate-full', version)"
           >
-            {{ isGeneratingVersion(version, 'full') ? '全量生成中...' : '生成版本全量' }}
+            {{ isGeneratingVersion(version, 'full') ? '全量生成中...' : generateActionLabel(version, 'full') }}
           </button>
           <button
-            class="ghost-button small-button generate-button frontend-generate-button"
+            class="ghost-button small-button generate-button"
             type="button"
-            :disabled="!canGenerateVersionType(version, 'frontend') || Boolean(generatingVersionKey)"
-            :title="generateDisabledTitle(version, 'frontend')"
-            @click="$emit('generate-frontend', version)"
+            :disabled="!canGenerateVersionType(version, 'current') || Boolean(generatingVersionKey)"
+            :title="generateDisabledTitle(version, 'current')"
+            @click="$emit('generate-current', version)"
           >
-            {{ isGeneratingVersion(version, 'frontend') ? '前端生成中...' : '生成前端报告' }}
-          </button>
-          <button
-            v-for="coverageSource in universalGenerateSources"
-            :key="coverageSource.type"
-            class="ghost-button small-button generate-button universal-generate-button"
-            type="button"
-            :disabled="!canGenerateVersionType(version, coverageSource.type) || Boolean(generatingVersionKey)"
-            :title="generateDisabledTitle(version, coverageSource.type)"
-            @click="$emit('generate-universal', version, coverageSource.type)"
-          >
-            {{ isGeneratingVersion(version, coverageSource.type) ? `${coverageSource.shortLabel}生成中...` : `生成${coverageSource.shortLabel}报告` }}
+            {{ isGeneratingVersion(version, 'current') ? 'Commit生成中...' : generateActionLabel(version, 'current') }}
           </button>
           <button
             class="ghost-button small-button generate-button"
@@ -93,7 +82,7 @@
             :title="generateDisabledTitle(version, 'incremental')"
             @click="$emit('open-incremental', version)"
           >
-            {{ isGeneratingVersion(version, 'incremental') ? '增量生成中...' : '生成版本增量' }}
+            {{ isGeneratingVersion(version, 'incremental') ? '增量生成中...' : generateActionLabel(version, 'incremental') }}
           </button>
         </div>
       </article>
@@ -118,7 +107,7 @@ import AppPagination from '@/components/AppPagination.vue'
 import type { VersionItemSummary } from '@/api/types'
 
 export type CoverageHubUniversalGenerateType = 'GO' | 'PYTHON' | 'CPP'
-export type CoverageHubVersionGenerateType = 'full' | 'incremental' | 'frontend' | CoverageHubUniversalGenerateType
+export type CoverageHubVersionGenerateType = 'full' | 'current' | 'incremental' | 'frontend' | CoverageHubUniversalGenerateType
 export type CoverageHubUniversalGenerateSource = {
   type: CoverageHubUniversalGenerateType
   shortLabel: string
@@ -147,6 +136,7 @@ defineProps<{
   canGenerateVersionType: (version: VersionItemSummary, type: CoverageHubVersionGenerateType) => boolean
   isGeneratingVersion: (version: VersionItemSummary, type: CoverageHubVersionGenerateType) => boolean
   generateDisabledTitle: (version: VersionItemSummary, type: CoverageHubVersionGenerateType) => string
+  generateActionLabel: (version: VersionItemSummary, type: CoverageHubVersionGenerateType) => string
 }>()
 
 defineEmits<{
@@ -156,6 +146,7 @@ defineEmits<{
   (event: 'show-time-tooltip', payload: MouseEvent | FocusEvent, text: string): void
   (event: 'hide-time-tooltip'): void
   (event: 'generate-full', version: VersionItemSummary): void
+  (event: 'generate-current', version: VersionItemSummary): void
   (event: 'generate-frontend', version: VersionItemSummary): void
   (event: 'generate-universal', version: VersionItemSummary, sourceType: CoverageHubUniversalGenerateType): void
   (event: 'open-incremental', version: VersionItemSummary): void
