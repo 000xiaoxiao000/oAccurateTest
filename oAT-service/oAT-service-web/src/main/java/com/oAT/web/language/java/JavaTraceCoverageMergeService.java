@@ -18,6 +18,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -89,7 +90,7 @@ public class JavaTraceCoverageMergeService {
             ClassCoverageIndex classCov = javaCoverageClassMatcher.findClassCoverage(coverageMap, originalClassName);
 
             if (classCov != null) {
-                mergeStackNode(classCov, sn);
+                mergeStackNode(classCov, sn, traceId);
                 matchedCount++;
             } else {
                 unmatchedCount++;
@@ -180,11 +181,13 @@ public class JavaTraceCoverageMergeService {
         cc.setBranchRate(calculateBranchRate(coveredBranchTargets, totalBranchTargets));
     }
 
-    private void mergeStackNode(ClassCoverageIndex classCov, StackNodeVo sn) {
+    private void mergeStackNode(ClassCoverageIndex classCov, StackNodeVo sn, String traceId) {
         Optional<MethodCoverageDetail> methodOpt = findBestMethodCoverage(classCov, sn);
 
         if (methodOpt.isPresent()) {
             MethodCoverageDetail md = methodOpt.get();
+            ClassCoverageIndex.CoverageFootprintRecord footprint =
+                    ClassCoverageIndex.CoverageFootprintRecord.of(traceId, null, null, null, System.currentTimeMillis());
 
             Set<Integer> staticLineNumbers = new HashSet<>(md.getTotalLineNumbers() != null ? md.getTotalLineNumbers() : Collections.emptyList());
             Set<Integer> coveredLines = new HashSet<>(md.getCoveredLineNumbers() != null ? md.getCoveredLineNumbers() : Collections.emptyList());
@@ -192,6 +195,7 @@ public class JavaTraceCoverageMergeService {
                 for (Integer line : sn.getDoLines()) {
                     if (staticLineNumbers.contains(line)) {
                         coveredLines.add(line);
+                        addLineFootprint(md, line, footprint);
                     }
                 }
             }
@@ -221,6 +225,7 @@ public class JavaTraceCoverageMergeService {
             md.setCoveredBranchTargetProbeMap(coveredBranchTargetProbeMap);
             md.setCoveredBranchTargets(countBranchTargets(coveredBranchTargetProbeMap));
             md.setBranchRate(calculateBranchRate(md.getCoveredBranchTargets(), md.getTotalBranchTargets()));
+            addBranchFootprints(md, sn.getExecuteBranchTargetProbeMap(), footprint);
 
             md.setCovered(md.getCoveredLines() > 0);
         }
@@ -271,5 +276,56 @@ public class JavaTraceCoverageMergeService {
             }
         }
         return Optional.ofNullable(best);
+    }
+
+    private void addLineFootprint(MethodCoverageDetail method, Integer line, ClassCoverageIndex.CoverageFootprintRecord footprint) {
+        if (line == null || footprint == null || !StringUtils.hasText(footprint.getTraceId())) {
+            return;
+        }
+        if (method.getLineFootprints() == null) {
+            method.setLineFootprints(new HashMap<>());
+        }
+        List<ClassCoverageIndex.CoverageFootprintRecord> records =
+                method.getLineFootprints().computeIfAbsent(line, ignored -> new ArrayList<>());
+        addFootprintIfAbsent(records, footprint);
+    }
+
+    private void addBranchFootprints(MethodCoverageDetail method,
+                                     Map<String, List<Integer>> coveredBranchTargetProbeMap,
+                                     ClassCoverageIndex.CoverageFootprintRecord footprint) {
+        if (method == null || coveredBranchTargetProbeMap == null || footprint == null
+                || !StringUtils.hasText(footprint.getTraceId())) {
+            return;
+        }
+        if (method.getBranchFootprints() == null) {
+            method.setBranchFootprints(new HashMap<>());
+        }
+        for (Map.Entry<String, List<Integer>> entry : coveredBranchTargetProbeMap.entrySet()) {
+            if (entry.getValue() == null) {
+                continue;
+            }
+            for (Integer target : entry.getValue()) {
+                String branchKey = branchKey(entry.getKey(), target);
+                List<ClassCoverageIndex.CoverageFootprintRecord> records =
+                        method.getBranchFootprints().computeIfAbsent(branchKey, ignored -> new ArrayList<>());
+                addFootprintIfAbsent(records, footprint);
+            }
+        }
+    }
+
+    private void addFootprintIfAbsent(List<ClassCoverageIndex.CoverageFootprintRecord> records,
+                                      ClassCoverageIndex.CoverageFootprintRecord footprint) {
+        boolean exists = records.stream().anyMatch(record ->
+                record != null && footprint.getTraceId().equals(record.getTraceId())
+                        && java.util.Objects.equals(footprint.getCaseName(), record.getCaseName())
+                        && java.util.Objects.equals(footprint.getTestStage(), record.getTestStage())
+                        && java.util.Objects.equals(footprint.getBuildId(), record.getBuildId()));
+        if (!exists) {
+            records.add(footprint);
+        }
+    }
+
+    private String branchKey(String groupId, Integer branchIndex) {
+        return (StringUtils.hasText(groupId) ? groupId : "0") + ":" + (branchIndex == null ? 0 : branchIndex);
     }
 }

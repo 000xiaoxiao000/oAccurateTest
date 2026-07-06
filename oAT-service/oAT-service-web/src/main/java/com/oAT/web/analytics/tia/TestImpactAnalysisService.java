@@ -86,6 +86,14 @@ public class TestImpactAnalysisService {
                 }
             }
         }
+        boolean usedSnapshotUsecaseFallback = false;
+        if (impactMap.isEmpty() && !scopedToChangedLines) {
+            for (UsecaseImpact usecase : usecaseResolver.findReportSnapshotUsecases()) {
+                String usecaseIdentity = "usecase:" + usecase.id();
+                impactMap.computeIfAbsent(usecaseIdentity, ignored -> new MutableImpactCase(usecase));
+                usedSnapshotUsecaseFallback = true;
+            }
+        }
 
         List<TestImpactCase> impactedCases = impactMap.values().stream()
                 .map(MutableImpactCase::toImpactCase)
@@ -97,7 +105,9 @@ public class TestImpactAnalysisService {
         if (!scopedToChangedLines) {
             report.getReasons().add("未提供变更行范围，已按当前报告内可关联用例或链路的已覆盖行估算");
         }
-        if (footprintCount == 0) {
+        if (usedSnapshotUsecaseFallback) {
+            report.getReasons().add("当前报告缺少行级覆盖足迹，已按系统快照关联用例兜底推荐");
+        } else if (footprintCount == 0) {
             report.getReasons().add("当前报告缺少用例或链路关联数据，无法推荐受影响用例");
         } else if (report.getImpactedCaseCount() == 0 && usecaseResolver.hasSystemSnapshots()) {
             report.getReasons().add("当前报告命中了系统快照链路，但这些快照未关联到测试用例");
@@ -193,6 +203,10 @@ public class TestImpactAnalysisService {
             this(footprint, null);
         }
 
+        private MutableImpactCase(UsecaseImpact usecase) {
+            this(null, usecase);
+        }
+
         private MutableImpactCase(CoverageFootprint footprint, UsecaseImpact usecase) {
             this.footprint = footprint;
             this.usecase = usecase;
@@ -202,9 +216,10 @@ public class TestImpactAnalysisService {
             TestImpactCase item = new TestImpactCase();
             item.setUsecaseId(usecase == null ? null : usecase.id());
             item.setCaseName(usecase == null ? footprint.getCaseName() : usecase.title());
-            item.setTestStage(footprint.getTestStage());
-            item.setBuildId(footprint.getBuildId());
-            item.setTraceId(footprint.getTraceId());
+            item.setTestStage(footprint == null ? null : footprint.getTestStage());
+            item.setBuildId(footprint == null ? null : footprint.getBuildId());
+            item.setTraceId(usecase != null && StringUtils.hasText(usecase.traceId()) ? usecase.traceId()
+                    : (footprint == null ? null : footprint.getTraceId()));
             item.setCoveredChangedLines(coveredChangedLines);
             item.setImpactedUnits(List.copyOf(impactedUnits));
             return item;
@@ -233,6 +248,21 @@ public class TestImpactAnalysisService {
             return loadedSnapshots || !snapshotsByTraceId.isEmpty();
         }
 
+        private List<UsecaseImpact> findReportSnapshotUsecases() {
+            LinkedHashMap<String, UsecaseImpact> result = new LinkedHashMap<>();
+            for (List<SystemSnapshot> snapshots : snapshotsByTraceId.values()) {
+                if (snapshots == null) {
+                    continue;
+                }
+                for (SystemSnapshot snapshot : snapshots) {
+                    for (UsecaseImpact usecase : loadUsecasesBySnapshot(snapshot)) {
+                        result.putIfAbsent(usecase.id(), usecase);
+                    }
+                }
+            }
+            return new ArrayList<>(result.values());
+        }
+
         private List<UsecaseImpact> loadUsecasesByTraceId(String traceId) {
             List<SystemSnapshot> snapshots = snapshotsByTraceId.get(traceId);
             if ((snapshots == null || snapshots.isEmpty()) && StringUtils.hasText(projectId)) {
@@ -245,21 +275,29 @@ public class TestImpactAnalysisService {
 
             LinkedHashMap<String, UsecaseImpact> result = new LinkedHashMap<>();
             for (SystemSnapshot snapshot : snapshots) {
-                if (snapshot == null || !StringUtils.hasText(snapshot.getId())) {
-                    continue;
-                }
-                List<CaseCenterIndex> indexes = caseCenterRepository
-                        .findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshot.getId());
-                for (CaseCenterIndex index : indexes) {
-                    Usecase usecase = index == null ? null : index.getUsecase();
-                    if (usecase == null || !StringUtils.hasText(index.getId())) {
-                        continue;
-                    }
-                    String title = firstText(usecase.getTitle(), index.getId());
-                    result.putIfAbsent(index.getId(), new UsecaseImpact(index.getId(), title));
+                for (UsecaseImpact usecase : loadUsecasesBySnapshot(snapshot)) {
+                    result.putIfAbsent(usecase.id(), usecase);
                 }
             }
             return new ArrayList<>(result.values());
+        }
+
+        private List<UsecaseImpact> loadUsecasesBySnapshot(SystemSnapshot snapshot) {
+            if (snapshot == null || !StringUtils.hasText(snapshot.getId()) || !StringUtils.hasText(projectId)) {
+                return Collections.emptyList();
+            }
+            List<UsecaseImpact> result = new ArrayList<>();
+            List<CaseCenterIndex> indexes = caseCenterRepository
+                    .findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshot.getId());
+            for (CaseCenterIndex index : indexes) {
+                Usecase usecase = index == null ? null : index.getUsecase();
+                if (usecase == null || !StringUtils.hasText(index.getId())) {
+                    continue;
+                }
+                String title = firstText(usecase.getTitle(), index.getId());
+                result.add(new UsecaseImpact(index.getId(), title, snapshot.getTraceId()));
+            }
+            return result;
         }
 
         private void loadReportSnapshots(CoverageReportIndex reportIndex) {
@@ -318,5 +356,5 @@ public class TestImpactAnalysisService {
         }
     }
 
-    private record UsecaseImpact(String id, String title) {}
+    private record UsecaseImpact(String id, String title, String traceId) {}
 }
