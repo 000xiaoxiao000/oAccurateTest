@@ -238,6 +238,15 @@
   background: rgba(15, 118, 110, .035);
 }
 
+.method-table tbody tr.method-row-active {
+  background: rgba(20, 184, 166, 0.16);
+  box-shadow: inset 4px 0 0 #0f766e;
+}
+
+.method-table tbody tr.method-row-active:hover {
+  background: rgba(20, 184, 166, 0.22);
+}
+
 .method-name {
   display: grid;
   gap: 4px;

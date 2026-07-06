@@ -31,7 +31,7 @@
             <button class="ghost-button" type="button" @click="clearFilters">清空</button>
           </div>
           <div v-if="!filteredMethods.length" class="empty-card">暂无匹配的方法覆盖数据</div>
-          <div v-else class="table-shell">
+          <div v-else ref="methodTableShellRef" class="table-shell">
             <table class="method-table">
               <colgroup>
                 <col class="method-col" />
@@ -55,7 +55,8 @@
                   :data-method-line-rate="formatRate(item.method.coveredLines, item.method.totalLines)"
                   :data-method-branch-rate="formatBranchRate(item.method.branchRate, item.method.totalBranchTargets)"
                   :data-method-summary="methodContextSummary(item.method)"
-                  :class="item.method.hasCodeChanges && 'method-row-changed'"
+                  :data-method-index="item.index"
+                  :class="[item.method.hasCodeChanges && 'method-row-changed', activeMethodIndex === item.index && 'method-row-active']"
                 >
                   <td class="method-name">
                     <div class="method-mainline">
@@ -102,6 +103,7 @@
             class="source-container"
             :payload="sourceViewerPayload"
             :html="hasStructuredSource ? undefined : coloredSourceHtml"
+            @visible-line-change="syncMethodWithSourceLine"
           />
           <div v-else class="empty-card">源码不可用</div>
         </section>
@@ -140,8 +142,10 @@ const statusFilter = ref('')
 const methodPage = ref(1)
 const methodPageSize = ref(50)
 const sourceViewerRef = ref<InstanceType<typeof SourceCodeViewer> | null>(null)
-const sourceRef = computed(() => sourceViewerRef.value?.htmlRef || null)
+const methodTableShellRef = ref<HTMLElement | null>(null)
+const sourceRef = computed(() => sourceViewerRef.value?.htmlRef || sourceViewerRef.value?.tableRef || null)
 const { jumpToMethod } = useSourceMethodJump(() => sourceRef.value)
+const activeMethodIndex = ref<number | null>(null)
 const hasStructuredSource = computed(() => Boolean(props.sourceCoverage?.lines?.length))
 const sourceViewerPayload = computed(() => ({
   language: props.sourceCoverage?.language || props.language,
@@ -184,10 +188,57 @@ function clearFilters() {
 }
 
 function jumpToMethodRow(method: CoverageMethodSummary) {
+  activeMethodIndex.value = props.methods?.indexOf(method) ?? null
   if (sourceViewerRef.value?.scrollToLine?.(method.startLine)) {
     return
   }
   jumpToMethod(method.methodName)
+}
+
+function syncMethodWithSourceLine(line: number) {
+  const match = findMethodForLine(line)
+  if (!match || match.index === activeMethodIndex.value) {
+    return
+  }
+  activeMethodIndex.value = match.index
+  const page = Math.floor(match.filteredIndex / methodPageSize.value) + 1
+  if (methodPage.value !== page) {
+    methodPage.value = page
+  }
+  requestAnimationFrame(() => {
+    methodTableShellRef.value
+      ?.querySelector<HTMLElement>(`[data-method-index="${match.index}"]`)
+      ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  })
+}
+
+function findMethodForLine(line: number) {
+  let closest: { index: number; filteredIndex: number; distance: number } | null = null
+  for (const item of filteredMethods.value) {
+    const start = item.method.startLine || methodStartFromDesc(item.method.methodDesc)
+    const end = item.method.endLine || methodEndFromDesc(item.method.methodDesc) || start
+    if (!start) {
+      continue
+    }
+    if (line >= start && line <= Math.max(start, end)) {
+      return { index: item.index, filteredIndex: filteredMethods.value.indexOf(item) }
+    }
+    const distance = Math.abs(line - start)
+    if (!closest || distance < closest.distance) {
+      closest = { index: item.index, filteredIndex: filteredMethods.value.indexOf(item), distance }
+    }
+  }
+  return closest
+}
+
+function methodStartFromDesc(desc?: string) {
+  const match = desc?.match(/(\d+)\s*-\s*(\d+)/)
+  return match ? Number(match[1]) : 0
+}
+
+function methodEndFromDesc(desc?: string) {
+  const match = desc?.match(/(\d+)\s*-\s*(\d+)/)
+  return match ? Number(match[2]) : 0
 }
 
 function methodBaseName(methodName: string) {
