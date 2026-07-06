@@ -104,12 +104,12 @@
           <strong>{{ testGap?.uncoveredLines || 0 }}</strong>
           <small>{{ testGap?.riskyUnits || 0 }} 个风险单元</small>
         </div>
-        <div>
+        <div class="risk-summary-card" :title="topRiskTitle">
           <span>最高风险</span>
-          <strong>{{ topRiskUnit?.displayName || topRiskUnit?.sourcePath || '-' }}</strong>
-          <small>{{ topRiskUnit?.uncoveredLines || 0 }} 行未覆盖</small>
+          <strong>{{ topRiskName }}</strong>
+          <small>{{ topRiskDetail }}</small>
         </div>
-        <div>
+        <div class="tia-summary-card" :title="testImpactTitle">
           <span>TIA 选测</span>
           <strong>{{ testImpact?.impactedCaseCount || testImpact?.impactedTraceCount || 0 }}</strong>
           <small>{{ testImpactSummary }}</small>
@@ -240,12 +240,28 @@ const coverageUnitTreeCount = computed(() => {
   return units.length + units.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0)
 })
 const topRiskUnit = computed(() => testGap.value?.units?.[0])
+const topRiskName = computed(() => topRiskUnit.value?.displayName || topRiskUnit.value?.unitKey || topRiskUnit.value?.sourcePath || '-')
+const topRiskDetail = computed(() => {
+  const unit = topRiskUnit.value
+  if (!unit) return '暂无风险单元'
+  const parts = [`${unit.uncoveredLines || 0} 行未覆盖`]
+  const source = unit.sourcePath || unit.unitKey
+  if (source && source !== topRiskName.value) parts.push(source)
+  return parts.join(' · ')
+})
+const topRiskTitle = computed(() => `${topRiskName.value}\n${topRiskDetail.value}`)
 const testImpactSummary = computed(() => {
   const report = testImpact.value
   if (!report) return '等待分析'
   if (report.impactedCaseCount) return `${report.impactedCaseCount} 个用例受影响`
   if (report.impactedTraceCount) return `${report.impactedTraceCount} 条链路受影响`
-  return report.reasons?.[0] || '暂无可归因快照'
+  return report.reasons?.join('；') || '暂无可归因快照'
+})
+const testImpactTitle = computed(() => {
+  const report = testImpact.value
+  if (!report) return testImpactSummary.value
+  const changedLineText = report.changedLineCount === undefined ? '' : `变更行 ${report.changedLineCount}`
+  return [testImpactSummary.value, changedLineText, ...(report.reasons || [])].filter(Boolean).join('\n')
 })
 
 function formatRate(value?: number) {
@@ -621,7 +637,7 @@ onMounted(() => {
 .core-summary,
 .analytics-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 10px;
   margin-top: 12px;
 }
@@ -645,20 +661,24 @@ onMounted(() => {
 
 .core-summary strong,
 .analytics-summary strong {
-  overflow: hidden;
   color: #0f172a;
   font-size: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .analytics-summary small {
-  overflow: hidden;
   color: #64748b;
   font-size: 12px;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.risk-summary-card,
+.tia-summary-card {
+  align-content: start;
 }
 
 .analytics-summary .gate-card.passed {
