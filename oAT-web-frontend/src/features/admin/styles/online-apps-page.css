@@ -53,6 +53,7 @@
   position: sticky;
   top: 12px;
   z-index: 4;
+  grid-column: span 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -61,12 +62,19 @@
 }
 
 .text-input {
+  flex: 1 1 360px;
+  min-width: 240px;
   width: 100%;
   max-width: 760px;
   border-radius: 14px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   padding: 10px 12px;
   background: #fff;
+}
+
+.toolbar-card span {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .summary-card strong {
@@ -403,6 +411,11 @@
   .toolbar-card {
     align-items: stretch;
     flex-direction: column;
+    grid-column: auto;
+  }
+
+  .text-input {
+    min-width: 0;
   }
 
   .module-panel {

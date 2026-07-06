@@ -51,13 +51,22 @@ const props = defineProps<{
 
 const visibleUnits = computed(() => {
   const term = (props.keyword || '').trim().toLowerCase()
-  if (!term) return props.units
-  return props.units.filter((unit) => [
-    unit.unitKey,
-    unit.displayName,
-    unit.sourcePath,
-    ...(unit.functions || []).map((fn) => fn.signature),
-  ].join(' ').toLowerCase().includes(term))
+  const filtered = term
+    ? props.units.filter((unit) => [
+      unit.unitKey,
+      unit.displayName,
+      unit.sourcePath,
+      ...(unit.functions || []).map((fn) => fn.signature),
+    ].join(' ').toLowerCase().includes(term))
+    : props.units
+
+  return filtered
+    .map((unit, index) => ({ unit, index }))
+    .sort((left, right) => {
+      const dataRank = lineCoverageRank(right.unit) - lineCoverageRank(left.unit)
+      return dataRank || left.index - right.index
+    })
+    .map((item) => item.unit)
 })
 
 function unitKey(unit: CoverageUnit) {
@@ -74,6 +83,12 @@ function coveredLines(unit: CoverageUnit) {
 
 function totalBranches(unit: CoverageUnit) {
   return Math.max(unit.branches?.length || 0, sum(unit.functions?.map((fn) => fn.branches?.length || 0)))
+}
+
+function lineCoverageRank(unit: CoverageUnit) {
+  if (coveredLines(unit) > 0) return 2
+  if (totalLines(unit) > 0) return 1
+  return 0
 }
 
 function coveredBranches(unit: CoverageUnit) {
