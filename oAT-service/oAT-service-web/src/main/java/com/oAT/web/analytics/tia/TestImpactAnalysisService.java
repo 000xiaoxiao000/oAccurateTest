@@ -90,12 +90,8 @@ public class TestImpactAnalysisService {
             }
         }
         boolean usedSnapshotUsecaseFallback = false;
-        if (impactMap.isEmpty() && !scopedToChangedLines) {
-            for (UsecaseImpact usecase : usecaseResolver.findReportSnapshotUsecases()) {
-                String usecaseIdentity = "usecase:" + usecase.id();
-                impactMap.computeIfAbsent(usecaseIdentity, ignored -> new MutableImpactCase(usecase));
-                usedSnapshotUsecaseFallback = true;
-            }
+        if (!scopedToChangedLines) {
+            usedSnapshotUsecaseFallback = supplementReportSnapshotUsecases(usecaseResolver, impactMap);
         }
 
         List<TestImpactCase> impactedCases = impactMap.values().stream()
@@ -109,7 +105,7 @@ public class TestImpactAnalysisService {
             report.getReasons().add("未提供变更行范围，已按当前报告内可关联用例或链路的已覆盖行估算");
         }
         if (usedSnapshotUsecaseFallback) {
-            report.getReasons().add("当前报告缺少行级覆盖足迹，已按系统快照关联用例兜底推荐");
+            report.getReasons().add("当前报告已按系统快照关联用例补充推荐");
         } else if (footprintCount == 0) {
             report.getReasons().add("当前报告缺少用例或链路关联数据，无法推荐受影响用例");
         } else if (impactMap.isEmpty()) {
@@ -201,6 +197,44 @@ public class TestImpactAnalysisService {
         return new ArrayList<>(result.values());
     }
 
+    private boolean supplementReportSnapshotUsecases(SnapshotUsecaseResolver usecaseResolver,
+                                                     Map<String, MutableImpactCase> impactMap) {
+        List<UsecaseImpact> reportSnapshotUsecases = usecaseResolver.findReportSnapshotUsecases();
+        if (reportSnapshotUsecases.isEmpty()) {
+            return false;
+        }
+
+        List<MutableImpactCase> currentImpacts = new ArrayList<>(impactMap.values());
+        Set<String> usecaseTraceIds = reportSnapshotUsecases.stream()
+                .map(UsecaseImpact::traceId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        for (UsecaseImpact usecase : reportSnapshotUsecases) {
+            String usecaseIdentity = "usecase:" + usecase.id();
+            MutableImpactCase target = impactMap.computeIfAbsent(usecaseIdentity, ignored -> new MutableImpactCase(usecase));
+            target.impactedUnits.addAll(usecase.impactedUnits());
+            if (!StringUtils.hasText(usecase.traceId())) {
+                continue;
+            }
+            for (MutableImpactCase source : currentImpacts) {
+                if (source == target || source.hasUsecase() || !usecase.traceId().equals(source.traceId())) {
+                    continue;
+                }
+                target.coveredChangedLines = Math.max(target.coveredChangedLines, source.coveredChangedLines);
+                target.impactedUnits.addAll(source.impactedUnits);
+            }
+        }
+
+        if (!usecaseTraceIds.isEmpty()) {
+            impactMap.entrySet().removeIf(entry -> {
+                MutableImpactCase value = entry.getValue();
+                return !value.hasUsecase() && usecaseTraceIds.contains(value.traceId());
+            });
+        }
+        return true;
+    }
+
     private String firstText(String... values) {
         if (values == null) {
             return null;
@@ -234,6 +268,9 @@ public class TestImpactAnalysisService {
         private MutableImpactCase(CoverageFootprint footprint, UsecaseImpact usecase) {
             this.footprint = footprint;
             this.usecase = usecase;
+            if (usecase != null) {
+                this.impactedUnits.addAll(usecase.impactedUnits());
+            }
         }
 
         private TestImpactCase toImpactCase() {
@@ -249,6 +286,17 @@ public class TestImpactAnalysisService {
             item.setCoveredChangedLines(coveredChangedLines);
             item.setImpactedUnits(List.copyOf(impactedUnits));
             return item;
+        }
+
+        private boolean hasUsecase() {
+            return usecase != null && StringUtils.hasText(usecase.id());
+        }
+
+        private String traceId() {
+            if (usecase != null && StringUtils.hasText(usecase.traceId())) {
+                return usecase.traceId();
+            }
+            return footprint == null ? null : footprint.getTraceId();
         }
     }
 
@@ -297,7 +345,7 @@ public class TestImpactAnalysisService {
                 }
                 for (SystemSnapshot snapshot : snapshots) {
                     for (UsecaseImpact usecase : loadUsecasesBySnapshot(snapshot)) {
-                        result.putIfAbsent(usecase.id(), usecase);
+                        mergeUsecaseImpact(result, usecase);
                     }
                 }
             }
@@ -313,7 +361,7 @@ public class TestImpactAnalysisService {
                     continue;
                 }
                 String title = firstText(usecase.getTitle(), index.getId());
-                result.add(new UsecaseImpact(index.getId(), title, null));
+                result.add(new UsecaseImpact(index.getId(), title, null, Collections.emptyList()));
             }
             return result;
         }
@@ -348,10 +396,28 @@ public class TestImpactAnalysisService {
             LinkedHashMap<String, UsecaseImpact> result = new LinkedHashMap<>();
             for (SystemSnapshot snapshot : snapshots) {
                 for (UsecaseImpact usecase : loadUsecasesBySnapshot(snapshot)) {
-                    result.putIfAbsent(usecase.id(), usecase);
+                    mergeUsecaseImpact(result, usecase);
                 }
             }
             return new ArrayList<>(result.values());
+        }
+
+        private void mergeUsecaseImpact(Map<String, UsecaseImpact> result, UsecaseImpact usecase) {
+            if (usecase == null || !StringUtils.hasText(usecase.id())) {
+                return;
+            }
+            UsecaseImpact existing = result.get(usecase.id());
+            if (existing == null) {
+                result.put(usecase.id(), usecase);
+                return;
+            }
+            LinkedHashSet<String> impactedUnits = new LinkedHashSet<>(existing.impactedUnits());
+            impactedUnits.addAll(usecase.impactedUnits());
+            result.put(usecase.id(), new UsecaseImpact(
+                    existing.id(),
+                    firstText(existing.title(), usecase.title()),
+                    firstText(existing.traceId(), usecase.traceId()),
+                    new ArrayList<>(impactedUnits)));
         }
 
         private List<UsecaseImpact> loadUsecasesBySnapshot(SystemSnapshot snapshot) {
@@ -361,15 +427,37 @@ public class TestImpactAnalysisService {
             List<UsecaseImpact> result = new ArrayList<>();
             List<CaseCenterIndex> indexes = caseCenterRepository
                     .findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshot.getId());
+            List<String> impactedUnits = snapshotImpactUnits(snapshot);
             for (CaseCenterIndex index : indexes) {
                 Usecase usecase = index == null ? null : index.getUsecase();
                 if (usecase == null || !StringUtils.hasText(index.getId())) {
                     continue;
                 }
                 String title = firstText(usecase.getTitle(), index.getId());
-                result.add(new UsecaseImpact(index.getId(), title, snapshot.getTraceId()));
+                result.add(new UsecaseImpact(index.getId(), title, snapshot.getTraceId(), impactedUnits));
             }
             return result;
+        }
+
+        private List<String> snapshotImpactUnits(SystemSnapshot snapshot) {
+            if (snapshot == null || snapshot.getCodes() == null || snapshot.getCodes().length == 0) {
+                return Collections.emptyList();
+            }
+            return java.util.Arrays.stream(snapshot.getCodes())
+                    .map(this::snapshotCodeClassName)
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .collect(Collectors.toList());
+        }
+
+        private String snapshotCodeClassName(String code) {
+            if (!StringUtils.hasText(code)) {
+                return null;
+            }
+            String normalized = code.trim();
+            int splitIndex = normalized.indexOf(' ');
+            String className = splitIndex < 0 ? normalized : normalized.substring(0, splitIndex);
+            return className.trim().replace('/', '.');
         }
 
         private void loadReportSnapshots(CoverageReportIndex reportIndex) {
@@ -428,5 +516,5 @@ public class TestImpactAnalysisService {
         }
     }
 
-    private record UsecaseImpact(String id, String title, String traceId) {}
+    private record UsecaseImpact(String id, String title, String traceId, List<String> impactedUnits) {}
 }

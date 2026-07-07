@@ -198,7 +198,7 @@
               <div class="tia-case-cell">
                 <strong>{{ row.caseName }}</strong>
                 <span>{{ row.meta }}</span>
-                <em>{{ row.coveredChangedLines }} 行变更已覆盖</em>
+                <em>{{ row.coveredChangedLines ? `${row.coveredChangedLines} 行变更已覆盖` : '由系统快照关联' }}</em>
               </div>
               <div class="tia-class-list">
                 <RouterLink
