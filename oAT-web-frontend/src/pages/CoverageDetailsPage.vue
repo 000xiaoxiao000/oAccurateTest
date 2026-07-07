@@ -83,7 +83,7 @@
           <strong>{{ coverageUnitFunctionCount }}</strong>
         </div>
         <div>
-          <span>源码类</span>
+          <span>覆盖单元</span>
           <strong>{{ coverageSourceUnitCount }}</strong>
         </div>
       </section>
@@ -102,7 +102,7 @@
         <div>
           <span>未覆盖行</span>
           <strong>{{ testGap?.uncoveredLines || 0 }}</strong>
-          <small>{{ testGap?.riskyUnits || 0 }} 个风险类</small>
+          <small>{{ testGap?.riskyUnits || 0 }} 个风险单元</small>
         </div>
         <div class="risk-summary-card" :title="topRiskTitle">
           <span>最高风险</span>
@@ -136,7 +136,7 @@
           :page="currentPage + 1"
           :page-size="pageSize"
           :total="coverageUnits?.totalElements || 0"
-          item-name="源码类"
+          item-name="覆盖单元"
           @update:page="goPage($event - 1)"
           @update:page-size="changePageSize"
         />
@@ -164,7 +164,7 @@
         <header class="tia-modal-head">
           <div>
             <span>TIA 选测</span>
-            <h2 id="tia-modal-title">用例与类映射</h2>
+            <h2 id="tia-modal-title">用例与覆盖单元映射</h2>
           </div>
           <button type="button" class="modal-close" aria-label="关闭 TIA 选测明细" @click="closeTiaDialog">关闭</button>
         </header>
@@ -209,9 +209,9 @@
                   :title="unit.title"
                 >
                   <span>{{ unit.displayName }}</span>
-                  <small>{{ unit.lineCount > 1 ? `${unit.lineCount} 行` : unit.firstLine ? `L${unit.firstLine}` : '类' }}</small>
+                  <small>{{ unit.lineCount > 1 ? `${unit.lineCount} 行` : unit.firstLine ? `L${unit.firstLine}` : '单元' }}</small>
                 </RouterLink>
-                <span v-if="!row.classCount" class="tia-empty-chip">暂无关联类</span>
+                <span v-if="!row.classCount" class="tia-empty-chip">暂无关联覆盖单元</span>
               </div>
             </article>
           </div>
@@ -343,7 +343,7 @@ const topRiskUnit = computed(() => testGap.value?.units?.[0])
 const topRiskName = computed(() => normalizeSourcePath(topRiskUnit.value?.displayName || topRiskUnit.value?.unitKey || topRiskUnit.value?.sourcePath) || '-')
 const topRiskDetail = computed(() => {
   const unit = topRiskUnit.value
-  if (!unit) return '暂无风险类'
+  if (!unit) return '暂无风险单元'
   const parts = [`${unit.uncoveredLines || 0} 行未覆盖`]
   const source = normalizeSourcePath(unit.sourcePath || unit.unitKey)
   if (source && source !== topRiskName.value) parts.push(source)

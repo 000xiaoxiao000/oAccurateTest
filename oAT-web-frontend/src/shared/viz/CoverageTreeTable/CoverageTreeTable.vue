@@ -3,7 +3,7 @@
     <div class="tree-toolbar">
       <label class="tree-search">
         <span>筛选</span>
-        <input v-model.trim="keyword" class="text-input" type="search" placeholder="模块、文件或函数" aria-label="筛选统一覆盖率模型" />
+        <input v-model.trim="keyword" class="text-input" type="search" :placeholder="treeSearchPlaceholder" aria-label="筛选统一覆盖率模型" />
       </label>
       <div class="tree-stats">
         <span>{{ normalizedLanguage }}</span>
@@ -27,7 +27,7 @@
         </colgroup>
         <thead>
           <tr>
-            <th>模块/文件/函数</th>
+            <th>{{ primaryColumnLabel }}</th>
             <th>类型</th>
             <th>代码行</th>
             <th>行覆盖率</th>
@@ -124,6 +124,9 @@ const normalizedLanguage = computed(() =>
 const loadedNodeSet = computed(() => new Set(props.loadedNodeIds || []))
 const loadingNodeSet = computed(() => new Set(props.loadingNodeIds || []))
 const rows = computed(() => props.treeNodes?.length ? buildRowsFromTreeNodes(props.treeNodes) : buildRows(props.units || []))
+const hasFunctionRows = computed(() => rows.value.some((row) => row.kind === 'function'))
+const primaryColumnLabel = computed(() => hasFunctionRows.value ? '模块/文件/函数' : '模块/文件')
+const treeSearchPlaceholder = computed(() => hasFunctionRows.value ? '模块、文件或函数' : '模块或文件')
 const filteredRows = computed(() => {
   const term = keyword.value.trim().toLowerCase()
   if (!term) return rows.value

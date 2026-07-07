@@ -436,9 +436,22 @@ public class TestImpactAnalysisService {
                     continue;
                 }
                 String title = firstText(usecase.getTitle(), index.getId());
-                result.add(new UsecaseImpact(index.getId(), title, snapshot.getTraceId(), impactedUnits));
+                LinkedHashSet<String> usecaseUnits = new LinkedHashSet<>(impactedUnits);
+                usecaseUnits.addAll(usecaseImpactUnits(usecase));
+                result.add(new UsecaseImpact(index.getId(), title, snapshot.getTraceId(), new ArrayList<>(usecaseUnits)));
             }
             return result;
+        }
+
+        private List<String> usecaseImpactUnits(Usecase usecase) {
+            if (usecase == null || usecase.getSrcStack() == null || usecase.getSrcStack().length == 0) {
+                return Collections.emptyList();
+            }
+            return java.util.Arrays.stream(usecase.getSrcStack())
+                    .map(this::stackCodeUnitName)
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .collect(Collectors.toList());
         }
 
         private List<String> snapshotImpactUnits(SystemSnapshot snapshot) {
@@ -446,24 +459,39 @@ public class TestImpactAnalysisService {
                 return Collections.emptyList();
             }
             return java.util.Arrays.stream(snapshot.getCodes())
-                    .map(this::snapshotCodeClassName)
+                    .map(this::stackCodeUnitName)
                     .filter(StringUtils::hasText)
                     .distinct()
                     .collect(Collectors.toList());
         }
 
-        private String snapshotCodeClassName(String code) {
+        private String stackCodeUnitName(String code) {
             if (!StringUtils.hasText(code)) {
                 return null;
             }
             String normalized = code.trim();
             int splitIndex = normalized.indexOf(' ');
-            String className = splitIndex < 0 ? normalized : normalized.substring(0, splitIndex);
-            className = className.trim();
-            if (isSourcePath(className)) {
-                return className.replace('\\', '/');
+            String unitName = splitIndex < 0 ? normalized : normalized.substring(0, splitIndex);
+            unitName = unitName.trim();
+            if (isSourcePath(unitName)) {
+                return unitName.replace('\\', '/');
             }
-            return className.replace('/', '.');
+            return normalizeDottedSourcePath(unitName.replace('/', '.'));
+        }
+
+        private String normalizeDottedSourcePath(String value) {
+            if (!StringUtils.hasText(value)) {
+                return value;
+            }
+            String lower = value.toLowerCase();
+            for (String extension : List.of(".vue", ".jsx", ".tsx", ".mjs", ".cjs", ".js", ".ts", ".go", ".py", ".cpp", ".cc", ".c", ".hpp", ".h")) {
+                if (lower.endsWith(extension) && value.indexOf('/') < 0) {
+                    int extensionStart = value.length() - extension.length();
+                    String withoutExtension = value.substring(0, extensionStart).replace('.', '/');
+                    return withoutExtension + extension;
+                }
+            }
+            return value;
         }
 
         private boolean isSourcePath(String value) {
