@@ -18,6 +18,7 @@ import com.oAT.web.esDao.entity.CoverageReportIndex;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.AppVo;
+import com.oAT.web.service.entity.CoverageTreeNode;
 import com.oAT.web.service.entity.ProjectMemberVo;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
@@ -163,6 +164,34 @@ public class CoverageCoreApiControl {
         payload.setLanguage(report.getLanguage() == null ? report.getSourceType() : report.getLanguage());
         payload.setModules(coverageCoreQueryService.listModules(reportId, query));
         return new ResultNotified<>(true, "获取统一覆盖率模块成功", payload);
+    }
+
+    @GetMapping("/reports/{reportId}/tree-nodes")
+    public ResultNotified<CoverageTreeNodesPayload> treeNodes(@PathVariable String reportId,
+                                                              @RequestParam String projectId,
+                                                              @RequestParam(required = false) String parentPackage,
+                                                              @RequestParam(required = false) String className,
+                                                              @RequestParam(required = false) String methodName,
+                                                              @RequestParam(required = false) Double minRate,
+                                                              @RequestParam(required = false) Double maxRate,
+                                                              @RequestParam(required = false) Double minBranchRate,
+                                                              @RequestParam(required = false) Double maxBranchRate,
+                                                              @RequestParam(required = false) Double minMethodRate,
+                                                              @RequestParam(required = false) Double maxMethodRate,
+                                                              @RequestParam(required = false) Integer minComplexity,
+                                                              @RequestParam(required = false) Integer maxComplexity,
+                                                              @SessionAttribute UserVo user) {
+        ensureProjectAccess(projectId, user);
+        CoverageReportIndex report = coverageCoreQueryService.getReport(reportId);
+        ensureReportAppBelongsToProject(projectId, report);
+        CoverageUnitQuery query = buildUnitQuery(className, methodName, minRate, maxRate, minBranchRate, maxBranchRate,
+                minMethodRate, maxMethodRate, minComplexity, maxComplexity, null, null);
+        CoverageTreeNodesPayload payload = new CoverageTreeNodesPayload();
+        payload.setReportId(reportId);
+        payload.setLanguage(report.getLanguage() == null ? report.getSourceType() : report.getLanguage());
+        payload.setParentPackage(parentPackage == null ? "" : parentPackage);
+        payload.setNodes(coverageCoreQueryService.listTreeNodes(reportId, parentPackage, query));
+        return new ResultNotified<>(true, "获取统一覆盖率树节点成功", payload);
     }
 
     @GetMapping("/reports/{reportId}/source")
@@ -322,5 +351,21 @@ public class CoverageCoreApiControl {
         public void setLanguage(String language) { this.language = language; }
         public List<CoverageModule> getModules() { return modules; }
         public void setModules(List<CoverageModule> modules) { this.modules = modules; }
+    }
+
+    public static class CoverageTreeNodesPayload {
+        private String reportId;
+        private String language;
+        private String parentPackage;
+        private List<CoverageTreeNode> nodes;
+
+        public String getReportId() { return reportId; }
+        public void setReportId(String reportId) { this.reportId = reportId; }
+        public String getLanguage() { return language; }
+        public void setLanguage(String language) { this.language = language; }
+        public String getParentPackage() { return parentPackage; }
+        public void setParentPackage(String parentPackage) { this.parentPackage = parentPackage; }
+        public List<CoverageTreeNode> getNodes() { return nodes; }
+        public void setNodes(List<CoverageTreeNode> nodes) { this.nodes = nodes; }
     }
 }

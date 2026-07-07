@@ -148,10 +148,13 @@
           <span>{{ coverageUnitTreeCount }}</span>
         </div>
         <CoverageTreeTable
-          :units="coverageTreeUnits"
-          :modules="coverageModules?.modules || []"
+          :units="[]"
+          :tree-nodes="coverageTreeNodes"
+          :loaded-node-ids="coverageTreeLoadedNodeIds"
+          :loading-node-ids="coverageTreeLoadingNodeIds"
           :language="coverageLanguage"
           :open-code-route="buildCoverageUnitCodeRoute"
+          @load-children="loadCoverageTreeChildren"
         />
       </section>
     </template>
@@ -230,14 +233,14 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import AppPagination from '@/components/AppPagination.vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
-import { coverageMethodExportUrl, coverageReportExportUrl, fetchCoverageModules, fetchCoverageReportMetadata, fetchCoverageUnits, fetchQualityGate, fetchTestGap, fetchTestImpact } from '@/features/coverage/api/core'
+import { coverageMethodExportUrl, coverageReportExportUrl, fetchCoverageReportMetadata, fetchCoverageTreeNodes, fetchCoverageUnits, fetchQualityGate, fetchTestGap, fetchTestImpact } from '@/features/coverage/api/core'
 import { CoverageTreeTable } from '@/shared/viz/CoverageTreeTable'
 import { CoverageUnitListTable } from '@/shared/viz/CoverageUnitListTable'
 import type {
   CoverageAppSummary,
-  CoverageModulesPayload,
   CoverageReportMetadata,
   CoverageReportSummary,
+  CoverageTreeNode,
   CoverageUnit,
   CoverageUnitsPayload,
   QualityGateResult,
@@ -283,7 +286,9 @@ const backRoute = computed(() => ({
 }))
 const reportMetadata = ref<CoverageReportMetadata | null>(null)
 const coverageUnits = ref<CoverageUnitsPayload | null>(null)
-const coverageModules = ref<CoverageModulesPayload | null>(null)
+const coverageTreeNodes = ref<CoverageTreeNode[]>([])
+const coverageTreeLoadedNodeIds = ref<string[]>([])
+const coverageTreeLoadingNodeIds = ref<string[]>([])
 const testGap = ref<TestGapReport | null>(null)
 const qualityGate = ref<QualityGateResult | null>(null)
 const testImpact = ref<TestImpactAnalysisReport | null>(null)
@@ -317,24 +322,22 @@ const advancedFilterCount = computed(
       filters.maxComplexity,
     ].filter((value) => value !== undefined && value !== null).length,
 )
-const coverageCoreUnits = computed(() => coverageModules.value?.modules.flatMap((module) => module.units || []) || coverageUnits.value?.units || [])
+const coverageCoreUnits = computed(() => coverageUnits.value?.units || [])
 const coverageListUnits = computed(() => coverageUnits.value?.units || [])
-const coverageTreeUnits = computed(() => coverageModules.value?.modules.flatMap((module) => module.units || []) || coverageUnits.value?.units || [])
 const reportSummary = computed<CoverageReportSummary | undefined>(() => reportMetadata.value?.report)
 const reportApp = computed<CoverageAppSummary | undefined>(() => reportMetadata.value?.app)
 const coverageLanguage = computed(() => coverageUnits.value?.language || reportSummary.value?.language || reportSummary.value?.sourceType || reportApp.value?.language || 'JAVA')
-const hasCoverageContent = computed(() => Boolean(reportMetadata.value || coverageCoreUnits.value.length))
-const coverageUnitCount = computed(() => coverageCoreUnits.value.length || '-')
+const hasCoverageContent = computed(() => Boolean(reportMetadata.value || coverageCoreUnits.value.length || coverageTreeNodes.value.length))
+const coverageUnitCount = computed(() => coverageUnits.value?.totalElements || reportSummary.value?.totalClasses || coverageCoreUnits.value.length || '-')
 const coverageUnitFunctionCount = computed(() =>
-  coverageCoreUnits.value.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0) || '-',
+  reportSummary.value?.totalMethods || coverageCoreUnits.value.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0) || '-',
 )
 const coverageSourceUnitCount = computed(() => {
   const count = coverageCoreUnits.value.filter((unit) => Boolean(unit.sourcePath || unit.displayName || unit.unitKey)).length
-  return count || '-'
+  return coverageUnits.value?.totalElements || reportSummary.value?.totalClasses || count || '-'
 })
 const coverageUnitTreeCount = computed(() => {
-  const units = coverageTreeUnits.value
-  return units.length + units.reduce((sum, unit) => sum + (unit.functions?.length || 0), 0)
+  return coverageTreeNodes.value.length
 })
 const topRiskUnit = computed(() => testGap.value?.units?.[0])
 const topRiskName = computed(() => normalizeSourcePath(topRiskUnit.value?.displayName || topRiskUnit.value?.unitKey || topRiskUnit.value?.sourcePath) || '-')
@@ -595,17 +598,20 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [metadata, units, modules, gap, gate, impact] = await Promise.all([
+    coverageTreeNodes.value = []
+    coverageTreeLoadedNodeIds.value = []
+    coverageTreeLoadingNodeIds.value = []
+    const [metadata, units, treeNodes, gap, gate, impact] = await Promise.all([
       fetchCoverageReportMetadata(projectId.value, reportId.value),
       fetchCoverageUnits(projectId.value, reportId.value, coverageUnitQuery(true)),
-      fetchCoverageModules(projectId.value, reportId.value, coverageUnitQuery(false)),
+      fetchCoverageTreeNodes(projectId.value, reportId.value, '', coverageUnitQuery(false)),
       fetchTestGap(projectId.value, reportId.value),
       fetchQualityGate(projectId.value, reportId.value),
       fetchTestImpact(projectId.value, reportId.value, String(route.query.changedLines || '')),
     ])
     reportMetadata.value = metadata
     coverageUnits.value = units
-    coverageModules.value = modules
+    coverageTreeNodes.value = treeNodes.nodes || []
     testGap.value = gap
     qualityGate.value = gate
     testImpact.value = impact
@@ -615,6 +621,32 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+async function loadCoverageTreeChildren(node: CoverageTreeNode) {
+  const parentId = treeNodeId(node)
+  if (!parentId || coverageTreeLoadedNodeIds.value.includes(parentId) || coverageTreeLoadingNodeIds.value.includes(parentId)) {
+    return
+  }
+  coverageTreeLoadingNodeIds.value = [...coverageTreeLoadingNodeIds.value, parentId]
+  try {
+    const payload = await fetchCoverageTreeNodes(projectId.value, reportId.value, node.fullName || node.id || '', coverageUnitQuery(false))
+    const existing = new Set(coverageTreeNodes.value.map(treeNodeId))
+    const nextChildren = (payload.nodes || []).filter((item) => {
+      const id = treeNodeId(item)
+      return id && !existing.has(id)
+    })
+    coverageTreeNodes.value = [...coverageTreeNodes.value, ...nextChildren]
+    coverageTreeLoadedNodeIds.value = [...coverageTreeLoadedNodeIds.value, parentId]
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '加载覆盖率树节点失败'
+  } finally {
+    coverageTreeLoadingNodeIds.value = coverageTreeLoadingNodeIds.value.filter((item) => item !== parentId)
+  }
+}
+
+function treeNodeId(node: CoverageTreeNode) {
+  return node.id || node.fullName || node.anchor || node.name || ''
 }
 
 watch(

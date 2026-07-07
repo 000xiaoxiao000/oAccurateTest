@@ -47,9 +47,10 @@
                   class="tree-fold-button"
                   type="button"
                   :aria-label="isExpanded(row.id) ? '收起' : '展开'"
-                  @click="toggleRow(row.id)"
+                  :disabled="isLoading(row.id)"
+                  @click="toggleRow(row)"
                 >
-                  {{ isExpanded(row.id) ? '−' : '+' }}
+                  {{ isLoading(row.id) ? '…' : isExpanded(row.id) ? '−' : '+' }}
                 </button>
                 <span v-else class="tree-fold-spacer"></span>
                 <span class="kind-mark">{{ kindMark(row.kind) }}</span>
@@ -78,10 +79,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import type { CoverageFunction, CoverageLine, CoverageUnit } from '@/entities/coverage/model'
+import type { CoverageFunction, CoverageLine, CoverageTreeNode, CoverageUnit } from '@/entities/coverage/model'
 import type { CoverageTreeTableProps } from './types'
 
-type RowKind = 'module' | 'unit' | 'function'
+type RowKind = 'module' | 'unit' | 'function' | 'package'
 
 interface CoverageTreeRow {
   id: string
@@ -92,6 +93,7 @@ interface CoverageTreeRow {
   title: string
   subtitle?: string
   unit?: CoverageUnit
+  node?: CoverageTreeNode
   expandable: boolean
   totalLines: number
   coveredLines: number
@@ -106,17 +108,22 @@ interface CoverageTreeRow {
 }
 
 const props = defineProps<CoverageTreeTableProps>()
+const emit = defineEmits<{
+  (event: 'load-children', node: CoverageTreeNode): void
+}>()
 const keyword = ref('')
 const expandedRowIds = ref<Set<string>>(new Set())
 
 const normalizedLanguage = computed(() =>
   props.language
   || props.modules?.find((module) => module.language)?.language
-  || props.units.find((unit) => unit.language)?.language
+  || props.units?.find((unit) => unit.language)?.language
   || 'UNKNOWN',
 )
 
-const rows = computed(() => buildRows(props.units || []))
+const loadedNodeSet = computed(() => new Set(props.loadedNodeIds || []))
+const loadingNodeSet = computed(() => new Set(props.loadingNodeIds || []))
+const rows = computed(() => props.treeNodes?.length ? buildRowsFromTreeNodes(props.treeNodes) : buildRows(props.units || []))
 const filteredRows = computed(() => {
   const term = keyword.value.trim().toLowerCase()
   if (!term) return rows.value
@@ -199,6 +206,87 @@ function buildRows(units: CoverageUnit[]): CoverageTreeRow[] {
   return result
 }
 
+function buildRowsFromTreeNodes(nodes: CoverageTreeNode[]): CoverageTreeRow[] {
+  const nodeMap = new Map(nodes.map((node) => [nodeIdOf(node), node]))
+  const childMap = new Map<string, CoverageTreeNode[]>()
+  const roots: CoverageTreeNode[] = []
+  for (const node of nodes) {
+    const parentId = node.parentId || ''
+    if (parentId && nodeMap.has(parentId)) {
+      const children = childMap.get(parentId) || []
+      children.push(node)
+      childMap.set(parentId, children)
+    } else {
+      roots.push(node)
+    }
+  }
+  const sortNodes = (items: CoverageTreeNode[]) => items.sort((left, right) => nodeSortWeight(left) - nodeSortWeight(right) || String(left.name || left.fullName || '').localeCompare(String(right.name || right.fullName || '')))
+  const ordered: CoverageTreeNode[] = []
+  const visit = (node: CoverageTreeNode) => {
+    ordered.push(node)
+    sortNodes(childMap.get(nodeIdOf(node)) || []).forEach(visit)
+  }
+  sortNodes(roots).forEach(visit)
+  const depthCache = new Map<string, number>()
+  return ordered
+    .map((node) => toTreeNodeRow(node, levelOfNode(node, nodeMap, depthCache)))
+}
+
+function nodeSortWeight(node: CoverageTreeNode) {
+  return node.type === 'package' ? 0 : 1
+}
+
+function toTreeNodeRow(node: CoverageTreeNode, level: number): CoverageTreeRow {
+  const id = nodeIdOf(node)
+  const kind = node.type === 'package' ? 'package' : 'unit'
+  const unit = kind === 'unit'
+    ? {
+        unitKey: node.anchor || node.fullName || node.id,
+        displayName: node.name || node.fullName || node.id,
+        sourcePath: node.fullName || node.anchor || node.id,
+      } as CoverageUnit
+    : undefined
+  return {
+    id,
+    parentId: node.parentId || undefined,
+    kind,
+    level,
+    name: node.name || node.fullName || node.id || '未命名节点',
+    title: node.fullName || node.name || node.id || '',
+    unit,
+    node,
+    expandable: Boolean(node.hasChildren),
+    totalLines: node.totalLines || 0,
+    coveredLines: node.coveredLines || 0,
+    lineRate: node.lineRate || rate(node.coveredLines || 0, node.totalLines || 0),
+    totalBranches: node.totalBranchTargets || node.totalBranches || 0,
+    coveredBranches: node.coveredBranchTargets || node.coveredBranches || 0,
+    branchRate: node.branchRate || rate(node.coveredBranchTargets || node.coveredBranches || 0, node.totalBranchTargets || node.totalBranches || 0),
+    totalFunctions: node.totalMethods || 0,
+    coveredFunctions: node.coveredMethods || 0,
+    complexity: node.totalComplexity || 0,
+    searchText: [node.name, node.fullName, node.id, node.anchor].filter(Boolean).join(' ').toLowerCase(),
+  }
+}
+
+function nodeIdOf(node: CoverageTreeNode) {
+  return node.id || node.fullName || node.anchor || node.name || ''
+}
+
+function levelOfNode(node: CoverageTreeNode, nodeMap: Map<string, CoverageTreeNode>, cache: Map<string, number>): number {
+  const id = nodeIdOf(node)
+  if (cache.has(id)) return cache.get(id) || 0
+  const parentId = node.parentId
+  if (!parentId) {
+    cache.set(id, 0)
+    return 0
+  }
+  const parent = nodeMap.get(parentId)
+  const level = parent ? levelOfNode(parent, nodeMap, cache) + 1 : 1
+  cache.set(id, level)
+  return level
+}
+
 function groupUnits(units: CoverageUnit[]) {
   const moduleMap = new Map<string, { name: string; units: CoverageUnit[] }>()
   units.forEach((unit) => {
@@ -258,10 +346,21 @@ function isExpanded(rowId: string) {
   return expandedRowIds.value.has(rowId)
 }
 
-function toggleRow(rowId: string) {
+function isLoading(rowId: string) {
+  return loadingNodeSet.value.has(rowId)
+}
+
+function toggleRow(row: CoverageTreeRow) {
+  const rowId = row.id
   const next = new Set(expandedRowIds.value)
-  if (next.has(rowId)) next.delete(rowId)
-  else next.add(rowId)
+  if (next.has(rowId)) {
+    next.delete(rowId)
+  } else {
+    next.add(rowId)
+    if (row.node && row.node.hasChildren && !loadedNodeSet.value.has(rowId)) {
+      emit('load-children', row.node)
+    }
+  }
   expandedRowIds.value = next
 }
 
@@ -384,13 +483,13 @@ function rateTone(value: number, total: number) {
 }
 
 function kindLabel(kind: RowKind) {
-  if (kind === 'module') return '模块'
+  if (kind === 'module' || kind === 'package') return '模块'
   if (kind === 'unit') return '文件'
   return '函数'
 }
 
 function kindMark(kind: RowKind) {
-  if (kind === 'module') return 'M'
+  if (kind === 'module' || kind === 'package') return 'M'
   if (kind === 'unit') return 'U'
   return 'F'
 }
@@ -540,7 +639,8 @@ function kindMark(kind: RowKind) {
   color: #2563eb;
 }
 
-.row-module .kind-mark {
+.row-module .kind-mark,
+.row-package .kind-mark {
   background: rgba(15, 23, 42, 0.1);
   color: #0f172a;
 }

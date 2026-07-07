@@ -102,6 +102,29 @@ export interface CoverageModule {
   units?: CoverageUnit[]
 }
 
+export interface CoverageTreeNode {
+  id?: string
+  parentId?: string
+  name?: string
+  fullName?: string
+  type?: string
+  hasChildren?: boolean
+  anchor?: string
+  totalMethods?: number
+  coveredMethods?: number
+  totalBranches?: number
+  coveredBranches?: number
+  totalBranchTargets?: number
+  coveredBranchTargets?: number
+  totalLines?: number
+  coveredLines?: number
+  totalComplexity?: number
+  lineRate?: number
+  branchRate?: number
+  methodRate?: number
+  hasCodeChanges?: boolean
+}
+
 export interface CoverageUnitsPayload {
   reportId: string
   language?: CoverageLanguage | string
@@ -116,6 +139,13 @@ export interface CoverageModulesPayload {
   reportId: string
   language?: CoverageLanguage | string
   modules: CoverageModule[]
+}
+
+export interface CoverageTreeNodesPayload {
+  reportId: string
+  language?: CoverageLanguage | string
+  parentPackage?: string
+  nodes: CoverageTreeNode[]
 }
 
 export interface CoverageMethodsPayload {

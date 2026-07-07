@@ -5,6 +5,7 @@ import type {
   CoverageMethodsPayload,
   CoverageModulesPayload,
   CoverageReportMetadata,
+  CoverageTreeNodesPayload,
   CoverageUnitsPayload,
   QualityGateResult,
   SourceCoveragePayload,
@@ -175,6 +176,12 @@ export function fetchCoverageUnits(projectId: string, reportId: string, params: 
 export function fetchCoverageModules(projectId: string, reportId: string, params: CoverageUnitQuery = {}) {
   const query = buildCoverageUnitQuery(projectId, params, false)
   return apiGet<CoverageModulesPayload>(`/api/v2/coverage/reports/${encodeURIComponent(reportId)}/modules?${query.toString()}`)
+}
+
+export function fetchCoverageTreeNodes(projectId: string, reportId: string, parentPackage = '', params: CoverageUnitQuery = {}) {
+  const query = buildCoverageUnitQuery(projectId, params, false)
+  if (parentPackage) query.set('parentPackage', parentPackage)
+  return apiGet<CoverageTreeNodesPayload>(`/api/v2/coverage/reports/${encodeURIComponent(reportId)}/tree-nodes?${query.toString()}`)
 }
 
 export function fetchSourceCoverage(projectId: string, reportId: string, unitKey: string) {

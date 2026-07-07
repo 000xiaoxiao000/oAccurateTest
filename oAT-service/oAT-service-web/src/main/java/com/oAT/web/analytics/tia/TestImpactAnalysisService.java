@@ -217,7 +217,7 @@ public class TestImpactAnalysisService {
         return value == null ? "" : value.trim().replace('\\', '/');
     }
 
-    private static class MutableImpactCase {
+    private class MutableImpactCase {
         private final CoverageFootprint footprint;
         private final UsecaseImpact usecase;
         private int coveredChangedLines;
@@ -239,7 +239,9 @@ public class TestImpactAnalysisService {
         private TestImpactCase toImpactCase() {
             TestImpactCase item = new TestImpactCase();
             item.setUsecaseId(usecase == null ? null : usecase.id());
-            item.setCaseName(usecase == null ? footprint.getCaseName() : usecase.title());
+            item.setCaseName(usecase == null
+                    ? (footprint == null ? null : footprint.getCaseName())
+                    : firstText(usecase.title(), footprint == null ? null : footprint.getCaseName(), usecase.id()));
             item.setTestStage(footprint == null ? null : footprint.getTestStage());
             item.setBuildId(footprint == null ? null : footprint.getBuildId());
             item.setTraceId(usecase != null && StringUtils.hasText(usecase.traceId()) ? usecase.traceId()
