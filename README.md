@@ -1,142 +1,96 @@
 # oAccurateTest (oAT)
 
-中文 | [English](#english)
+oAccurateTest 是面向 Java 应用的精准测试与智能分析平台。平台通过 JavaAgent 采集运行时链路和代码执行栈，结合静态源码分析、版本 Diff、覆盖率报告与 AI 工具编排，帮助测试和研发团队定位变更影响、评估覆盖质量、追踪调用链路并沉淀测试资产。
 
-oAccurateTest 是一个面向 Java 应用的智能测试分析平台。通过 JavaAgent 无侵入地采集运行时链路数据，结合静态代码分析与 AI 能力，为测试和研发团队提供覆盖率分析、链路追踪、版本对比和智能诊断。
-
-> **使用声明**：本项目仅供个人学习、技术研究与交流使用，不得用于任何商业用途或未经授权的生产环境部署。使用者应自行遵守相关法律法规及第三方组件许可协议，由使用或二次开发引发的风险与责任由使用者自行承担。
-
----
+> 使用声明：本项目仅供个人学习、技术研究与交流使用，不得用于商业用途或未经授权的生产环境部署。使用者需自行遵守相关法律法规和第三方组件许可协议。
 
 ## 交流与反馈
 
-如果你正在关注 AI + 精准测试、覆盖率分析、链路追踪、流量采集或测试平台工程化实践，欢迎扫码交流。
-
 | 添加作者微信 | 微信交流入口 | AI + 精准测试实战交流群 |
 |---|---|---|
-| 扫码添加好友，备注 `oAT` / `精准测试`，方便通过验证。 | 扫码添加微信，交流项目使用、部署问题与二次开发思路。 | 扫码加入实战交流群，一起讨论 AI 测试分析、覆盖率治理和工程落地经验。 |
+| 扫码添加好友，备注 `oAT` / `精准测试`。 | 交流项目使用、部署问题与二次开发思路。 | 讨论 AI 测试分析、覆盖率治理和工程落地。 |
 | <img src="docs/assets/wechat-friend.png" alt="添加作者微信二维码" width="220"> | <img src="docs/assets/wechat-contact.jpg" alt="微信交流二维码" width="220"> | <img src="docs/assets/ai-testing-group.png" alt="AI + 精准测试实战交流群二维码" width="220"> |
 
----
+## 模块总览
 
-## 整体架构
-
-```
+```text
 oAccurateTest/
-├── oAT-agent/            # 探针模块（默认 Java 7 字节码，支持 JDK6/7/8 profile）
-│   ├── oAT-client-model/ # Agent 与服务端共用的数据模型
-│   ├── oAT-agent-core/   # 字节码增强、链路采集、数据上报
-│   └── oAT-agnet-shaded/ # 依赖 shaded 打包
-├── oAT-service/          # 服务端模块（Java 17）
-│   ├── oAT-ai/           # AI 分析模块（LangChain4j）
-│   └── oAT-service-web/  # Web 平台主服务（Spring Boot 3）
-├── oAT-relay/            # HTTP 转发中继服务（Spring Boot 3）
-├── oAT-web-frontend/     # 前端界面（Vue 3 + TypeScript）
-├── oAT-traffic-capture/  # 桌面流量采集器与覆盖率上送 SDK（Electron + Vue 3）
-└── README.md
+├── oAT-agent/            # JavaAgent 探针，采集链路、方法调用、覆盖率 codeNodes
+│   ├── oAT-client-model/ # Agent 与服务端共用模型
+│   ├── oAT-agent-core/   # 字节码增强、采集、上报
+│   └── oAT-agnet-shaded/ # shaded 依赖包
+├── oAT-service/
+│   ├── oAT-ai/           # LangChain4j AI 分析模块
+│   └── oAT-service-web/  # 平台后端主服务
+├── oAT-relay/            # HTTP 转发中继
+├── oAT-web-frontend/     # Web 前端
+├── oAT-traffic-capture/  # Electron 桌面流量采集器和覆盖率中继
+└── docs/                 # 文档与图片资源
 ```
 
-### 数据流
+## 数据流
 
-```
+```text
 目标 Java 应用
-  └─ oAT-agent（JavaAgent）
-       │ HTTP 上报链路 / 快照数据
+  └─ oAT-agent
+       │ 上报链路、快照、代码执行栈
        ▼
-  oAT-service-web（Spring Boot）
-       ├─ Elasticsearch  ← 快照、链路、静态源码
-       ├─ MySQL          ← 项目、应用、版本、用例等结构化数据
-       ├─ Redis          ← 会话、缓存
-       ├─ MinIO          ← 覆盖率 codeNodes 对象存储
-       ├─ Git 仓库       ← Commit、Diff、源码下载
-       └─ oAT-ai        ← AI 工具编排与 LLM 集成
-            │
-            ▼
-  oAT-web-frontend（Vue 3）
-       ▲
-       │ 前端 / 多语言覆盖率上送
-  oAT-traffic-capture / sdk
+  oAT-service-web
+       ├─ Elasticsearch：链路、快照、静态源码、报告索引
+       ├─ MySQL：项目、应用、版本、用例、成员等结构化数据
+       ├─ Redis：会话、缓存、AI 语义缓存
+       ├─ MinIO：覆盖率 codeNodes 对象存储
+       ├─ Git 仓库：源码、Commit、Diff
+       └─ oAT-ai：AI 工具编排与 LLM 调用
+       ▼
+  oAT-web-frontend
+
+可选入口：
+  oAT-relay：在隔离网络中转发 Agent / SDK / 前端请求
+  oAT-traffic-capture：采集桌面流量，并中继前端、多语言覆盖率
 ```
 
-`oAT-relay` 可按需部署在测试网络、隔离网络或边缘节点，接收 Agent、覆盖率 SDK、桌面采集器等客户端请求，并按原始路径转发到 `oAT-service-web`。
+## 核心能力
 
----
+- 运行时链路采集：支持 HTTP、JDBC、Redis、Feign、Dubbo、SOFA-RPC、RocketMQ、Kafka、RabbitMQ 等常见调用链路。
+- 系统快照：将一次测试场景的完整调用链沉淀为快照，支持目录管理、版本归档和图谱查看。
+- 覆盖率分析：支持全量和增量报告，提供类、方法、行、分支维度统计、源码着色和 Excel 导出。
+- 多语言覆盖率：支持前端 Istanbul、Go、Python、C/C++ 覆盖率上送与报告生成。
+- 版本中心：管理应用版本、分支、Commit、Git Diff 和变更影响范围。
+- 用例中心：管理用例目录、用例详情、快照关联、缺陷/PRD 链接和导入导出。
+- API 端点分析：识别 HTTP 接口并结合链路数据分析接口覆盖情况。
+- 探针监控：查看在线 Agent、心跳状态和离线告警。
+- AI 智能分析：基于 LangChain4j 和工具调用实现覆盖率分析、缺陷检测、性能分析、链路对比和测试推荐。
 
 ## 技术栈
 
-| 层 | 技术 | 版本 |
+| 层 | 技术 |
+|---|---|
+| Agent | Java、ASM、JavaAgent，默认 Java 7 字节码，提供 JDK6/7/8 profile |
+| 后端 | Java 17、Spring Boot 3.3.6、Spring Data Elasticsearch、Redis、JDBC |
+| AI | LangChain4j 1.12.2，支持 OpenAI / DeepSeek / Ollama / 兼容 OpenAI 协议接口 |
+| 存储 | Elasticsearch 7.x/8.x、MySQL 5.7+/8.x、Redis、MinIO |
+| 前端 | Vue 3、TypeScript、Vite 7、Pinia、Vue Router |
+| 桌面端 | Electron 30、Vue 3、Vite 5、SQLite、http-mitm-proxy |
+
+## 环境要求
+
+| 组件 | 建议版本 | 用途 |
 |---|---|---|
-| 探针 | Java、ASM 字节码增强 | 默认 Java 7 字节码，支持 JDK6/7/8 profile |
-| 服务端框架 | Spring Boot | 3.3.6 |
-| 服务端语言 | Java | 17 |
-| AI 框架 | LangChain4j | 1.12.2 |
-| 存储 - 文档 | Elasticsearch | 7.x / 8.x |
-| 存储 - 关系型 | MySQL | 5.7+ / 8.x |
-| 存储 - 对象 | MinIO | — |
-| 存储 - 缓存 | Redis + Redisson | — |
-| 代码分析 | JGit、ASM、JavaParser | — |
-| 报表导出 | EasyExcel | 3.1.1 |
-| 前端框架 | Vue 3 + TypeScript | Vue 3.5 |
-| 前端构建 | Vite | 7.x |
-| 前端状态 | Pinia | 3.x |
-| 桌面采集器 | Electron、Vue 3、Vite | Electron 30 / Vite 5.x |
-
----
-
-## 核心功能
-
-**运行时采集**
-Agent 通过字节码增强拦截 HTTP、SQL、Redis、Dubbo、SOFA-RPC、Feign、RocketMQ、Kafka、RabbitMQ 等协议，将链路节点和代码执行栈实时上报至平台。
-
-**系统快照**
-每次测试场景执行后，平台将该次请求的完整调用链路沉淀为系统快照，支持场景目录管理、版本归档、图谱可视化。
-
-**覆盖率分析**
-基于快照和静态源码结构生成全量或增量覆盖率报告，支持类 / 方法 / 行 / 分支四个维度，提供源码着色视图和 Excel 导出；同时支持前端 Istanbul 覆盖率和 Go / Python / C/C++ 原生覆盖率上报。
-
-**版本管理**
-接入 Git 仓库，管理应用的分支、Commit 与版本号，支持跨版本 Diff 和代码变更影响分析。
-
-**用例中心**
-管理测试用例目录与详情，支持与快照关联、导入导出，关联缺陷/PRD 链接。
-
-**API 端点分析**
-自动识别应用暴露的 HTTP 接口，结合链路数据分析接口覆盖情况。
-
-**探针监控**
-实时监控在线 Agent 实例状态，支持探针下线告警和 Webhook 通知。
-
-**桌面流量采集**
-`oAT-traffic-capture` 提供 HTTP/HTTPS、WebSocket、MQTT 流量捕获、过滤、重放、导出和历史会话管理，并内置覆盖率上送中继能力，方便前端和多语言测试产物接入平台。
-
-**HTTP 中继**
-`oAT-relay` 提供独立的轻量级 HTTP 转发服务，默认监听 `18089` 并转发到 `oAT-service-web` 的 `8899` 端口，适用于客户端无法直接访问平台服务或需要统一代理出口的场景。
-
-**AI 智能分析**
-基于 LangChain4j 的对话式 AI 助手，内置覆盖率分析、缺陷检测、性能分析、调用链比较、测试推荐等专用工具，支持 OpenAI / Ollama / DeepSeek 等多种模型。
-
----
-
-## 模块说明
-
-每个模块的详细构建、配置和使用说明见各自的 README：
-
-- `oAT-agent/` → [oAT-agent README](oAT-agent/README.md)
-- `oAT-service/oAT-ai/` → [oAT-ai README](oAT-service/oAT-ai/README.md)
-- `oAT-service/oAT-service-web/` → [oAT-service-web README](oAT-service/oAT-service-web/README.md)
-- `oAT-relay/` → [oAT-relay README](oAT-relay/README.md)
-- `oAT-web-frontend/` → [oAT-web-frontend README](oAT-web-frontend/README.md)
-- `oAT-traffic-capture/` → [oAT-traffic-capture README](oAT-traffic-capture/README.md)
-- `oAT-traffic-capture/sdk/coverage/` → [多语言覆盖率上送 SDK README](oAT-traffic-capture/sdk/coverage/README.md)
-
----
+| JDK | Agent 构建建议 8+；服务端运行 17+ | Java 模块构建与运行 |
+| Maven | 3.8+ | Java 模块构建 |
+| Node.js | 18+ | 前端和桌面端构建 |
+| MySQL | 5.7+ / 8.x | 结构化数据 |
+| Elasticsearch | 7.x / 8.x | 快照、链路、报告索引 |
+| Redis | 5.x+ | 缓存、会话、AI 语义缓存 |
+| MinIO | RELEASE.2023+ | 覆盖率 codeNodes 对象存储 |
 
 ## 构建顺序
 
-模块间存在依赖，必须按以下顺序构建：
+模块间存在本地 Maven 依赖，建议按以下顺序构建：
 
 ```bash
-# 1. 构建 Agent（含 oAT-client-model，安装到本地 Maven 仓库）
+# 1. 构建 Agent，同时安装 oAT-client-model
 cd oAT-agent
 mvn clean install
 
@@ -144,247 +98,43 @@ mvn clean install
 cd ../oAT-service/oAT-ai
 mvn clean install
 
-# 3. 构建 Web 服务
+# 3. 构建后端主服务
 cd ../oAT-service-web
 mvn clean package
 
-# 4. 构建 HTTP 中继（可选，需要代理转发时使用）
+# 4. 构建 HTTP 中继，可选
 cd ../../oAT-relay
 mvn clean package
 
-# 5. 构建前端（可选，生产部署时需要）
+# 5. 构建 Web 前端，可选
 cd ../oAT-web-frontend
 npm install
 npm run build
 
-# 6. 构建桌面流量采集器（可选）
+# 6. 构建桌面流量采集器，可选
 cd ../oAT-traffic-capture
 npm install
 npm run build
 ```
-
----
 
 ## 启动顺序
 
-1. 启动 Elasticsearch
-2. 启动 MySQL
-3. 启动 Redis
-4. 启动 MinIO（启用覆盖率对象存储时需要）
-5. 启动 `oAT-service-web`
-6. 按需启动 `oAT-relay` 作为 HTTP 转发中继
-7. 启动挂载了 Agent 的目标应用
-8. 按需启动 `oAT-traffic-capture` 进行桌面流量采集或覆盖率中继
+1. 启动 MySQL、Elasticsearch、Redis。
+2. 如果启用覆盖率对象存储，启动 MinIO。
+3. 初始化 MySQL 表结构，脚本位于 `oAT-service/oAT-service-web/src/main/resources/db/mysql/`。
+4. 启动 `oAT-service-web`。
+5. 按需启动 `oAT-relay`。
+6. 启动 `oAT-web-frontend` 或部署前端静态资源。
+7. 在目标 Java 应用中挂载 `oAT-agent`。
+8. 按需启动 `oAT-traffic-capture` 采集流量或中继覆盖率。
 
-详细配置和启动参数见各模块 README。
+## 模块文档
 
----
-
-## 覆盖率数据存储
-
-本次优化引入了基于 MinIO 的覆盖率 codeNodes 对象存储，将链路上报时的代码执行栈数据从 Elasticsearch 中剥离，写入 MinIO 以降低 ES 存储压力。
-
-**工作机制**
-
-- 写入（异步）：Agent 上报 TraceNode 时，服务端提取 `codeNodes` → 序列化为 MessagePack → 异步写入 MinIO。内置有界队列（最多积压 500 个任务），队列满时自动降级为同步写，不丢失数据。
-- 读取（同步）：生成覆盖率报告时按 `traceId` 从 MinIO 加载 codeNodes → 反序列化 → 用于覆盖率合并。
-- 降级（Fallback）：MinIO 不可用或对象不存在时，自动回退到旧的 ES 链路数据兜底，保证已有数据可用。
-
-**配置项**（`application.properties`）
-
-```properties
-# 是否启用 MinIO 对象存储（默认 true，设为 false 则完全使用旧 ES 模式）
-coverage.storage.enabled=true
-coverage.storage.type=minIO
-coverage.storage.endpoint=http://localhost:9000
-coverage.storage.bucket=oat-coverage
-coverage.storage.access-key=<your-access-key>
-coverage.storage.secret-key=<your-secret-key>
-```
-
-MinIO 的 Bucket 会在服务启动时自动创建，无需手动初始化。如不需要 MinIO，将 `coverage.storage.enabled` 设为 `false` 即可保持原有行为。
-
-## 前端与多语言覆盖率上送
-
-服务端提供两类非 Java 覆盖率入口：
-
-```text
-POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/report
-POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
-POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/generate
-POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/generate
-```
-
-`oAT-traffic-capture` 可作为本地覆盖率中继，默认接收 `http://localhost:8889/oat/coverage/report`，再转发到平台；多语言上送脚本见 `oAT-traffic-capture/sdk/coverage/`。
-
-如果客户端无法直接访问 `oAT-service-web`，也可以将 Agent、SDK 或采集器的服务地址配置为 `oAT-relay`，例如 `http://localhost:18089`。
-
----
-
-## 环境要求
-
-| 组件 | 版本 | 说明 |
-|---|---|---|
-| JDK（Agent） | 8+ | — |
-| JDK（Service） | 17+ | — |
-| Maven | 3.8+ | — |
-| Node.js | 18+ | 前端开发/构建 |
-| Elasticsearch | 7.x / 8.x | — |
-| MySQL | 5.7+ / 8.x | — |
-| Redis | 5.x+ | — |
-| MinIO | RELEASE.2023+ | 用于覆盖率 codeNodes 对象存储 |
-| Electron 构建链 | Node.js 18+ | 桌面采集器开发/构建 |
-
----
-
-## English
-
-[中文](#oaccuratetest-oat) | English
-
-oAccurateTest is an intelligent test analysis platform for Java applications. It uses a non-intrusive JavaAgent to collect runtime trace data, combines static code analysis with AI capabilities, and helps QA and engineering teams with coverage analysis, tracing, version comparison, and diagnostics.
-
-> **Usage notice**: This project is for personal learning, technical research, and communication only. It must not be used for commercial purposes or unauthorized production deployment. Users are responsible for complying with applicable laws and third-party licenses, and for any risks caused by use or secondary development.
-
-### Architecture
-
-```text
-oAccurateTest/
-├── oAT-agent/            # Probe module; Java 7 bytecode by default, JDK6/7/8 profiles
-│   ├── oAT-client-model/ # Shared data model for Agent and server
-│   ├── oAT-agent-core/   # Bytecode enhancement, trace collection, data upload
-│   └── oAT-agnet-shaded/ # Shaded packaging
-├── oAT-service/          # Server modules (Java 17)
-│   ├── oAT-ai/           # AI analysis module (LangChain4j)
-│   └── oAT-service-web/  # Main Web service (Spring Boot 3)
-├── oAT-relay/            # HTTP forwarding relay service (Spring Boot 3)
-├── oAT-web-frontend/     # Web UI (Vue 3 + TypeScript)
-├── oAT-traffic-capture/  # Desktop traffic capture and coverage relay SDK
-└── README.md
-```
-
-Runtime data flows from the target Java application through `oAT-agent` to `oAT-service-web`. The server stores traces, snapshots, source metadata, coverage objects, project data, and cache data in Elasticsearch, MinIO, MySQL, and Redis, then exposes the results through `oAT-web-frontend`. `oAT-traffic-capture` can capture desktop traffic and relay frontend or multi-language coverage reports.
-
-`oAT-relay` can be deployed in test networks, isolated networks, or edge nodes. It receives requests from the Agent, coverage SDKs, or the desktop capture app and forwards them to `oAT-service-web` with the original path.
-
-### Technology Stack
-
-| Layer | Technology | Version |
-|---|---|---|
-| Probe | Java, ASM bytecode enhancement | Java 7 bytecode by default; JDK6/7/8 profiles |
-| Server framework | Spring Boot | 3.3.6 |
-| Server language | Java | 17 |
-| AI framework | LangChain4j | 1.12.2 |
-| Document storage | Elasticsearch | 7.x / 8.x |
-| Relational storage | MySQL | 5.7+ / 8.x |
-| Object storage | MinIO | — |
-| Cache | Redis + Redisson | — |
-| Code analysis | JGit, ASM, JavaParser | — |
-| Export | EasyExcel | 3.1.1 |
-| Frontend | Vue 3 + TypeScript | Vue 3.5 |
-| Frontend build | Vite | 7.x |
-| Frontend state | Pinia | 3.x |
-| Desktop capture | Electron, Vue 3, Vite | Electron 30 / Vite 5.x |
-
-### Core Features
-
-- **Runtime collection**: the Agent intercepts HTTP, SQL, Redis, Dubbo, SOFA-RPC, Feign, RocketMQ, Kafka, RabbitMQ, and other protocols through bytecode enhancement.
-- **System snapshots**: complete call chains from test scenarios can be archived, organized, versioned, and visualized.
-- **Coverage analysis**: full and incremental reports are generated from snapshots and static source structures, with class, method, line, and branch dimensions, source highlighting, Excel export, frontend Istanbul coverage, and Go / Python / C/C++ native coverage ingestion.
-- **Version management**: Git repositories, branches, commits, versions, cross-version diffs, and change impact analysis.
-- **Use case center**: test case directories, details, snapshot association, import/export, and defect/PRD links.
-- **API endpoint analysis**: automatic HTTP endpoint detection and coverage analysis.
-- **Probe monitoring**: online Agent status monitoring, offline alerts, and Webhook notifications.
-- **Desktop traffic capture**: HTTP/HTTPS, WebSocket, MQTT capture, filtering, replay, export, session history, and coverage relay.
-- **HTTP relay**: lightweight forwarding service for clients that cannot access `oAT-service-web` directly or need a unified proxy endpoint.
-- **AI analysis**: LangChain4j-based assistant with tools for coverage analysis, defect detection, performance analysis, call-chain comparison, and test recommendation. OpenAI, Ollama, DeepSeek, and compatible providers are supported.
-
-### Module READMEs
-
-- `oAT-agent/` -> [oAT-agent README](oAT-agent/README.md)
-- `oAT-service/oAT-ai/` -> [oAT-ai README](oAT-service/oAT-ai/README.md)
-- `oAT-service/oAT-service-web/` -> [oAT-service-web README](oAT-service/oAT-service-web/README.md)
-- `oAT-relay/` -> [oAT-relay README](oAT-relay/README.md)
-- `oAT-web-frontend/` -> [oAT-web-frontend README](oAT-web-frontend/README.md)
-- `oAT-traffic-capture/` -> [oAT-traffic-capture README](oAT-traffic-capture/README.md)
-- `oAT-traffic-capture/sdk/coverage/` -> [Multi-language coverage SDK README](oAT-traffic-capture/sdk/coverage/README.md)
-
-### Build Order
-
-```bash
-# 1. Build Agent, including oAT-client-model, and install it into local Maven
-cd oAT-agent
-mvn clean install
-
-# 2. Build AI module
-cd ../oAT-service/oAT-ai
-mvn clean install
-
-# 3. Build Web service
-cd ../oAT-service-web
-mvn clean package
-
-# 4. Build HTTP relay when proxy forwarding is needed
-cd ../../oAT-relay
-mvn clean package
-
-# 5. Build frontend when needed for production deployment
-cd ../oAT-web-frontend
-npm install
-npm run build
-
-# 6. Build desktop traffic capture when needed
-cd ../oAT-traffic-capture
-npm install
-npm run build
-```
-
-### Startup Order
-
-1. Start Elasticsearch.
-2. Start MySQL.
-3. Start Redis.
-4. Start MinIO when coverage object storage is enabled.
-5. Start `oAT-service-web`.
-6. Start `oAT-relay` when HTTP forwarding is needed.
-7. Start the target application with the Agent attached.
-8. Start `oAT-traffic-capture` when desktop traffic capture or coverage relay is needed.
-
-### Coverage Object Storage
-
-Coverage `codeNodes` can be stored in MinIO to reduce Elasticsearch storage pressure. When the Agent uploads `TraceNode` data, the server extracts `codeNodes`, serializes them as MessagePack, and writes them to MinIO asynchronously. Coverage report generation loads objects by `traceId`; if MinIO is unavailable or an object is missing, the server falls back to the old Elasticsearch trace data.
-
-```properties
-coverage.storage.enabled=true
-coverage.storage.type=minIO
-coverage.storage.endpoint=http://localhost:9000
-coverage.storage.bucket=oat-coverage
-coverage.storage.access-key=<your-access-key>
-coverage.storage.secret-key=<your-secret-key>
-```
-
-### Frontend and Multi-language Coverage Upload
-
-```text
-POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/report
-POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/report
-POST /api/projects/{projectId}/apps/{appId}/coverage/frontend/generate
-POST /api/projects/{projectId}/apps/{appId}/coverage/universal/{CPP|GO|PYTHON}/generate
-```
-
-`oAT-traffic-capture` can work as a local relay. It receives reports at `http://localhost:8889/oat/coverage/report` and forwards them to the platform. Multi-language upload scripts are documented in `oAT-traffic-capture/sdk/coverage/`.
-
-If clients cannot access `oAT-service-web` directly, point the Agent, SDKs, or desktop capture app to `oAT-relay`, for example `http://localhost:18089`.
-
-### Requirements
-
-| Component | Version | Notes |
-|---|---|---|
-| JDK for Agent | 8+ | — |
-| JDK for Service | 17+ | — |
-| Maven | 3.8+ | — |
-| Node.js | 18+ | Frontend development/build |
-| Elasticsearch | 7.x / 8.x | — |
-| MySQL | 5.7+ / 8.x | — |
-| Redis | 5.x+ | — |
-| MinIO | RELEASE.2023+ | Coverage `codeNodes` object storage |
-| Electron build chain | Node.js 18+ | Desktop capture development/build |
+- [oAT-agent](oAT-agent/README.md)
+- [oAT-service](oAT-service/README.md)
+- [oAT-service-web](oAT-service/oAT-service-web/README.md)
+- [oAT-ai](oAT-service/oAT-ai/README.md)
+- [oAT-relay](oAT-relay/README.md)
+- [oAT-web-frontend](oAT-web-frontend/README.md)
+- [oAT-traffic-capture](oAT-traffic-capture/README.md)
+- [多语言覆盖率上送 SDK](oAT-traffic-capture/sdk/coverage/README.md)

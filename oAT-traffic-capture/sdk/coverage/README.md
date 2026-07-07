@@ -1,22 +1,58 @@
 # oAT 多语言覆盖率上送 SDK
 
-中文 | [English](#english)
+本目录提供 Go、Python、C/C++ 覆盖率产物上送 helper，用于把非 Java 覆盖率数据提交到 oAccurateTest，再由覆盖率中心生成报告。
 
-这些 helper 用于把非 Java 覆盖率产物上送到 oAT：
+## 上送入口
+
+本目录下的 Go、Python、C/C++ helper 会在 `endpoint` 后自动追加统一上送路径：
 
 ```text
 POST /api/v2/ingest/coverage
 ```
 
-上送完成后，在 oAT 覆盖率中心使用相同版本号和 Commit 生成报告。
+因此 `endpoint` 只需要填写服务基础地址。推荐直接指向 `oAT-service-web`：
 
-默认服务端端口是 `8899`。如果通过 `oAT-traffic-capture` 中继上送，也可以先 POST 到 `http://localhost:8889/oat/coverage/report`，由采集器转发到服务端。
+```text
+http://localhost:8899
+```
 
-如果测试环境无法直连 `oAT-service-web`，也可以将 `endpoint` 设置为 `oAT-relay` 地址，例如 `http://localhost:18089`。relay 会按原路径转发到平台。
+测试环境无法直连平台时，可以把 `endpoint` 指向 `oAT-relay`，relay 会按原路径转发：
+
+```text
+http://localhost:18089
+```
+
+桌面采集器中继使用另一个本地接收地址，适合前端 Istanbul 或采集器统一转发场景：
+
+```text
+http://localhost:8889/oat/coverage/report
+```
+
+上送完成后，在 oAT 覆盖率中心使用相同版本号、分支和 Commit 生成报告。
+
+## 必填元数据
+
+| 字段 | 说明 |
+|---|---|
+| `endpoint` | `oAT-service-web`、`oAT-relay` 或桌面采集器中继地址 |
+| `projectId` | oAT 项目 ID |
+| `appId` | oAT 应用 ID |
+| `versionNumber` | 版本号 |
+| `commitId` | Git Commit |
+| `branch` | 分支名，推荐填写 |
+| `buildId` | 构建号，推荐填写 |
+| `testStage` | 测试阶段，例如 `unit`、`integration`、`e2e` |
+| `caseName` | 用例或场景名称，推荐填写 |
 
 ## Go
 
-先生成 Go cover profile，再上送：
+生成 cover profile：
+
+```bash
+go test ./... -coverprofile=coverage.out
+```
+
+上送：
 
 ```go
 err := oatcover.PostProfile(ctx, oatcover.ReportOptions{
@@ -28,19 +64,25 @@ err := oatcover.PostProfile(ctx, oatcover.ReportOptions{
     CommitID: "git-sha",
     Branch: "main",
     CaseName: "case-name",
-    BuildID: "build-20260628",
+    BuildID: "build-20260707",
     TestStage: "unit",
 })
 ```
 
-后端解析器期望标准 `go test -coverprofile` 文本格式。
+后端解析标准 `go test -coverprofile` 文本格式。
 
 ## Python
 
-先执行 `coverage.py json`，再上送生成的 JSON：
+生成 coverage.py JSON：
 
 ```bash
+coverage run -m pytest
 coverage json -o coverage.json
+```
+
+上送：
+
+```bash
 python python/oat_python_coverage_reporter.py \
   --endpoint http://localhost:8899 \
   --project-id project-id \
@@ -48,16 +90,22 @@ python python/oat_python_coverage_reporter.py \
   --coverage-json coverage.json \
   --version-number v1.0.0 \
   --commit-id git-sha \
-  --build-id build-20260628 \
+  --branch main \
+  --build-id build-20260707 \
   --test-stage unit
 ```
 
 ## C/C++
 
-先生成 gcov JSON，再上送一个或多个 JSON 文件：
+生成 gcov JSON：
 
 ```bash
 gcov --json-format path/to/file.gcda
+```
+
+上送一个或多个 JSON / JSON.GZ：
+
+```bash
 python native/oat_native_gcov_reporter.py \
   --endpoint http://localhost:8899 \
   --project-id project-id \
@@ -65,85 +113,15 @@ python native/oat_native_gcov_reporter.py \
   --coverage-json 'build/**/*.gcov.json.gz' \
   --version-number v1.0.0 \
   --commit-id git-sha \
-  --build-id build-20260628 \
+  --branch main \
+  --build-id build-20260707 \
   --test-stage unit
 ```
 
-脚本同时支持纯 JSON 和 gzip 压缩后的 JSON。
+## 与覆盖率中心配合
 
----
-
-## English
-
-[中文](#oat-多语言覆盖率上送-sdk) | English
-
-# oAT Multi-language Coverage Upload SDK
-
-These helpers upload non-Java coverage artifacts to oAT:
-
-```text
-POST /api/v2/ingest/coverage
-```
-
-After upload, generate a report in the oAT coverage center with the same version number and commit.
-
-The default server port is `8899`. If you upload through the `oAT-traffic-capture` relay, POST to `http://localhost:8889/oat/coverage/report` first, and the desktop capture app forwards the report to the server.
-
-If the test environment cannot access `oAT-service-web` directly, set `endpoint` to the `oAT-relay` address, for example `http://localhost:18089`. The relay forwards requests to the platform with the original path.
-
-## Go
-
-Generate a Go cover profile, then upload it:
-
-```go
-err := oatcover.PostProfile(ctx, oatcover.ReportOptions{
-    Endpoint: "http://localhost:8899",
-    ProjectID: "project-id",
-    AppID: "app-id",
-    ProfilePath: "coverage.out",
-    VersionNumber: "v1.0.0",
-    CommitID: "git-sha",
-    Branch: "main",
-    CaseName: "case-name",
-    BuildID: "build-20260628",
-    TestStage: "unit",
-})
-```
-
-The backend parser expects the standard `go test -coverprofile` text format.
-
-## Python
-
-Run `coverage.py json`, then upload the generated JSON:
-
-```bash
-coverage json -o coverage.json
-python python/oat_python_coverage_reporter.py \
-  --endpoint http://localhost:8899 \
-  --project-id project-id \
-  --app-id app-id \
-  --coverage-json coverage.json \
-  --version-number v1.0.0 \
-  --commit-id git-sha \
-  --build-id build-20260628 \
-  --test-stage unit
-```
-
-## C/C++
-
-Generate gcov JSON, then upload one or more JSON files:
-
-```bash
-gcov --json-format path/to/file.gcda
-python native/oat_native_gcov_reporter.py \
-  --endpoint http://localhost:8899 \
-  --project-id project-id \
-  --app-id app-id \
-  --coverage-json 'build/**/*.gcov.json.gz' \
-  --version-number v1.0.0 \
-  --commit-id git-sha \
-  --build-id build-20260628 \
-  --test-stage unit
-```
-
-The script supports both plain JSON and gzip-compressed JSON.
+1. 在 oAT 中确认项目和应用已创建。
+2. 确认应用关联了正确 Git 仓库，且 `commitId` 能在仓库中找到。
+3. 上传覆盖率产物。
+4. 在覆盖率中心选择相同版本、分支和 Commit 生成报告。
+5. 如果通过桌面采集器中继，先确认 `oat-coverage-relay` 插件已启用。
