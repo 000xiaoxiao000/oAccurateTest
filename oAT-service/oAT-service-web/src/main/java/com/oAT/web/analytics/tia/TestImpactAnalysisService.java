@@ -305,6 +305,7 @@ public class TestImpactAnalysisService {
         private final String appId;
         private final String language;
         private final String commitId;
+        private final String versionNumber;
         private final Map<String, List<SystemSnapshot>> snapshotsByTraceId = new HashMap<>();
         private final Map<String, List<UsecaseImpact>> usecasesByTraceId = new HashMap<>();
         private final Map<String, List<UsecaseImpact>> usecasesByCoverageFootprintKey = new HashMap<>();
@@ -315,6 +316,7 @@ public class TestImpactAnalysisService {
             this.appId = reportIndex == null ? null : reportIndex.getAppId();
             this.language = reportIndex == null ? null : firstText(reportIndex.getLanguage(), reportIndex.getSourceType());
             this.commitId = reportIndex == null ? null : reportIndex.getRepoCommitId();
+            this.versionNumber = reportIndex == null ? null : reportIndex.getVersionNumber();
             loadReportSnapshots(reportIndex);
         }
 
@@ -457,15 +459,58 @@ public class TestImpactAnalysisService {
             String normalized = code.trim();
             int splitIndex = normalized.indexOf(' ');
             String className = splitIndex < 0 ? normalized : normalized.substring(0, splitIndex);
-            return className.trim().replace('/', '.');
+            className = className.trim();
+            if (isSourcePath(className)) {
+                return className.replace('\\', '/');
+            }
+            return className.replace('/', '.');
+        }
+
+        private boolean isSourcePath(String value) {
+            if (!StringUtils.hasText(value)) {
+                return false;
+            }
+            String normalized = value.replace('\\', '/').toLowerCase();
+            return normalized.contains("/")
+                    && (normalized.endsWith(".vue")
+                    || normalized.endsWith(".js")
+                    || normalized.endsWith(".jsx")
+                    || normalized.endsWith(".ts")
+                    || normalized.endsWith(".tsx")
+                    || normalized.endsWith(".mjs")
+                    || normalized.endsWith(".cjs")
+                    || normalized.endsWith(".go")
+                    || normalized.endsWith(".py")
+                    || normalized.endsWith(".c")
+                    || normalized.endsWith(".cc")
+                    || normalized.endsWith(".cpp")
+                    || normalized.endsWith(".h")
+                    || normalized.endsWith(".hpp"));
         }
 
         private void loadReportSnapshots(CoverageReportIndex reportIndex) {
             List<String> snapshotIds = parseSnapshotIds(reportIndex == null ? null : reportIndex.getSnapshotIds());
-            if (snapshotIds.isEmpty()) {
+            if (!snapshotIds.isEmpty()) {
+                addSnapshots(systemSnapshotRepository.findAllById(snapshotIds));
                 return;
             }
-            addSnapshots(systemSnapshotRepository.findAllById(snapshotIds));
+            loadAppSnapshotsFallback();
+        }
+
+        private void loadAppSnapshotsFallback() {
+            if (!StringUtils.hasText(projectId) || !StringUtils.hasText(appId)) {
+                return;
+            }
+            List<SystemSnapshot> snapshots = systemSnapshotRepository.findByProjectIdAndAppId(projectId, appId);
+            if (snapshots == null || snapshots.isEmpty()) {
+                return;
+            }
+            List<SystemSnapshot> versionMatched = snapshots.stream()
+                    .filter(snapshot -> snapshot != null
+                            && StringUtils.hasText(versionNumber)
+                            && versionNumber.equals(snapshot.getVersion()))
+                    .toList();
+            addSnapshots(versionMatched.isEmpty() ? snapshots : versionMatched);
         }
 
         private void addSnapshots(List<SystemSnapshot> snapshots) {

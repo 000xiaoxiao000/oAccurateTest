@@ -174,22 +174,12 @@ function sum(values?: number[]) {
 
 .coverage-unit-list-table th:first-child,
 .coverage-unit-list-table td:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 1;
   width: 360px;
   min-width: 360px;
-  background: #fff;
-  box-shadow: 8px 0 12px -12px rgba(15, 23, 42, 0.28);
 }
 
 .coverage-unit-list-table th:first-child {
-  z-index: 3;
   background: rgba(248, 250, 252, 0.98);
-}
-
-.coverage-unit-list-table tbody tr:hover td:first-child {
-  background: #f8fdfc;
 }
 
 .coverage-unit-list-table th:not(:first-child),
