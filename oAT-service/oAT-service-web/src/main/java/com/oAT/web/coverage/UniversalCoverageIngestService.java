@@ -8,8 +8,10 @@ import com.oAT.web.coverage.universal.CoverageParserRegistry;
 import com.oAT.web.coverage.universal.SourceType;
 import com.oAT.web.coverage.universal.UniversalCoverageFile;
 import com.oAT.web.coverage.universal.UniversalCoverageService;
+import com.oAT.web.esDao.SnapshotCommitMappingRepository;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
+import com.oAT.web.esDao.entity.SnapshotCommitMapping;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.entity.AppVo;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class UniversalCoverageIngestService {
@@ -30,15 +33,18 @@ public class UniversalCoverageIngestService {
     private final AppService appService;
     private final CoverageParserRegistry coverageParserRegistry;
     private final UniversalCoverageService universalCoverageService;
+    private final SnapshotCommitMappingRepository snapshotCommitMappingRepository;
 
     public UniversalCoverageIngestService(UniversalCoverageRawRepository rawRepository,
                                           AppService appService,
                                           CoverageParserRegistry coverageParserRegistry,
-                                          UniversalCoverageService universalCoverageService) {
+                                          UniversalCoverageService universalCoverageService,
+                                          SnapshotCommitMappingRepository snapshotCommitMappingRepository) {
         this.rawRepository = rawRepository;
         this.appService = appService;
         this.coverageParserRegistry = coverageParserRegistry;
         this.universalCoverageService = universalCoverageService;
+        this.snapshotCommitMappingRepository = snapshotCommitMappingRepository;
     }
 
     public String saveReport(String projectId, String appId, SourceType sourceType, UniversalCoverageReportRequest request) {
@@ -61,6 +67,7 @@ public class UniversalCoverageIngestService {
         report.caseName = request.getCaseName();
         report.buildId = request.getBuildId();
         report.testStage = request.getTestStage();
+        report.traceId = request.getTraceId();
         report.timestamp = request.getTimestamp();
         report.coverageData = request.getCoverageData();
         return rawRepository.save(report);
@@ -89,7 +96,7 @@ public class UniversalCoverageIngestService {
             lastTimestamp = Math.max(lastTimestamp, rawReport.timestamp == null ? 0L : rawReport.timestamp);
             List<UniversalCoverageFile> files = parser.parse(rawReport.coverageData.getBytes(StandardCharsets.UTF_8));
             ClassCoverageIndex.CoverageFootprintRecord footprint = ClassCoverageIndex.CoverageFootprintRecord.of(
-                    null,
+                    rawReport.traceId,
                     rawReport.caseName,
                     rawReport.testStage,
                     rawReport.buildId,
@@ -119,6 +126,21 @@ public class UniversalCoverageIngestService {
         report.setBaseRepoCommitId(reportType == 1 && request != null ? request.getBaseCommitId() : null);
         report.setLastProcessedTime(lastTimestamp > 0 ? String.valueOf(lastTimestamp) : String.valueOf(System.currentTimeMillis()));
 
+        // Resolve system snapshots via commit mapping so TIA can link usecases to this report.
+        if (StringUtils.hasText(commitId)) {
+            List<SnapshotCommitMapping> mappings = snapshotCommitMappingRepository.findByAppIdAndRepoCommitId(appId, commitId);
+            if (!mappings.isEmpty()) {
+                String snapshotIds = mappings.stream()
+                        .map(SnapshotCommitMapping::getSnapshotId)
+                        .filter(StringUtils::hasText)
+                        .distinct()
+                        .collect(Collectors.joining(","));
+                if (StringUtils.hasText(snapshotIds)) {
+                    report.setSnapshotIds(snapshotIds);
+                }
+            }
+        }
+
         universalCoverageService.saveReport(report, appId, coverageMap);
         return report;
     }
@@ -146,6 +168,7 @@ public class UniversalCoverageIngestService {
             request.setCaseName(text(root, "caseName", "case_name"));
             request.setBuildId(text(root, "buildId", "build_id"));
             request.setTestStage(text(root, "testStage", "test_stage"));
+            request.setTraceId(text(root, "traceId", "trace_id"));
             request.setTimestamp(longValue(root, "timestamp", "time"));
 
             JsonNode coverageNode = first(root, "coverageData", "coverage", "data", "profile");
@@ -194,6 +217,7 @@ public class UniversalCoverageIngestService {
         private String caseName;
         private String buildId;
         private String testStage;
+        private String traceId;
         private Long timestamp;
         private String coverageData;
 
@@ -209,6 +233,8 @@ public class UniversalCoverageIngestService {
         public void setBuildId(String buildId) { this.buildId = buildId; }
         public String getTestStage() { return testStage; }
         public void setTestStage(String testStage) { this.testStage = testStage; }
+        public String getTraceId() { return traceId; }
+        public void setTraceId(String traceId) { this.traceId = traceId; }
         public Long getTimestamp() { return timestamp; }
         public void setTimestamp(Long timestamp) { this.timestamp = timestamp; }
         public String getCoverageData() { return coverageData; }

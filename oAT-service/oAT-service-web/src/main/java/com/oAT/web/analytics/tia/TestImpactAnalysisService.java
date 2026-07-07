@@ -55,7 +55,8 @@ public class TestImpactAnalysisService {
         report.setLanguage(reportIndex.getLanguage() == null ? reportIndex.getSourceType() : reportIndex.getLanguage());
         report.setChangedLineCount(changedLineMap.values().stream().mapToInt(Set::size).sum());
 
-        SnapshotUsecaseResolver usecaseResolver = new SnapshotUsecaseResolver(reportIndex);
+        Set<String> reportUnitKeys = buildReportUnitKeys(units);
+        SnapshotUsecaseResolver usecaseResolver = new SnapshotUsecaseResolver(reportIndex, reportUnitKeys);
         Map<String, MutableImpactCase> impactMap = new LinkedHashMap<>();
         int footprintCount = 0;
         for (CoverageUnit unit : units) {
@@ -89,9 +90,9 @@ public class TestImpactAnalysisService {
                 }
             }
         }
-        boolean usedSnapshotUsecaseFallback = false;
+        boolean usedSnapshotFallback = false;
         if (!scopedToChangedLines) {
-            usedSnapshotUsecaseFallback = supplementReportSnapshotUsecases(usecaseResolver, impactMap);
+            usedSnapshotFallback = supplementReportSnapshotUsecases(usecaseResolver, impactMap);
         }
 
         List<TestImpactCase> impactedCases = impactMap.values().stream()
@@ -104,8 +105,8 @@ public class TestImpactAnalysisService {
         if (!scopedToChangedLines) {
             report.getReasons().add("未提供变更行范围，已按当前报告内可关联用例或链路的已覆盖行估算");
         }
-        if (usedSnapshotUsecaseFallback) {
-            report.getReasons().add("当前报告已按系统快照关联用例补充推荐");
+        if (usedSnapshotFallback) {
+            report.getReasons().add("当前报告已按系统快照关联用例或覆盖单元补充推荐");
         } else if (footprintCount == 0) {
             report.getReasons().add("当前报告缺少用例或链路关联数据，无法推荐受影响用例");
         } else if (impactMap.isEmpty()) {
@@ -200,18 +201,25 @@ public class TestImpactAnalysisService {
     private boolean supplementReportSnapshotUsecases(SnapshotUsecaseResolver usecaseResolver,
                                                      Map<String, MutableImpactCase> impactMap) {
         List<UsecaseImpact> reportSnapshotUsecases = usecaseResolver.findReportSnapshotUsecases();
-        if (reportSnapshotUsecases.isEmpty()) {
+        List<UsecaseImpact> reportSnapshotUnitImpacts = usecaseResolver.findReportSnapshotUnitImpacts();
+        if (reportSnapshotUsecases.isEmpty() && reportSnapshotUnitImpacts.isEmpty()) {
             return false;
         }
 
         List<MutableImpactCase> currentImpacts = new ArrayList<>(impactMap.values());
-        Set<String> usecaseTraceIds = reportSnapshotUsecases.stream()
+        List<UsecaseImpact> reportSnapshotImpacts = new ArrayList<>(reportSnapshotUsecases);
+        reportSnapshotImpacts.addAll(reportSnapshotUnitImpacts);
+        Set<String> snapshotTraceIds = reportSnapshotImpacts.stream()
                 .map(UsecaseImpact::traceId)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
-        for (UsecaseImpact usecase : reportSnapshotUsecases) {
-            String usecaseIdentity = "usecase:" + usecase.id();
+        Set<String> preservedImpactIdentities = new LinkedHashSet<>();
+        for (UsecaseImpact usecase : reportSnapshotImpacts) {
+            String usecaseIdentity = StringUtils.hasText(usecase.id())
+                    ? "usecase:" + usecase.id()
+                    : "snapshot:" + firstText(usecase.traceId(), String.valueOf(impactMap.size()));
+            preservedImpactIdentities.add(usecaseIdentity);
             MutableImpactCase target = impactMap.computeIfAbsent(usecaseIdentity, ignored -> new MutableImpactCase(usecase));
             target.impactedUnits.addAll(usecase.impactedUnits());
             if (!StringUtils.hasText(usecase.traceId())) {
@@ -226,10 +234,12 @@ public class TestImpactAnalysisService {
             }
         }
 
-        if (!usecaseTraceIds.isEmpty()) {
+        if (!snapshotTraceIds.isEmpty()) {
             impactMap.entrySet().removeIf(entry -> {
                 MutableImpactCase value = entry.getValue();
-                return !value.hasUsecase() && usecaseTraceIds.contains(value.traceId());
+                return !preservedImpactIdentities.contains(entry.getKey())
+                        && !value.hasUsecase()
+                        && snapshotTraceIds.contains(value.traceId());
             });
         }
         return true;
@@ -249,6 +259,16 @@ public class TestImpactAnalysisService {
 
     private String normalizeUnitKey(String value) {
         return value == null ? "" : value.trim().replace('\\', '/');
+    }
+
+    private Set<String> buildReportUnitKeys(List<CoverageUnit> units) {
+        Set<String> keys = new LinkedHashSet<>();
+        for (CoverageUnit unit : units) {
+            if (StringUtils.hasText(unit.getUnitKey())) keys.add(normalizeUnitKey(unit.getUnitKey()));
+            if (StringUtils.hasText(unit.getSourcePath())) keys.add(normalizeUnitKey(unit.getSourcePath()));
+            if (StringUtils.hasText(unit.getDisplayName())) keys.add(normalizeUnitKey(unit.getDisplayName()));
+        }
+        return keys;
     }
 
     private class MutableImpactCase {
@@ -306,17 +326,19 @@ public class TestImpactAnalysisService {
         private final String language;
         private final String commitId;
         private final String versionNumber;
+        private final Set<String> reportUnitKeys;
         private final Map<String, List<SystemSnapshot>> snapshotsByTraceId = new HashMap<>();
         private final Map<String, List<UsecaseImpact>> usecasesByTraceId = new HashMap<>();
         private final Map<String, List<UsecaseImpact>> usecasesByCoverageFootprintKey = new HashMap<>();
         private boolean loadedSnapshots;
 
-        private SnapshotUsecaseResolver(CoverageReportIndex reportIndex) {
+        private SnapshotUsecaseResolver(CoverageReportIndex reportIndex, Set<String> reportUnitKeys) {
             this.projectId = resolveProjectId(reportIndex);
             this.appId = reportIndex == null ? null : reportIndex.getAppId();
             this.language = reportIndex == null ? null : firstText(reportIndex.getLanguage(), reportIndex.getSourceType());
             this.commitId = reportIndex == null ? null : reportIndex.getRepoCommitId();
             this.versionNumber = reportIndex == null ? null : reportIndex.getVersionNumber();
+            this.reportUnitKeys = reportUnitKeys != null ? reportUnitKeys : Collections.emptySet();
             loadReportSnapshots(reportIndex);
         }
 
@@ -352,6 +374,33 @@ public class TestImpactAnalysisService {
                 }
             }
             return new ArrayList<>(result.values());
+        }
+
+        private List<UsecaseImpact> findReportSnapshotUnitImpacts() {
+            List<UsecaseImpact> result = new ArrayList<>();
+            Set<String> handledSnapshotIds = new LinkedHashSet<>();
+            for (List<SystemSnapshot> snapshots : snapshotsByTraceId.values()) {
+                if (snapshots == null) {
+                    continue;
+                }
+                for (SystemSnapshot snapshot : snapshots) {
+                    String snapshotIdentity = firstText(snapshot == null ? null : snapshot.getId(),
+                            snapshot == null ? null : snapshot.getTraceId());
+                    if (snapshot == null || !StringUtils.hasText(snapshot.getTraceId())
+                            || !handledSnapshotIds.add(snapshotIdentity)) {
+                        continue;
+                    }
+                    if (!loadUsecasesBySnapshot(snapshot).isEmpty()) {
+                        continue;
+                    }
+                    List<String> snapshotUnits = resolveToReportUnits(snapshotImpactUnits(snapshot));
+                    if (snapshotUnits.isEmpty()) {
+                        continue;
+                    }
+                    result.add(new UsecaseImpact(null, null, snapshot.getTraceId(), snapshotUnits));
+                }
+            }
+            return result;
         }
 
         private List<UsecaseImpact> loadUsecasesByCoverageFootprintKey(String footprintKey) {
@@ -391,17 +440,43 @@ public class TestImpactAnalysisService {
                 snapshots = systemSnapshotRepository.findByProjectIdAndTraceId(projectId, traceId);
                 addSnapshots(snapshots);
             }
-            if (snapshots == null || snapshots.isEmpty()) {
-                return Collections.emptyList();
-            }
 
             LinkedHashMap<String, UsecaseImpact> result = new LinkedHashMap<>();
-            for (SystemSnapshot snapshot : snapshots) {
-                for (UsecaseImpact usecase : loadUsecasesBySnapshot(snapshot)) {
+            if (snapshots != null && !snapshots.isEmpty()) {
+                for (SystemSnapshot snapshot : snapshots) {
+                    for (UsecaseImpact usecase : loadUsecasesBySnapshot(snapshot)) {
+                        mergeUsecaseImpact(result, usecase);
+                    }
+                }
+            }
+
+            // Supplement with usecases linked via my-snapshot (oat_snapshot) when no system-snapshot
+            // covers this traceId, or to pick up any additional usecases that are only snapshot-linked.
+            if (StringUtils.hasText(projectId)) {
+                for (UsecaseImpact usecase : loadUsecasesByMySnapshotTraceId(traceId)) {
                     mergeUsecaseImpact(result, usecase);
                 }
             }
+
             return new ArrayList<>(result.values());
+        }
+
+        private List<UsecaseImpact> loadUsecasesByMySnapshotTraceId(String traceId) {
+            List<CaseCenterIndex> indexes = caseCenterRepository.findUsecasesByMySnapshotTraceId(projectId, traceId);
+            if (indexes.isEmpty()) {
+                return Collections.emptyList();
+            }
+            List<UsecaseImpact> result = new ArrayList<>();
+            for (CaseCenterIndex index : indexes) {
+                Usecase usecase = index == null ? null : index.getUsecase();
+                if (usecase == null || !StringUtils.hasText(index.getId())) {
+                    continue;
+                }
+                String title = firstText(usecase.getTitle(), index.getId());
+                List<String> units = resolveToReportUnits(usecaseImpactUnits(usecase));
+                result.add(new UsecaseImpact(index.getId(), title, traceId, units));
+            }
+            return result;
         }
 
         private void mergeUsecaseImpact(Map<String, UsecaseImpact> result, UsecaseImpact usecase) {
@@ -429,18 +504,99 @@ public class TestImpactAnalysisService {
             List<UsecaseImpact> result = new ArrayList<>();
             List<CaseCenterIndex> indexes = caseCenterRepository
                     .findByUsecase_ProjectIdAndUsecase_SystemSnapshotsContaining(projectId, snapshot.getId());
-            List<String> impactedUnits = snapshotImpactUnits(snapshot);
+            List<String> snapshotUnits = resolveToReportUnits(snapshotImpactUnits(snapshot));
             for (CaseCenterIndex index : indexes) {
                 Usecase usecase = index == null ? null : index.getUsecase();
                 if (usecase == null || !StringUtils.hasText(index.getId())) {
                     continue;
                 }
                 String title = firstText(usecase.getTitle(), index.getId());
-                LinkedHashSet<String> usecaseUnits = new LinkedHashSet<>(impactedUnits);
-                usecaseUnits.addAll(usecaseImpactUnits(usecase));
+                LinkedHashSet<String> usecaseUnits = new LinkedHashSet<>(snapshotUnits);
+                usecaseUnits.addAll(resolveToReportUnits(usecaseImpactUnits(usecase)));
                 result.add(new UsecaseImpact(index.getId(), title, snapshot.getTraceId(), new ArrayList<>(usecaseUnits)));
             }
             return result;
+        }
+
+        /**
+         * Maps extracted unit names to actual keys present in the report.
+         * For each extracted name, looks for a report unit whose key ends with the extracted name
+         * (or vice versa) to handle root-relative vs absolute path mismatches.
+         * Falls back to the raw extracted name when no match is found so that at least some
+         * context is preserved for callers that do not need an exact match.
+         */
+        private List<String> resolveToReportUnits(List<String> extractedNames) {
+            if (extractedNames.isEmpty() || reportUnitKeys.isEmpty()) {
+                return extractedNames;
+            }
+            List<String> resolved = new ArrayList<>();
+            for (String name : extractedNames) {
+                if (!StringUtils.hasText(name)) {
+                    continue;
+                }
+                String matched = matchReportUnitKey(name);
+                resolved.add(matched != null ? matched : name);
+            }
+            return resolved;
+        }
+
+        private String matchReportUnitKey(String candidateName) {
+            if (!StringUtils.hasText(candidateName) || reportUnitKeys.isEmpty()) {
+                return null;
+            }
+            String normalized = normalizeUnitKey(candidateName);
+            // 1. Exact match
+            if (reportUnitKeys.contains(normalized)) {
+                return normalized;
+            }
+            // 2. Suffix match (case-sensitive): handles root-relative vs absolute path differences
+            for (String key : reportUnitKeys) {
+                if (key.endsWith("/" + normalized) || normalized.endsWith("/" + key)) {
+                    return key;
+                }
+            }
+            // 3. Extension-tolerant match: snapshot codes store class names without file extensions
+            // because agent class names come from bytecode/runtime and have no extension
+            // (e.g. "src.views.Login" for .vue, "com.example.UserHandler" for .go).
+            // Also case-insensitive to handle Go type names (UserHandler) vs file names (user_handler.go)
+            // and similar conventions in Python and C/C++.
+            String normalizedSlash = normalized.replace('.', '/').toLowerCase();
+            for (String key : reportUnitKeys) {
+                String keyWithoutExt = stripExtension(key).toLowerCase();
+                if (keyWithoutExt.equals(normalizedSlash)
+                        || keyWithoutExt.endsWith("/" + normalizedSlash)
+                        || normalizedSlash.endsWith("/" + keyWithoutExt)) {
+                    return key;
+                }
+            }
+            // 4. Case-insensitive suffix match for languages where the path separator was already
+            // a slash in the original (Go module paths, Python package paths, etc.)
+            String normalizedLower = normalized.toLowerCase();
+            for (String key : reportUnitKeys) {
+                String keyLower = key.toLowerCase();
+                if (keyLower.endsWith("/" + normalizedLower) || normalizedLower.endsWith("/" + keyLower)) {
+                    return key;
+                }
+            }
+            // 5. Partial file-name match for dotted Java class names converted to slash paths
+            for (String key : reportUnitKeys) {
+                if (key.contains(normalized) || normalized.contains(key)) {
+                    return key;
+                }
+            }
+            return null;
+        }
+
+        private String stripExtension(String path) {
+            if (!StringUtils.hasText(path)) {
+                return path;
+            }
+            int dotIndex = path.lastIndexOf('.');
+            int slashIndex = path.lastIndexOf('/');
+            if (dotIndex > slashIndex && dotIndex > 0) {
+                return path.substring(0, dotIndex);
+            }
+            return path;
         }
 
         private List<String> usecaseImpactUnits(Usecase usecase) {

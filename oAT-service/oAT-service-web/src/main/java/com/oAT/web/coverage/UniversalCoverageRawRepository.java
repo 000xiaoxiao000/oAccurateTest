@@ -26,8 +26,8 @@ public class UniversalCoverageRawRepository {
         jdbcTemplate.update("""
                         INSERT INTO oat_universal_coverage_report (
                             id, project_id, app_id, source_type, commit_id, version_number,
-                            branch, case_name, build_id, test_stage, timestamp, coverage_data
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            branch, case_name, build_id, test_stage, trace_id, timestamp, coverage_data
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 report.id,
                 report.projectId,
@@ -39,6 +39,7 @@ public class UniversalCoverageRawRepository {
                 report.caseName,
                 report.buildId,
                 report.testStage,
+                report.traceId,
                 report.timestamp,
                 report.coverageData);
         return report.id;
@@ -196,6 +197,7 @@ public class UniversalCoverageRawRepository {
         report.caseName = rs.getString("case_name");
         report.buildId = rs.getString("build_id");
         report.testStage = rs.getString("test_stage");
+        report.traceId = rs.getString("trace_id");
         report.timestamp = rs.getLong("timestamp");
         if (rs.wasNull()) {
             report.timestamp = null;
@@ -215,6 +217,7 @@ public class UniversalCoverageRawRepository {
         public String caseName;
         public String buildId;
         public String testStage;
+        public String traceId;
         public Long timestamp;
         public String coverageData;
     }

@@ -20,6 +20,7 @@ ALTER TABLE `oat_frontend_coverage_report`
 ALTER TABLE `oat_universal_coverage_report`
   ADD COLUMN `build_id` VARCHAR(128) DEFAULT NULL AFTER `case_name`,
   ADD COLUMN `test_stage` VARCHAR(64) DEFAULT NULL AFTER `build_id`,
+  ADD COLUMN `trace_id` VARCHAR(128) DEFAULT NULL AFTER `test_stage`,
   ADD INDEX `idx_universal_cov_build_stage` (`app_id`, `source_type`, `build_id`, `test_stage`);
 
 UPDATE `oat_coverage_report`

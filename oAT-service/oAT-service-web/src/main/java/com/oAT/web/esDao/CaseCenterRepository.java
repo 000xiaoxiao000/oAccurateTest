@@ -74,6 +74,31 @@ public class CaseCenterRepository {
         return query("SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE project_id = ? AND system_snapshots_json IS NOT NULL AND JSON_CONTAINS(system_snapshots_json, JSON_QUOTE(?)) ORDER BY create_time DESC", projectId, systemSnapshotId);
     }
 
+    /**
+     * 通过 my snapshot 的 traceId 查找关联了该 snapshot 的用例。
+     * 路径：oat_snapshot.trace_id = traceId → snapshot.id → oat_usecase.snapshots_json contains snapshot.id
+     */
+    public List<CaseCenterIndex> findUsecasesByMySnapshotTraceId(String projectId, String traceId) {
+        List<CaseCenterIndex> snapshots = query(
+                "SELECT 'snapshot' type, id, payload_json, create_time, update_time FROM oat_snapshot WHERE project_id = ? AND trace_id = ?",
+                projectId, traceId);
+        if (snapshots.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<CaseCenterIndex> result = new ArrayList<>();
+        for (CaseCenterIndex snapshotIndex : snapshots) {
+            String snapshotId = snapshotIndex.getId();
+            if (!StringUtils.hasText(snapshotId)) {
+                continue;
+            }
+            List<CaseCenterIndex> usecases = query(
+                    "SELECT 'usecase' type, id, payload_json, create_time, update_time FROM oat_usecase WHERE project_id = ? AND snapshots_json IS NOT NULL AND JSON_CONTAINS(snapshots_json, JSON_QUOTE(?)) ORDER BY create_time DESC",
+                    projectId, snapshotId);
+            result.addAll(usecases);
+        }
+        return result;
+    }
+
     public List<CaseCenterIndex> findByUsecase_ProjectIdAndUsecase_CoverageFootprintsContaining(String projectId, String footprintKey) {
         List<CaseCenterIndex> result = new ArrayList<>();
         for (CaseCenterIndex index : findByUsecase_ProjectId(projectId)) {
