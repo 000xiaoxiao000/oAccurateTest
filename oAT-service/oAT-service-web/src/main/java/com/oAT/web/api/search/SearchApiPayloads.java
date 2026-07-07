@@ -24,6 +24,7 @@ public final class SearchApiPayloads {
     public static class SearchKeywordResult {
         private String id;
         private String appId;
+        private String resultType;
         private String title;
         private String plainTitle;
         private String titleFragment;
@@ -42,6 +43,8 @@ public final class SearchApiPayloads {
         public void setId(String id) { this.id = id; }
         public String getAppId() { return appId; }
         public void setAppId(String appId) { this.appId = appId; }
+        public String getResultType() { return resultType; }
+        public void setResultType(String resultType) { this.resultType = resultType; }
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
         public String getPlainTitle() { return plainTitle; }

@@ -135,6 +135,7 @@ export interface CoverageCodePayload {
 export interface SearchKeywordResult {
   id: string
   appId?: string
+  resultType?: 'usecase' | 'mySnapshot' | 'systemSnapshot'
   title: string
   plainTitle?: string
   titleFragment?: string

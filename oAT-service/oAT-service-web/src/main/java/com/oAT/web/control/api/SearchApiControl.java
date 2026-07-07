@@ -6,9 +6,13 @@ import com.oAT.web.control.entity.ResultNotified;
 import com.oAT.web.esDao.entity.SystemSnapshot;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.SnapshotSearchService;
+import com.oAT.web.service.SnapshotService;
+import com.oAT.web.service.UsecaseSearchService;
+import com.oAT.web.service.entity.CaseSearchResult;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.SearchPage;
 import com.oAT.web.service.entity.SnapshotSearchResult;
+import com.oAT.web.service.entity.SnapshotVo;
 import com.oAT.web.service.entity.UserVo;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
@@ -29,27 +33,46 @@ import java.util.stream.Stream;
 public class SearchApiControl {
 
     private final SnapshotSearchService snapshotSearchService;
+    private final UsecaseSearchService usecaseSearchService;
+    private final SnapshotService snapshotService;
     private final ProjectService projectService;
 
     public SearchApiControl(SnapshotSearchService snapshotSearchService,
+                            UsecaseSearchService usecaseSearchService,
+                            SnapshotService snapshotService,
                             ProjectService projectService) {
         this.snapshotSearchService = snapshotSearchService;
+        this.usecaseSearchService = usecaseSearchService;
+        this.snapshotService = snapshotService;
         this.projectService = projectService;
     }
 
     @GetMapping("/keyword")
     public ResultNotified<SearchKeywordPayload> keyword(@PathVariable String projectId,
                                                         @SessionAttribute UserVo user,
-                                                        @RequestParam String keyword) {
+                                                        @RequestParam String keyword,
+                                                        @RequestParam(name = "type", required = false, defaultValue = "systemSnapshot") String type) {
         ensureProjectAccess(projectId, user);
         Assert.hasText(keyword, "keyword不能为空");
 
-        SearchPage<SnapshotSearchResult> page = snapshotSearchService.doSearch(projectId, keyword);
         SearchKeywordPayload payload = new SearchKeywordPayload();
         payload.setKeyword(keyword);
-        payload.setTotal(page.getTotal());
-        payload.setResults((page.getContents() == null ? java.util.Collections.<SnapshotSearchResult>emptyList() : page.getContents())
-                .stream().map(this::toResult).collect(Collectors.toList()));
+        String normalizedType = normalizeSearchType(type);
+        if ("usecase".equals(normalizedType)) {
+            SearchPage<CaseSearchResult> page = usecaseSearchService.doSearch(projectId, keyword);
+            payload.setTotal(page.getTotal());
+            payload.setResults((page.getContents() == null ? java.util.Collections.<CaseSearchResult>emptyList() : page.getContents())
+                    .stream().map(this::toUsecaseResult).collect(Collectors.toList()));
+        } else if ("mySnapshot".equals(normalizedType)) {
+            List<SnapshotVo> snapshots = snapshotService.findSnapshot(projectId, user.getId(), "updateTime", keyword);
+            payload.setTotal(snapshots.size());
+            payload.setResults(snapshots.stream().map(this::toMySnapshotResult).collect(Collectors.toList()));
+        } else {
+            SearchPage<SnapshotSearchResult> page = snapshotSearchService.doSearch(projectId, keyword);
+            payload.setTotal(page.getTotal());
+            payload.setResults((page.getContents() == null ? java.util.Collections.<SnapshotSearchResult>emptyList() : page.getContents())
+                    .stream().map(this::toSystemSnapshotResult).collect(Collectors.toList()));
+        }
         return new ResultNotified<>(true, "搜索成功", payload);
     }
 
@@ -81,10 +104,11 @@ public class SearchApiControl {
         return new ResultNotified<>(true, "搜索成功", new NetworkGraphData(nodes, edges));
     }
 
-    private SearchKeywordResult toResult(SnapshotSearchResult item) {
+    private SearchKeywordResult toSystemSnapshotResult(SnapshotSearchResult item) {
         SearchKeywordResult result = new SearchKeywordResult();
         result.setId(item.getId());
         result.setAppId(item.getAppId());
+        result.setResultType("systemSnapshot");
         result.setTitle(StringUtils.hasText(item.getTitleFragment()) ? item.getTitleFragment() : item.getTitle());
         result.setPlainTitle(item.getTitle());
         result.setTitleFragment(item.getTitleFragment());
@@ -107,6 +131,52 @@ public class SearchApiControl {
         }
         result.setTargetPath("/p/" + item.getProjectId() + "/apps/" + item.getAppId() + "/snapshots/" + item.getId());
         return result;
+    }
+
+    private SearchKeywordResult toUsecaseResult(CaseSearchResult item) {
+        SearchKeywordResult result = new SearchKeywordResult();
+        result.setId(item.getId());
+        result.setResultType("usecase");
+        result.setTitle(StringUtils.hasText(item.getTitleFragment()) ? item.getTitleFragment() : item.getTitle());
+        result.setPlainTitle(item.getTitle());
+        result.setTitleFragment(item.getTitleFragment());
+        result.setHeadImage(item.getHeadImage());
+        result.setImagePath(StringUtils.hasText(item.getHeadImage()) ? "/r/" + item.getHeadImage() : "/images/image.png");
+        result.setDescribeFragments(item.getContentFragments());
+        result.setSqlContentFragments(item.getSqlContentFragments());
+        result.setRemoteContentFragments(item.getRemoteContentFragments());
+        result.setUpdateTimeText(item.getUpdateTime() == null ? null : item.getUpdateTime().toString());
+        result.setDescription(item.getContentFragments() == null ? null : String.join("</br>", item.getContentFragments()));
+        result.setTargetPath("/p/" + item.getProjectId() + "/usecases/" + item.getId());
+        return result;
+    }
+
+    private SearchKeywordResult toMySnapshotResult(SnapshotVo item) {
+        SearchKeywordResult result = new SearchKeywordResult();
+        result.setId(item.getId());
+        result.setAppId(item.getAppId());
+        result.setResultType("mySnapshot");
+        result.setTitle(item.getName());
+        result.setPlainTitle(item.getName());
+        result.setSubTitle(item.getDescribe());
+        result.setDescription(item.getDescribe());
+        result.setImagePath("/images/image.png");
+        result.setUpdateTimeText(item.getUpdateTimeText());
+        result.setTargetPath("/p/" + item.getProjectId() + "/my-snapshots/" + item.getId());
+        return result;
+    }
+
+    private String normalizeSearchType(String type) {
+        if ("usecase".equals(type) || "mySnapshot".equals(type) || "systemSnapshot".equals(type)) {
+            return type;
+        }
+        if ("snapshot".equals(type) || "system".equals(type)) {
+            return "systemSnapshot";
+        }
+        if ("my".equals(type) || "my-snapshot".equals(type)) {
+            return "mySnapshot";
+        }
+        return "systemSnapshot";
     }
 
     private NetworkGraphData.Edge buildEdge(SystemSnapshot snapshot, String database, String table) {

@@ -390,9 +390,10 @@ export function saveMonitorMySnapshot(
   )
 }
 
-export function searchKeyword(projectId: string, keyword: string) {
+export function searchKeyword(projectId: string, keyword: string, type?: 'usecase' | 'mySnapshot' | 'systemSnapshot') {
   const query = new URLSearchParams()
   query.set('keyword', keyword)
+  if (type) query.set('type', type)
   return apiGet<SearchKeywordPayload>(`/api/projects/${projectId}/search/keyword?${query.toString()}`)
 }
 

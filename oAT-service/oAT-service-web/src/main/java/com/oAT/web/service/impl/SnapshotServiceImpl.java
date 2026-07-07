@@ -190,10 +190,9 @@ public class SnapshotServiceImpl implements SnapshotService{
         List<CaseCenterIndex> list = centerRepository.findBySnapshot_ProjectIdAndSnapshot_CreateUser(projectId, userId
                 , PageRequest.of(0, 500, Sort.Direction.DESC, sort));
         if (StringUtils.hasText(keyword)) {
-            String normalizedKeyword = keyword.trim().toLowerCase();
+            String normalizedKeyword = keyword.trim().toLowerCase(Locale.ROOT);
             list = list.stream()
-                    .filter(index -> index.getSnapshot() != null && StringUtils.hasText(index.getSnapshot().getName()))
-                    .filter(index -> index.getSnapshot().getName().toLowerCase().contains(normalizedKeyword))
+                    .filter(index -> matchesSnapshotKeyword(index.getSnapshot(), normalizedKeyword))
                     .toList();
         }
         List<SnapshotVo> result = new ArrayList<>(list.size());
@@ -289,6 +288,33 @@ public class SnapshotServiceImpl implements SnapshotService{
             op.get().getSnapshot().setShare(share);
             centerRepository.save(op.get());
         }
+    }
+
+    private boolean matchesSnapshotKeyword(Snapshot snapshot, String normalizedKeyword) {
+        if (snapshot == null || !StringUtils.hasText(normalizedKeyword)) {
+            return false;
+        }
+        return containsKeyword(snapshot.getName(), normalizedKeyword)
+                || containsKeyword(snapshot.getDescribe(), normalizedKeyword)
+                || containsKeyword(snapshot.getTraceId(), normalizedKeyword)
+                || containsKeyword(snapshot.getAppId(), normalizedKeyword)
+                || containsAnyKeyword(snapshot.getLabels(), normalizedKeyword);
+    }
+
+    private boolean containsAnyKeyword(String[] values, String normalizedKeyword) {
+        if (values == null) {
+            return false;
+        }
+        for (String value : values) {
+            if (containsKeyword(value, normalizedKeyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsKeyword(String value, String normalizedKeyword) {
+        return StringUtils.hasText(value) && value.toLowerCase(Locale.ROOT).contains(normalizedKeyword);
     }
 
 

@@ -19,7 +19,9 @@
             <span class="caret">⌄</span>
           </button>
           <div class="mode-menu">
-            <button type="button" :class="{ active: mode === 'keyword' }" @click="switchMode('keyword')">用例</button>
+            <button type="button" :class="{ active: mode === 'usecase' }" @click="switchMode('usecase')">用例</button>
+            <button type="button" :class="{ active: mode === 'mySnapshot' }" @click="switchMode('mySnapshot')">我的快照</button>
+            <button type="button" :class="{ active: mode === 'systemSnapshot' }" @click="switchMode('systemSnapshot')">系统快照</button>
             <button type="button" :class="{ active: mode === 'table' }" @click="switchMode('table')">表结构图</button>
           </div>
         </div>
@@ -27,12 +29,12 @@
       </div>
     </form>
 
-    <div v-if="mode === 'keyword' && error" class="message error">{{ error }}</div>
+    <div v-if="isKeywordMode && error" class="message error">{{ error }}</div>
 
-    <section v-if="mode === 'keyword'" class="keyword-results">
+    <section v-if="isKeywordMode" class="keyword-results">
       <div v-if="!keywordSearched" class="placeholder-state">
         <strong>⌕</strong>
-        <span>输入关键词搜索系统快照、SQL 或远程调用</span>
+        <span>{{ keywordPlaceholder }}</span>
       </div>
       <template v-else>
         <div class="result-count">为您找到：{{ keywordResults?.total || 0 }} 条结果</div>
@@ -177,7 +179,7 @@ import { searchKeyword, searchTableGraph } from '@/api/bootstrap'
 import type { NetworkGraphEdge, NetworkGraphNode, SearchKeywordResult } from '@/api/types'
 import AppPagination from '@/components/AppPagination.vue'
 
-type SearchMode = 'keyword' | 'table'
+type SearchMode = 'usecase' | 'mySnapshot' | 'systemSnapshot' | 'table'
 
 interface PositionedNode extends NetworkGraphNode {
   x: number
@@ -194,7 +196,7 @@ interface PositionedEdge extends Omit<NetworkGraphEdge, 'source' | 'target'> {
 const route = useRoute()
 const router = useRouter()
 const projectId = computed(() => String(route.params.projectId || ''))
-const mode = ref<SearchMode>(route.query.tab === 'table' ? 'table' : 'keyword')
+const mode = ref<SearchMode>(initialMode())
 const keyword = ref(String(route.query.keyword || route.query.q || ''))
 const tableKeyword = ref(String(route.query.tableKeyword || ''))
 const database = ref(String(route.query.database || ''))
@@ -223,8 +225,19 @@ const keywordPageSize = ref(10)
 const relationExpanded = ref(false)
 const relationPreviewLimit = 12
 
-const modeLabel = computed(() => (mode.value === 'table' ? '表结构图' : '用例'))
-const activeLoading = computed(() => (mode.value === 'keyword' ? loadingKeyword.value : loadingTable.value))
+const isKeywordMode = computed(() => mode.value !== 'table')
+const modeLabel = computed(() => {
+  if (mode.value === 'table') return '表结构图'
+  if (mode.value === 'mySnapshot') return '我的快照'
+  if (mode.value === 'systemSnapshot') return '系统快照'
+  return '用例'
+})
+const keywordPlaceholder = computed(() => {
+  if (mode.value === 'mySnapshot') return '输入关键词搜索我的快照'
+  if (mode.value === 'systemSnapshot') return '输入关键词搜索系统快照、SQL 或远程调用'
+  return '输入关键词搜索测试用例'
+})
+const activeLoading = computed(() => (isKeywordMode.value ? loadingKeyword.value : loadingTable.value))
 const tableViewBox = computed(() => `0 0 ${tableCanvas.width} ${tableCanvas.height}`)
 const tableGraphTransform = computed(() => `translate(${tableGraphOffset.value.x} ${tableGraphOffset.value.y}) scale(${tableGraphZoom.value})`)
 
@@ -307,7 +320,7 @@ function handleSearchKeydown(event: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', handleSearchKeydown)
-  if (mode.value === 'keyword' && keyword.value) {
+  if (isKeywordMode.value && keyword.value) {
     submitKeywordSearch()
   } else if (mode.value === 'table' && (tableKeyword.value || (database.value && table.value))) {
     submitTableSearch()
@@ -321,8 +334,14 @@ function initialTableText() {
   return [database.value, table.value].filter(Boolean).join(' ')
 }
 
+function initialMode(): SearchMode {
+  const tab = String(route.query.tab || '')
+  if (tab === 'table' || tab === 'mySnapshot' || tab === 'systemSnapshot' || tab === 'usecase') return tab
+  return 'usecase'
+}
+
 function syncTextFromMode() {
-  searchText.value = mode.value === 'table' ? initialTableText() : keyword.value
+  searchText.value = isKeywordMode.value ? keyword.value : initialTableText()
   error.value = ''
 }
 
@@ -474,11 +493,15 @@ function focusSearchInput() {
 function switchMode(next: SearchMode) {
   mode.value = next
   syncTextFromMode()
-  updateQuery({ tab: next === 'table' ? 'table' : undefined })
+  if (next !== 'table') {
+    keywordResults.value = null
+    keywordSearched.value = false
+  }
+  updateQuery({ tab: next === 'usecase' ? undefined : next })
 }
 
 function submitSearch() {
-  if (mode.value === 'keyword') {
+  if (isKeywordMode.value) {
     keyword.value = searchText.value
     submitKeywordSearch()
     return
@@ -497,9 +520,11 @@ async function submitKeywordSearch() {
   keywordSearched.value = true
   error.value = ''
   try {
-    keywordResults.value = await searchKeyword(projectId.value, value)
+    const searchType = mode.value
+    if (searchType === 'table') return
+    keywordResults.value = await searchKeyword(projectId.value, value, searchType)
     keywordPage.value = 1
-    updateQuery({ keyword: value, tab: undefined, q: undefined, database: undefined, table: undefined, tableKeyword: undefined })
+    updateQuery({ keyword: value, tab: searchType === 'usecase' ? undefined : searchType, q: undefined, database: undefined, table: undefined, tableKeyword: undefined })
   } catch (err) {
     error.value = err instanceof Error ? err.message : '搜索失败，请稍后重试'
   } finally {
