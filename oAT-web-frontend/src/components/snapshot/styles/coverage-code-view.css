@@ -431,28 +431,46 @@
 
 :deep(.source-container [class~="branch-tooltip"]) {
   position: absolute;
-  left: calc(var(--line-number-width, 3em) + 24px);
+  left: calc(var(--line-number-width, 3em) + 26px);
   top: 50%;
   z-index: 20;
   min-width: 220px;
-  max-width: 420px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: 6px;
-  background: rgba(20, 24, 33, .96);
-  color: #f7f7f2;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
+  max-width: 380px;
+  padding: 9px 11px;
+  border: 1px solid rgba(15, 23, 42, .12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .98);
+  color: #172033;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .16), 0 2px 8px rgba(15, 23, 42, .08);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-size: 12px;
-  line-height: 1.45;
+  font-weight: 700;
+  line-height: 1.55;
   white-space: pre-wrap;
   opacity: 0;
   pointer-events: none;
-  transform: translateY(-50%);
-  transition: opacity .12s ease;
+  transform: translateY(-50%) translateY(4px) scale(.98);
+  transform-origin: left center;
+  transition: opacity .14s ease, transform .14s ease;
 }
 
+:deep(.source-container [class~="branch-tooltip"]::before) {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-left: 1px solid rgba(15, 23, 42, .12);
+  border-bottom: 1px solid rgba(15, 23, 42, .12);
+  background: rgba(255, 255, 255, .98);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+:deep(.source-container [class~="branch-line"]:hover [class~="branch-tooltip"]),
 :deep(.source-container [class~="branch-line"] [class~="branch-flag"]:hover + [class~="branch-tooltip"]) {
   opacity: 1;
+  transform: translateY(-50%) scale(1);
 }
 
 :deep(.source-container table),

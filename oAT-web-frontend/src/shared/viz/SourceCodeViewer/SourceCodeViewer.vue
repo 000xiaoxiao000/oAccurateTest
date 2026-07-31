@@ -28,12 +28,13 @@
             class="line-branches"
             :class="branchTone(line.line)"
             :title="branchTitle(line.line)"
+            tabindex="0"
           >
             {{ coveredBranchesByLine(line.line) }}/{{ branchesByLine[line.line].length }}
           </span>
         </span>
         <code class="line-code" role="cell">{{ line.text || ' ' }}</code>
-        <span v-if="line.cases?.length" class="line-cases" role="cell" :title="line.cases.join('\\n')">
+        <span v-if="line.cases?.length" class="line-cases" role="cell" :title="line.cases.join('\n')" tabindex="0">
           {{ line.cases.length }} cases
         </span>
       </div>
@@ -265,7 +266,7 @@ onBeforeUnmount(() => {
 }
 
 .source-header strong {
-  overflow: hidden;
+  overflow: visible;
   color: #0f172a;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -331,6 +332,7 @@ onBeforeUnmount(() => {
 }
 
 .line-cases {
+  position: relative;
   display: inline-flex;
   align-items: center;
   padding: 0 10px;
@@ -370,6 +372,7 @@ onBeforeUnmount(() => {
 }
 
 .line-branches {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -383,6 +386,12 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.line-branches:focus-visible,
+.line-cases:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.32);
+  outline-offset: 2px;
 }
 
 .line-branches.branch-full {

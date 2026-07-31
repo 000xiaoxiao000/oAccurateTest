@@ -851,14 +851,15 @@ onMounted(loadApps)
   align-items: center;
   gap: 10px;
   max-width: min(360px, calc(100vw - 24px));
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.96));
-  color: #fff;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.22);
+  padding: 9px 11px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  color: #172033;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16), 0 2px 8px rgba(15, 23, 42, 0.08);
   font-size: 12px;
-  line-height: 1.4;
+  font-weight: 700;
+  line-height: 1.5;
   pointer-events: none;
   text-align: left;
   white-space: normal;
@@ -871,9 +872,9 @@ onMounted(loadApps)
   width: 28px;
   height: 28px;
   place-items: center;
-  border-radius: 10px;
-  background: rgba(20, 184, 166, 0.16);
-  color: #99f6e4;
+  border-radius: 8px;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
   font-size: 15px;
 }
 
@@ -884,14 +885,14 @@ onMounted(loadApps)
 }
 
 .floating-time-tooltip-content span {
-  color: #cbd5e1;
+  color: #64748b;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .floating-time-tooltip-content strong {
-  color: #f8fafc;
+  color: #172033;
   font-size: 13px;
   font-weight: 800;
   line-height: 1.35;
@@ -901,9 +902,13 @@ onMounted(loadApps)
 .floating-time-tooltip-arrow {
   position: absolute;
   top: 100%;
-  border: 6px solid transparent;
-  border-top-color: rgba(15, 23, 42, 0.96);
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid rgba(15, 23, 42, 0.12);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.98);
   transform: translateX(-50%);
+  rotate: 45deg;
 }
 
 </style>
