@@ -8,9 +8,12 @@ import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.oAT.web.coveragecore.diff.BranchTargetProbeMaps.calculateBranchRate;
 import static com.oAT.web.coveragecore.diff.BranchTargetProbeMaps.copyBranchTargetProbeMap;
@@ -47,7 +50,7 @@ public class JavaStaticCoverageStructureService {
             md.setMethodName(mInfo.getMethodName());
             md.setMethodDesc(mInfo.getMethodDesc());
 
-            List<Integer> methodLines = mInfo.getMethodLineNumberMap();
+            List<Integer> methodLines = normalizeExecutableMethodLines(mInfo.getMethodLineNumberMap(), classInfo.getSourceCode());
             Map<String, List<Integer>> totalBranchTargetProbeMap = changedLinesInClass != null
                     ? filterBranchTargetProbeMap(mInfo.getBranchLineAndTargetProbeMap(), changedLinesInClass)
                     : copyBranchTargetProbeMap(mInfo.getBranchLineAndTargetProbeMap());
@@ -98,5 +101,35 @@ public class JavaStaticCoverageStructureService {
             classCov.setTotalComplexity(classCov.getTotalComplexity() + md.getComplexity());
         }
         classCov.setTotalMethods(classCov.getMethods().size());
+    }
+
+    private List<Integer> normalizeExecutableMethodLines(List<Integer> methodLines, String sourceCode) {
+        if (methodLines == null || methodLines.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String[] sourceLines = sourceCode == null ? null : sourceCode.split("\\r?\\n", -1);
+        Set<Integer> normalized = new LinkedHashSet<>();
+        for (Integer lineNumber : methodLines) {
+            if (lineNumber == null || lineNumber <= 0) {
+                continue;
+            }
+            if (isNonExecutableStructureLine(sourceLines, lineNumber)) {
+                continue;
+            }
+            normalized.add(lineNumber);
+        }
+        return new ArrayList<>(normalized);
+    }
+
+    private boolean isNonExecutableStructureLine(String[] sourceLines, int lineNumber) {
+        if (sourceLines == null || lineNumber <= 0 || lineNumber > sourceLines.length) {
+            return false;
+        }
+        String text = sourceLines[lineNumber - 1];
+        if (text == null) {
+            return true;
+        }
+        String trimmed = text.trim();
+        return trimmed.isEmpty() || trimmed.matches("[{};]+");
     }
 }
