@@ -102,9 +102,9 @@ public class PerformanceAnalysisTool {
 
             // 找出慢接口
             traces.sort((a, b) -> {
-                Long timeA = parseLong(a.get("duration"));
-                Long timeB = parseLong(b.get("duration"));
-                return timeB.compareTo(timeA); // 降序
+                long timeA = defaultLong(getDuration(a));
+                long timeB = defaultLong(getDuration(b));
+                return Long.compare(timeB, timeA); // 降序
             });
 
             StringBuilder sb = new StringBuilder();
@@ -118,9 +118,9 @@ public class PerformanceAnalysisTool {
                 count++;
                 
                 String url = (String) trace.getOrDefault("url", "-");
-                Long duration = parseLong(trace.get("duration"));
-                Integer statusCode = parseInt(trace.get("statusCode"));
-                String createTime = (String) trace.getOrDefault("createTime", "-");
+                Long duration = getDuration(trace);
+                Integer statusCode = getStatusCode(trace);
+                String createTime = safeString(trace.getOrDefault("createTime", "-"));
 
                 String durationStr = duration != null ? duration + "ms" : "-";
                 String statusStr = statusCode != null ? statusCode.toString() : "-";
@@ -240,7 +240,7 @@ public class PerformanceAnalysisTool {
         List<Long> durations = new java.util.ArrayList<>();
 
         for (Map<String, Object> trace : traces) {
-            Long duration = parseLong(trace.get("duration"));
+            Long duration = getDuration(trace);
             if (duration != null && duration > 0) {
                 durations.add(duration);
                 stats.totalTime += duration;
@@ -260,6 +260,24 @@ public class PerformanceAnalysisTool {
         }
 
         return stats;
+    }
+
+    private Long getDuration(Map<String, Object> trace) {
+        Long duration = parseLong(trace.get("duration"));
+        return duration != null ? duration : parseLong(trace.get("useTime"));
+    }
+
+    private Integer getStatusCode(Map<String, Object> trace) {
+        Integer statusCode = parseInt(trace.get("statusCode"));
+        return statusCode != null ? statusCode : parseInt(trace.get("responseCode"));
+    }
+
+    private String safeString(Object value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private long defaultLong(Long value) {
+        return value == null ? 0L : value;
     }
 
     private Long parseLong(Object obj) {

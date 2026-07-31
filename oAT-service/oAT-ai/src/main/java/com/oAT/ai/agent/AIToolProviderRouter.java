@@ -79,7 +79,7 @@ final class AIToolProviderRouter {
 
         String normalized = question == null ? "" : question.toLowerCase(Locale.ROOT);
         if (containsAny(normalized, "业务需求", "业务逻辑", "业务规则", "业务场景", "处理什么业务", "需求分析", "功能逻辑", "方法职责")) {
-            addAll(toolNames, "searchCodeRelation", "analyzeBusinessRequirement", "getClassCallGraph", "detectBugsInMethod");
+            addAll(toolNames, "searchCodeRelation", "analyzeBusinessRequirement", "detectBugsInMethod");
         } else if (containsAny(normalized, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误")) {
             addAll(toolNames, "searchCodeRelation", "detectBugsInMethod", "detectBugs", "batchDetectBugs", "getCodeQualityReport");
         } else if (containsAny(normalized, "生成覆盖率", "拉取代码", "自动生成", "生成报告", "覆盖率生成", "任务进度", "生成好了吗", "任务状态", "下载报告", "导出报告", "检查配置", "验证git", "git配置")) {
@@ -91,13 +91,13 @@ final class AIToolProviderRouter {
         } else if (containsAny(normalized, "缺陷", "defect", "错误", "error", "异常", "exception", "根因")) {
             addAll(toolNames, "getDefectOverview", "getRecentExceptions", "getAppErrorDetails", "getRecentTraces", "locateRootCause", "getApps");
         } else if (containsAny(normalized, "链路", "trace", "调用链", "span", "链路详情")) {
-            addAll(toolNames, "getRecentTraces", "getTracesByAppName", "getTraceDetail", "analyzeCallChain", "analyzeMethodCallChain", "getClassCallGraph", "getCallGraph", "getApps", "searchAppByName");
+            addAll(toolNames, "getRecentTraces", "getTracesByAppName", "getTraceDetail", "analyzeCallChain", "getApps", "searchAppByName");
         } else if (containsAny(normalized, "快照", "snapshot", "版本", "上线", "发布")) {
             addAll(toolNames, "getSnapshots", "getMySnapshots", "getSnapshotDetail", "getProjectCoverageOverview");
         } else if (containsAny(normalized, "应用", "app", "在线", "运行状态", "状态")) {
             addAll(toolNames, "getApps", "getOnlineApps", "searchAppByName", "getAppDetail");
         } else if (containsAny(normalized, "代码", "类", "方法", "调用关系", "调用图", "上下游", "依赖")) {
-            addAll(toolNames, "searchCodeRelation", "getClassCallGraph", "getCallGraph", "analyzeMethodCallChain");
+            addAll(toolNames, "searchCodeRelation");
         } else {
             addAll(toolNames, "getProjectOverview", "getProjectInfo", "getProjectStatistics", "getApps", "getProjectCoverageOverview");
         }
@@ -106,7 +106,7 @@ final class AIToolProviderRouter {
             String loweredQuestion = question.toLowerCase(Locale.ROOT);
             if (containsAny(loweredQuestion, "调用链", "调用关系", "上下游", "调用图", "链路")
                     && containsAny(loweredQuestion, "方法", "method", "函数")) {
-                addAll(toolNames, "getCallGraph", "analyzeMethodCallChain", "getClassCallGraph");
+                addAll(toolNames, "searchCodeRelation", "getRecentTraces", "analyzeCallChain");
             }
             if (containsAny(loweredQuestion, "bug", "缺陷", "风险", "可能存在", "潜在")
                     && containsAny(loweredQuestion, "方法", "method", "函数")) {

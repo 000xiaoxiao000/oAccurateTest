@@ -170,7 +170,7 @@ public class ToolRecommender {
         if (containsAny(lowerQuestion, "业务需求", "业务逻辑", "业务规则", "业务场景", "业务含义", "处理什么业务",
                 "需求分析", "功能逻辑", "功能需求", "方法逻辑", "方法职责", "类职责", "实现什么", "干什么", "做什么", "分析业务", "梳理业务")) {
             return sourceAnalysisRecommendation("analyzeBusinessRequirement",
-                    Arrays.asList("searchCodeRelation", "getClassCallGraph", "detectBugsInMethod"),
+                    Arrays.asList("searchCodeRelation", "detectBugsInMethod"),
                     "business_logic", "业务需求/业务逻辑问题必须优先使用真实源码业务逻辑分析工具");
         }
         if (containsAny(lowerQuestion, "批量", "多个类", "这些类", "一批", "批量检测", "批量扫描", "批量分析" )
@@ -443,12 +443,12 @@ public class ToolRecommender {
             }
         }
         if (containsAny(lowerQuestion, "业务需求", "业务逻辑", "业务规则", "业务场景", "处理什么业务", "需求分析", "功能逻辑", "方法职责")) {
-            if (Set.of("analyzeBusinessRequirement", "searchCodeRelation", "getClassCallGraph", "getCallGraph", "detectBugsInMethod", "detectBugs").contains(toolName)) {
+            if (Set.of("analyzeBusinessRequirement", "searchCodeRelation", "detectBugsInMethod", "detectBugs").contains(toolName)) {
                 return 12.0;
             }
         }
         if (containsAny(lowerQuestion, "调用关系", "调用图", "调用链图", "调用关系图", "类调用图", "方法调用链", "方法调用关系", "上下游", "谁调用", "调用了谁", "依赖关系")) {
-            if (Set.of("getClassCallGraph", "getCallGraph", "searchCodeRelation", "analyzeMethodCallChain").contains(toolName)) {
+            if (Set.of("searchCodeRelation", "getRecentTraces", "getTraceDetail", "analyzeCallChain").contains(toolName)) {
                 return 16.0;
             }
         }
@@ -456,12 +456,9 @@ public class ToolRecommender {
             if ("searchCodeRelation".equals(toolName)) {
                 return 16.0;
             }
-            if (Set.of("getClassCallGraph", "getCallGraph").contains(toolName)) {
-                return 8.0;
-            }
         }
         if (containsAny(lowerQuestion, "版本上线", "上线前", "发布前", "精准回归", "回归范围", "回归策略")) {
-            if (Set.of("getProjectCoverageOverview", "getLowCoverageClasses", "recommendTestcases", "compareCoverage", "searchCodeRelation", "getCallGraph", "getSnapshots").contains(toolName)) {
+            if (Set.of("getProjectCoverageOverview", "getLowCoverageClasses", "recommendTestcases", "compareCoverage", "searchCodeRelation", "getSnapshots").contains(toolName)) {
                 return 8.0;
             }
         }
@@ -569,9 +566,6 @@ public class ToolRecommender {
         registerTool(new ToolMeta("searchCodeRelation", "代码关系搜索",
                 "搜索代码中的调用/引用关系", new String[]{"代码关系", "searchRelation"}, new String[]{"code_relation"}));
 
-        registerTool(new ToolMeta("getCallGraph", "调用图",
-                "获取方法的完整调用图", new String[]{"调用图", "callGraph", "依赖"}, new String[]{"code_relation"}));
-
         registerTool(new ToolMeta("getAppPerformanceOverview", "性能概览",
                 "获取应用的整体性能指标", new String[]{"性能", "performance", "概览"}, new String[]{"performance"}));
 
@@ -617,16 +611,11 @@ public class ToolRecommender {
         registerTool(new ToolMeta("analyzeRecentCallChains", "最近调用链汇总分析",
                 "对最近多条调用链做汇总分析，发现共性问题和模式", new String[]{"最近链路", "链路汇总", "批量分析"}, new String[]{"trace", "performance", "defect"}));
 
-        registerTool(new ToolMeta("analyzeMethodCallChain", "方法调用链分析",
-                "基于真实调用图/Trace 分析类或方法的上下游调用关系",
-                new String[]{"方法调用链", "类调用链", "调用关系", "调用图", "上下游", "谁调用", "调用了谁"},
-                new String[]{"trace", "code_relation"}));
-
         registerTool(new ToolMeta("analyzeUrlCallPattern", "URL调用模式分析",
                 "分析接口URL的典型路径、慢请求规律和异常情况", new String[]{"URL", "接口", "调用模式", "慢请求"}, new String[]{"trace", "performance"}));
 
         registerTool(new ToolMeta("getCodeQualityReport", "代码质量报告",
-                "评估代码的整体质量状况", new String[]{"质量报告", "quality", "report"}, new String[]{"code_quality"}));
+                "基于覆盖率和类级复杂度评估质量风险", new String[]{"质量报告", "quality", "report"}, new String[]{"code_quality"}));
 
         registerTool(new ToolMeta("getProjectOverview", "项目概览",
                 "获取项目基本信息、应用状态和覆盖率概览", new String[]{"项目概览", "项目总览", "overview"}, new String[]{"project_info"}));
@@ -657,11 +646,6 @@ public class ToolRecommender {
 
         registerTool(new ToolMeta("getCoverageReportDetail", "覆盖率报告详情",
                 "获取单份覆盖率报告的详细信息", new String[]{"覆盖率报告详情", "报告详情"}, new String[]{"coverage"}));
-
-        registerTool(new ToolMeta("getClassCallGraph", "类调用图",
-                "获取类级别的真实调用关系图",
-                new String[]{"类调用图", "类调用关系", "类依赖", "类关系", "调用关系图", "调用图", "上下游"},
-                new String[]{"code_relation", "trace", "business_logic"}));
 
         registerTool(new ToolMeta("generateCoverageReport", "生成覆盖率报告",
                 "拉取代码并启动覆盖率生成任务，返回任务ID",

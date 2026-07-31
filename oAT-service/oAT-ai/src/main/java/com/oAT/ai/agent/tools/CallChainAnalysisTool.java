@@ -252,7 +252,6 @@ public class CallChainAnalysisTool {
         }
     }
 
-    @Tool("分析指定类/方法的调用关系图，展示完整的上下游调用链路")
     public String analyzeMethodCallChain(@P("类全限定名") String className,
                                           @P("方法名（可选）") String methodName) {
         if (className == null || className.trim().isEmpty()) {

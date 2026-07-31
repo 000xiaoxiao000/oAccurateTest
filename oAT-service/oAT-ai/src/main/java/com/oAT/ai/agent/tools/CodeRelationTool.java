@@ -73,7 +73,6 @@ public class CodeRelationTool {
         }
     }
 
-    @Tool("获取接口或类的真实调用关系图；如果没有静态调用边或运行时调用链证据，必须明确返回暂无真实调用关系，不能根据覆盖率节点或相邻方法猜测调用方/被调用方")
     public String getCallGraph(@P("类名（全限定名或简单名）") String className, @P("方法名（可选）") String methodName) {
         if (className == null || className.trim().isEmpty()) {
             return "错误：请提供类名";
@@ -144,7 +143,6 @@ public class CodeRelationTool {
         }
     }
 
-    @Tool("获取类的真实调用关系图（仅类级别）；如果没有真实调用关系数据，必须明确说明暂无数据")
     public String getClassCallGraph(@P("类名（全限定名或简单名）") String className) {
         return getCallGraph(className, null);
     }

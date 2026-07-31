@@ -42,6 +42,10 @@ public class CaseCenterRepository {
         return queryPage("snapshot", "project_id = ? AND create_user = ?", pageable, projectId, userId);
     }
 
+    public List<CaseCenterIndex> findBySnapshot_ProjectId(String projectId, Pageable pageable) {
+        return queryPage("snapshot", "project_id = ?", pageable, projectId);
+    }
+
     public List<CaseCenterIndex> findBySnapshot_AppId(String appId) {
         return query("SELECT 'snapshot' type, id, payload_json, create_time, update_time FROM oat_snapshot WHERE app_id = ? ORDER BY create_time DESC", appId);
     }

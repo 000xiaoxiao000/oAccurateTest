@@ -55,9 +55,10 @@ public class DefectStatisticsTool {
                         int appExceptions = 0;
 
                         for (Map<String, Object> trace : traces) {
-                            Integer statusCode = parseInt(trace.get("statusCode"));
-                            String error = (String) trace.get("error");
-                            String exception = (String) trace.get("exception");
+                            Integer statusCode = getStatusCode(trace);
+                            boolean hasError = hasError(trace);
+                            String error = getText(trace.get("errorMessage"));
+                            String exception = getText(trace.get("exception"));
 
                             // 统计HTTP错误
                             if (statusCode != null && statusCode >= 400) {
@@ -67,14 +68,12 @@ public class DefectStatisticsTool {
                             }
 
                             // 统计异常
-                            if (error != null && !error.isEmpty()) {
+                            if (hasError) {
                                 appExceptions++;
-                                String errorType = extractErrorType(error);
+                                String errorType = !exception.isEmpty()
+                                        ? extractErrorType(exception)
+                                        : (!error.isEmpty() ? extractErrorType(error) : "调用链标记异常");
                                 errorTypeDist.put(errorType, errorTypeDist.getOrDefault(errorType, 0) + 1);
-                            }
-
-                            if (exception != null && !exception.isEmpty()) {
-                                appExceptions++;
                             }
                         }
 
@@ -149,10 +148,9 @@ public class DefectStatisticsTool {
             // 筛选错误请求
             List<Map<String, Object>> errorTraces = new java.util.ArrayList<>();
             for (Map<String, Object> trace : traces) {
-                Integer statusCode = parseInt(trace.get("statusCode"));
-                String error = (String) trace.get("error");
+                Integer statusCode = getStatusCode(trace);
                 
-                if ((statusCode != null && statusCode >= 400) || (error != null && !error.isEmpty())) {
+                if ((statusCode != null && statusCode >= 400) || hasError(trace)) {
                     errorTraces.add(trace);
                 }
             }
@@ -170,12 +168,12 @@ public class DefectStatisticsTool {
                 if (count >= limit) break;
                 count++;
 
-                String url = (String) trace.getOrDefault("url", "-");
-                Integer statusCode = parseInt(trace.get("statusCode"));
-                String error = (String) trace.get("error");
-                String exception = (String) trace.get("exception");
-                String createTime = (String) trace.getOrDefault("createTime", "-");
-                Long duration = parseLong(trace.get("duration"));
+                String url = getText(trace.getOrDefault("url", "-"));
+                Integer statusCode = getStatusCode(trace);
+                String error = getText(trace.get("errorMessage"));
+                String exception = getText(trace.get("exception"));
+                String createTime = getText(trace.getOrDefault("createTime", "-"));
+                Long duration = getDuration(trace);
 
                 sb.append("### ").append(count).append(". ");
                 if (statusCode != null && statusCode >= 400) {
@@ -202,6 +200,8 @@ public class DefectStatisticsTool {
                 }
                 if (exception != null && !exception.isEmpty()) {
                     sb.append("- 异常类型: ").append(extractErrorType(exception)).append("\n");
+                } else if (hasError(trace)) {
+                    sb.append("- 异常信息: 调用链已标记异常，概要数据未包含详细异常文本\n");
                 }
                 sb.append("- 发生时间: ").append(createTime).append("\n");
                 sb.append("\n");
@@ -248,10 +248,10 @@ public class DefectStatisticsTool {
             Map<String, Integer> exceptionTypeCount = new java.util.HashMap<>();
 
             for (Map<String, Object> trace : traces) {
-                String exception = (String) trace.get("exception");
-                if (exception != null && !exception.isEmpty()) {
+                String exception = getText(trace.get("exception"));
+                if (!exception.isEmpty() || hasError(trace)) {
                     exceptionTraces.add(trace);
-                    String excType = extractErrorType(exception);
+                    String excType = !exception.isEmpty() ? extractErrorType(exception) : "调用链标记异常";
                     exceptionTypeCount.put(excType, exceptionTypeCount.getOrDefault(excType, 0) + 1);
                 }
             }
@@ -283,13 +283,14 @@ public class DefectStatisticsTool {
                 if (count >= limit) break;
                 count++;
 
-                String url = (String) trace.getOrDefault("url", "-");
-                String exception = (String) trace.get("exception");
-                String createTime = (String) trace.getOrDefault("createTime", "-");
+                String url = getText(trace.getOrDefault("url", "-"));
+                String exception = getText(trace.get("exception"));
+                String createTime = getText(trace.getOrDefault("createTime", "-"));
+                String exceptionText = !exception.isEmpty() ? exception : "调用链已标记异常，概要数据未包含详细异常文本";
 
-                sb.append(count).append(". **").append(extractErrorType(exception)).append("**\n");
+                sb.append(count).append(". **").append(extractErrorType(exceptionText)).append("**\n");
                 sb.append("   - 接口: `").append(url).append("`\n");
-                sb.append("   - 异常: ").append(truncateString(exception, 80)).append("\n");
+                sb.append("   - 异常: ").append(truncateString(exceptionText, 80)).append("\n");
                 sb.append("   - 时间: ").append(createTime).append("\n");
             }
 
@@ -328,6 +329,35 @@ public class DefectStatisticsTool {
     private String truncateString(String str, int maxLength) {
         if (str == null) return "";
         return str.length() > maxLength ? str.substring(0, maxLength) + "..." : str;
+    }
+
+    private boolean hasError(Map<String, Object> trace) {
+        Object hasError = trace.get("hasError");
+        if (hasError == null) {
+            hasError = trace.get("error");
+        }
+        if (hasError instanceof Boolean) {
+            return (Boolean) hasError;
+        }
+        if (hasError instanceof String) {
+            String text = ((String) hasError).trim();
+            return "true".equalsIgnoreCase(text) || "error".equalsIgnoreCase(text) || "fail".equalsIgnoreCase(text);
+        }
+        return false;
+    }
+
+    private Long getDuration(Map<String, Object> trace) {
+        Long duration = parseLong(trace.get("duration"));
+        return duration != null ? duration : parseLong(trace.get("useTime"));
+    }
+
+    private Integer getStatusCode(Map<String, Object> trace) {
+        Integer statusCode = parseInt(trace.get("statusCode"));
+        return statusCode != null ? statusCode : parseInt(trace.get("responseCode"));
+    }
+
+    private String getText(Object value) {
+        return value == null ? "" : value.toString();
     }
 
     private Long parseLong(Object obj) {

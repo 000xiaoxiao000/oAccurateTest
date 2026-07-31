@@ -35,8 +35,8 @@ public final class AIPromptGuideBuilder {
 
         if (containsAny(normalized, "业务需求", "业务逻辑", "业务规则", "业务场景", "处理什么业务", "需求分析", "功能逻辑", "方法职责")) {
             scenario = "源码业务逻辑分析";
-            preferredTools.addAll(Arrays.asList("searchCodeRelation", "analyzeBusinessRequirement", "getClassCallGraph", "detectBugsInMethod", "detectBugs"));
-            answerFocus = "必须先用 searchCodeRelation 定位源码中的真实类/方法；再用 analyzeBusinessRequirement 分析真实源码，必要时用 getClassCallGraph 补充真实上下游。只能基于源码中的真实类名、方法名、参数、分支和返回值分析业务规则。无法从源码确认的需求要明确说明，禁止使用示例类名、示例链接或猜测的业务流程。";
+            preferredTools.addAll(Arrays.asList("searchCodeRelation", "analyzeBusinessRequirement", "detectBugsInMethod", "detectBugs"));
+            answerFocus = "必须先用 searchCodeRelation 定位源码中的真实类/方法；再用 analyzeBusinessRequirement 分析真实源码。只能基于源码中的真实类名、方法名、参数、分支和返回值分析业务规则。无法从源码确认的需求要明确说明，禁止使用示例类名、示例链接或猜测的业务流程。";
         } else if (containsAny(normalized, "bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷", "源码缺陷", "空指针", "资源泄漏", "并发问题", "逻辑错误")) {
             scenario = "源码 Bug 检测";
             preferredTools.addAll(Arrays.asList("searchCodeRelation", "detectBugsInMethod", "batchDetectBugs", "detectBugs", "getCodeQualityReport"));
@@ -48,8 +48,8 @@ public final class AIPromptGuideBuilder {
         } else if (containsAny(normalized, "调用链", "调用关系", "上下游", "谁调用", "调用了谁", "依赖关系")
                 && containsAny(normalized, "方法", "method", "函数")) {
             scenario = "方法真实调用关系分析";
-            preferredTools.addAll(Arrays.asList("searchCodeRelation", "getClassCallGraph", "getCallGraph", "analyzeMethodCallChain", "analyzeCallChain"));
-            answerFocus = "必须先用 searchCodeRelation 根据类名/方法名定位真实代码对象；类级调用图优先用 getClassCallGraph，方法级调用关系用 getCallGraph 或 analyzeMethodCallChain。只输出工具返回的真实调用方、被调用方和 Trace 数据；如果工具返回无真实调用关系数据，要明确说明暂无真实数据，禁止生成 example.com 链接、示意图链接、methodA/helperMethod 或任何源码中不存在的方法。";
+            preferredTools.addAll(Arrays.asList("searchCodeRelation", "getRecentTraces", "getTraceDetail", "analyzeCallChain"));
+            answerFocus = "必须先用 searchCodeRelation 根据类名/方法名定位真实代码对象；当前未接入静态调用边数据，不能回答类/方法的上游、下游调用图。只可基于真实 Trace 分析运行时调用链；如果没有 Trace，要明确说明暂无真实调用链数据，禁止生成 example.com 链接、示意图链接、methodA/helperMethod 或任何源码中不存在的方法。";
         } else if (containsAny(normalized, "覆盖率是多少", "这个项目的代码覆盖率", "项目覆盖率", "整体覆盖率", "代码覆盖情况", "覆盖率概览")) {
             scenario = "项目覆盖率概览";
             preferredTools.addAll(Arrays.asList("getProjectCoverageOverview", "getCoverageReports", "getAppCoverageReport", "getAppCoverageTrend"));

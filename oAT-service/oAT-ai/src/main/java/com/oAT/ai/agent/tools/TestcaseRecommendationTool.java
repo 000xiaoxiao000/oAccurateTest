@@ -59,7 +59,8 @@ public class TestcaseRecommendationTool {
                     reportId, 0.0, 0.3); // 覆盖率低于30%的类
 
             if (lowCoverageClasses == null || lowCoverageClasses.isEmpty()) {
-                sb.append("✅ 恭喜！该应用所有类的覆盖率都在30%以上\n");
+                sb.append("未查询到覆盖率低于30%的类级明细。\n\n");
+                sb.append("> 这不等于所有类都已达标；可能是类级覆盖率明细未入库、筛选条件未命中，或当前报告只包含汇总指标。请结合总体覆盖率判断风险。\n");
             } else {
                 sb.append("### 🔴 需要补充测试的类（覆盖率<30%）\n\n");
                 sb.append("| 类名 | 行覆盖率 | 分支覆盖率 | 建议优先级 |\n");

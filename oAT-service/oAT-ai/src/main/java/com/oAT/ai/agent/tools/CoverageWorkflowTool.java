@@ -35,6 +35,9 @@ public class CoverageWorkflowTool {
         if (projectId == null) {
             return "错误：未找到项目上下文";
         }
+        if (appName == null || appName.trim().isEmpty()) {
+            return "错误：请提供应用名称";
+        }
 
         try {
             List<Map<String, Object>> apps = dataProvider.getApps(projectId);
@@ -182,7 +185,6 @@ public class CoverageWorkflowTool {
         if (projectId == null) {
             return "错误：未找到项目上下文";
         }
-
         try {
             if ((reportId == null || reportId.trim().isEmpty()) && appName != null && !appName.trim().isEmpty()) {
                 List<Map<String, Object>> apps = dataProvider.getApps(projectId);
@@ -239,6 +241,9 @@ public class CoverageWorkflowTool {
         String projectId = AgentContext.getCurrentProjectId();
         if (projectId == null) {
             return "错误：未找到项目上下文";
+        }
+        if (appName == null || appName.trim().isEmpty()) {
+            return "错误：请提供应用名称";
         }
 
         try {

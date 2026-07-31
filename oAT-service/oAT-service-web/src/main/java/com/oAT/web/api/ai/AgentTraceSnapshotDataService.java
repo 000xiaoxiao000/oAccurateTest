@@ -95,7 +95,14 @@ public class AgentTraceSnapshotDataService {
             result.put("traceId", traceId);
             result.put("appId", first.getAppId());
             result.put("createTime", first.getCreateTime());
+            result.put("time", first.getCreateTime());
+            result.put("startTime", first.getCreateTime());
             result.put("type", first.getType());
+            result.put("status", first.getStatus());
+            result.put("useTime", first.getUseTime());
+            result.put("duration", first.getUseTime());
+            result.put("hasError", first.getHasError());
+            result.put("error", Boolean.TRUE.equals(first.getHasError()));
             result.put("nodes", new ArrayList<>());
             if (httpNode != null) {
                 fillHttpTrace(result, traceId, httpNode);
@@ -162,7 +169,15 @@ public class AgentTraceSnapshotDataService {
         result.put("clientIp", httpNode.getClientIp());
         result.put("serverIp", httpNode.getServerIp());
         result.put("appName", httpNode.getApp() != null ? httpNode.getApp().getAppName() : "");
+        result.put("statusCode", httpNode.getResponseCode());
+        result.put("responseCode", httpNode.getResponseCode());
+        result.put("duration", httpNode.getUseTime());
+        result.put("useTime", httpNode.getUseTime());
+        result.put("hasError", httpNode.getError() != null);
         result.put("error", httpNode.getError() != null);
+        if (httpNode.getError() != null) {
+            result.put("exception", httpNode.getError().toString());
+        }
 
         List<StackNodeVo> storedNodes = coverageStorage.load(traceId);
         List<StackNodeVo> codeNodesSource = storedNodes.isEmpty()
@@ -185,13 +200,17 @@ public class AgentTraceSnapshotDataService {
         trace.put("createTime", summary.getCreateTime());
         trace.put("type", "http");
         trace.put("hasError", Boolean.TRUE.equals(summary.getHasError()));
+        trace.put("error", Boolean.TRUE.equals(summary.getHasError()));
         trace.put("useTime", summary.getUseTime());
+        trace.put("duration", summary.getUseTime());
         trace.put("url", summary.getHttpUrl());
         trace.put("method", summary.getHttpMethod());
         trace.put("clientIp", summary.getHttpClientIp());
         trace.put("serverIp", summary.getHttpServerIp());
         trace.put("responseCode", summary.getHttpResponseCode());
-        trace.put("error", Boolean.TRUE.equals(summary.getHasError()));
+        trace.put("statusCode", summary.getHttpResponseCode());
+        trace.put("status", summary.getStatus());
+        trace.put("time", summary.getCreateTime());
         trace.put("nodeCount", summary.getNodeCount());
         trace.put("sqlCount", summary.getSqlCount());
         trace.put("remoteCount", summary.getRemoteCount());

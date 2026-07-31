@@ -187,8 +187,10 @@ public class SnapshotServiceImpl implements SnapshotService{
         } else if (sort == null) {
             sort = "updateTime";
         }
-        List<CaseCenterIndex> list = centerRepository.findBySnapshot_ProjectIdAndSnapshot_CreateUser(projectId, userId
-                , PageRequest.of(0, 500, Sort.Direction.DESC, sort));
+        PageRequest pageRequest = PageRequest.of(0, 500, Sort.Direction.DESC, sort);
+        List<CaseCenterIndex> list = StringUtils.hasText(userId)
+                ? centerRepository.findBySnapshot_ProjectIdAndSnapshot_CreateUser(projectId, userId, pageRequest)
+                : centerRepository.findBySnapshot_ProjectId(projectId, pageRequest);
         if (StringUtils.hasText(keyword)) {
             String normalizedKeyword = keyword.trim().toLowerCase(Locale.ROOT);
             list = list.stream()

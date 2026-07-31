@@ -295,7 +295,7 @@ public class CoverageTool {
                     if (maxRate != null) filter += " 最大" + (maxRate * 100) + "%";
                     filter += "）";
                 }
-                return "未找到符合条件的类覆盖率数据" + filter;
+                return "未找到符合条件的类覆盖率数据" + filter + "。这只能说明当前类级明细查询没有返回结果，不能据此推断不存在低覆盖类，也不能推断所有类都低覆盖；请结合报告总体覆盖率或检查类级覆盖率数据是否已入库。";
             }
             StringBuilder sb = new StringBuilder();
             sb.append("找到 ").append(classes.size()).append(" 个类：\n\n");

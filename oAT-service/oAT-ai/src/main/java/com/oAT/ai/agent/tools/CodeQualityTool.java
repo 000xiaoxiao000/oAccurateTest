@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * 代码质量分析工具
- * 提供代码复杂度、重复代码、代码规范等分析能力
+ * 基于覆盖率报告中的类级覆盖率和复杂度数据提供质量风险分析。
  */
 public class CodeQualityTool {
 
@@ -24,7 +24,7 @@ public class CodeQualityTool {
         this.dataProvider = dataProvider;
     }
 
-    @Tool("获取应用的代码质量分析报告，包括复杂度、重复代码等指标")
+    @Tool("获取应用的代码质量风险报告，基于覆盖率和类级复杂度指标")
     public String getCodeQualityReport(@P("应用名称") String appName) {
         if (appName == null || appName.trim().isEmpty()) {
             return "错误：请提供应用名称";
@@ -93,8 +93,8 @@ public class CodeQualityTool {
             sb.append("\n### 💡 代码质量建议\n\n");
             sb.append("1. **提高测试覆盖率**：目标是行覆盖率>80%，分支覆盖率>70%\n");
             sb.append("2. **降低代码复杂度**：单个方法圈复杂度应<10\n");
-            sb.append("3. **消除重复代码**：重复率应<5%\n");
-            sb.append("4. **遵循编码规范**：使用代码检查工具（如SonarQube）\n");
+            sb.append("3. **补齐质量数据源**：当前报告不包含重复率、坏味道、漏洞等静态扫描指标\n");
+            sb.append("4. **静态扫描补充**：如需这些指标，请接入 SonarQube 等静态扫描数据源\n");
             sb.append("5. **定期代码审查**：建立code review机制\n");
 
             return sb.toString();
