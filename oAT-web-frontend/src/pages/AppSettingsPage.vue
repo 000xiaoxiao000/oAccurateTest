@@ -87,7 +87,12 @@
             </label>
             <label>
               <span>Webhook 地址</span>
-              <input v-model="form.probeWebhookUrl" class="text-input" type="text" />
+              <input
+                v-model.trim="form.probeWebhookUrl"
+                class="text-input"
+                type="text"
+                placeholder="例如：https://example.com/webhook/alerts"
+              />
             </label>
           </div>
 
