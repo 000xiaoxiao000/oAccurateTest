@@ -7,6 +7,7 @@
         <p class="subtext">支持 Git 拉取与文件上传两种方式创建新版本。</p>
       </div>
       <div class="header-actions">
+        <RouterLink v-if="center && !center.app.repoConfigured" class="repository-link" :to="`/p/${projectId}/apps/${appId}/repository`">仓库配置</RouterLink>
         <RouterLink class="secondary-link" :to="`/p/${projectId}/apps/${appId}/versions`">返回版本列表</RouterLink>
       </div>
     </div>
@@ -77,11 +78,11 @@
           </label>
         </div>
         <div class="action-row">
-          <button class="ghost-button" type="button" :disabled="busy || branchesLoading || !center?.app.repoConfigured" @click="loadBranches()">{{ branchesLoading ? '刷新中...' : '刷新分支' }}</button>
-          <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="fetchLatestCommitForBranch">获取最新 Commit</button>
-          <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="checkGit">检测可拉取性</button>
-          <button class="ghost-button" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="pullGit">执行拉取</button>
-          <button class="ghost-button" type="button" :disabled="busy || !gitPulledPath" @click="removePulledCode">删除拉取文件</button>
+          <button class="git-action-button refresh" type="button" :disabled="busy || branchesLoading || !center?.app.repoConfigured" @click="loadBranches()">{{ branchesLoading ? '刷新中...' : '刷新分支' }}</button>
+          <button class="git-action-button commit" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="fetchLatestCommitForBranch">获取最新 Commit</button>
+          <button class="git-action-button check" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="checkGit">检测拉取</button>
+          <button class="git-action-button pull" type="button" :disabled="busy || !center?.app.repoConfigured || !form.repoBranch" @click="pullGit">执行拉取</button>
+          <button class="git-action-button remove" type="button" :disabled="busy || !gitPulledPath" @click="removePulledCode">删除拉取文件</button>
         </div>
         <div v-if="gitEstimate" class="panel">
           <div class="panel-head">
@@ -136,7 +137,7 @@
       <p v-if="notice" class="notice-text">{{ notice }}</p>
       <p v-if="error" class="error-text">{{ error }}</p>
       <div class="action-row">
-        <button class="primary-button" type="submit" :disabled="busy">{{ busy ? '处理中...' : '创建版本' }}</button>
+        <button class="primary-button" type="submit" :disabled="!canCreateVersion">{{ busy ? '处理中...' : '创建版本' }}</button>
       </div>
     </form>
   </section>
@@ -172,6 +173,7 @@ const branchFieldRef = ref<HTMLElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const uploadedPath = ref('')
 const gitPulledPath = ref('')
+const gitPulledKey = ref('')
 const excludePaths = ref('')
 const gitEstimate = ref<GitPullEstimate | null>(null)
 const gitJob = ref<GitJobSummary | null>(null)
@@ -188,6 +190,18 @@ const form = ref({
 })
 
 const currentAppBranch = computed(() => center.value?.app.currentBranch || '')
+const currentGitPullKey = computed(() => [
+  normalizeBranchName(form.value.repoBranch),
+  form.value.repoCommitId.trim(),
+  excludePaths.value.trim(),
+].join('|'))
+const canCreateVersion = computed(() => {
+  if (busy.value || !form.value.versionNumber.trim()) return false
+  if (sourceType.value === 'git') {
+    return Boolean(gitPulledPath.value && gitPulledKey.value === currentGitPullKey.value)
+  }
+  return Boolean(uploadedPath.value)
+})
 const branchOptions = computed(() => {
   const historyBranches = [
     ...(center.value?.versions || []).map((version) => version.repoBranch || ''),
@@ -330,6 +344,7 @@ async function checkGit() {
       const existingFile = findExistingVersionFile(form.value.versionNumber, form.value.repoBranch, form.value.repoCommitId)
       if (existingFile) {
         gitPulledPath.value = existingFile
+        gitPulledKey.value = currentGitPullKey.value
       }
     }
   } finally {
@@ -344,8 +359,9 @@ async function pollGit(jobId: string) {
     await new Promise((resolve) => setTimeout(resolve, 1500))
   }
   if (gitJob.value.success) {
-    gitPulledPath.value = gitJob.value.cachePath || ''
     form.value.repoCommitId = gitJob.value.repoCommitId || form.value.repoCommitId
+    gitPulledPath.value = gitJob.value.cachePath || ''
+    gitPulledKey.value = currentGitPullKey.value
   } else {
     throw new Error(gitJob.value.message || 'Git 拉取失败')
   }
@@ -371,6 +387,7 @@ async function pullGit() {
       const existingFile = findExistingVersionFile(form.value.versionNumber, form.value.repoBranch, form.value.repoCommitId)
       if (existingFile) {
         gitPulledPath.value = existingFile
+        gitPulledKey.value = currentGitPullKey.value
       }
     }
     
@@ -379,6 +396,7 @@ async function pullGit() {
       const pathMatch = message.match(/缓存路径:\s*([^,\)]+)/)
       if (pathMatch && pathMatch[1]) {
         gitPulledPath.value = pathMatch[1].trim()
+        gitPulledKey.value = currentGitPullKey.value
       }
     }
   } finally {
@@ -393,6 +411,7 @@ async function removePulledCode() {
   try {
     await deleteGitCode(projectId.value, appId.value, gitPulledPath.value)
     gitPulledPath.value = ''
+    gitPulledKey.value = ''
     gitJob.value = null
   } catch (err) {
     error.value = err instanceof Error ? err.message : '删除拉取文件失败'
@@ -446,6 +465,7 @@ async function submit() {
       setAsCurrent: form.value.setAsCurrent,
     })
     gitPulledPath.value = ''
+    gitPulledKey.value = ''
     await router.push(`/p/${projectId.value}/apps/${appId.value}/versions`)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '创建版本失败'
@@ -501,6 +521,19 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
+.repository-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 10px 22px rgba(15, 118, 110, .18);
+}
+
 .tab-button,
 .primary-button,
 .ghost-button {
@@ -508,6 +541,36 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   padding: 10px 14px;
   cursor: pointer;
+}
+
+.git-action-button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 14px;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, .1);
+}
+
+.git-action-button.refresh {
+  background: #475569;
+}
+
+.git-action-button.commit {
+  background: #2563eb;
+}
+
+.git-action-button.check {
+  background: #7c3aed;
+}
+
+.git-action-button.pull {
+  background: #0f766e;
+}
+
+.git-action-button.remove {
+  background: #b91c1c;
 }
 
 .tab-button,
@@ -585,11 +648,13 @@ button:disabled {
 .grid-two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 14px;
 }
 
 .field {
   display: grid;
+  align-content: start;
   gap: 8px;
 }
 

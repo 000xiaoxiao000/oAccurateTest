@@ -130,9 +130,10 @@
             <div class="app-id">{{ app.id }}</div>
             <div class="card-sub">{{ app.srcName || app.range || '未配置源工程信息' }}</div>
           </div>
-          <RouterLink :class="['badge', collectorHealthTone(app)]" :to="`/p/${projectId}/apps/online?appId=${app.id}`">
+          <RouterLink v-if="app.id" :class="['badge', collectorHealthTone(app)]" :to="`/p/${projectId}/apps/online?appId=${app.id}`">
             {{ collectorHealthLabel(app) }}
           </RouterLink>
+          <span v-else :class="['badge', collectorHealthTone(app)]">{{ collectorHealthLabel(app) }}</span>
         </div>
         <div class="card-desc">{{ app.describe || '暂无应用描述' }}</div>
         <div class="meta-list">
@@ -142,7 +143,7 @@
           <span>分支 {{ app.currentBranch || '-' }}</span>
           <span>{{ app.repoConfigured ? '已配置仓库' : '未配置仓库' }}</span>
         </div>
-        <div class="card-actions">
+        <div v-if="app.id" class="card-actions">
           <RouterLink :to="`/p/${projectId}/apps/${app.id}/settings`">应用设置</RouterLink>
           <RouterLink :to="`/p/${projectId}/apps/${app.id}/snapshots`">系统快照</RouterLink>
           <RouterLink :to="`/p/${projectId}/apps/${app.id}/api-endpoints`">接口扫描</RouterLink>
