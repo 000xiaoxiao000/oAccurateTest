@@ -460,6 +460,32 @@ function generationPayload(version: VersionItemSummary) {
   }
 }
 
+function generationTargetText(version: VersionItemSummary) {
+  return [
+    `版本 ${version.versionNumber || '-'}`,
+    `分支 ${version.repoBranch || '-'}`,
+    `Commit ${version.repoCommitId || '-'}`,
+  ].join('，')
+}
+
+function generationFailureMessage(label: string, version: VersionItemSummary, reason?: string) {
+  const detail = trimTrailingSentencePunctuation(reason)
+  const target = generationTargetText(version)
+  if (detail) {
+    return `${label}失败：${detail}。本次生成对象：${target}。请按失败原因修正后重新生成。`
+  }
+  return `${label}失败：任务结束但未返回具体失败原因。本次生成对象：${target}。请确认该版本已有系统快照或覆盖率上报数据，并检查分支、Commit 是否与仓库代码一致后重新生成。`
+}
+
+function generationSubmitFailureMessage(label: string, version: VersionItemSummary, err: unknown, fallback: string) {
+  const detail = trimTrailingSentencePunctuation(err instanceof Error && err.message ? err.message : fallback)
+  return `${label}提交失败：${detail}。本次生成对象：${generationTargetText(version)}。`
+}
+
+function trimTrailingSentencePunctuation(value?: string) {
+  return value?.trim().replace(/[。.!！\s]+$/, '') || ''
+}
+
 function closeIncrementalDialog() {
   if (generatingVersionKey.value) return
   incrementalDialogOpen.value = false
@@ -474,20 +500,23 @@ function openIncrementalDialog(version: VersionItemSummary) {
   incrementalDialogOpen.value = true
 }
 
-async function pollCoverageJob(jobId: string, label: string) {
+async function pollCoverageJob(jobId: string, label: string, version: VersionItemSummary) {
   generationNotice.value = `已提交${label}任务`
   while (true) {
     try {
       const status = await fetchCoverageJobV2(jobId)
       const progress = Number.isFinite(Number(status.progress)) ? Math.max(0, Math.min(100, Number(status.progress))) : 0
       const stage = status.progressName || status.message || ''
-      generationNotice.value = status.finish
-        ? `${label}${status.success === false ? '失败' : '完成'}`
-        : `${label}处理中，进度 ${Math.round(progress)}%${stage ? ` · ${stage}` : ''}`
-      if (status.finish) return status.success !== false
+      if (status.finish) {
+        generationNotice.value = status.success === false
+          ? generationFailureMessage(label, version, status.message || status.data || status.progressName)
+          : `${label}完成`
+        return status.success !== false
+      }
+      generationNotice.value = `${label}处理中，进度 ${Math.round(progress)}%${stage ? ` · ${stage}` : ''}`
     } catch (err) {
       generationFailed.value = true
-      generationNotice.value = err instanceof Error ? err.message : `${label}失败`
+      generationNotice.value = generationSubmitFailureMessage(`${label}状态查询`, version, err, `${label}状态查询失败`)
       return false
     }
     await new Promise((resolve) => setTimeout(resolve, 1500))
@@ -509,7 +538,7 @@ async function generateVersionFull(version: VersionItemSummary) {
         branch: payload.branch,
         commitId: payload.commitId,
       })
-      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}版本全量报告生成`)
+      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}版本全量报告生成`, version)
       generationFailed.value = !success
       if (!success) return
     } else {
@@ -525,7 +554,7 @@ async function generateVersionFull(version: VersionItemSummary) {
     }
   } catch (err) {
     generationFailed.value = true
-    generationNotice.value = err instanceof Error ? err.message : '生成版本全量报告失败'
+    generationNotice.value = generationSubmitFailureMessage(`${sourceTypeLabel(reportSourceType(version))}版本全量报告生成`, version, err, '生成版本全量报告失败')
   } finally {
     generatingVersionKey.value = ''
   }
@@ -546,7 +575,7 @@ async function generateVersionCurrent(version: VersionItemSummary) {
         branch: payload.branch,
         commitId: payload.commitId,
       })
-      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}本次 Commit 报告生成`)
+      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}本次 Commit 报告生成`, version)
       generationFailed.value = !success
       if (!success) return
     } else {
@@ -563,7 +592,7 @@ async function generateVersionCurrent(version: VersionItemSummary) {
     }
   } catch (err) {
     generationFailed.value = true
-    generationNotice.value = err instanceof Error ? err.message : '生成本次 Commit 报告失败'
+    generationNotice.value = generationSubmitFailureMessage(`${sourceTypeLabel(reportSourceType(version))}本次 Commit 报告生成`, version, err, '生成本次 Commit 报告失败')
   } finally {
     generatingVersionKey.value = ''
   }
@@ -585,7 +614,7 @@ async function generateFrontendCoverage(version: VersionItemSummary) {
     await refreshCenter(selectedAppId.value)
   } catch (err) {
     generationFailed.value = true
-    generationNotice.value = err instanceof Error ? err.message : '生成前端覆盖率报告失败'
+    generationNotice.value = generationSubmitFailureMessage('前端覆盖率报告生成', version, err, '生成前端覆盖率报告失败')
   } finally {
     generatingVersionKey.value = ''
   }
@@ -607,7 +636,7 @@ async function generateUniversalCoverage(version: VersionItemSummary, sourceType
     await refreshCenter(selectedAppId.value)
   } catch (err) {
     generationFailed.value = true
-    generationNotice.value = err instanceof Error ? err.message : `生成${sourceTypeLabel(sourceType)}覆盖率报告失败`
+    generationNotice.value = generationSubmitFailureMessage(`${sourceTypeLabel(sourceType)}覆盖率报告生成`, version, err, `生成${sourceTypeLabel(sourceType)}覆盖率报告失败`)
   } finally {
     generatingVersionKey.value = ''
   }
@@ -637,7 +666,7 @@ async function generateVersionIncremental(base: { baseVersionNumber: string; bas
         baseVersionNumber: base.baseVersionNumber,
         baseCommitId: base.baseCommitId || undefined,
       })
-      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}版本增量报告生成`)
+      const success = await pollCoverageJob(jobId, `${sourceTypeLabel(sourceType)}版本增量报告生成`, version)
       generationFailed.value = !success
       if (!success) return
     } else {
@@ -656,7 +685,7 @@ async function generateVersionIncremental(base: { baseVersionNumber: string; bas
     }
   } catch (err) {
     generationFailed.value = true
-    incrementalError.value = err instanceof Error ? err.message : '生成版本增量报告失败'
+    incrementalError.value = generationSubmitFailureMessage(`${sourceTypeLabel(reportSourceType(version))}版本增量报告生成`, version, err, '生成版本增量报告失败')
     generationNotice.value = incrementalError.value
   } finally {
     generatingVersionKey.value = ''

@@ -65,7 +65,8 @@ public class CoverageCoreQueryService {
         List<CoverageUnit> units = new ArrayList<>();
         for (ClassCoverageIndex index : classCoverageRepository.findByReportId(reportId)) {
             if (language == CoverageLanguage.JAVA) {
-                units.add(javaCoverageUnitProjector.project(index));
+                CoverageSourceContent content = coverageSourceContentService.loadSource(report, index);
+                units.add(javaCoverageUnitProjector.project(index, content.getContent()));
             } else {
                 units.add(classCoverageUnitProjector.project(index, language));
             }
