@@ -1,12 +1,26 @@
 package com.oAT.web.coverage;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Component
 public class FrontendCoverageSchemaInitializer {
     private final JdbcTemplate jdbcTemplate;
+    private static final List<String> RETAINED_CREATE_TABLE_PHASES = List.of(
+            "db/mysql/phase5_normalized_core.sql",
+            "db/mysql/phase1_snapshot_probe.sql",
+            "db/mysql/phase2_api_endpoint.sql",
+            "db/mysql/phase2_coverage_report.sql",
+            "db/mysql/phase3_system_snapshot.sql",
+            "db/mysql/phase4_class_coverage.sql",
+            "db/mysql/phase6_frontend_coverage.sql",
+            "db/mysql/phase7_universal_coverage.sql"
+    );
 
     public FrontendCoverageSchemaInitializer(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
@@ -14,6 +28,7 @@ public class FrontendCoverageSchemaInitializer {
 
     @PostConstruct
     public void initialize() {
+        ensureRetainedMysqlTables();
         ensureCoreTables();
         ensureSourceTypeColumn("oat_coverage_report", "create_time");
         ensureSourceTypeColumn("oat_class_coverage", "class_name");
@@ -125,6 +140,50 @@ public class FrontendCoverageSchemaInitializer {
                 "CREATE INDEX `idx_universal_cov_build_stage` ON `oat_universal_coverage_report` (`app_id`, `source_type`, `build_id`, `test_stage`)");
         ensureIndex("oat_universal_coverage_report", "idx_universal_cov_object_key",
                 "CREATE INDEX `idx_universal_cov_object_key` ON `oat_universal_coverage_report` (`object_key`)");
+    }
+
+    private void ensureRetainedMysqlTables() {
+        for (String phase : RETAINED_CREATE_TABLE_PHASES) {
+            executeCreateTableStatements(phase);
+        }
+    }
+
+    private void executeCreateTableStatements(String resourcePath) {
+        try {
+            ClassPathResource resource = new ClassPathResource(resourcePath);
+            if (!resource.exists()) {
+                return;
+            }
+            String sql = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            StringBuilder statement = new StringBuilder();
+            for (String line : sql.split("\\R")) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("--")) {
+                    continue;
+                }
+                statement.append(line).append('\n');
+                if (trimmed.endsWith(";")) {
+                    executeCreateTableStatement(statement.toString());
+                    statement.setLength(0);
+                }
+            }
+            if (!statement.isEmpty()) {
+                executeCreateTableStatement(statement.toString());
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to initialize MySQL schema from " + resourcePath, e);
+        }
+    }
+
+    private void executeCreateTableStatement(String sql) {
+        String normalized = sql.trim();
+        if (normalized.endsWith(";")) {
+            normalized = normalized.substring(0, normalized.length() - 1).trim();
+        }
+        if (!normalized.regionMatches(true, 0, "CREATE TABLE IF NOT EXISTS", 0, "CREATE TABLE IF NOT EXISTS".length())) {
+            return;
+        }
+        jdbcTemplate.execute(normalized);
     }
 
     private void ensureCoreTables() {

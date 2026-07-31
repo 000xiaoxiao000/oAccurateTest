@@ -57,7 +57,7 @@
           </div>
         </label>
         <p v-if="route.query.registered" class="success-text">注册成功，请登录。</p>
-        <p v-if="route.query.error" class="error-text">{{ String(route.query.error) }}</p>
+        <p v-if="route.query.error" class="error-text">{{ routeErrorMessage }}</p>
         <p v-if="error" class="error-text">{{ error }}</p>
         <button class="login-button" type="submit" :disabled="submitting">
           {{ submitting ? '登录中...' : '登录' }}
@@ -134,7 +134,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import MascotCanvas from '@/components/MascotCanvas.vue'
 
-import { ApiError } from '@/api/http'
+import { ApiError, formatApiErrorMessage } from '@/api/http'
 import { register } from '@/api/bootstrap'
 import { useAuthStore } from '@/stores/auth'
 
@@ -174,6 +174,7 @@ const mascotItems = [
 ]
 
 const isRegisterMode = computed(() => route.name === 'register')
+const routeErrorMessage = computed(() => formatApiErrorMessage(typeof route.query.error === 'string' ? route.query.error : ''))
 
 function resolveRedirect() {
   const redirect = route.query.redirect

@@ -5,6 +5,14 @@ const BACKEND_BASE_URL = (import.meta.env.VITE_OAT_BACKEND_BASE_URL || '').repla
 
 let authRedirectPending = false
 
+const API_ERROR_MESSAGES: Record<string, string> = {
+  AUTH_REQUIRED: '未登录或登录已过期',
+  LOGIN_FAILED: '用户名或密码错误，请重新输入',
+  LOGIN_INVALID: '请输入用户名和密码',
+  REGISTER_INVALID: '请完整填写注册信息',
+  REGISTER_PASSWORD_MISMATCH: '两次输入的密码不一致',
+}
+
 export class ApiError extends Error {
   status: number
   code?: string
@@ -23,6 +31,22 @@ function backendUrl(input: string) {
 
   const normalized = input.startsWith('/') ? input : `/${input}`
   return BACKEND_BASE_URL ? `${BACKEND_BASE_URL}${normalized}` : normalized
+}
+
+export function formatApiErrorMessage(codeOrMessage?: string, fallback = '请求失败') {
+  if (!codeOrMessage) {
+    return fallback
+  }
+
+  return API_ERROR_MESSAGES[codeOrMessage] || codeOrMessage
+}
+
+function resolveApiErrorMessage<T>(payload: ApiResponse<T>) {
+  if (payload.errorMessage && API_ERROR_MESSAGES[payload.errorMessage]) {
+    return API_ERROR_MESSAGES[payload.errorMessage]
+  }
+
+  return payload.message || formatApiErrorMessage(payload.errorMessage)
 }
 
 async function fetchApi(input: string, init?: RequestInit) {
@@ -72,7 +96,7 @@ async function request<T>(input: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok || !payload.result) {
     throw new ApiError(
-      payload.errorMessage || payload.message || '请求失败',
+      resolveApiErrorMessage(payload),
       response.status,
       payload.errorMessage,
     )
