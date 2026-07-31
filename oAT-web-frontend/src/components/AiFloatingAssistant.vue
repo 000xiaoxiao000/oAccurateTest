@@ -158,6 +158,7 @@ import { useAiFloatingLayout } from '@/features/ai/composables/useAiFloatingLayo
 import { useAiFloatingPageSignals } from '@/features/ai/composables/useAiFloatingPageSignals'
 import { useAiFloatingShortcuts } from '@/features/ai/composables/useAiFloatingShortcuts'
 import { submitAiFeedback } from '@/api/bootstrap'
+import { normalizeTokenUsage } from '@/features/ai/utils/tokenUsage'
 import type { AIAction, AIInteractivePagePayload, AIQuickLink } from '@/api/types'
 import type { AiAttachment, AiFeedbackType, AiFloatingContextChip, AiFloatingContextChipId, AiFloatingMessage } from '@/features/ai/types'
 
@@ -352,6 +353,7 @@ function sanitizeMessages(value: unknown): AiFloatingMessage[] {
       text: sanitizeMessageText(item.text),
       suggestions: Array.isArray(item.suggestions) ? item.suggestions.filter((entry): entry is string => typeof entry === 'string' && Boolean(entry.trim())) : undefined,
       actions: Array.isArray(item.actions) ? item.actions : undefined,
+      tokenUsage: normalizeTokenUsage(item.tokenUsage),
     }))
     .filter((item) => item.text)
 }
@@ -488,6 +490,7 @@ async function sendQuestion() {
       text: sanitizeMessageText(result.answer || '暂无回答'),
       suggestions: result.suggestions || [],
       actions: result.actions || [],
+      tokenUsage: normalizeTokenUsage(result.metadata?.tokenUsage),
     })
     await executeAutoAction(result.actions)
   } catch (err) {

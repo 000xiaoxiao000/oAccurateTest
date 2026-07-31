@@ -477,6 +477,13 @@ export interface AIInteractiveReply {
   sessionState?: string
 }
 
+export interface AITokenUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  estimated?: boolean
+}
+
 export interface AIFeedbackPayload {
   projectId: string
   question?: string

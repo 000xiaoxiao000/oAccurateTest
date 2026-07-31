@@ -18,6 +18,11 @@
           <div v-if="item.role === 'assistant'" class="message-text markdown-message" v-html="renderMarkdown(item.text)"></div>
           <div v-else class="message-text">{{ item.text }}</div>
 
+          <div v-if="item.role === 'assistant' && formatTokenUsage(item.tokenUsage)" class="message-token-usage">
+            <span class="message-token-dot"></span>
+            {{ formatTokenUsage(item.tokenUsage) }}
+          </div>
+
           <div v-if="item.role === 'assistant'" class="feedback-actions">
             <button
               class="feedback-btn"
@@ -75,6 +80,7 @@
 import type { AIAction } from '@/api/types'
 import { renderMarkdown } from '@/utils/markdown'
 import type { AiFeedbackType, AiFloatingMessage } from '@/features/ai/types'
+import { formatTokenUsage } from '@/features/ai/utils/tokenUsage'
 
 defineProps<{
   messages: AiFloatingMessage[]
@@ -122,6 +128,8 @@ defineEmits<{
 .markdown-message { white-space: normal; }
 .copy-button { position: absolute; top: 7px; right: 8px; min-width: 42px; height: 22px; border: 1px solid rgba(20, 184, 166, .2); border-radius: 999px; background: #fff; color: #0f766e; font-size: 11px; cursor: pointer; opacity: 0; }
 .message-card:hover .copy-button, .copy-button.copied { opacity: 1; }
+.message-token-usage { display: inline-flex; align-items: center; gap: 5px; justify-self: end; max-width: 100%; margin-top: 8px; border: 1px solid rgba(20, 184, 166, .2); border-radius: 999px; padding: 3px 8px; background: rgba(240, 253, 250, .78); color: #0f766e; font-size: 10.5px; font-weight: 700; line-height: 1.35; }
+.message-token-dot { flex: 0 0 6px; width: 6px; height: 6px; border-radius: 999px; background: #0f766e; }
 .feedback-actions, .message-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
 .feedback-btn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
 .feedback-btn:hover, .feedback-btn.active { background: rgba(15, 118, 110, .1); }

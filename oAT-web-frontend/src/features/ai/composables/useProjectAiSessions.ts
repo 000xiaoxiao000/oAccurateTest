@@ -1,5 +1,6 @@
 import { computed, ref, type ComputedRef } from 'vue'
 
+import type { AITokenUsage } from '@/api/types'
 import type { AiChatSession } from '@/features/ai/types'
 
 type SessionSortMode = 'recent' | 'oldest' | 'name'
@@ -64,7 +65,7 @@ export function useProjectAiSessions(options: UseProjectAiSessionsOptions) {
     try {
       const parsed = JSON.parse(rawState) as {
         sessions?: AiChatSession[]
-        history?: Array<{ id?: string; role?: 'user' | 'assistant'; message?: string; text?: string; responseTime?: number }>
+        history?: Array<{ id?: string; role?: 'user' | 'assistant'; message?: string; text?: string; responseTime?: number; tokenUsage?: AITokenUsage }>
         title?: string
         activeSessionId?: string
         sessionSort?: SessionSortMode
@@ -85,6 +86,7 @@ export function useProjectAiSessions(options: UseProjectAiSessionsOptions) {
             role: item.role as 'user' | 'assistant',
             text: item.text || item.message || '',
             responseTime: item.responseTime,
+            tokenUsage: item.tokenUsage,
           }))
         const fresh = createSession(parsed.title || '历史会话')
         fresh.messages = legacyMessages

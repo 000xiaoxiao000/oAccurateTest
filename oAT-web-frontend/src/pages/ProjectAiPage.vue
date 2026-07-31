@@ -104,6 +104,7 @@ import ProjectAiReplyPanel from '@/features/ai/components/ProjectAiReplyPanel.vu
 import ProjectAiSidebar from '@/features/ai/components/ProjectAiSidebar.vue'
 import { useProjectAiAnchors } from '@/features/ai/composables/useProjectAiAnchors'
 import { useProjectAiSessions } from '@/features/ai/composables/useProjectAiSessions'
+import { normalizeTokenUsage } from '@/features/ai/utils/tokenUsage'
 import type { AiAttachment, AiSessionMessage } from '@/features/ai/types'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
@@ -554,6 +555,7 @@ async function askAiWithFallback(currentQuestion: string, assistantMessage: AiSe
       memoryScope: 'workbench',
     })
     assistantMessage.text = reply.answer || reply.topic || 'AI 已返回结果，但没有可展示的文本。'
+    assistantMessage.tokenUsage = normalizeTokenUsage(reply.metadata?.tokenUsage)
   }
 }
 
@@ -612,6 +614,7 @@ async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessi
         assistantMessage.text = eventText(event.data.message) || 'AI 正在分析...'
       } else if (event.event === 'complete') {
         assistantMessage.text = answer || eventText(event.data.answer) || eventText(event.data.content) || assistantMessage.text
+        assistantMessage.tokenUsage = normalizeTokenUsage(event.data.tokenUsage)
       } else if (event.event === 'error') {
         throw new Error(eventText(event.data.message) || 'AI 流式响应失败')
       }
@@ -625,7 +628,7 @@ function parseSseChunk(chunk: string) {
   const dataText = lines.filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n')
   if (!dataText) return null
   try {
-    return { event, data: JSON.parse(dataText) as Record<string, string | number | boolean | undefined> }
+    return { event, data: JSON.parse(dataText) as Record<string, unknown> }
   } catch {
     return { event, data: { content: dataText } }
   }

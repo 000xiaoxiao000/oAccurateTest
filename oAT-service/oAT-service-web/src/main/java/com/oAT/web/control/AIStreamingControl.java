@@ -4,6 +4,7 @@ import com.oAT.ai.agent.AgentContext;
 import com.oAT.ai.agent.AIAgentService;
 import com.oAT.ai.agent.ToolRecommender;
 import com.oAT.web.api.ai.AIStreamingSseService;
+import com.oAT.web.api.ai.AITokenUsageEstimator;
 import com.oAT.web.service.ProjectService;
 import com.oAT.web.service.entity.ProjectVo;
 import com.oAT.web.service.entity.UserVo;
@@ -164,6 +165,7 @@ public class AIStreamingControl {
                 Map<String, Object> completeData = new HashMap<>();
                 completeData.put("responseTimeMs", responseTime);
                 completeData.put("responseLength", response != null ? response.length() : 0);
+                completeData.put("tokenUsage", AITokenUsageEstimator.estimate(question + "\n" + (pageContext != null ? pageContext : ""), response));
                 completeData.put("model", aiAgentService.getLlmSwitcher() != null ?
                         aiAgentService.getLlmSwitcher().getDefaultModelName() : "default");
                 sendJsonEvent(emitter, "complete", completeData);

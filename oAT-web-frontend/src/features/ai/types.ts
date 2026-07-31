@@ -1,4 +1,6 @@
-export type AiSessionMessage = { id: string; role: 'user' | 'assistant'; text: string; responseTime?: number }
+import type { AIAction, AITokenUsage } from '@/api/types'
+
+export type AiSessionMessage = { id: string; role: 'user' | 'assistant'; text: string; responseTime?: number; tokenUsage?: AITokenUsage }
 export type AiChatSession = { id: string; title: string; messages: AiSessionMessage[]; updatedAt: number; pinned?: boolean }
 export type AiQuestionAnchor = { id: string; label: string; question: string; answered: boolean; responseTime: number; responseTimeText: string; shareUrl: string; messageId: string }
 export type AiMessageSection = { id: string; anchorId: string; message: AiSessionMessage; startsQuestion: boolean; endsAnswer: boolean }
@@ -9,16 +11,7 @@ export type AiTimelineItem = {
   question: string
 }
 
-import type { AIAction } from '@/api/types'
-
-export type AiFloatingMessage = {
-  id: string
-  role: 'user' | 'assistant'
-  text: string
-  suggestions?: string[]
-  actions?: AIAction[]
-}
-
+export type AiFloatingMessage = { id: string; role: 'user' | 'assistant'; text: string; suggestions?: string[]; actions?: AIAction[]; tokenUsage?: AITokenUsage }
 export type AiFloatingContextChipId = 'route' | 'apps' | 'online' | 'topic' | 'image' | 'filter' | 'hover' | 'selection'
 
 export type AiFloatingContextChip = {

@@ -54,6 +54,11 @@
         <div v-if="section.message.role === 'assistant'" class="message-text markdown-message" v-html="formatAssistantMessage(section.message.text)"></div>
         <div v-else class="message-text">{{ section.message.text }}</div>
 
+        <div v-if="section.message.role === 'assistant' && formatTokenUsage(section.message.tokenUsage)" class="message-token-usage">
+          <span class="message-token-dot"></span>
+          {{ formatTokenUsage(section.message.tokenUsage) }}
+        </div>
+
         <div v-if="section.message.role === 'assistant' && section.endsAnswer" class="message-actions">
           <button
             class="message-action-btn"
@@ -266,6 +271,7 @@ import { computed, ref } from 'vue'
 import type { AIFeedbackPayload } from '@/api/types'
 import { AI_TOOL_PROMPT_GROUPS, AI_TOOL_PROMPTS } from '@/features/ai/toolPrompts'
 import type { AiAttachment, AiMessageSection, AiQuestionAnchor, AiSessionMessage } from '@/features/ai/types'
+import { formatTokenUsage } from '@/features/ai/utils/tokenUsage'
 import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps<{

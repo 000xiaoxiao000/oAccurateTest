@@ -7,6 +7,7 @@ import com.oAT.web.api.ai.AIInteractivePageComposerService;
 import com.oAT.web.api.ai.AIInteractiveRouteService;
 import com.oAT.web.api.ai.AIInteractiveRouteService.RouteContext;
 import com.oAT.web.api.ai.AIInteractiveSessionMemoryService;
+import com.oAT.web.api.ai.AITokenUsageEstimator;
 import com.oAT.web.service.AIInteractiveService;
 import com.oAT.web.service.AppService;
 import com.oAT.web.service.ClientSessionService;
@@ -113,6 +114,7 @@ public class AIInteractiveServiceImpl implements AIInteractiveService {
         metadata.put("responseTime", responseTime);
         metadata.put("topic", routeContext.getTopicKey());
         metadata.put("route", routeContext.getRouteKey());
+        metadata.put("tokenUsage", AITokenUsageEstimator.estimate(cleanQuestion + "\n" + contextSummary, answer));
         reply.setMetadata(metadata);
         reply.setSuggestions(routeService.buildFollowUpSuggestions(apps, routeContext));
         reply.setQuickLinks(navigationService.buildQuickLinks(projectId, apps, routeContext));
