@@ -287,7 +287,7 @@ function reportSourceType(version: VersionItemSummary) {
 
 function hasCoverageInput(version: VersionItemSummary, sourceType = reportSourceType(version)) {
   const normalizedType = normalizeSourceType(sourceType)
-  if (normalizedType === 'JAVA') return Boolean(version.hasReport)
+  if (normalizedType === 'JAVA') return Boolean(version.versionNumber)
   return hasRawCoverageSource(version, normalizedType)
 }
 
@@ -427,6 +427,7 @@ function generateDisabledTitle(version: VersionItemSummary, type: VersionGenerat
   if (!version.current) return '非当前版本仅支持查看覆盖率，不能生成报告'
   if (generatingVersionKey.value && !isGeneratingVersion(version, type)) return '已有覆盖率生成任务处理中，请稍后再试'
   if (!canGenerateVersionType(version, type)) {
+    if (reportSourceType(version) === 'JAVA' && !version.versionNumber) return '缺少版本号，无法生成 Java 覆盖率报告'
     if (type === 'frontend') return '没有可生成的前端覆盖率上报数据'
     if (type === 'GO') return '没有可生成的 Go 覆盖率上报数据'
     if (type === 'PYTHON') return '没有可生成的 Python 覆盖率上报数据'
