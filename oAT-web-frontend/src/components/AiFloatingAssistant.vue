@@ -121,8 +121,7 @@
 
       <AiFloatingComposeForm
         v-model:question="question"
-        :image-data="imageData"
-        :attachment-name="attachmentName"
+        :attachments="attachments"
         :recording="recording"
         :asking="asking"
         :state-text="stateText"
@@ -133,6 +132,7 @@
         @image-change="handleImageChange"
         @files-drop="handleFilesDrop"
         @clear-image="clearImage"
+        @remove-attachment="removeAttachment"
         @toggle-voice="toggleVoiceInput"
         @layout-drag="startLayoutDrag($event, 'compose')"
         @layout-resize="(event, direction) => startLayoutResize(event, 'compose', direction)"
@@ -159,7 +159,7 @@ import { useAiFloatingPageSignals } from '@/features/ai/composables/useAiFloatin
 import { useAiFloatingShortcuts } from '@/features/ai/composables/useAiFloatingShortcuts'
 import { submitAiFeedback } from '@/api/bootstrap'
 import type { AIAction, AIInteractivePagePayload, AIQuickLink } from '@/api/types'
-import type { AiFeedbackType, AiFloatingContextChip, AiFloatingContextChipId, AiFloatingMessage } from '@/features/ai/types'
+import type { AiAttachment, AiFeedbackType, AiFloatingContextChip, AiFloatingContextChipId, AiFloatingMessage } from '@/features/ai/types'
 
 type SpeechRecognitionLike = {
   lang: string
@@ -193,9 +193,7 @@ const feedbackSubmitting = ref(false)
 const messageFeedbacks = ref<Record<string, string>>({})
 const rootRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
-const imageData = ref('')
-const attachmentName = ref('')
-const attachmentText = ref('')
+const attachments = ref<AiAttachment[]>([])
 const recording = ref(false)
 const hiddenContextChips = ref<AiFloatingContextChipId[]>([])
 let recognition: SpeechRecognitionLike | null = null
@@ -245,7 +243,7 @@ const launcherHint = computed(() => {
   return assistantContext.value.mascot?.mascotName || '点我提问'
 })
 const mood = computed(() => error.value ? 'error' : 'happy')
-const stateText = computed(() => error.value || (asking.value ? '生成中...' : attachmentName.value ? `已添加 ${attachmentName.value}` : '就绪'))
+const stateText = computed(() => error.value || (asking.value ? '生成中...' : attachments.value.length ? `已添加 ${attachments.value.length} 个附件` : '就绪'))
 const storagePrefix = computed(() => projectId.value ? `spa-ai-floating:${projectId.value}` : '')
 
 const normalizedQuickLinks = computed(() => normalizeLinks(buildAdaptiveQuickLinks(dynamicQuickLinks.value.length ? dynamicQuickLinks.value : assistantContext.value.quickLinks || []), route.path))
@@ -391,7 +389,7 @@ function buildContextChips(): AiFloatingContextChip[] {
   if (liveSignals.value.tableHover) chips.push({ id: 'hover', label: '当前悬停', value: liveSignals.value.tableHover })
   if (liveSignals.value.tableSelection) chips.push({ id: 'selection', label: '当前选中', value: liveSignals.value.tableSelection })
   if (lastReply.value?.topic) chips.push({ id: 'topic', label: '主题', value: lastReply.value.topic })
-  if (imageData.value) chips.push({ id: 'image', label: '图片', value: '已附加' })
+  if (attachments.value.some((item) => item.isImage)) chips.push({ id: 'image', label: '图片', value: '已附加' })
   return chips
 }
 
@@ -441,9 +439,7 @@ async function clearConversation() {
   messages.value = []
   error.value = ''
   question.value = ''
-  imageData.value = ''
-  attachmentName.value = ''
-  attachmentText.value = ''
+  attachments.value = []
   try {
     await projectStore.resetAiSessionState(projectId.value, 'assistant')
   } catch (err) {
@@ -454,26 +450,25 @@ async function clearConversation() {
 async function sendQuestion() {
   if (asking.value) return
   const text = question.value.trim()
-  const attachmentPrompt = attachmentName.value ? `\n\n[附件：${attachmentName.value}]${attachmentText.value ? `\n${attachmentText.value}` : ''}` : ''
+  const attachmentPrompt = attachments.value.map((item) => item.promptText).filter(Boolean).join('\n\n')
   if (!projectId.value) {
     error.value = '请先进入或选择一个项目后再使用 AI 助手'
     return
   }
-  if (!text && !imageData.value && !attachmentName.value) {
+  if (!text && !attachments.value.length) {
     error.value = '请输入问题或添加文件'
     return
   }
   asking.value = true
   error.value = ''
-  const currentImageData = imageData.value
-  messages.value.push({ id: uid(), role: 'user', text: text || (attachmentName.value ? `[附件：${attachmentName.value}]` : '[图片提问]') })
+  const currentImageData = attachments.value.find((item) => item.isImage)?.imageData || ''
+  const displayText = text || (attachments.value.length ? `[已添加 ${attachments.value.length} 个附件]` : '[图片提问]')
+  messages.value.push({ id: uid(), role: 'user', text: displayText })
   question.value = ''
-  imageData.value = ''
-  attachmentName.value = ''
-  attachmentText.value = ''
+  attachments.value = []
   try {
     const result = await projectStore.askAi(projectId.value, {
-      question: `${text}${attachmentPrompt}`,
+      question: [text, attachmentPrompt].filter(Boolean).join('\n\n'),
       pageContext: buildPageContext(text, route.fullPath),
       imageData: currentImageData || undefined,
       sessionState: JSON.stringify({ messages: messages.value.slice(-20) }),
@@ -619,15 +614,13 @@ function friendlyAiError(err: unknown) {
 
 function handleImageChange(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+  const files = Array.from(input.files || [])
   input.value = ''
-  handleAttachmentFile(file)
+  files.forEach(handleAttachmentFile)
 }
 
 function handleFilesDrop(files: File[]) {
-  const file = files[0]
-  if (file) handleAttachmentFile(file)
+  files.forEach(handleAttachmentFile)
 }
 
 function handleAttachmentFile(file: File) {
@@ -635,27 +628,51 @@ function handleAttachmentFile(file: File) {
     error.value = '文件不能超过 20MB'
     return
   }
-  attachmentName.value = file.name
-  attachmentText.value = ''
-  if (!file.type.startsWith('image/') && /\.(txt|md|json|yaml|yml|csv|log|xml|html|css|js|ts|java|py|sql)$/i.test(file.name)) {
-    const reader = new FileReader()
-    reader.onload = () => { attachmentText.value = String(reader.result || '').slice(0, 60000) }
-    reader.readAsText(file)
-  }
-  if (!file.type.startsWith('image/')) {
+  if (attachments.value.length >= 20) {
+    error.value = '最多添加 20 个附件'
     return
   }
-  const reader = new FileReader()
-  reader.onload = () => {
-    imageData.value = String(reader.result || '')
+  error.value = ''
+  const isImage = file.type.startsWith('image/')
+  const metadata = `文件名：${file.name}\n类型：${file.type || '未知'}\n大小：${formatAttachmentSize(file.size)}`
+  const attachment: AiAttachment = {
+    id: uid(),
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    isImage,
+    imageData: '',
+    promptText: isImage ? `[已添加图片附件]\n${metadata}` : `[已添加文件附件]\n${metadata}`,
   }
-  reader.readAsDataURL(file)
+  attachments.value.push(attachment)
+  if (isImage) {
+    const reader = new FileReader()
+    reader.onload = () => { attachment.imageData = String(reader.result || '') }
+    reader.readAsDataURL(file)
+    return
+  }
+  if (/\.(txt|md|json|yaml|yml|csv|log|xml|html|css|js|ts|java|py|sql)$/i.test(file.name)) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const content = String(reader.result || '').slice(0, 60000)
+      attachment.promptText = `[已添加文本附件]\n${metadata}\n\n文件内容：\n${content}`
+    }
+    reader.readAsText(file)
+  }
+}
+
+function formatAttachmentSize(size: number) {
+  if (size < 1024) return `${size}B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)}KB`
+  return `${(size / 1024 / 1024).toFixed(1)}MB`
 }
 
 function clearImage() {
-  imageData.value = ''
-  attachmentName.value = ''
-  attachmentText.value = ''
+  attachments.value = []
+}
+
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter((item) => item.id !== id)
 }
 
 function toggleVoiceInput() {

@@ -94,7 +94,31 @@
       accept="image/*,.txt,.md,.json,.yaml,.yml,.csv,.log,.xml,.html,.css,.js,.ts,.java,.py,.sql,.pdf,.doc,.docx,.xls,.xlsx"
       @change="$emit('image-change', $event)"
     />
-    <form v-if="activeMessages.length" ref="askFormRef" class="ask-form" :class="{ 'is-dragging': draggingFiles }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
+    <form v-if="activeMessages.length" ref="askFormRef" class="ask-form" :class="{ 'is-dragging': draggingFiles, 'has-attachment': attachments.length }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
+      <div v-if="attachments.length" class="compose-attachments">
+        <div v-for="item in attachments" :key="item.id" class="compose-attachment">
+          <div v-if="item.isImage" class="compose-image-preview">
+            <img :src="item.imageData" :alt="item.name" />
+            <button class="compose-image-remove" type="button" title="移除图片" aria-label="移除图片" @click="$emit('remove-attachment', item.id)">
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+          <div v-else class="compose-file-card">
+            <span class="compose-file-icon" aria-hidden="true">{{ extLabel(item) }}</span>
+            <span class="compose-file-copy">
+              <strong>{{ item.name }}</strong>
+              <small>{{ metaLabel(item) }}</small>
+            </span>
+            <button class="compose-file-remove" type="button" title="移除附件" aria-label="移除附件" @click="$emit('remove-attachment', item.id)">
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
       <textarea
         ref="askInputRef"
         v-model="questionModel"
@@ -106,54 +130,53 @@
       ></textarea>
       <div class="form-actions">
         <div class="ask-tools">
-          <button class="ghost-button attachment-button" :class="{ active: Boolean(attachmentName || imageData) }" type="button" title="添加文件或图片" @click="$emit('select-image')">
-            <svg class="button-icon attachment-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            {{ attachmentName || imageData ? '已添加附件' : '添加文件' }}
-          </button>
-          <span v-if="attachmentName || imageData" class="attachment-pill">{{ attachmentName || '图片已添加' }}</span>
-          <button v-if="attachmentName || imageData" class="ghost-button" type="button" @click="$emit('clear-image')">移除附件</button>
-        </div>
-        <div class="ask-submit-actions">
-          <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
-            <span class="button-icon stop-icon"></span>
-            停止生成
-          </button>
-          <button v-else class="primary-button control-button send-button" type="submit" title="发送问题">
-            <svg class="button-icon send-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path d="M12 20V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            <span class="send-label">{{ activeMessages.length ? '发送问题' : '' }}</span>
-          </button>
           <button class="ghost-button control-button save-button" type="button" :disabled="asking" @click="$emit('save-session')">
             <span class="button-icon save-icon" aria-hidden="true"></span>
             保存会话状态
           </button>
         </div>
-      </div>
-    </form>
-    <form v-else ref="askFormRef" class="ask-form deepseek-compose" :class="{ 'has-attachment': attachmentName || imageData, 'is-dragging': draggingFiles }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
-      <div v-if="attachmentName || imageData" class="compose-attachments">
-        <div v-if="imageData" class="compose-image-preview">
-          <img :src="imageData" alt="已添加图片" />
-          <button class="compose-image-remove" type="button" title="移除图片" aria-label="移除图片" @click="$emit('clear-image')">
-            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+        <div class="ask-submit-actions">
+          <button class="icon-button attachment-icon-button" type="button" aria-label="添加文件或图片" title="添加文件或图片" @click="$emit('select-image')">
+            <svg class="button-icon attachment-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
+          </button>
+          <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
+            <span class="button-icon stop-icon"></span>
+            停止生成
+          </button>
+          <button v-else class="primary-button control-button send-button" type="submit" aria-label="发送问题" title="发送问题">
+            <svg class="button-icon send-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M12 20V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span class="send-label">发送问题</span>
           </button>
         </div>
-        <div v-if="!imageData" class="compose-file-card">
-          <span class="compose-file-icon" aria-hidden="true">{{ attachmentExtLabel }}</span>
-          <span class="compose-file-copy">
-            <strong>{{ attachmentName || '图片附件' }}</strong>
-            <small>{{ attachmentMeta }}</small>
-          </span>
-          <button class="compose-file-remove" type="button" title="移除附件" aria-label="移除附件" @click="$emit('clear-image')">
-            <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
-            </svg>
-          </button>
+      </div>
+    </form>
+    <form v-else ref="askFormRef" class="ask-form deepseek-compose" :class="{ 'has-attachment': attachments.length, 'is-dragging': draggingFiles }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
+      <div v-if="attachments.length" class="compose-attachments">
+        <div v-for="item in attachments" :key="item.id" class="compose-attachment">
+          <div v-if="item.isImage" class="compose-image-preview">
+            <img :src="item.imageData" :alt="item.name" />
+            <button class="compose-image-remove" type="button" title="移除图片" aria-label="移除图片" @click="$emit('remove-attachment', item.id)">
+              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
+          <div v-else class="compose-file-card">
+            <span class="compose-file-icon" aria-hidden="true">{{ extLabel(item) }}</span>
+            <span class="compose-file-copy">
+              <strong>{{ item.name }}</strong>
+              <small>{{ metaLabel(item) }}</small>
+            </span>
+            <button class="compose-file-remove" type="button" title="移除附件" aria-label="移除附件" @click="$emit('remove-attachment', item.id)">
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
       <textarea
@@ -166,14 +189,13 @@
         @paste="handlePaste"
       ></textarea>
       <div class="form-actions deepseek-compose-actions">
-        <div class="ask-tools deepseek-compose-left">
+        <div class="ask-tools deepseek-compose-left"></div>
+        <div class="ask-submit-actions deepseek-compose-controls">
           <button class="icon-button attachment-icon-button" type="button" aria-label="添加文件或图片" title="添加文件或图片" @click="$emit('select-image')">
             <svg class="button-icon attachment-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
-        </div>
-        <div class="ask-submit-actions deepseek-compose-controls">
           <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
             <span class="button-icon stop-icon"></span>
             停止生成
@@ -194,15 +216,13 @@
 import { computed, ref } from 'vue'
 
 import type { AIFeedbackPayload } from '@/api/types'
-import type { AiMessageSection, AiQuestionAnchor, AiSessionMessage } from '@/features/ai/types'
+import type { AiAttachment, AiMessageSection, AiQuestionAnchor, AiSessionMessage } from '@/features/ai/types'
 import { renderMarkdown } from '@/utils/markdown'
 
 const props = defineProps<{
   question: string
   asking: boolean
-  imageData: string
-  attachmentName: string
-  attachmentSize?: number
+  attachments: AiAttachment[]
   recording: boolean
   activeMessages: AiSessionMessage[]
   messageSections: AiMessageSection[]
@@ -229,6 +249,7 @@ const emit = defineEmits<{
   'files-drop': [files: File[]]
   'select-image': []
   'clear-image': []
+  'remove-attachment': [id: string]
   'toggle-voice-input': []
   'stop-ask': []
   'save-session': []
@@ -244,18 +265,17 @@ const questionModel = computed({
   set: (value: string) => emit('update:question', value),
 })
 
-const attachmentExtLabel = computed(() => {
-  const name = props.attachmentName || ''
-  const ext = name.includes('.') ? name.split('.').pop() || '' : ''
+function extLabel(item: AiAttachment) {
+  const ext = item.name.includes('.') ? item.name.split('.').pop() || '' : ''
   if (ext) return ext.slice(0, 4).toUpperCase()
-  return props.imageData ? 'IMG' : 'FILE'
-})
+  return item.isImage ? 'IMG' : 'FILE'
+}
 
-const attachmentMeta = computed(() => {
-  const parts: string[] = [attachmentExtLabel.value]
-  if (props.attachmentSize) parts.push(formatFileSize(props.attachmentSize))
+function metaLabel(item: AiAttachment) {
+  const parts: string[] = [extLabel(item)]
+  if (item.size) parts.push(formatFileSize(item.size))
   return parts.join(' ')
-})
+}
 
 function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`

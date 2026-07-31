@@ -57,9 +57,7 @@
             v-model:question="question"
             v-model:preview-anchor-id="previewAnchorId"
             :asking="asking"
-            :image-data="imageData"
-            :attachment-name="attachmentName"
-            :attachment-size="attachmentSize"
+            :attachments="attachments"
             :recording="recording"
             :active-messages="activeMessages"
             :message-sections="messageSections"
@@ -80,6 +78,7 @@
             @files-drop="handleFilesDrop"
             @select-image="selectImage"
             @clear-image="clearImage"
+            @remove-attachment="removeAttachment"
             @toggle-voice-input="toggleVoiceInput"
             @stop-ask="stopAsk"
             @save-session="saveSession"
@@ -105,7 +104,7 @@ import ProjectAiReplyPanel from '@/features/ai/components/ProjectAiReplyPanel.vu
 import ProjectAiSidebar from '@/features/ai/components/ProjectAiSidebar.vue'
 import { useProjectAiAnchors } from '@/features/ai/composables/useProjectAiAnchors'
 import { useProjectAiSessions } from '@/features/ai/composables/useProjectAiSessions'
-import type { AiSessionMessage } from '@/features/ai/types'
+import type { AiAttachment, AiSessionMessage } from '@/features/ai/types'
 import { useProjectStore } from '@/stores/project'
 import { useAuthStore } from '@/stores/auth'
 import type { AIAction, AIFeedbackPayload, AIFeedbackStats, AILearningReport, AIQuickLink } from '@/api/types'
@@ -135,10 +134,7 @@ const asking = ref(false)
 const error = ref('')
 const question = ref('')
 const askWorkspaceRef = ref<InstanceType<typeof ProjectAiAskWorkspace> | null>(null)
-const imageData = ref('')
-const attachmentName = ref('')
-const attachmentSize = ref(0)
-const attachmentPromptText = ref('')
+const attachments = ref<AiAttachment[]>([])
 const recording = ref(false)
 let recognition: SpeechRecognitionLike | null = null
 const anchorFilterMode = ref<'all' | 'pending'>('all')
@@ -335,29 +331,29 @@ async function copyMessage(text: string, messageId: string) {
 
 async function submitAsk() {
   if (asking.value) return
-  if (!question.value.trim() && !imageData.value) {
+  if (!question.value.trim() && !attachments.value.length) {
     error.value = '请输入问题或添加附件'
     return
   }
   asking.value = true
   error.value = ''
-  const currentQuestion = question.value.trim()
-  const currentImageData = imageData.value
+  const userText = question.value.trim()
+  const attachmentPrompt = attachments.value.map((item) => item.promptText).filter(Boolean).join('\n\n')
+  const currentQuestion = [userText, attachmentPrompt].filter(Boolean).join('\n\n')
+  const currentImageData = attachments.value.find((item) => item.isImage)?.imageData || ''
+  const displayText = userText || (attachments.value.length ? `[已添加 ${attachments.value.length} 个附件]` : '[图片提问]')
   question.value = ''
-  imageData.value = ''
-  attachmentName.value = ''
-  attachmentSize.value = 0
-  attachmentPromptText.value = ''
+  attachments.value = []
   try {
     ensureActiveSession()
     activeSession.value?.messages.push({
       id: createMessageId(),
       role: 'user',
-      text: currentQuestion || '[图片提问]',
+      text: displayText,
     })
     touchSession(activeSession.value)
     if (activeSession.value && activeSession.value.title === '新会话') {
-      activeSession.value.title = currentQuestion.slice(0, 20)
+      activeSession.value.title = displayText.slice(0, 20)
     }
     const assistantMessage: AiSessionMessage = { id: createMessageId(), role: 'assistant', text: '正在连接 AI 流式响应...' }
     activeSession.value?.messages.push(assistantMessage)
@@ -667,15 +663,13 @@ function selectImage() {
 
 function handleImageChange(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+  const files = Array.from(input.files || [])
   input.value = ''
-  handleAttachmentFile(file)
+  files.forEach(handleAttachmentFile)
 }
 
 function handleFilesDrop(files: File[]) {
-  const file = files[0]
-  if (file) handleAttachmentFile(file)
+  files.forEach(handleAttachmentFile)
 }
 
 function handleAttachmentFile(file: File) {
@@ -683,49 +677,50 @@ function handleAttachmentFile(file: File) {
     error.value = '附件不能超过 20MB'
     return
   }
+  if (attachments.value.length >= 20) {
+    error.value = '最多添加 20 个附件'
+    return
+  }
   error.value = ''
-  imageData.value = ''
-  attachmentName.value = file.name
-  attachmentSize.value = file.size
+  const isImage = file.type.startsWith('image/')
+  const attachment: AiAttachment = {
+    id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    isImage,
+    imageData: '',
+    promptText: '',
+  }
+  attachments.value.push(attachment)
   const metadata = `文件名：${file.name}\n类型：${file.type || '未知'}\n大小：${formatAttachmentSize(file.size)}`
-  if (file.type.startsWith('image/')) {
+  if (isImage) {
     const reader = new FileReader()
     reader.onload = () => {
-      imageData.value = String(reader.result || '')
+      attachment.imageData = String(reader.result || '')
     }
     reader.readAsDataURL(file)
-    setAttachmentPrompt(`[已添加图片附件]\n${metadata}`)
+    attachment.promptText = `[已添加图片附件]\n${metadata}`
     return
   }
   if (isReadableTextFile(file)) {
     const reader = new FileReader()
     reader.onload = () => {
       const content = String(reader.result || '').slice(0, 60000)
-      setAttachmentPrompt(`[已添加文本附件]\n${metadata}\n\n文件内容：\n${content}`)
+      attachment.promptText = `[已添加文本附件]\n${metadata}\n\n文件内容：\n${content}`
     }
     reader.readAsText(file)
     return
   }
-  setAttachmentPrompt(`[已添加文件附件]\n${metadata}\n当前前端已记录文件信息；如需分析文件正文，请粘贴关键内容或上传文本格式文件。`)
+  attachment.promptText = `[已添加文件附件]\n${metadata}\n当前前端已记录文件信息；如需分析文件正文，请粘贴关键内容或上传文本格式文件。`
 }
 
 function clearImage() {
-  if (attachmentPromptText.value && question.value.includes(attachmentPromptText.value)) {
-    question.value = question.value.replace(`\n\n${attachmentPromptText.value}`, '').replace(attachmentPromptText.value, '').trim()
-  }
-  imageData.value = ''
-  attachmentName.value = ''
-  attachmentSize.value = 0
-  attachmentPromptText.value = ''
+  attachments.value = []
 }
 
-function setAttachmentPrompt(text: string) {
-  if (attachmentPromptText.value && question.value.includes(attachmentPromptText.value)) {
-    question.value = question.value.replace(`\n\n${attachmentPromptText.value}`, '').replace(attachmentPromptText.value, '').trim()
-  }
-  const currentQuestion = question.value.trim()
-  attachmentPromptText.value = text
-  question.value = `${currentQuestion}${currentQuestion ? '\n\n' : ''}${text}`
+function removeAttachment(id: string) {
+  attachments.value = attachments.value.filter((item) => item.id !== id)
 }
 
 function isReadableTextFile(file: File) {

@@ -27,6 +27,16 @@ export type AiFloatingContextChip = {
   value: string
 }
 
+export type AiAttachment = {
+  id: string
+  name: string
+  size: number
+  type: string
+  isImage: boolean
+  imageData: string
+  promptText: string
+}
+
 export type AiFeedbackType = 'helpful' | 'not_helpful' | 'incorrect' | 'incomplete'
 
 export type AiFloatingPosition = { left: number; top: number }
