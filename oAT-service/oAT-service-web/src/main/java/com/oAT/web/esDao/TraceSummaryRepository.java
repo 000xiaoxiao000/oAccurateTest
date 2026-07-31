@@ -32,7 +32,7 @@ public class TraceSummaryRepository {
     private static final Logger logger = LoggerFactory.getLogger(TraceSummaryRepository.class);
 
     private static final String INDEX_ALIAS = "trace_summary";
-    private static final String INDEX_PATTERN = "trace_summary*";
+    private static final String INDEX_PATTERN = "trace_summary-*";
     private static final DateTimeFormatter INDEX_SUFFIX = DateTimeFormatter.ofPattern("yyyy.MM");
 
     private final ElasticsearchOperations elasticsearchOperations;

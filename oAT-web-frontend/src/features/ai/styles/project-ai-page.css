@@ -3071,8 +3071,8 @@
 
 .ai-page :deep(.ask-workspace-panel) {
   position: relative;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   min-height: 0;
   height: 100%;
@@ -3083,8 +3083,8 @@
 
 .ai-page :deep(.message-history) {
   display: grid;
-  flex: 1 1 auto;
-  min-height: 160px;
+  align-content: start;
+  min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -3194,19 +3194,22 @@
 }
 
 .ai-page :deep(.ask-form) {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
   display: grid;
   gap: 10px;
-  flex: 0 0 auto;
-  margin-top: auto;
+  margin-top: 0;
   border: 1px solid var(--ai-final-border);
   border-radius: var(--oat-radius-lg);
   padding: 12px;
   background: #fff;
-  box-shadow: none;
+  box-shadow: 0 -10px 24px rgba(15, 23, 42, .045);
 }
 
 .ai-page :deep(.text-area) {
-  min-height: 132px;
+  min-height: 92px;
+  max-height: 180px;
   resize: vertical;
 }
 

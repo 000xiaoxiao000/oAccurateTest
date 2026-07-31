@@ -22,6 +22,7 @@ public class ElasticsearchTemplateInitializer {
 
     private static final Logger logger = LoggerFactory.getLogger(ElasticsearchTemplateInitializer.class);
     private static final String TRACE_NODE_TEMPLATE_NAME = "trace_node_template";
+    private static final String TRACE_SUMMARY_TEMPLATE_NAME = "trace_summary_template";
     private static final String COVERAGE_METHOD_SEARCH_TEMPLATE_NAME = "coverage_method_search_template";
     private static final String COVERAGE_TRENDS_TEMPLATE_NAME = "coverage_trends_template";
     private static final String SYSTEM_LOG_TEMPLATE_NAME = "system_log_template";
@@ -45,6 +46,7 @@ public class ElasticsearchTemplateInitializer {
             createIlmPolicy(COVERAGE_METHOD_SEARCH_ILM_POLICY_NAME, "elasticsearch/coverage_method_search_ilm_policy.json");
             createIlmPolicy(COVERAGE_TRENDS_ILM_POLICY_NAME, "elasticsearch/coverage_trends_ilm_policy.json");
             createTemplate(TRACE_NODE_TEMPLATE_NAME, "elasticsearch/trace_node_template.json");
+            createTemplate(TRACE_SUMMARY_TEMPLATE_NAME, "elasticsearch/trace_summary_template.json");
             createTemplate(COVERAGE_METHOD_SEARCH_TEMPLATE_NAME, "elasticsearch/coverage_method_search_template.json");
             createTemplate(COVERAGE_TRENDS_TEMPLATE_NAME, "elasticsearch/coverage_trends_template.json");
             createTemplate(SYSTEM_LOG_TEMPLATE_NAME, "elasticsearch/system_log_template.json");
@@ -106,9 +108,16 @@ public class ElasticsearchTemplateInitializer {
                     .ignoreUnavailable(true)
                     .properties("baseVersionNumber", Property.of(p -> p.keyword(k -> k)))
                     .properties("baseRepoCommitId", Property.of(p -> p.keyword(k -> k))));
+            elasticsearchClient.indices().putMapping(m -> m
+                    .index("trace_summary-*")
+                    .ignoreUnavailable(true)
+                    .properties("appId", Property.of(p -> p.keyword(k -> k)))
+                    .properties("projectId", Property.of(p -> p.keyword(k -> k)))
+                    .properties("createTime", Property.of(p -> p.date(d -> d
+                            .format("strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS")))));
             logger.info("Coverage index mappings ensured in Elasticsearch");
         } catch (Exception e) {
-            logger.warn("Failed to update coverage index mappings: {}", e.getMessage());
+            logger.warn("Failed to update Elasticsearch index mappings: {}", e.getMessage());
         }
     }
 

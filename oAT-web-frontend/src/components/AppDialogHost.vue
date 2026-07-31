@@ -122,6 +122,7 @@ watch(
 .dialog-main {
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .dialog-main h2 {
@@ -135,6 +136,8 @@ watch(
   margin: 0;
   color: #64748b;
   line-height: 1.65;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   white-space: pre-line;
 }
 
