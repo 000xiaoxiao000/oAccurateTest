@@ -92,3 +92,38 @@ defineEmits<{
   execute: [action: AIAction]
 }>()
 </script>
+
+<style scoped>
+.message-list {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 12px 10px;
+  scrollbar-gutter: stable;
+}
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.message.user { flex-direction: row-reverse; }
+.message-avatar { flex: 0 0 28px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 10px; background: #dff7f5; color: #0f172a; font-size: 11px; font-weight: 800; }
+.message.user .message-avatar { background: #e5e7eb; }
+.message-body { min-width: 0; flex: 1; }
+.message-name { margin-bottom: 3px; color: #6b7280; font-size: 11px; }
+.message.user .message-name { text-align: right; }
+.message-card { position: relative; border: 1px solid rgba(226, 232, 240, .82); border-radius: 12px; padding: 8px 10px; background: rgba(248, 250, 252, .9); color: #1f2937; font-size: 12.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.message.user .message-card { background: rgba(238, 242, 255, .9); }
+.message-text { white-space: pre-wrap; user-select: text; }
+.markdown-message { white-space: normal; }
+.copy-button { position: absolute; top: 7px; right: 8px; min-width: 42px; height: 22px; border: 1px solid rgba(20, 184, 166, .2); border-radius: 999px; background: #fff; color: #0f766e; font-size: 11px; cursor: pointer; opacity: 0; }
+.message-card:hover .copy-button, .copy-button.copied { opacity: 1; }
+.feedback-actions, .message-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.feedback-btn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; cursor: pointer; }
+.feedback-btn:hover, .feedback-btn.active { background: rgba(15, 118, 110, .1); }
+.message-action { border: 1px solid rgba(15, 118, 110, .18); border-radius: 999px; padding: 5px 8px; background: #fff; color: #0f766e; font-size: 11px; cursor: pointer; }
+</style>

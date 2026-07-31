@@ -91,11 +91,11 @@
 
 .assistant-panel {
   position: relative;
-  width: clamp(560px, 54vw, calc(100vw - 132px));
+  width: clamp(620px, 58vw, 980px);
   height: min(760px, calc(100vh - 48px));
   min-width: min(420px, calc(100vw - 132px));
   min-height: min(460px, calc(100vh - 48px));
-  max-width: calc(100vw - 132px);
+  max-width: min(980px, calc(100vw - 132px));
   max-height: calc(100vh - 32px);
   display: flex;
   flex-direction: column;
@@ -680,51 +680,20 @@
 .context-status {
   display: flex;
   flex-wrap: wrap;
+  align-content: flex-start;
   gap: 6px;
   flex: 0 0 auto;
-  padding: 7px 13px;
+  padding: 8px 13px;
   border-bottom: 1px solid rgba(226, 232, 240, .62);
   background: rgba(248, 250, 252, .82);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   cursor: move;
 }
 
-.context-chip {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  border: 1px solid rgba(20, 184, 166, .22);
-  border-radius: 12px;
-  padding: 6px 8px;
-  background: rgba(240, 253, 250, .92);
-  color: #0f766e;
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.context-chip span {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.context-chip button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: 5px;
-  border: none;
-  background: transparent;
-  color: rgba(15, 118, 110, .46);
-  cursor: pointer;
-}
-
-.context-chip button:hover {
-  color: rgba(220, 38, 68, .8);
-}
+/* Context chip visuals live in AiFloatingContextChips.vue scoped styles,
+   because the child renders multiple root nodes and cannot inherit this
+   component's scoped-style id. */
 
 .quick-links,
 .starters {

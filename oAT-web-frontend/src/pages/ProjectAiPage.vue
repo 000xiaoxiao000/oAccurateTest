@@ -76,6 +76,7 @@
             @submit-ask="submitAsk"
             @ask-enter="handleAskEnter"
             @image-change="handleImageChange"
+            @files-drop="handleFilesDrop"
             @select-image="selectImage"
             @clear-image="clearImage"
             @toggle-voice-input="toggleVoiceInput"
@@ -665,6 +666,15 @@ function handleImageChange(event: Event) {
   const file = input.files?.[0]
   if (!file) return
   input.value = ''
+  handleAttachmentFile(file)
+}
+
+function handleFilesDrop(files: File[]) {
+  const file = files[0]
+  if (file) handleAttachmentFile(file)
+}
+
+function handleAttachmentFile(file: File) {
   if (file.size > 20 * 1024 * 1024) {
     error.value = '附件不能超过 20MB'
     return

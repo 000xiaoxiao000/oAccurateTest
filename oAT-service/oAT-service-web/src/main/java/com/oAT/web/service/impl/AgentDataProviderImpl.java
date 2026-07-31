@@ -218,7 +218,7 @@ public class AgentDataProviderImpl implements AgentDataProvider {
 
             result.put("snapshotCount", agentTraceSnapshotDataService.countSnapshots(projectId));
 
-            result.put("traceCount", 0);
+            result.put("traceCount", agentTraceSnapshotDataService.getTraceCount(projectId));
         } catch (Exception e) {
             logger.error("Get project statistics failed: {}", projectId, e);
         }

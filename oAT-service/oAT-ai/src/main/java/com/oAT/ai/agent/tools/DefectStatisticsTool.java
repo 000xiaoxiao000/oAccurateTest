@@ -60,15 +60,13 @@ public class DefectStatisticsTool {
                             String error = getText(trace.get("errorMessage"));
                             String exception = getText(trace.get("exception"));
 
-                            // 统计HTTP错误
-                            if (statusCode != null && statusCode >= 400) {
+                            boolean httpError = statusCode != null && statusCode >= 400;
+                            // 一条调用链只计为一个缺陷事件，避免 HTTP 错误和异常标记重复累计。
+                            if (httpError) {
                                 appErrors++;
                                 String errorType = statusCode >= 500 ? "服务器错误" : "客户端错误";
                                 errorTypeDist.put(errorType, errorTypeDist.getOrDefault(errorType, 0) + 1);
-                            }
-
-                            // 统计异常
-                            if (hasError) {
+                            } else if (hasError) {
                                 appExceptions++;
                                 String errorType = !exception.isEmpty()
                                         ? extractErrorType(exception)

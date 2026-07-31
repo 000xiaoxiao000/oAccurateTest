@@ -1732,6 +1732,219 @@
   }
 }
 
+/* Final composer pass: keep the workbench input close to the DeepSeek layout. */
+.ai-page :deep(.ask-workspace-panel .ask-form) {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 62px;
+  width: 100%;
+  min-height: 230px;
+  overflow: hidden;
+  border: 1px solid #e2e5e9;
+  border-radius: 26px;
+  padding: 0;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, .07);
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form.is-dragging) {
+  border-color: #3867f5;
+  border-style: dashed;
+  background: #f8fbff;
+  box-shadow: 0 0 0 4px rgba(56, 103, 245, .12), 0 16px 36px rgba(15, 23, 42, .07);
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form.is-dragging .text-area) {
+  background: #f8fbff;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form:focus-within) {
+  border-color: #cbd5e1;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, .09);
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form .text-area) {
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  padding: 28px 30px 12px;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: #1f2937;
+  font-size: 18px;
+  line-height: 1.55;
+  box-shadow: none;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form .text-area::placeholder) {
+  color: #9aa8bc;
+  opacity: 1;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form .text-area:focus) {
+  border: 0;
+  box-shadow: none;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form .form-actions) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 62px;
+  border: 0;
+  padding: 8px 22px 14px 24px;
+  background: #fff;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-tools),
+.ai-page :deep(.ask-workspace-panel .ask-submit-actions) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-submit-actions) {
+  justify-content: flex-end;
+}
+
+.ai-page :deep(.ask-workspace-panel .attachment-button),
+.ai-page :deep(.ask-workspace-panel .attachment-icon-button) {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 0;
+  cursor: pointer;
+}
+
+.ai-page :deep(.ask-workspace-panel .attachment-button:hover),
+.ai-page :deep(.ask-workspace-panel .attachment-icon-button:hover) {
+  background: #e5e7eb;
+}
+
+.ai-page :deep(.ask-workspace-panel .attachment-icon) {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-send-button),
+.ai-page :deep(.ask-workspace-panel .send-button) {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: #3867f5;
+  color: #fff;
+  box-shadow: none;
+  transform: none;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-send-button:hover:not(:disabled)),
+.ai-page :deep(.ask-workspace-panel .send-button:hover:not(:disabled)) {
+  background: #2f59df;
+  transform: translateY(-1px);
+}
+
+.ai-page :deep(.ask-workspace-panel .send-label),
+.ai-page :deep(.ask-workspace-panel .attachment-pill),
+.ai-page :deep(.ask-workspace-panel .remove-attachment-button) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.ai-page :deep(.ask-workspace-panel .save-button) {
+  display: none;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-compose) {
+  grid-template-rows: auto minmax(0, 1fr) 62px;
+  height: 250px;
+  min-height: 250px;
+  max-height: 250px;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-compose.has-attachment) {
+  height: 344px;
+  min-height: 344px;
+  max-height: 344px;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-compose-input) {
+  grid-row: 2;
+  padding: 22px 30px 12px;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-compose-actions) {
+  grid-row: 3;
+  height: 62px;
+  min-height: 62px;
+  padding: 8px 22px 14px 24px;
+}
+
+.ai-page :deep(.ask-workspace-panel .compose-attachments) {
+  min-height: 96px;
+  padding: 14px 24px 4px;
+}
+
+@media (max-width: 720px) {
+  .ai-page :deep(.ask-workspace-panel .ask-form) {
+    min-height: 210px;
+    border-radius: 22px;
+  }
+
+  .ai-page :deep(.ask-workspace-panel .deepseek-compose) {
+    height: 220px;
+    min-height: 220px;
+    max-height: 220px;
+  }
+
+  .ai-page :deep(.ask-workspace-panel .deepseek-compose.has-attachment) {
+    height: 316px;
+    min-height: 316px;
+    max-height: 316px;
+  }
+
+  .ai-page :deep(.ask-workspace-panel .ask-form .text-area),
+  .ai-page :deep(.ask-workspace-panel .deepseek-compose-input) {
+    padding-left: 18px;
+    padding-right: 18px;
+    font-size: 16px;
+  }
+
+  .ai-page :deep(.ask-workspace-panel .form-actions),
+  .ai-page :deep(.ask-workspace-panel .deepseek-compose-actions) {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
 /* Child components are rendered below ProjectAiPage, so scoped styles need deep
    selectors for their internal controls. Keep these under .ai-page to avoid
    changing shared pages such as monitor, online apps, and project home. */
@@ -3929,28 +4142,49 @@
   box-sizing: border-box;
   height: 58px;
   min-height: 58px;
-  padding: 6px 18px 10px 22px;
+  padding: 7px 18px 11px 18px;
 }
 
 .ai-page :deep(.empty-ask .deepseek-compose-controls) {
-  gap: 14px;
+  gap: 10px;
 }
 
 .ai-page :deep(.empty-ask .attachment-icon-button) {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  flex: 0 0 38px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
   background: transparent;
+  color: #4b5563;
+  box-shadow: none;
 }
 
 .ai-page :deep(.empty-ask .attachment-icon-button:hover) {
   background: rgba(15, 23, 42, .06);
 }
 
+.ai-page :deep(.empty-ask .attachment-icon-button .attachment-icon) {
+  width: 17px;
+  height: 17px;
+  flex-basis: 17px;
+}
+
 .ai-page :deep(.empty-ask .deepseek-send-button) {
-  width: 48px;
-  min-width: 48px;
-  height: 48px;
-  min-height: 48px;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  flex: 0 0 42px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: var(--ai-accent);
+  box-shadow: none;
+  transform: none;
 }
 
 .ai-page :deep(.compose-attachments) {
@@ -4114,4 +4348,208 @@
   .ai-page :deep(.ask-workspace-panel) {
     padding-right: 14px;
   }
+}
+
+/* Keep these final values after the legacy responsive rules above. */
+.ai-page :deep(.ask-workspace-panel .ask-form) {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 62px;
+  min-height: 230px;
+  border: 1px solid #e2e5e9;
+  border-radius: 26px;
+  padding: 0;
+  background: #fff;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, .07);
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form .text-area) {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 0;
+  padding: 28px 30px 12px;
+  resize: none;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1.55;
+  box-shadow: none;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form .text-area:focus) {
+  border: 0;
+  box-shadow: none;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form .form-actions) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 62px;
+  border: 0;
+  padding: 8px 22px 14px 24px;
+  background: #fff;
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-tools),
+.ai-page :deep(.ask-workspace-panel .ask-submit-actions) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.ai-page :deep(.ask-workspace-panel .attachment-button),
+.ai-page :deep(.ask-workspace-panel .attachment-icon-button) {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 0;
+}
+
+.ai-page :deep(.ask-workspace-panel .attachment-button:hover),
+.ai-page :deep(.ask-workspace-panel .attachment-icon-button:hover) {
+  background: #e5e7eb;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-send-button),
+.ai-page :deep(.ask-workspace-panel .send-button) {
+  display: inline-grid;
+  place-items: center;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  background: #3867f5;
+  color: #fff;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-send-button:hover:not(:disabled)),
+.ai-page :deep(.ask-workspace-panel .send-button:hover:not(:disabled)) {
+  background: #2f59df;
+}
+
+.ai-page :deep(.ask-workspace-panel .send-label),
+.ai-page :deep(.ask-workspace-panel .ask-form .attachment-pill),
+.ai-page :deep(.ask-workspace-panel .remove-attachment-button),
+.ai-page :deep(.ask-workspace-panel .save-button) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-compose) {
+  grid-template-rows: auto minmax(0, 1fr) 62px;
+  height: 250px;
+  min-height: 250px;
+  max-height: 250px;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-compose.has-attachment) {
+  height: 344px;
+  min-height: 344px;
+  max-height: 344px;
+}
+
+.ai-page :deep(.ask-workspace-panel .deepseek-compose-actions) {
+  grid-row: 3;
+  height: 62px;
+  min-height: 62px;
+  padding: 8px 22px 14px 24px;
+}
+
+.ai-page :deep(.ask-workspace-panel .compose-attachments) {
+  min-height: 96px;
+  padding: 14px 24px 4px;
+}
+
+@media (max-width: 720px) {
+  .ai-page :deep(.ask-workspace-panel .ask-form) { min-height: 210px; border-radius: 22px; }
+  .ai-page :deep(.ask-workspace-panel .deepseek-compose) { height: 220px; min-height: 220px; max-height: 220px; }
+  .ai-page :deep(.ask-workspace-panel .deepseek-compose.has-attachment) { height: 316px; min-height: 316px; max-height: 316px; }
+  .ai-page :deep(.ask-workspace-panel .ask-form .text-area) { padding-left: 18px; padding-right: 18px; font-size: 16px; }
+  .ai-page :deep(.ask-workspace-panel .form-actions),
+  .ai-page :deep(.ask-workspace-panel .deepseek-compose-actions) { padding-left: 14px; padding-right: 14px; }
+}
+
+/* The icons live inside a child component, so their pseudo-elements need :deep(). */
+.ai-page :deep(.ask-workspace-panel .attachment-icon::before) {
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 8px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-radius: 0 8px 8px 0;
+  transform: rotate(42deg);
+  content: '';
+}
+
+.ai-page :deep(.ask-workspace-panel .attachment-icon::after) {
+  position: absolute;
+  left: 7px;
+  top: 5px;
+  width: 5px;
+  height: 8px;
+  border: 2px solid currentColor;
+  border-left-color: transparent;
+  border-radius: 0 5px 5px 0;
+  transform: rotate(42deg);
+  content: '';
+}
+
+.ai-page :deep(.ask-workspace-panel .send-icon) {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  transform: none;
+}
+
+.ai-page :deep(.ask-workspace-panel .send-icon::before) {
+  position: absolute;
+  left: 8px;
+  top: 2px;
+  width: 2px;
+  height: 14px;
+  border-radius: 2px;
+  background: currentColor;
+  content: '';
+}
+
+.ai-page :deep(.ask-workspace-panel .send-icon::after) {
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: rotate(-45deg);
+  content: '';
+}
+
+.ai-page :deep(.ask-workspace-panel .ask-form.is-dragging) {
+  border-color: #3867f5;
+  border-style: dashed;
+  background: #f8fbff;
+  box-shadow: 0 0 0 4px rgba(56, 103, 245, .12), 0 16px 36px rgba(15, 23, 42, .07);
 }

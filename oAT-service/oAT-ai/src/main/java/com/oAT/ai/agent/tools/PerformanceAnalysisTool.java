@@ -57,15 +57,25 @@ public class PerformanceAnalysisTool {
             List<Map<String, Object>> traces = dataProvider.getTraceList(projectId, appId, 100);
             if (traces != null && !traces.isEmpty()) {
                 PerformanceStats stats = calculatePerformanceStats(traces);
-                sb.append("\n### 响应时间统计\n");
+                if (stats.totalRequests == 0) {
+                    sb.append("\n### 无法评估性能\n");
+                    sb.append("已找到 ").append(traces.size()).append(" 条调用链，但没有可解析的响应耗时，在线状态不能代表性能。\n");
+                    sb.append("请确认 Agent 上报了 useTime/duration 后再分析。\n");
+                    return sb.toString();
+                }
+                sb.append("\n### 响应时间统计（最近 ").append(traces.size()).append(" 条调用链样本）\n");
                 sb.append("- 平均响应时间: **").append(stats.avgTime).append("ms**\n");
                 sb.append("- P50响应时间: **").append(stats.p50Time).append("ms**\n");
                 sb.append("- P95响应时间: **").append(stats.p95Time).append("ms**\n");
                 sb.append("- P99响应时间: **").append(stats.p99Time).append("ms**\n");
                 sb.append("- 最慢请求: **").append(stats.maxTime).append("ms**\n");
-                sb.append("- 总请求数: ").append(stats.totalRequests).append("\n");
+                sb.append("- 有效耗时样本: ").append(stats.totalRequests).append("\n");
+                sb.append("- HTTP 错误样本: ").append(stats.errorRequests).append("（").append(formatRate(stats.errorRequests, stats.totalRequests)).append("）\n");
+                sb.append("\n### 判断\n").append(buildAssessment(stats)).append("\n");
             } else {
-                sb.append("\n⚠️ 暂无性能数据，请确保应用有请求流量\n");
+                sb.append("\n### 无法评估性能\n");
+                sb.append("当前没有调用链样本。应用在线只说明 Agent 有心跳，不代表有请求流量或性能正常。\n");
+                sb.append("请先访问应用产生请求，并确认 Agent 已上报调用链和耗时。\n");
             }
 
             return sb.toString();
@@ -100,8 +110,14 @@ public class PerformanceAnalysisTool {
                 return "应用【" + appName + "】暂无调用链数据";
             }
 
+            List<Map<String, Object>> timedTraces = new java.util.ArrayList<>(traces);
+            timedTraces.removeIf(trace -> getDuration(trace) == null || getDuration(trace) <= 0);
+            if (timedTraces.isEmpty()) {
+                return "应用【" + appName + "】有调用链记录，但没有可解析的响应耗时，无法识别慢接口。";
+            }
+
             // 找出慢接口
-            traces.sort((a, b) -> {
+            timedTraces.sort((a, b) -> {
                 long timeA = defaultLong(getDuration(a));
                 long timeB = defaultLong(getDuration(b));
                 return Long.compare(timeB, timeA); // 降序
@@ -113,7 +129,7 @@ public class PerformanceAnalysisTool {
             sb.append("|------|----------|----------|--------|------|\n");
 
             int count = 0;
-            for (Map<String, Object> trace : traces) {
+            for (Map<String, Object> trace : timedTraces) {
                 if (count >= limit) break;
                 count++;
                 
@@ -182,6 +198,10 @@ public class PerformanceAnalysisTool {
                 }
             }
 
+            if (endpointCount.isEmpty()) {
+                return "应用【" + appName + "】的调用链没有可识别的接口路径，无法统计调用频次。";
+            }
+
             // 排序
             List<Map.Entry<String, Integer>> sortedEndpoints = new java.util.ArrayList<>(endpointCount.entrySet());
             sortedEndpoints.sort((a, b) -> b.getValue().compareTo(a.getValue()));
@@ -204,6 +224,8 @@ public class PerformanceAnalysisTool {
                 sb.append(" | ").append(String.format("%.1f%%", percentage));
                 sb.append(" |\n");
             }
+
+            sb.append("\n> 统计范围：最近最多 500 条调用链样本；这不是全量吞吐量。\n");
 
             return sb.toString();
         } catch (Exception e) {
@@ -247,6 +269,10 @@ public class PerformanceAnalysisTool {
                 if (duration > stats.maxTime) {
                     stats.maxTime = duration;
                 }
+                Integer statusCode = getStatusCode(trace);
+                if ((statusCode != null && statusCode >= 400) || Boolean.TRUE.equals(trace.get("hasError")) || Boolean.TRUE.equals(trace.get("error"))) {
+                    stats.errorRequests++;
+                }
             }
         }
 
@@ -260,6 +286,17 @@ public class PerformanceAnalysisTool {
         }
 
         return stats;
+    }
+
+    private String buildAssessment(PerformanceStats stats) {
+        if (stats.p95Time > 2000) return "🔴 P95 超过 2 秒，建议优先查看慢接口并定位对应调用节点。";
+        if (stats.p95Time > 1000) return "🟡 P95 超过 1 秒，存在明显慢请求，建议查看慢接口 TOP 列表。";
+        if (stats.errorRequests > 0) return "🟡 样本中存在 HTTP 错误或异常，性能结论需要结合错误链路一起判断。";
+        return "🟢 当前样本的 P95 未超过 1 秒，未发现明显性能异常；这只代表样本窗口，不能替代持续监控。";
+    }
+
+    private String formatRate(int numerator, int denominator) {
+        return denominator <= 0 ? "0.0%" : String.format("%.1f%%", numerator * 100.0 / denominator);
     }
 
     private Long getDuration(Map<String, Object> trace) {
@@ -308,5 +345,6 @@ public class PerformanceAnalysisTool {
         long p95Time = 0;
         long p99Time = 0;
         int totalRequests = 0;
+        int errorRequests = 0;
     }
 }

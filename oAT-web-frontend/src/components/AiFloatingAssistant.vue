@@ -122,6 +122,7 @@
       <AiFloatingComposeForm
         v-model:question="question"
         :image-data="imageData"
+        :attachment-name="attachmentName"
         :recording="recording"
         :asking="asking"
         :state-text="stateText"
@@ -130,6 +131,7 @@
         @send="sendQuestion"
         @enter="handleQuestionEnter"
         @image-change="handleImageChange"
+        @files-drop="handleFilesDrop"
         @clear-image="clearImage"
         @toggle-voice="toggleVoiceInput"
         @layout-drag="startLayoutDrag($event, 'compose')"
@@ -172,7 +174,7 @@ type SpeechRecognitionLike = {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike
 
-const LAYOUT_VERSION = '2026-05-26-compact-internal-content-ai'
+const LAYOUT_VERSION = '2026-07-31-floating-assistant-polish-v2'
 const DEFAULT_COLLAPSED_SECTIONS = ['links', 'starters'] as const
 
 const route = useRoute()
@@ -192,6 +194,8 @@ const messageFeedbacks = ref<Record<string, string>>({})
 const rootRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 const imageData = ref('')
+const attachmentName = ref('')
+const attachmentText = ref('')
 const recording = ref(false)
 const hiddenContextChips = ref<AiFloatingContextChipId[]>([])
 let recognition: SpeechRecognitionLike | null = null
@@ -241,7 +245,7 @@ const launcherHint = computed(() => {
   return assistantContext.value.mascot?.mascotName || '点我提问'
 })
 const mood = computed(() => error.value ? 'error' : 'happy')
-const stateText = computed(() => error.value || (asking.value ? '生成中...' : imageData.value ? '已附加图片' : '就绪'))
+const stateText = computed(() => error.value || (asking.value ? '生成中...' : attachmentName.value ? `已添加 ${attachmentName.value}` : '就绪'))
 const storagePrefix = computed(() => projectId.value ? `spa-ai-floating:${projectId.value}` : '')
 
 const normalizedQuickLinks = computed(() => normalizeLinks(buildAdaptiveQuickLinks(dynamicQuickLinks.value.length ? dynamicQuickLinks.value : assistantContext.value.quickLinks || []), route.path))
@@ -438,6 +442,8 @@ async function clearConversation() {
   error.value = ''
   question.value = ''
   imageData.value = ''
+  attachmentName.value = ''
+  attachmentText.value = ''
   try {
     await projectStore.resetAiSessionState(projectId.value, 'assistant')
   } catch (err) {
@@ -448,20 +454,21 @@ async function clearConversation() {
 async function sendQuestion() {
   if (asking.value) return
   const text = question.value.trim()
+  const attachmentPrompt = attachmentName.value ? `\n\n[附件：${attachmentName.value}]${attachmentText.value ? `\n${attachmentText.value}` : ''}` : ''
   if (!projectId.value) {
     error.value = '请先进入或选择一个项目后再使用 AI 助手'
     return
   }
-  if (!text && !imageData.value) {
-    error.value = '请输入问题或上传图片'
+  if (!text && !imageData.value && !attachmentName.value) {
+    error.value = '请输入问题或添加文件'
     return
   }
   asking.value = true
   error.value = ''
-  messages.value.push({ id: uid(), role: 'user', text: text || '[图片提问]' })
+  messages.value.push({ id: uid(), role: 'user', text: text || (attachmentName.value ? `[附件：${attachmentName.value}]` : '[图片提问]') })
   try {
     const result = await projectStore.askAi(projectId.value, {
-      question: text,
+      question: `${text}${attachmentPrompt}`,
       pageContext: buildPageContext(text, route.fullPath),
       imageData: imageData.value || undefined,
       sessionState: JSON.stringify({ messages: messages.value.slice(-20) }),
@@ -483,6 +490,8 @@ async function sendQuestion() {
     await executeAutoAction(result.actions)
     question.value = ''
     imageData.value = ''
+    attachmentName.value = ''
+    attachmentText.value = ''
   } catch (err) {
     error.value = friendlyAiError(err)
     messages.value.push({ id: uid(), role: 'assistant', text: error.value })
@@ -611,12 +620,28 @@ function handleImageChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  if (!file.type.startsWith('image/')) {
-    error.value = '仅支持图片文件'
+  input.value = ''
+  handleAttachmentFile(file)
+}
+
+function handleFilesDrop(files: File[]) {
+  const file = files[0]
+  if (file) handleAttachmentFile(file)
+}
+
+function handleAttachmentFile(file: File) {
+  if (file.size > 20 * 1024 * 1024) {
+    error.value = '文件不能超过 20MB'
     return
   }
-  if (file.size > 10 * 1024 * 1024) {
-    error.value = '图片不能超过 10MB'
+  attachmentName.value = file.name
+  attachmentText.value = ''
+  if (!file.type.startsWith('image/') && /\.(txt|md|json|yaml|yml|csv|log|xml|html|css|js|ts|java|py|sql)$/i.test(file.name)) {
+    const reader = new FileReader()
+    reader.onload = () => { attachmentText.value = String(reader.result || '').slice(0, 60000) }
+    reader.readAsText(file)
+  }
+  if (!file.type.startsWith('image/')) {
     return
   }
   const reader = new FileReader()
@@ -624,11 +649,12 @@ function handleImageChange(event: Event) {
     imageData.value = String(reader.result || '')
   }
   reader.readAsDataURL(file)
-  input.value = ''
 }
 
 function clearImage() {
   imageData.value = ''
+  attachmentName.value = ''
+  attachmentText.value = ''
 }
 
 function toggleVoiceInput() {

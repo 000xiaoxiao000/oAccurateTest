@@ -77,6 +77,15 @@ public class AgentTraceSnapshotDataService {
         return result;
     }
 
+    public long getTraceCount(String projectId) {
+        try {
+            return traceSummaryRepository.findByProjectId(projectId, PageRequest.of(0, 1)).getTotalElements();
+        } catch (Exception e) {
+            logger.warn("Get trace count failed: projectId={}", projectId, e);
+            return 0L;
+        }
+    }
+
     public Map<String, Object> getTraceDetail(String traceId) {
         Map<String, Object> result = new HashMap<>();
         try {

@@ -94,7 +94,7 @@
       accept="image/*,.txt,.md,.json,.yaml,.yml,.csv,.log,.xml,.html,.css,.js,.ts,.java,.py,.sql,.pdf,.doc,.docx,.xls,.xlsx"
       @change="$emit('image-change', $event)"
     />
-    <form v-if="activeMessages.length" ref="askFormRef" class="ask-form" @submit.prevent="$emit('submit-ask')">
+    <form v-if="activeMessages.length" ref="askFormRef" class="ask-form" :class="{ 'is-dragging': draggingFiles }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
       <textarea
         ref="askInputRef"
         v-model="questionModel"
@@ -102,11 +102,14 @@
         rows="6"
         placeholder="例如：帮我总结当前项目的测试覆盖盲区，优先按风险排序。"
         @keydown.enter.exact="$emit('ask-enter', $event)"
+        @paste="handlePaste"
       ></textarea>
       <div class="form-actions">
         <div class="ask-tools">
           <button class="ghost-button attachment-button" :class="{ active: Boolean(attachmentName || imageData) }" type="button" title="添加文件或图片" @click="$emit('select-image')">
-            <span class="button-icon attachment-icon" aria-hidden="true"></span>
+            <svg class="button-icon attachment-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
             {{ attachmentName || imageData ? '已添加附件' : '添加文件' }}
           </button>
           <span v-if="attachmentName || imageData" class="attachment-pill">{{ attachmentName || '图片已添加' }}</span>
@@ -129,7 +132,7 @@
         </div>
       </div>
     </form>
-    <form v-else ref="askFormRef" class="ask-form deepseek-compose" :class="{ 'has-attachment': attachmentName || imageData }" @submit.prevent="$emit('submit-ask')">
+    <form v-else ref="askFormRef" class="ask-form deepseek-compose" :class="{ 'has-attachment': attachmentName || imageData, 'is-dragging': draggingFiles }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
       <div v-if="attachmentName || imageData" class="compose-attachments">
         <div v-if="imageData" class="compose-image-preview">
           <img :src="imageData" alt="已添加图片" />
@@ -150,16 +153,17 @@
         rows="2"
         placeholder="给 AI 助手发送消息"
         @keydown.enter.exact="$emit('ask-enter', $event)"
+        @paste="handlePaste"
       ></textarea>
       <div class="form-actions deepseek-compose-actions">
         <div class="ask-tools deepseek-compose-left">
+          <button class="icon-button attachment-icon-button" type="button" aria-label="添加文件或图片" @click="$emit('select-image')">
+            <span class="button-icon attachment-icon" aria-hidden="true"></span>
+          </button>
           <span v-if="attachmentName || imageData" class="attachment-pill">{{ attachmentName || '图片已添加' }}</span>
           <button v-if="attachmentName || imageData" class="ghost-button remove-attachment-button" type="button" @click="$emit('clear-image')">移除</button>
         </div>
         <div class="ask-submit-actions deepseek-compose-controls">
-          <button class="icon-button attachment-icon-button" type="button" title="添加文件或图片" @click="$emit('select-image')">
-            <span class="button-icon attachment-icon" aria-hidden="true"></span>
-          </button>
           <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
             <span class="button-icon stop-icon"></span>
             停止生成
@@ -210,6 +214,7 @@ const emit = defineEmits<{
   'submit-ask': []
   'ask-enter': [event: KeyboardEvent]
   'image-change': [event: Event]
+  'files-drop': [files: File[]]
   'select-image': []
   'clear-image': []
   'toggle-voice-input': []
@@ -220,11 +225,36 @@ const emit = defineEmits<{
 const askFormRef = ref<HTMLFormElement | null>(null)
 const askInputRef = ref<HTMLTextAreaElement | null>(null)
 const imageInput = ref<HTMLInputElement | null>(null)
+const draggingFiles = ref(false)
 
 const questionModel = computed({
   get: () => props.question,
   set: (value: string) => emit('update:question', value),
 })
+
+function handleDragLeave(event: DragEvent) {
+  const current = event.currentTarget as HTMLElement | null
+  const related = event.relatedTarget as Node | null
+  if (!current?.contains(related)) draggingFiles.value = false
+}
+
+function handleDrop(event: DragEvent) {
+  draggingFiles.value = false
+  const files = Array.from(event.dataTransfer?.files || [])
+  if (files.length) emit('files-drop', files)
+}
+
+function handlePaste(event: ClipboardEvent) {
+  const items = Array.from(event.clipboardData?.items || [])
+  const files = items
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file))
+  if (files.length) {
+    event.preventDefault()
+    emit('files-drop', files)
+  }
+}
 
 function formatAssistantMessage(text: string) {
   return renderMarkdown(text)
