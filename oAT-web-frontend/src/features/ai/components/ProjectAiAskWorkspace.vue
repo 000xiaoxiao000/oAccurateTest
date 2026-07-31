@@ -1,5 +1,5 @@
 <template>
-  <section class="panel ask-workspace-panel">
+  <section class="panel ask-workspace-panel" :class="{ 'empty-ask': !activeMessages.length }">
     <div v-if="questionAnchors.length" class="floating-anchors" aria-label="右侧问答锚点导航">
       <div class="floating-anchor-head">问答</div>
       <div class="floating-anchor-track" :style="{ height: `${floatingTrackHeight}px` }">
@@ -24,9 +24,10 @@
         </button>
       </div>
     </div>
-    <div class="card-title">
+    <div v-if="activeMessages.length" class="card-title">
       <h2>提问</h2>
     </div>
+    <div v-else class="empty-ask-title" aria-hidden="true">使用 AI 助手开始测试分析</div>
     <div v-if="activeMessages.length" class="message-history">
       <article
         v-for="section in messageSections"
@@ -86,7 +87,14 @@
         </div>
       </article>
     </div>
-    <form ref="askFormRef" class="ask-form" @submit.prevent="$emit('submit-ask')">
+    <input
+      ref="imageInput"
+      class="hidden-input"
+      type="file"
+      accept="image/*,.txt,.md,.json,.yaml,.yml,.csv,.log,.xml,.html,.css,.js,.ts,.java,.py,.sql,.pdf,.doc,.docx,.xls,.xlsx"
+      @change="$emit('image-change', $event)"
+    />
+    <form v-if="activeMessages.length" ref="askFormRef" class="ask-form" @submit.prevent="$emit('submit-ask')">
       <textarea
         ref="askInputRef"
         v-model="questionModel"
@@ -95,15 +103,14 @@
         placeholder="例如：帮我总结当前项目的测试覆盖盲区，优先按风险排序。"
         @keydown.enter.exact="$emit('ask-enter', $event)"
       ></textarea>
-      <input ref="imageInput" class="hidden-input" type="file" accept="image/*" @change="$emit('image-change', $event)" />
       <div class="form-actions">
         <div class="ask-tools">
-          <button class="ghost-button" :class="{ active: Boolean(imageData) }" type="button" @click="$emit('select-image')">
-            {{ imageData ? '已附图片' : '上传图片' }}
+          <button class="ghost-button attachment-button" :class="{ active: Boolean(attachmentName || imageData) }" type="button" title="添加文件或图片" @click="$emit('select-image')">
+            <span class="button-icon attachment-icon" aria-hidden="true"></span>
+            {{ attachmentName || imageData ? '已添加附件' : '添加文件' }}
           </button>
-          <span v-if="imageData" class="attachment-pill">图片已添加</span>
-          <button v-if="imageData" class="ghost-button" type="button" @click="$emit('clear-image')">移除图片</button>
-          <button class="ghost-button" :class="{ active: recording }" type="button" @click="$emit('toggle-voice-input')">语音输入</button>
+          <span v-if="attachmentName || imageData" class="attachment-pill">{{ attachmentName || '图片已添加' }}</span>
+          <button v-if="attachmentName || imageData" class="ghost-button" type="button" @click="$emit('clear-image')">移除附件</button>
         </div>
         <div class="ask-submit-actions">
           <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
@@ -113,11 +120,54 @@
           <button class="primary-button control-button send-button" type="submit" :class="{ loading: asking }" :disabled="asking">
             <span v-if="asking" class="button-spinner" aria-hidden="true"></span>
             <span v-else class="button-icon send-icon" aria-hidden="true"></span>
-            {{ asking ? '生成中...' : '发送问题' }}
+            <span class="send-label">{{ asking ? '生成中...' : activeMessages.length ? '发送问题' : '' }}</span>
           </button>
           <button class="ghost-button control-button save-button" type="button" :disabled="asking" @click="$emit('save-session')">
             <span class="button-icon save-icon" aria-hidden="true"></span>
             保存会话状态
+          </button>
+        </div>
+      </div>
+    </form>
+    <form v-else ref="askFormRef" class="ask-form deepseek-compose" :class="{ 'has-attachment': attachmentName || imageData }" @submit.prevent="$emit('submit-ask')">
+      <div v-if="attachmentName || imageData" class="compose-attachments">
+        <div v-if="imageData" class="compose-image-preview">
+          <img :src="imageData" alt="已添加图片" />
+        </div>
+        <div class="compose-file-card">
+          <span class="compose-file-icon" aria-hidden="true">{{ attachmentName?.split('.').pop()?.slice(0, 4).toUpperCase() || 'FILE' }}</span>
+          <span class="compose-file-copy">
+            <strong>{{ attachmentName || '图片附件' }}</strong>
+            <small>已添加附件</small>
+          </span>
+          <button class="compose-file-remove" type="button" title="移除附件" @click="$emit('clear-image')">×</button>
+        </div>
+      </div>
+      <textarea
+        ref="askInputRef"
+        v-model="questionModel"
+        class="text-area deepseek-compose-input"
+        rows="2"
+        placeholder="给 AI 助手发送消息"
+        @keydown.enter.exact="$emit('ask-enter', $event)"
+      ></textarea>
+      <div class="form-actions deepseek-compose-actions">
+        <div class="ask-tools deepseek-compose-left">
+          <span v-if="attachmentName || imageData" class="attachment-pill">{{ attachmentName || '图片已添加' }}</span>
+          <button v-if="attachmentName || imageData" class="ghost-button remove-attachment-button" type="button" @click="$emit('clear-image')">移除</button>
+        </div>
+        <div class="ask-submit-actions deepseek-compose-controls">
+          <button class="icon-button attachment-icon-button" type="button" title="添加文件或图片" @click="$emit('select-image')">
+            <span class="button-icon attachment-icon" aria-hidden="true"></span>
+          </button>
+          <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
+            <span class="button-icon stop-icon"></span>
+            停止生成
+          </button>
+          <button class="primary-button control-button send-button deepseek-send-button" type="submit" :class="{ loading: asking }" :disabled="asking">
+            <span v-if="asking" class="button-spinner" aria-hidden="true"></span>
+            <span v-else class="button-icon send-icon" aria-hidden="true"></span>
+            <span class="send-label">{{ asking ? '生成中...' : '' }}</span>
           </button>
         </div>
       </div>
@@ -136,6 +186,7 @@ const props = defineProps<{
   question: string
   asking: boolean
   imageData: string
+  attachmentName: string
   recording: boolean
   activeMessages: AiSessionMessage[]
   messageSections: AiMessageSection[]

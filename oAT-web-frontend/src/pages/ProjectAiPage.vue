@@ -58,6 +58,7 @@
             v-model:preview-anchor-id="previewAnchorId"
             :asking="asking"
             :image-data="imageData"
+            :attachment-name="attachmentName"
             :recording="recording"
             :active-messages="activeMessages"
             :message-sections="messageSections"
@@ -133,6 +134,8 @@ const error = ref('')
 const question = ref('')
 const askWorkspaceRef = ref<InstanceType<typeof ProjectAiAskWorkspace> | null>(null)
 const imageData = ref('')
+const attachmentName = ref('')
+const attachmentPromptText = ref('')
 const recording = ref(false)
 let recognition: SpeechRecognitionLike | null = null
 const anchorFilterMode = ref<'all' | 'pending'>('all')
@@ -330,7 +333,7 @@ async function copyMessage(text: string, messageId: string) {
 async function submitAsk() {
   if (asking.value) return
   if (!question.value.trim() && !imageData.value) {
-    error.value = '请输入问题或上传图片'
+    error.value = '请输入问题或添加附件'
     return
   }
   asking.value = true
@@ -360,6 +363,8 @@ async function submitAsk() {
     if (latestAnchor) scrollToAnchor(latestAnchor.id)
     question.value = ''
     imageData.value = ''
+    attachmentName.value = ''
+    attachmentPromptText.value = ''
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       const lastAssistant = [...activeMessages.value].reverse().find((item) => item.role === 'assistant')
@@ -659,24 +664,63 @@ function handleImageChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
-  if (!file.type.startsWith('image/')) {
-    error.value = '仅支持图片文件'
-    return
-  }
-  if (file.size > 10 * 1024 * 1024) {
-    error.value = '图片不能超过 10MB'
-    return
-  }
-  const reader = new FileReader()
-  reader.onload = () => {
-    imageData.value = String(reader.result || '')
-  }
-  reader.readAsDataURL(file)
   input.value = ''
+  if (file.size > 20 * 1024 * 1024) {
+    error.value = '附件不能超过 20MB'
+    return
+  }
+  error.value = ''
+  imageData.value = ''
+  attachmentName.value = file.name
+  const metadata = `文件名：${file.name}\n类型：${file.type || '未知'}\n大小：${formatAttachmentSize(file.size)}`
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      imageData.value = String(reader.result || '')
+    }
+    reader.readAsDataURL(file)
+    setAttachmentPrompt(`[已添加图片附件]\n${metadata}`)
+    return
+  }
+  if (isReadableTextFile(file)) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const content = String(reader.result || '').slice(0, 60000)
+      setAttachmentPrompt(`[已添加文本附件]\n${metadata}\n\n文件内容：\n${content}`)
+    }
+    reader.readAsText(file)
+    return
+  }
+  setAttachmentPrompt(`[已添加文件附件]\n${metadata}\n当前前端已记录文件信息；如需分析文件正文，请粘贴关键内容或上传文本格式文件。`)
 }
 
 function clearImage() {
+  if (attachmentPromptText.value && question.value.includes(attachmentPromptText.value)) {
+    question.value = question.value.replace(`\n\n${attachmentPromptText.value}`, '').replace(attachmentPromptText.value, '').trim()
+  }
   imageData.value = ''
+  attachmentName.value = ''
+  attachmentPromptText.value = ''
+}
+
+function setAttachmentPrompt(text: string) {
+  if (attachmentPromptText.value && question.value.includes(attachmentPromptText.value)) {
+    question.value = question.value.replace(`\n\n${attachmentPromptText.value}`, '').replace(attachmentPromptText.value, '').trim()
+  }
+  const currentQuestion = question.value.trim()
+  attachmentPromptText.value = text
+  question.value = `${currentQuestion}${currentQuestion ? '\n\n' : ''}${text}`
+}
+
+function isReadableTextFile(file: File) {
+  if (file.type.startsWith('text/')) return true
+  return /\.(txt|md|json|ya?ml|csv|log|xml|html|css|js|ts|java|py|sql)$/i.test(file.name)
+}
+
+function formatAttachmentSize(size: number) {
+  if (size < 1024) return `${size}B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)}KB`
+  return `${(size / 1024 / 1024).toFixed(1)}MB`
 }
 
 function toggleVoiceInput() {
