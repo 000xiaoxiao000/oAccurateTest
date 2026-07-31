@@ -11,12 +11,17 @@ import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * 覆盖率数据对象存储客户端。
@@ -30,6 +35,7 @@ public class CoverageStorage {
 
     private static final Logger logger = LoggerFactory.getLogger(CoverageStorage.class);
     private static final String OBJECT_SUFFIX = ".msgpack";
+    private static final String COMPRESS_GZIP = "gzip";
 
     private final CoverageStorageProperties props;
     private final ObjectMapper msgpackMapper;
@@ -124,6 +130,65 @@ public class CoverageStorage {
         }
     }
 
+    public boolean isAvailable() {
+        return props.isEnabled() && minioClient != null;
+    }
+
+    /**
+     * Stores large text payloads in MinIO. The hash and content size are based on
+     * the original UTF-8 bytes so callers can validate after decompression.
+     */
+    public StoredObject storeText(String objectKey, String content, String contentType) {
+        if (!isAvailable()) {
+            return null;
+        }
+        if (!org.springframework.util.StringUtils.hasText(objectKey)) {
+            throw new IllegalArgumentException("objectKey must not be empty");
+        }
+        if (content == null) {
+            return null;
+        }
+        try {
+            byte[] raw = content.getBytes(StandardCharsets.UTF_8);
+            byte[] compressed = gzip(raw);
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(props.getBucket())
+                            .object(objectKey)
+                            .stream(new ByteArrayInputStream(compressed), compressed.length, -1)
+                            .contentType(contentType == null ? "application/octet-stream" : contentType)
+                            .build());
+            return new StoredObject(objectKey, sha256(raw), (long) raw.length, (long) compressed.length, COMPRESS_GZIP,
+                    contentType);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to store object in MinIO: " + objectKey, e);
+        }
+    }
+
+    public String loadText(String objectKey, String compressType) {
+        if (!isAvailable() || !org.springframework.util.StringUtils.hasText(objectKey)) {
+            return null;
+        }
+        try (InputStream is = minioClient.getObject(
+                GetObjectArgs.builder()
+                        .bucket(props.getBucket())
+                        .object(objectKey)
+                        .build())) {
+            byte[] bytes = is.readAllBytes();
+            byte[] raw = COMPRESS_GZIP.equalsIgnoreCase(compressType) ? gunzip(bytes) : bytes;
+            return new String(raw, StandardCharsets.UTF_8);
+        } catch (ErrorResponseException e) {
+            if ("NoSuchKey".equals(e.errorResponse().code())) {
+                return null;
+            }
+            logger.warn("Failed to load object from MinIO: key={}, error={}", objectKey, e.getMessage());
+            return null;
+        } catch (Exception e) {
+            logger.warn("Failed to load object from MinIO: key={}, error={}", objectKey, e.getMessage());
+            return null;
+        }
+    }
+
     private void doStore(String traceId, StackNodeVo[] codeNodes) {
         try {
             byte[] data = msgpackMapper.writeValueAsBytes(codeNodes);
@@ -144,6 +209,34 @@ public class CoverageStorage {
         return traceId + OBJECT_SUFFIX;
     }
 
+    private byte[] gzip(byte[] raw) throws Exception {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        try (GZIPOutputStream gzip = new GZIPOutputStream(out)) {
+            gzip.write(raw);
+        }
+        return out.toByteArray();
+    }
+
+    private byte[] gunzip(byte[] compressed) throws Exception {
+        try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(compressed))) {
+            return gzip.readAllBytes();
+        }
+    }
+
+    private String sha256(byte[] bytes) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(bytes);
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) {
+                hex.append(String.format(Locale.ROOT, "%02x", b));
+            }
+            return hex.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
     private void ensureBucketExists() {
         try {
             boolean exists = minioClient.bucketExists(
@@ -157,4 +250,11 @@ public class CoverageStorage {
             logger.warn("Failed to ensure MinIO bucket exists: bucket={}, error={}", props.getBucket(), e.getMessage());
         }
     }
+
+    public record StoredObject(String objectKey,
+                               String contentHash,
+                               Long contentSize,
+                               Long compressedSize,
+                               String compressType,
+                               String contentType) {}
 }

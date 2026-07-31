@@ -279,11 +279,16 @@
   position: sticky;
   top: 138px;
   z-index: 7;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(360px, auto);
+  align-items: center;
   gap: 12px;
   background: rgba(255, 255, 255, .94);
   backdrop-filter: blur(14px);
+}
+
+.filter-actions {
+  justify-content: flex-end;
 }
 
 .text-input {
@@ -291,6 +296,11 @@
   border: 1px solid rgba(15, 23, 42, .12);
   border-radius: 14px;
   padding: 10px 12px;
+}
+
+.filter-actions .text-input {
+  flex: 1 1 300px;
+  max-width: 320px;
 }
 
 .filter-chip,
@@ -744,10 +754,19 @@
     grid-column: auto;
   }
 
-  .toolbar-panel,
   .page-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .toolbar-panel {
+    grid-template-columns: 1fr;
+    position: static;
+    align-items: stretch;
+  }
+
+  .filter-actions {
+    justify-content: flex-start;
   }
 
   .log-line {

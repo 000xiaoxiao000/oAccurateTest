@@ -1,6 +1,7 @@
 package com.oAT.web.esDao;
 
 import com.oAT.web.common.UtilJson;
+import com.oAT.web.coverage.CoverageStorage;
 import com.oAT.web.esDao.entity.ChangeLog;
 import com.oAT.web.esDao.entity.Comment;
 import com.oAT.web.esDao.entity.Remote;
@@ -32,6 +33,7 @@ import java.util.stream.StreamSupport;
 public class SystemSnapshotRepository {
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<SystemSnapshot> rowMapper = this::mapRow;
+    private final CoverageStorage coverageStorage;
 
     @Value("${oat.storage.large-payload.path:${user.home}/oAT/codeData/large-payload/}")
     private String largePayloadPath;
@@ -39,8 +41,9 @@ public class SystemSnapshotRepository {
     @Value("${oat.storage.snapshot-artifact.inline-threshold-bytes:8192}")
     private long artifactInlineThresholdBytes;
 
-    public SystemSnapshotRepository(JdbcTemplate jdbcTemplate) {
+    public SystemSnapshotRepository(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
         this.jdbcTemplate = jdbcTemplate;
+        this.coverageStorage = coverageStorage;
     }
 
     public Optional<SystemSnapshot> findById(String id) {
@@ -86,44 +89,56 @@ public class SystemSnapshotRepository {
     @Transactional
     public SystemSnapshot save(SystemSnapshot snapshot) {
         normalize(snapshot);
-        jdbcTemplate.update("""
-                        INSERT INTO oat_system_snapshot (
-                            id, project_id, app_id, trace_id, title, sub_title, topic_image,
-                            snapshot_describe, directory, version, version_cycle, version_last_update,
-                            report_status, payload_json, create_time, update_time
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            project_id = VALUES(project_id),
-                            app_id = VALUES(app_id),
-                            trace_id = VALUES(trace_id),
-                            title = VALUES(title),
-                            sub_title = VALUES(sub_title),
-                            topic_image = VALUES(topic_image),
-                            snapshot_describe = VALUES(snapshot_describe),
-                            directory = VALUES(directory),
-                            version = VALUES(version),
-                            version_cycle = VALUES(version_cycle),
-                            version_last_update = VALUES(version_last_update),
-                            report_status = VALUES(report_status),
-                            payload_json = VALUES(payload_json),
-                            update_time = VALUES(update_time)
-                        """,
-                snapshot.getId(),
-                snapshot.getProjectId(),
-                snapshot.getAppId(),
-                snapshot.getTraceId(),
-                snapshot.getTitle(),
-                snapshot.getSubTitle(),
-                snapshot.getTopicImage(),
-                snapshot.getDescribe(),
-                snapshot.getDirectory(),
-                snapshot.getVersion(),
-                snapshot.getVersionCycle(),
-                toTimestamp(snapshot.getVersionLastUpdate()),
-                snapshot.getReportStatus(),
-                UtilJson.writeValueAsString(snapshot),
-                toTimestamp(snapshot.getCreateTime()),
-                toTimestamp(snapshot.getUpdateTime()));
+        String[] originalCodes = snapshot.getCodes();
+        Sql[] originalSqls = snapshot.getSqls();
+        Remote[] originalRemotes = snapshot.getRemotes();
+        snapshot.setCodes(null);
+        snapshot.setSqls(null);
+        snapshot.setRemotes(null);
+        try {
+            jdbcTemplate.update("""
+                            INSERT INTO oat_system_snapshot (
+                                id, project_id, app_id, trace_id, title, sub_title, topic_image,
+                                snapshot_describe, directory, version, version_cycle, version_last_update,
+                                report_status, payload_json, create_time, update_time
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON DUPLICATE KEY UPDATE
+                                project_id = VALUES(project_id),
+                                app_id = VALUES(app_id),
+                                trace_id = VALUES(trace_id),
+                                title = VALUES(title),
+                                sub_title = VALUES(sub_title),
+                                topic_image = VALUES(topic_image),
+                                snapshot_describe = VALUES(snapshot_describe),
+                                directory = VALUES(directory),
+                                version = VALUES(version),
+                                version_cycle = VALUES(version_cycle),
+                                version_last_update = VALUES(version_last_update),
+                                report_status = VALUES(report_status),
+                                payload_json = VALUES(payload_json),
+                                update_time = VALUES(update_time)
+                            """,
+                    snapshot.getId(),
+                    snapshot.getProjectId(),
+                    snapshot.getAppId(),
+                    snapshot.getTraceId(),
+                    snapshot.getTitle(),
+                    snapshot.getSubTitle(),
+                    snapshot.getTopicImage(),
+                    snapshot.getDescribe(),
+                    snapshot.getDirectory(),
+                    snapshot.getVersion(),
+                    snapshot.getVersionCycle(),
+                    toTimestamp(snapshot.getVersionLastUpdate()),
+                    snapshot.getReportStatus(),
+                    UtilJson.writeValueAsString(snapshot),
+                    toTimestamp(snapshot.getCreateTime()),
+                    toTimestamp(snapshot.getUpdateTime()));
+        } finally {
+            snapshot.setCodes(originalCodes);
+            snapshot.setSqls(originalSqls);
+            snapshot.setRemotes(originalRemotes);
+        }
         saveSnapshotDetails(snapshot);
         return snapshot;
     }
@@ -218,6 +233,11 @@ public class SystemSnapshotRepository {
         }
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         String hash = sha256(bytes);
+        if (coverageStorage.isAvailable()) {
+            Path relativePath = Path.of("snapshot", snapshotId, type + "-" + order + "-" + hash + ".json.gz");
+            CoverageStorage.StoredObject object = coverageStorage.storeText(relativePath.toString(), content, "application/json");
+            return new ArtifactPayload("MINIO", object.objectKey(), object.contentHash(), object.contentSize(), null);
+        }
         if (bytes.length <= artifactInlineThresholdBytes) {
             return new ArtifactPayload("DB", null, hash, (long) bytes.length, content);
         }
@@ -238,13 +258,13 @@ public class SystemSnapshotRepository {
         List<Sql> sqls = new ArrayList<>();
         List<Remote> remotes = new ArrayList<>();
         jdbcTemplate.query("""
-                        SELECT artifact_type, content_text, content_path, payload_json
+                        SELECT artifact_type, storage_type, content_text, content_path, payload_json
                         FROM oat_system_snapshot_artifact
                         WHERE snapshot_id = ?
                         ORDER BY artifact_type ASC, artifact_order ASC
                         """, rs -> {
                     String type = rs.getString("artifact_type");
-                    String payload = loadArtifact(rs.getString("content_text"), rs.getString("content_path"));
+                    String payload = loadArtifact(rs.getString("storage_type"), rs.getString("content_text"), rs.getString("content_path"));
                     String payloadJson = rs.getString("payload_json");
                     if ("CODE".equals(type) && payload != null) {
                         codes.add(payload);
@@ -260,9 +280,12 @@ public class SystemSnapshotRepository {
         if (!remotes.isEmpty()) snapshot.setRemotes(remotes.toArray(new Remote[0]));
     }
 
-    private String loadArtifact(String inlineContent, String path) {
+    private String loadArtifact(String storageType, String inlineContent, String path) {
         if (StringUtils.hasText(inlineContent)) return inlineContent;
         if (!StringUtils.hasText(path)) return null;
+        if ("MINIO".equalsIgnoreCase(storageType)) {
+            return coverageStorage.loadText(path, "gzip");
+        }
         try {
             return Files.readString(Path.of(largePayloadPath).resolve(path), StandardCharsets.UTF_8);
         } catch (Exception e) {

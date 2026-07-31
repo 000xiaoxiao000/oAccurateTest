@@ -415,6 +415,8 @@ export interface GitCommitOption {
   shortCommitId?: string
   message?: string
   author?: string
+  commitTime?: string
+  commitTimeText?: string
 }
 
 export interface GitJobSummary {

@@ -36,7 +36,7 @@
       </label>
     </div>
 
-    <div v-else class="grid-two">
+    <div v-else class="git-compare-grid">
       <label class="field">
         <span>分支</span>
         <div class="input-action">
@@ -256,6 +256,13 @@ button:disabled {
   gap: 14px;
 }
 
+.git-compare-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) minmax(300px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -325,7 +332,8 @@ button:disabled {
 }
 
 @media (max-width: 840px) {
-  .grid-two {
+  .grid-two,
+  .git-compare-grid {
     grid-template-columns: 1fr;
   }
 }

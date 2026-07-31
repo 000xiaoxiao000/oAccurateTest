@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS `oat_coverage_report` (
   `inc_covered_branch_targets` BIGINT DEFAULT 0,
   `inc_total_complexity` INT DEFAULT 0,
   INDEX `idx_app_version_commit_type` (`app_id`, `version_number`, `repo_commit_id`, `report_type`),
+  INDEX `idx_cov_report_app_create_time` (`app_id`, `create_time`),
   INDEX `idx_app_branch` (`app_id`, `repo_branch`),
   INDEX `idx_create_time` (`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='覆盖率报告头表';

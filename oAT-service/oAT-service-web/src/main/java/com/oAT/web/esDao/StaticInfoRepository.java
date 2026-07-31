@@ -1,6 +1,7 @@
 package com.oAT.web.esDao;
 
 import com.oAT.web.common.UtilJson;
+import com.oAT.web.coverage.CoverageStorage;
 import com.oAT.web.esDao.entity.StaticSourceClassInfo;
 import com.oAT.web.esDao.entity.StaticSourceInfo;
 import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
@@ -27,6 +28,7 @@ import java.util.UUID;
 public class StaticInfoRepository {
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<StaticSourceInfo> rowMapper = this::mapRow;
+    private final CoverageStorage coverageStorage;
 
     @Value("${oat.storage.large-payload.path:${user.home}/oAT/codeData/large-payload/}")
     private String largePayloadPath;
@@ -34,8 +36,9 @@ public class StaticInfoRepository {
     @Value("${oat.storage.static-source.inline-threshold-bytes:8192}")
     private long inlineThresholdBytes;
 
-    public StaticInfoRepository(JdbcTemplate jdbcTemplate) {
+    public StaticInfoRepository(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
         this.jdbcTemplate = jdbcTemplate;
+        this.coverageStorage = coverageStorage;
     }
 
     public List<StaticSourceInfo> findByAppIdAndClassInfo_ClassName(String appId, String className) {
@@ -61,37 +64,45 @@ public class StaticInfoRepository {
         normalize(info);
         StaticSourceClassInfo classInfo = info.getClassInfo();
         SourcePayload sourcePayload = storeSourceCode(info.getAppId(), classInfo.getClassName(), classInfo.getSourceCode());
-        jdbcTemplate.update("""
-                        INSERT INTO oat_static_source_class (
-                            id, app_id, type, class_id, class_name, method_maps_json,
-                            source_code, source_code_path, source_code_hash, source_code_size,
-                            payload_json, create_time, update_time
-                        ) VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?, CAST(? AS JSON), ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            id = VALUES(id),
-                            type = VALUES(type),
-                            class_id = VALUES(class_id),
-                            method_maps_json = VALUES(method_maps_json),
-                            source_code = VALUES(source_code),
-                            source_code_path = VALUES(source_code_path),
-                            source_code_hash = VALUES(source_code_hash),
-                            source_code_size = VALUES(source_code_size),
-                            payload_json = VALUES(payload_json),
-                            update_time = VALUES(update_time)
-                        """,
-                info.getId(),
-                info.getAppId(),
-                info.getType(),
-                classInfo.getClassId(),
-                classInfo.getClassName(),
-                UtilJson.writeValueAsString(classInfo.getMethodMaps()),
-                sourcePayload.inlineContent(),
-                sourcePayload.path(),
-                sourcePayload.hash(),
-                sourcePayload.size(),
-                UtilJson.writeValueAsString(info),
-                toTimestamp(info.getCreateTime()),
-                toTimestamp(info.getUpdateTime()));
+        String originalSourceCode = classInfo.getSourceCode();
+        if (sourcePayload.path() != null) {
+            classInfo.setSourceCode(null);
+        }
+        try {
+            jdbcTemplate.update("""
+                            INSERT INTO oat_static_source_class (
+                                id, app_id, type, class_id, class_name, method_maps_json,
+                                source_code, source_code_path, source_code_hash, source_code_size,
+                                payload_json, create_time, update_time
+                            ) VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, ?, CAST(? AS JSON), ?, ?)
+                            ON DUPLICATE KEY UPDATE
+                                id = VALUES(id),
+                                type = VALUES(type),
+                                class_id = VALUES(class_id),
+                                method_maps_json = VALUES(method_maps_json),
+                                source_code = VALUES(source_code),
+                                source_code_path = VALUES(source_code_path),
+                                source_code_hash = VALUES(source_code_hash),
+                                source_code_size = VALUES(source_code_size),
+                                payload_json = VALUES(payload_json),
+                                update_time = VALUES(update_time)
+                            """,
+                    info.getId(),
+                    info.getAppId(),
+                    info.getType(),
+                    classInfo.getClassId(),
+                    classInfo.getClassName(),
+                    UtilJson.writeValueAsString(classInfo.getMethodMaps()),
+                    sourcePayload.inlineContent(),
+                    sourcePayload.path(),
+                    sourcePayload.hash(),
+                    sourcePayload.size(),
+                    UtilJson.writeValueAsString(info),
+                    toTimestamp(info.getCreateTime()),
+                    toTimestamp(info.getUpdateTime()));
+        } finally {
+            classInfo.setSourceCode(originalSourceCode);
+        }
         return info;
     }
 
@@ -156,6 +167,12 @@ public class StaticInfoRepository {
         }
         byte[] bytes = sourceCode.getBytes(StandardCharsets.UTF_8);
         String hash = sha256(bytes);
+        if (coverageStorage.isAvailable()) {
+            String safeClassName = className == null ? "unknown" : className.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String objectKey = "source/" + (appId == null ? "unknown-app" : appId) + "/" + safeClassName + "-" + hash + ".java.gz";
+            CoverageStorage.StoredObject object = coverageStorage.storeText(objectKey, sourceCode, "text/x-java-source");
+            return new SourcePayload(null, object.objectKey(), object.contentHash(), object.contentSize());
+        }
         if (bytes.length <= inlineThresholdBytes) {
             return new SourcePayload(sourceCode, null, hash, (long) bytes.length);
         }
@@ -178,6 +195,10 @@ public class StaticInfoRepository {
         }
         if (!StringUtils.hasText(sourcePath)) {
             return null;
+        }
+        String minioContent = coverageStorage.loadText(sourcePath, "gzip");
+        if (minioContent != null) {
+            return minioContent;
         }
         try {
             return Files.readString(Path.of(largePayloadPath).resolve(sourcePath), StandardCharsets.UTF_8);

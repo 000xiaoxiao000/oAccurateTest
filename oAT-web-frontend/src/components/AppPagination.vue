@@ -97,9 +97,6 @@ function changePageSize(event: Event) {
 
 <style scoped>
 .app-pagination {
-  position: sticky;
-  bottom: 12px;
-  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;

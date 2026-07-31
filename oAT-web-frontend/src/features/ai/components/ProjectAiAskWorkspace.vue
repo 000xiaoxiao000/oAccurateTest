@@ -101,6 +101,7 @@
           <button class="ghost-button" :class="{ active: Boolean(imageData) }" type="button" @click="$emit('select-image')">
             {{ imageData ? '已附图片' : '上传图片' }}
           </button>
+          <span v-if="imageData" class="attachment-pill">图片已添加</span>
           <button v-if="imageData" class="ghost-button" type="button" @click="$emit('clear-image')">移除图片</button>
           <button class="ghost-button" :class="{ active: recording }" type="button" @click="$emit('toggle-voice-input')">语音输入</button>
         </div>

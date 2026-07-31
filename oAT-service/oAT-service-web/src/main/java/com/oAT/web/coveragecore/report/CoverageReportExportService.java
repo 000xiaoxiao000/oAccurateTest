@@ -48,7 +48,7 @@ public class CoverageReportExportService {
             int pageNum = 0;
             Page<ClassCoverageIndex> page;
             do {
-                page = classCoverageRepository.findByReportId(reportId, PageRequest.of(pageNum, EXPORT_PAGE_SIZE));
+                page = classCoverageRepository.findByReportIdWithMethods(reportId, PageRequest.of(pageNum, EXPORT_PAGE_SIZE));
                 excelWriter.write(toMethodExportRows(page.getContent()), writeSheet);
                 pageNum++;
             } while (page.hasNext());

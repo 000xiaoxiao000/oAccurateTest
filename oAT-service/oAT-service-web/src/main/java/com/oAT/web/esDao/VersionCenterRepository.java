@@ -1,6 +1,7 @@
 package com.oAT.web.esDao;
 
 import com.oAT.web.common.UtilJson;
+import com.oAT.web.coverage.CoverageStorage;
 import com.oAT.web.esDao.entity.VersionCenterIndex;
 import com.oAT.web.esDao.entity.VersionCompareReport;
 import com.oAT.web.esDao.entity.VersionItem;
@@ -22,9 +23,11 @@ import java.util.*;
 public class VersionCenterRepository {
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<VersionCenterIndex> rowMapper = this::mapRow;
+    private final CoverageStorage coverageStorage;
 
-    public VersionCenterRepository(JdbcTemplate jdbcTemplate) {
+    public VersionCenterRepository(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
         this.jdbcTemplate = jdbcTemplate;
+        this.coverageStorage = coverageStorage;
     }
 
     public Optional<VersionCenterIndex> findById(String id) {
@@ -101,11 +104,40 @@ public class VersionCenterRepository {
 
     private void saveCompareReport(VersionCenterIndex index) {
         VersionCompareReport report = index.getCompareReport();
+        VersionComparePayload payload = objectifyCompareReport(index.getId(), report);
         jdbcTemplate.update("""
-                        INSERT INTO oat_version_compare_report (id, project_id, app_id, job_id, job_name, job_log, source_version, target_version, git_branch, git_old_commit, git_new_commit, add_class_count, update_class_count, delete_class_count, add_method_count, update_method_count, delete_method_count, impact_case_count, differences_json, cases_json, payload_json, create_time, update_time)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON), ?, ?)
-                        ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), app_id=VALUES(app_id), job_id=VALUES(job_id), job_name=VALUES(job_name), job_log=VALUES(job_log), source_version=VALUES(source_version), target_version=VALUES(target_version), git_branch=VALUES(git_branch), git_old_commit=VALUES(git_old_commit), git_new_commit=VALUES(git_new_commit), add_class_count=VALUES(add_class_count), update_class_count=VALUES(update_class_count), delete_class_count=VALUES(delete_class_count), add_method_count=VALUES(add_method_count), update_method_count=VALUES(update_method_count), delete_method_count=VALUES(delete_method_count), impact_case_count=VALUES(impact_case_count), differences_json=VALUES(differences_json), cases_json=VALUES(cases_json), payload_json=VALUES(payload_json), create_time=VALUES(create_time), update_time=VALUES(update_time)
-                        """, index.getId(), report == null ? null : report.getProjectId(), report == null ? null : report.getAppId(), report == null ? null : report.getJobId(), report == null ? null : report.getJobName(), report == null ? null : report.getJobLog(), report == null ? null : report.getSourceVersion(), report == null ? null : report.getTargetVersion(), report == null ? null : report.getGitBranch(), report == null ? null : report.getGitOldCommit(), report == null ? null : report.getGitNewCommit(), report == null ? null : report.getAddClassCount(), report == null ? null : report.getUpdateClassCount(), report == null ? null : report.getDeleteClassCount(), report == null ? null : report.getAddMethodCount(), report == null ? null : report.getUpdateMethodCount(), report == null ? null : report.getDeleteMethodCount(), report == null ? null : report.getImpactCaseCount(), report == null ? null : UtilJson.writeValueAsString(report.getDifferences()), report == null ? null : UtilJson.writeValueAsString(report.getCases()), json(index), ts(index.getCreateTime()), ts(index.getUpdateTime()));
+                        INSERT INTO oat_version_compare_report (
+                            id, project_id, app_id, job_id, job_name, job_log, job_log_object_key,
+                            source_version, target_version, git_branch, git_old_commit, git_new_commit,
+                            add_class_count, update_class_count, delete_class_count, add_method_count,
+                            update_method_count, delete_method_count, impact_case_count,
+                            differences_json, differences_object_key, cases_json, cases_object_key,
+                            payload_json, create_time, update_time
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, CAST(? AS JSON), ?, CAST(? AS JSON), ?, ?)
+                        ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), app_id=VALUES(app_id), job_id=VALUES(job_id),
+                            job_name=VALUES(job_name), job_log=VALUES(job_log), job_log_object_key=VALUES(job_log_object_key),
+                            source_version=VALUES(source_version), target_version=VALUES(target_version), git_branch=VALUES(git_branch),
+                            git_old_commit=VALUES(git_old_commit), git_new_commit=VALUES(git_new_commit),
+                            add_class_count=VALUES(add_class_count), update_class_count=VALUES(update_class_count),
+                            delete_class_count=VALUES(delete_class_count), add_method_count=VALUES(add_method_count),
+                            update_method_count=VALUES(update_method_count), delete_method_count=VALUES(delete_method_count),
+                            impact_case_count=VALUES(impact_case_count), differences_json=VALUES(differences_json),
+                            differences_object_key=VALUES(differences_object_key), cases_json=VALUES(cases_json),
+                            cases_object_key=VALUES(cases_object_key), payload_json=VALUES(payload_json),
+                            create_time=VALUES(create_time), update_time=VALUES(update_time)
+                        """, index.getId(), report == null ? null : report.getProjectId(), report == null ? null : report.getAppId(),
+                report == null ? null : report.getJobId(), report == null ? null : report.getJobName(), payload.jobLogJson(),
+                report == null ? null : report.getJobLogObjectKey(), report == null ? null : report.getSourceVersion(),
+                report == null ? null : report.getTargetVersion(), report == null ? null : report.getGitBranch(),
+                report == null ? null : report.getGitOldCommit(), report == null ? null : report.getGitNewCommit(),
+                report == null ? null : report.getAddClassCount(), report == null ? null : report.getUpdateClassCount(),
+                report == null ? null : report.getDeleteClassCount(), report == null ? null : report.getAddMethodCount(),
+                report == null ? null : report.getUpdateMethodCount(), report == null ? null : report.getDeleteMethodCount(),
+                report == null ? null : report.getImpactCaseCount(), payload.differencesJson(),
+                report == null ? null : report.getDifferencesObjectKey(), payload.casesJson(),
+                report == null ? null : report.getCasesObjectKey(), json(index), ts(index.getCreateTime()), ts(index.getUpdateTime()));
+        restoreCompareReport(report, payload);
     }
 
     private List<VersionCenterIndex> queryVersionTop1(String where, Object... args) {
@@ -169,10 +201,80 @@ public class VersionCenterRepository {
         index.setType(rs.getString("type"));
         index.setCreateTime(toDate(rs.getTimestamp("create_time")));
         index.setUpdateTime(toDate(rs.getTimestamp("update_time")));
+        hydrateCompareReport(index);
         return index;
+    }
+
+    private VersionComparePayload objectifyCompareReport(String reportId, VersionCompareReport report) {
+        if (report == null || !coverageStorage.isAvailable()) {
+            return new VersionComparePayload(
+                    report == null ? null : report.getJobLog(),
+                    report == null ? null : UtilJson.writeValueAsString(report.getDifferences()),
+                    report == null ? null : UtilJson.writeValueAsString(report.getCases()),
+                    report == null ? null : report.getJobLog(),
+                    report == null ? null : report.getDifferences(),
+                    report == null ? null : report.getCases());
+        }
+        String jobLog = report.getJobLog();
+        VersionCompareReport.Difference[] differences = report.getDifferences();
+        VersionCompareReport.ImpactCase[] cases = report.getCases();
+        if (StringUtils.hasText(jobLog)) {
+            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + report.getAppId() + "/" + reportId + "/job-log.txt.gz", jobLog, "text/plain");
+            report.setJobLogObjectKey(object.objectKey());
+            report.setJobLog(null);
+        }
+        if (differences != null) {
+            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + report.getAppId() + "/" + reportId + "/differences.json.gz", UtilJson.writeValueAsString(differences), "application/json");
+            report.setDifferencesObjectKey(object.objectKey());
+            report.setDifferences(null);
+        }
+        if (cases != null) {
+            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + report.getAppId() + "/" + reportId + "/cases.json.gz", UtilJson.writeValueAsString(cases), "application/json");
+            report.setCasesObjectKey(object.objectKey());
+            report.setCases(null);
+        }
+        return new VersionComparePayload(null, null, null, jobLog, differences, cases);
+    }
+
+    private void restoreCompareReport(VersionCompareReport report, VersionComparePayload payload) {
+        if (report == null || payload == null) {
+            return;
+        }
+        report.setJobLog(payload.originalJobLog());
+        report.setDifferences(payload.originalDifferences());
+        report.setCases(payload.originalCases());
+    }
+
+    private void hydrateCompareReport(VersionCenterIndex index) {
+        if (index == null || index.getCompareReport() == null) {
+            return;
+        }
+        VersionCompareReport report = index.getCompareReport();
+        if (!StringUtils.hasText(report.getJobLog()) && StringUtils.hasText(report.getJobLogObjectKey())) {
+            report.setJobLog(coverageStorage.loadText(report.getJobLogObjectKey(), "gzip"));
+        }
+        if (report.getDifferences() == null && StringUtils.hasText(report.getDifferencesObjectKey())) {
+            String json = coverageStorage.loadText(report.getDifferencesObjectKey(), "gzip");
+            if (StringUtils.hasText(json)) {
+                report.setDifferences(UtilJson.convertValue(json, VersionCompareReport.Difference[].class));
+            }
+        }
+        if (report.getCases() == null && StringUtils.hasText(report.getCasesObjectKey())) {
+            String json = coverageStorage.loadText(report.getCasesObjectKey(), "gzip");
+            if (StringUtils.hasText(json)) {
+                report.setCases(UtilJson.convertValue(json, VersionCompareReport.ImpactCase[].class));
+            }
+        }
     }
 
     private String json(Object value) { return UtilJson.writeValueAsString(value); }
     private Timestamp ts(Date date) { return date == null ? null : new Timestamp(date.getTime()); }
     private Date toDate(Timestamp timestamp) { return timestamp == null ? null : new Date(timestamp.getTime()); }
+
+    private record VersionComparePayload(String jobLogJson,
+                                         String differencesJson,
+                                         String casesJson,
+                                         String originalJobLog,
+                                         VersionCompareReport.Difference[] originalDifferences,
+                                         VersionCompareReport.ImpactCase[] originalCases) {}
 }

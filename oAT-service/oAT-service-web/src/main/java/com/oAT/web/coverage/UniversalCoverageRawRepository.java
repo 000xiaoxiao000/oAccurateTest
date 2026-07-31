@@ -13,9 +13,11 @@ import java.util.UUID;
 @Repository
 public class UniversalCoverageRawRepository {
     private final JdbcTemplate jdbcTemplate;
+    private final CoverageStorage coverageStorage;
 
-    public UniversalCoverageRawRepository(JdbcTemplate jdbcTemplate) {
+    public UniversalCoverageRawRepository(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
         this.jdbcTemplate = jdbcTemplate;
+        this.coverageStorage = coverageStorage;
     }
 
     @Transactional
@@ -23,11 +25,13 @@ public class UniversalCoverageRawRepository {
         if (!StringUtils.hasText(report.id)) {
             report.id = UUID.randomUUID().toString();
         }
+        CoverageStorage.StoredObject object = storeRawCoverage(report);
         jdbcTemplate.update("""
                         INSERT INTO oat_universal_coverage_report (
                             id, project_id, app_id, source_type, commit_id, version_number,
-                            branch, case_name, build_id, test_stage, trace_id, timestamp, coverage_data
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            branch, case_name, build_id, test_stage, trace_id, timestamp, coverage_data,
+                            object_key, content_hash, content_size, compressed_size, compress_type, content_type
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 report.id,
                 report.projectId,
@@ -41,7 +45,13 @@ public class UniversalCoverageRawRepository {
                 report.testStage,
                 report.traceId,
                 report.timestamp,
-                report.coverageData);
+                object == null ? report.coverageData : null,
+                object == null ? report.objectKey : object.objectKey(),
+                object == null ? report.contentHash : object.contentHash(),
+                object == null ? report.contentSize : object.contentSize(),
+                object == null ? report.compressedSize : object.compressedSize(),
+                object == null ? report.compressType : object.compressType(),
+                object == null ? report.contentType : object.contentType());
         return report.id;
     }
 
@@ -203,7 +213,40 @@ public class UniversalCoverageRawRepository {
             report.timestamp = null;
         }
         report.coverageData = rs.getString("coverage_data");
+        report.objectKey = rs.getString("object_key");
+        report.contentHash = rs.getString("content_hash");
+        report.contentSize = getLong(rs, "content_size");
+        report.compressedSize = getLong(rs, "compressed_size");
+        report.compressType = rs.getString("compress_type");
+        report.contentType = rs.getString("content_type");
+        if (!StringUtils.hasText(report.coverageData) && StringUtils.hasText(report.objectKey)) {
+            report.coverageData = coverageStorage.loadText(report.objectKey, report.compressType);
+        }
         return report;
+    }
+
+    private CoverageStorage.StoredObject storeRawCoverage(UniversalCoverageRawReport report) {
+        if (!StringUtils.hasText(report.coverageData) || !coverageStorage.isAvailable()) {
+            return null;
+        }
+        return coverageStorage.storeText(buildObjectKey(report), report.coverageData, "application/json");
+    }
+
+    private String buildObjectKey(UniversalCoverageRawReport report) {
+        String appId = StringUtils.hasText(report.appId) ? report.appId : "unknown-app";
+        String sourceType = StringUtils.hasText(report.sourceType) ? report.sourceType : "UNKNOWN";
+        String date = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"))
+                .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+        return "coverage/raw/" + safe(appId) + "/" + safe(sourceType) + "/" + date + "/" + report.id + ".json.gz";
+    }
+
+    private String safe(String value) {
+        return value == null ? "unknown" : value.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private Long getLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
     }
 
     public static class UniversalCoverageRawReport {
@@ -220,5 +263,11 @@ public class UniversalCoverageRawRepository {
         public String traceId;
         public Long timestamp;
         public String coverageData;
+        public String objectKey;
+        public String contentHash;
+        public Long contentSize;
+        public Long compressedSize;
+        public String compressType;
+        public String contentType;
     }
 }

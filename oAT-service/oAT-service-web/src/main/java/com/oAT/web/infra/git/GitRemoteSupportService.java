@@ -6,6 +6,7 @@ import org.eclipse.jgit.api.FetchCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.LsRemoteCommand;
 import org.eclipse.jgit.lib.ObjectId;
+import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.transport.RefSpec;
@@ -21,11 +22,14 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
+import java.util.TimeZone;
 
 @Service
 public class GitRemoteSupportService {
@@ -320,8 +324,19 @@ public class GitRemoteSupportService {
         if (!StringUtils.hasText(message)) {
             message = "-";
         }
-        String author = commit.getAuthorIdent() != null ? commit.getAuthorIdent().getName() : "";
-        return new GitCommitOptionVo(commitId, shortCommitId, message, author);
+        PersonIdent ident = commit.getAuthorIdent();
+        String author = ident != null ? ident.getName() : "";
+        String commitTime = "";
+        String commitTimeText = "";
+        if (ident != null && ident.getWhen() != null) {
+            Date when = ident.getWhen();
+            TimeZone timeZone = ident.getTimeZone() != null ? ident.getTimeZone() : TimeZone.getDefault();
+            SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            formatter.setTimeZone(timeZone);
+            commitTime = when.toInstant().toString();
+            commitTimeText = formatter.format(when);
+        }
+        return new GitCommitOptionVo(commitId, shortCommitId, message, author, commitTime, commitTimeText);
     }
 
     private void deleteFile(File file) {

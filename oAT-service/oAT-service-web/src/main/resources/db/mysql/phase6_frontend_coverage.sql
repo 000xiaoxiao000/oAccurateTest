@@ -14,10 +14,17 @@ CREATE TABLE IF NOT EXISTS `oat_frontend_coverage_report` (
   `branch` VARCHAR(128),
   `case_name` VARCHAR(255),
   `timestamp` BIGINT,
-  `coverage_json` LONGTEXT NOT NULL,
+  `coverage_json` LONGTEXT,
+  `object_key` VARCHAR(768),
+  `content_hash` VARCHAR(128),
+  `content_size` BIGINT,
+  `compressed_size` BIGINT,
+  `compress_type` VARCHAR(32),
+  `content_type` VARCHAR(128),
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   INDEX `idx_frontend_cov_request_id` (`request_id`),
   INDEX `idx_frontend_cov_app_commit` (`app_id`, `commit_id`),
   INDEX `idx_frontend_cov_app_version` (`app_id`, `version_number`),
-  INDEX `idx_frontend_cov_create_time` (`create_time`)
+  INDEX `idx_frontend_cov_create_time` (`create_time`),
+  INDEX `idx_frontend_cov_object_key` (`object_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='前端 Istanbul 覆盖率原始上报表';

@@ -1,0 +1,46 @@
+{
+  "index_patterns": ["coverage_method_search-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 1,
+      "refresh_interval": "10s",
+      "index.codec": "best_compression",
+      "index.max_result_window": 10000,
+      "index.lifecycle.name": "coverage_method_search_ilm_policy"
+    },
+    "mappings": {
+      "dynamic": "false",
+      "properties": {
+        "id": {"type": "keyword"},
+        "docType": {"type": "keyword"},
+        "reportId": {"type": "keyword"},
+        "appId": {"type": "keyword"},
+        "language": {"type": "keyword"},
+        "className": {"type": "keyword"},
+        "classNameText": {"type": "text"},
+        "displayName": {"type": "keyword"},
+        "sourcePath": {"type": "keyword"},
+        "methodOrder": {"type": "integer"},
+        "methodName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+        "methodNameKeyword": {"type": "keyword"},
+        "methodDesc": {"type": "keyword"},
+        "lineRate": {"type": "float"},
+        "branchRate": {"type": "float"},
+        "methodRate": {"type": "float"},
+        "covered": {"type": "boolean"},
+        "hasCodeChanges": {"type": "boolean"},
+        "totalLines": {"type": "integer"},
+        "coveredLines": {"type": "integer"},
+        "totalBranches": {"type": "integer"},
+        "coveredBranches": {"type": "integer"},
+        "totalBranchTargets": {"type": "integer"},
+        "coveredBranchTargets": {"type": "integer"},
+        "complexity": {"type": "integer"},
+        "createTime": {"type": "date"}
+      }
+    }
+  },
+  "priority": 500,
+  "version": 1
+}

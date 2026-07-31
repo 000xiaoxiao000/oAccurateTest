@@ -23,7 +23,8 @@
         <button v-for="item in commits" :key="item.commitId" class="commit-item" type="button" @click="$emit('select', item.commitId)">
           <strong>{{ item.shortCommitId || item.commitId.slice(0, 10) }}</strong>
           <span>{{ item.message || '-' }}</span>
-          <small>{{ item.author || '-' }}</small>
+          <small class="commit-author">{{ item.author || '-' }}</small>
+          <small class="commit-time">{{ item.commitTimeText || item.commitTime || '-' }}</small>
         </button>
         <div v-if="!filteredCount" class="empty-card">未找到匹配 Commit</div>
       </div>
@@ -87,7 +88,9 @@ defineEmits<{
 .modal-card {
   width: min(720px, calc(100vw - 32px));
   max-height: min(760px, calc(100vh - 48px));
-  overflow: auto;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
 }
 
 .panel-head,
@@ -125,11 +128,14 @@ defineEmits<{
 .commit-list {
   display: grid;
   gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .commit-item {
   display: grid;
-  grid-template-columns: 120px 1fr auto;
+  grid-template-columns: 116px minmax(0, 1fr) 104px 150px;
   gap: 12px;
   align-items: center;
   border: 1px solid rgba(15, 23, 42, .08);
@@ -145,6 +151,23 @@ defineEmits<{
   color: #64748b;
 }
 
+.commit-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commit-time,
+.commit-author {
+  text-align: right;
+}
+
+.modal-card :deep(.app-pagination) {
+  flex: 0 0 auto;
+  margin-top: 12px;
+}
+
 .text-danger {
   border: none;
   background: transparent;
@@ -157,6 +180,11 @@ defineEmits<{
 @media (max-width: 840px) {
   .commit-item {
     grid-template-columns: 1fr;
+  }
+
+  .commit-time,
+  .commit-author {
+    text-align: left;
   }
 }
 </style>

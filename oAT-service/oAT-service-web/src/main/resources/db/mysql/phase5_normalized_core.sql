@@ -115,6 +115,7 @@ CREATE TABLE IF NOT EXISTS `oat_version_compare_report` (
   `job_id` VARCHAR(128),
   `job_name` VARCHAR(256),
   `job_log` TEXT,
+  `job_log_object_key` VARCHAR(768),
   `source_version` TEXT,
   `target_version` TEXT,
   `git_branch` VARCHAR(512),
@@ -128,12 +129,15 @@ CREATE TABLE IF NOT EXISTS `oat_version_compare_report` (
   `delete_method_count` INT DEFAULT 0,
   `impact_case_count` INT DEFAULT 0,
   `differences_json` JSON,
+  `differences_object_key` VARCHAR(768),
   `cases_json` JSON,
+  `cases_object_key` VARCHAR(768),
   `payload_json` JSON NOT NULL,
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_project_app_time` (`project_id`, `app_id`, `create_time`),
-  INDEX `idx_job` (`job_id`)
+  INDEX `idx_job` (`job_id`),
+  INDEX `idx_version_compare_object_keys` (`differences_object_key`(191), `cases_object_key`(191))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='版本比对报告表';
 
 CREATE TABLE IF NOT EXISTS `oat_snapshot` (
@@ -265,4 +269,3 @@ CREATE TABLE IF NOT EXISTS `oat_system_snapshot_artifact` (
   INDEX `idx_snapshot_type_order` (`snapshot_id`, `artifact_type`, `artifact_order`),
   INDEX `idx_hash` (`content_hash`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统快照大字段制品表';
-

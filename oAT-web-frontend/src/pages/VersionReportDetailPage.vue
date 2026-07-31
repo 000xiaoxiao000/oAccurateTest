@@ -93,7 +93,7 @@
       <section id="report-differences" class="panel toolbar-panel">
         <div>
           <h2>变更项</h2>
-          <p class="subtext">按老前端的类/方法结构展示，支持搜索和新增、修改、删除筛选；默认收起长列表以便快速查看重点。</p>
+          <p class="subtext">按类和方法结构展示，支持搜索和新增、修改、删除筛选；默认分页呈现以便快速查看重点。</p>
         </div>
         <div class="filter-actions">
           <input v-model.trim="keyword" class="text-input" type="search" placeholder="搜索类名、方法名或描述" aria-label="搜索变更项" />
@@ -262,7 +262,7 @@
         <div class="panel-head">
           <div>
             <h2>比对日志</h2>
-            <p class="subtext">按老前端控制台分组：变更发现、比对汇总、影响分析、运行日志。</p>
+            <p class="subtext">按任务阶段分组：变更发现、比对汇总、影响分析、运行日志。</p>
           </div>
           <div class="log-actions">
             <button class="ghost-button small" type="button" @click="logCollapsed = !logCollapsed">{{ logCollapsed ? '展开日志' : '收起日志' }}</button>

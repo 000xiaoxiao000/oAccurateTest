@@ -21,7 +21,11 @@ public class ElasticsearchTemplateInitializer {
 
     private static final Logger logger = LoggerFactory.getLogger(ElasticsearchTemplateInitializer.class);
     private static final String TRACE_NODE_TEMPLATE_NAME = "trace_node_template";
+    private static final String COVERAGE_METHOD_SEARCH_TEMPLATE_NAME = "coverage_method_search_template";
+    private static final String COVERAGE_TRENDS_TEMPLATE_NAME = "coverage_trends_template";
     private static final String TRACE_NODE_ILM_POLICY_NAME = "trace_node_ilm_policy";
+    private static final String COVERAGE_METHOD_SEARCH_ILM_POLICY_NAME = "coverage_method_search_ilm_policy";
+    private static final String COVERAGE_TRENDS_ILM_POLICY_NAME = "coverage_trends_ilm_policy";
     private static final String TRACE_NODE_WRITE_ALIAS = "trace_node_write";
     private static final DateTimeFormatter INDEX_SUFFIX = DateTimeFormatter.ofPattern("yyyy.MM");
 
@@ -34,8 +38,12 @@ public class ElasticsearchTemplateInitializer {
     @EventListener(ApplicationReadyEvent.class)
     public void initializeTemplates() {
         try {
-            createIlmPolicy();
-            createTraceNodeTemplate();
+            createIlmPolicy(TRACE_NODE_ILM_POLICY_NAME, "elasticsearch/trace_node_ilm_policy.json");
+            createIlmPolicy(COVERAGE_METHOD_SEARCH_ILM_POLICY_NAME, "elasticsearch/coverage_method_search_ilm_policy.json");
+            createIlmPolicy(COVERAGE_TRENDS_ILM_POLICY_NAME, "elasticsearch/coverage_trends_ilm_policy.json");
+            createTemplate(TRACE_NODE_TEMPLATE_NAME, "elasticsearch/trace_node_template.json");
+            createTemplate(COVERAGE_METHOD_SEARCH_TEMPLATE_NAME, "elasticsearch/coverage_method_search_template.json");
+            createTemplate(COVERAGE_TRENDS_TEMPLATE_NAME, "elasticsearch/coverage_trends_template.json");
             ensureWriteAlias();
             logger.info("Elasticsearch templates and ILM policy initialized successfully");
         } catch (Exception e) {
@@ -43,41 +51,41 @@ public class ElasticsearchTemplateInitializer {
         }
     }
 
-    private void createIlmPolicy() {
+    private void createIlmPolicy(String policyName, String resourcePath) {
         try {
-            ClassPathResource resource = new ClassPathResource("elasticsearch/trace_node_ilm_policy.json");
+            ClassPathResource resource = new ClassPathResource(resourcePath);
             if (!resource.exists()) {
-                logger.warn("trace_node_ilm_policy.json not found, skipping ILM policy creation");
+                logger.warn("{} not found, skipping ILM policy creation", resourcePath);
                 return;
             }
             try (InputStream is = resource.getInputStream()) {
                 PutLifecycleRequest request = PutLifecycleRequest.of(b -> b
-                        .name(TRACE_NODE_ILM_POLICY_NAME)
+                        .name(policyName)
                         .withJson(is));
                 elasticsearchClient.ilm().putLifecycle(request);
-                logger.info("trace_node ILM policy ensured in Elasticsearch: {}", TRACE_NODE_ILM_POLICY_NAME);
+                logger.info("ILM policy ensured in Elasticsearch: {}", policyName);
             }
         } catch (Exception e) {
-            logger.error("Failed to create trace_node ILM policy", e);
+            logger.error("Failed to create ILM policy: {}", policyName, e);
         }
     }
 
-    private void createTraceNodeTemplate() {
+    private void createTemplate(String templateName, String resourcePath) {
         try {
-            ClassPathResource resource = new ClassPathResource("elasticsearch/trace_node_template.json");
+            ClassPathResource resource = new ClassPathResource(resourcePath);
             if (!resource.exists()) {
-                logger.warn("trace_node_template.json not found, skipping template creation");
+                logger.warn("{} not found, skipping template creation", resourcePath);
                 return;
             }
             try (InputStream is = resource.getInputStream()) {
                 PutIndexTemplateRequest request = PutIndexTemplateRequest.of(builder -> builder
-                        .name(TRACE_NODE_TEMPLATE_NAME)
+                        .name(templateName)
                         .withJson(is));
                 elasticsearchClient.indices().putIndexTemplate(request);
-                logger.info("trace_node index template ensured in Elasticsearch: {}", TRACE_NODE_TEMPLATE_NAME);
+                logger.info("index template ensured in Elasticsearch: {}", templateName);
             }
         } catch (Exception e) {
-            logger.error("Failed to create trace_node template", e);
+            logger.error("Failed to create index template: {}", templateName, e);
         }
     }
 

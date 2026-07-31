@@ -10,6 +10,7 @@ public class VersionCompareReport implements Serializable {
     private String appId;
     private String jobName;
     private String jobLog;
+    private String jobLogObjectKey;
     private String sourceVersion;
     private String targetVersion;
     private String gitBranch;
@@ -19,10 +20,12 @@ public class VersionCompareReport implements Serializable {
      有差异的项
      */
     private Difference[] differences;
+    private String differencesObjectKey;
     /**
      影响的用例及关联项
      */
     private ImpactCase[] cases;
+    private String casesObjectKey;
 
     // 统计字段：类/方法/影响用例计数
     private int addClassCount;
@@ -80,6 +83,14 @@ public class VersionCompareReport implements Serializable {
         this.jobLog = jobLog;
     }
 
+    public String getJobLogObjectKey() {
+        return jobLogObjectKey;
+    }
+
+    public void setJobLogObjectKey(String jobLogObjectKey) {
+        this.jobLogObjectKey = jobLogObjectKey;
+    }
+
     public String getSourceVersion() {
         return sourceVersion;
     }
@@ -128,12 +139,28 @@ public class VersionCompareReport implements Serializable {
         this.differences = differences;
     }
 
+    public String getDifferencesObjectKey() {
+        return differencesObjectKey;
+    }
+
+    public void setDifferencesObjectKey(String differencesObjectKey) {
+        this.differencesObjectKey = differencesObjectKey;
+    }
+
     public ImpactCase[] getCases() {
         return cases;
     }
 
     public void setCases(ImpactCase[] cases) {
         this.cases = cases;
+    }
+
+    public String getCasesObjectKey() {
+        return casesObjectKey;
+    }
+
+    public void setCasesObjectKey(String casesObjectKey) {
+        this.casesObjectKey = casesObjectKey;
     }
 
     public Date getCreateTime() {

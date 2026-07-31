@@ -1,5 +1,6 @@
 package com.oAT.web.esDao;
 
+import com.oAT.web.coveragecore.index.CoverageEsIndexService;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -19,9 +20,11 @@ import java.util.UUID;
 public class CoverageReportRepository {
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<CoverageReportIndex> rowMapper = this::mapRow;
+    private final CoverageEsIndexService coverageEsIndexService;
 
-    public CoverageReportRepository(JdbcTemplate jdbcTemplate) {
+    public CoverageReportRepository(JdbcTemplate jdbcTemplate, CoverageEsIndexService coverageEsIndexService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.coverageEsIndexService = coverageEsIndexService;
     }
 
     public Optional<CoverageReportIndex> findById(String id) {
@@ -160,6 +163,7 @@ public class CoverageReportRepository {
                 report.getIncTotalBranchTargets(),
                 report.getIncCoveredBranchTargets(),
                 report.getIncTotalComplexity());
+        coverageEsIndexService.indexTrend(report);
         return report;
     }
 

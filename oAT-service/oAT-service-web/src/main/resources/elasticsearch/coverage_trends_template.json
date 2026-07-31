@@ -1,0 +1,45 @@
+{
+  "index_patterns": ["coverage_trends-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1,
+      "refresh_interval": "30s",
+      "index.codec": "best_compression",
+      "index.max_result_window": 10000,
+      "index.lifecycle.name": "coverage_trends_ilm_policy"
+    },
+    "mappings": {
+      "dynamic": "false",
+      "properties": {
+        "id": {"type": "keyword"},
+        "reportId": {"type": "keyword"},
+        "appId": {"type": "keyword"},
+        "language": {"type": "keyword"},
+        "versionNumber": {"type": "keyword"},
+        "commitId": {"type": "keyword"},
+        "branch": {"type": "keyword"},
+        "buildId": {"type": "keyword"},
+        "testStage": {"type": "keyword"},
+        "reportType": {"type": "integer"},
+        "timestamp": {"type": "date"},
+        "date": {"type": "date"},
+        "totalClasses": {"type": "long"},
+        "coveredClasses": {"type": "long"},
+        "totalMethods": {"type": "long"},
+        "coveredMethods": {"type": "long"},
+        "totalLines": {"type": "long"},
+        "coveredLines": {"type": "long"},
+        "totalBranches": {"type": "long"},
+        "coveredBranches": {"type": "long"},
+        "totalBranchTargets": {"type": "long"},
+        "coveredBranchTargets": {"type": "long"},
+        "lineRate": {"type": "float"},
+        "branchRate": {"type": "float"},
+        "methodRate": {"type": "float"}
+      }
+    }
+  },
+  "priority": 500,
+  "version": 1
+}

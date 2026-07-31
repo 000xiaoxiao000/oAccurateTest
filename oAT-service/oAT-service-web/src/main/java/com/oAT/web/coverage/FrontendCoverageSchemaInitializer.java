@@ -28,6 +28,18 @@ public class FrontendCoverageSchemaInitializer {
                 "ALTER TABLE `oat_class_coverage` ADD COLUMN `display_name` VARCHAR(512) DEFAULT NULL AFTER `language`");
         ensureColumn("oat_class_coverage", "source_path",
                 "ALTER TABLE `oat_class_coverage` ADD COLUMN `source_path` VARCHAR(1024) DEFAULT NULL AFTER `display_name`");
+        ensureIndex("oat_coverage_report", "idx_cov_report_app_create_time",
+                "CREATE INDEX `idx_cov_report_app_create_time` ON `oat_coverage_report` (`app_id`, `create_time`)");
+        ensureIndex("oat_class_coverage", "idx_class_cov_report_rates",
+                "CREATE INDEX `idx_class_cov_report_rates` ON `oat_class_coverage` (`report_id`, `line_rate`, `branch_rate`, `method_rate`, `total_complexity`)");
+        ensureColumn("oat_version_compare_report", "job_log_object_key",
+                "ALTER TABLE `oat_version_compare_report` ADD COLUMN `job_log_object_key` VARCHAR(768) DEFAULT NULL AFTER `job_log`");
+        ensureColumn("oat_version_compare_report", "differences_object_key",
+                "ALTER TABLE `oat_version_compare_report` ADD COLUMN `differences_object_key` VARCHAR(768) DEFAULT NULL AFTER `differences_json`");
+        ensureColumn("oat_version_compare_report", "cases_object_key",
+                "ALTER TABLE `oat_version_compare_report` ADD COLUMN `cases_object_key` VARCHAR(768) DEFAULT NULL AFTER `cases_json`");
+        ensureIndex("oat_version_compare_report", "idx_version_compare_object_keys",
+                "CREATE INDEX `idx_version_compare_object_keys` ON `oat_version_compare_report` (`differences_object_key`(191), `cases_object_key`(191))");
         ensureColumn("oat_app", "language",
                 "ALTER TABLE `oat_app` ADD COLUMN `language` VARCHAR(32) DEFAULT 'JAVA' AFTER `src_name`");
         ensureColumn("oat_app", "language_config_json",
@@ -45,7 +57,13 @@ public class FrontendCoverageSchemaInitializer {
                   `build_id` VARCHAR(128),
                   `test_stage` VARCHAR(64),
                   `timestamp` BIGINT,
-                  `coverage_json` LONGTEXT NOT NULL,
+                  `coverage_json` LONGTEXT,
+                  `object_key` VARCHAR(768),
+                  `content_hash` VARCHAR(128),
+                  `content_size` BIGINT,
+                  `compressed_size` BIGINT,
+                  `compress_type` VARCHAR(32),
+                  `content_type` VARCHAR(128),
                   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
                   INDEX `idx_frontend_cov_request_id` (`request_id`),
                   INDEX `idx_frontend_cov_app_commit` (`app_id`, `commit_id`),
@@ -59,10 +77,14 @@ public class FrontendCoverageSchemaInitializer {
                 "ALTER TABLE `oat_frontend_coverage_report` ADD COLUMN `build_id` VARCHAR(128) DEFAULT NULL AFTER `case_name`");
         ensureColumn("oat_frontend_coverage_report", "test_stage",
                 "ALTER TABLE `oat_frontend_coverage_report` ADD COLUMN `test_stage` VARCHAR(64) DEFAULT NULL AFTER `build_id`");
+        ensureNullableLongText("oat_frontend_coverage_report", "coverage_json");
+        ensureObjectColumns("oat_frontend_coverage_report", "coverage_json");
         ensureIndex("oat_frontend_coverage_report", "idx_frontend_cov_request_id",
                 "CREATE INDEX `idx_frontend_cov_request_id` ON `oat_frontend_coverage_report` (`request_id`)");
         ensureIndex("oat_frontend_coverage_report", "idx_frontend_cov_build_stage",
                 "CREATE INDEX `idx_frontend_cov_build_stage` ON `oat_frontend_coverage_report` (`app_id`, `build_id`, `test_stage`)");
+        ensureIndex("oat_frontend_coverage_report", "idx_frontend_cov_object_key",
+                "CREATE INDEX `idx_frontend_cov_object_key` ON `oat_frontend_coverage_report` (`object_key`)");
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS `oat_universal_coverage_report` (
                   `id` VARCHAR(64) PRIMARY KEY,
@@ -75,8 +97,15 @@ public class FrontendCoverageSchemaInitializer {
                   `case_name` VARCHAR(255),
                   `build_id` VARCHAR(128),
                   `test_stage` VARCHAR(64),
+                  `trace_id` VARCHAR(128),
                   `timestamp` BIGINT,
-                  `coverage_data` LONGTEXT NOT NULL,
+                  `coverage_data` LONGTEXT,
+                  `object_key` VARCHAR(768),
+                  `content_hash` VARCHAR(128),
+                  `content_size` BIGINT,
+                  `compressed_size` BIGINT,
+                  `compress_type` VARCHAR(32),
+                  `content_type` VARCHAR(128),
                   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
                   INDEX `idx_universal_cov_app_type_commit` (`app_id`, `source_type`, `commit_id`),
                   INDEX `idx_universal_cov_app_type_version` (`app_id`, `source_type`, `version_number`),
@@ -87,8 +116,14 @@ public class FrontendCoverageSchemaInitializer {
                 "ALTER TABLE `oat_universal_coverage_report` ADD COLUMN `build_id` VARCHAR(128) DEFAULT NULL AFTER `case_name`");
         ensureColumn("oat_universal_coverage_report", "test_stage",
                 "ALTER TABLE `oat_universal_coverage_report` ADD COLUMN `test_stage` VARCHAR(64) DEFAULT NULL AFTER `build_id`");
+        ensureColumn("oat_universal_coverage_report", "trace_id",
+                "ALTER TABLE `oat_universal_coverage_report` ADD COLUMN `trace_id` VARCHAR(128) DEFAULT NULL AFTER `test_stage`");
+        ensureNullableLongText("oat_universal_coverage_report", "coverage_data");
+        ensureObjectColumns("oat_universal_coverage_report", "coverage_data");
         ensureIndex("oat_universal_coverage_report", "idx_universal_cov_build_stage",
                 "CREATE INDEX `idx_universal_cov_build_stage` ON `oat_universal_coverage_report` (`app_id`, `source_type`, `build_id`, `test_stage`)");
+        ensureIndex("oat_universal_coverage_report", "idx_universal_cov_object_key",
+                "CREATE INDEX `idx_universal_cov_object_key` ON `oat_universal_coverage_report` (`object_key`)");
     }
 
     private void ensureSourceTypeColumn(String tableName, String afterColumn) {
@@ -117,6 +152,35 @@ public class FrontendCoverageSchemaInitializer {
             return;
         }
         jdbcTemplate.execute(alterSql);
+    }
+
+    private void ensureObjectColumns(String tableName, String afterColumn) {
+        ensureColumn(tableName, "object_key",
+                "ALTER TABLE `" + tableName + "` ADD COLUMN `object_key` VARCHAR(768) DEFAULT NULL AFTER `" + afterColumn + "`");
+        ensureColumn(tableName, "content_hash",
+                "ALTER TABLE `" + tableName + "` ADD COLUMN `content_hash` VARCHAR(128) DEFAULT NULL AFTER `object_key`");
+        ensureColumn(tableName, "content_size",
+                "ALTER TABLE `" + tableName + "` ADD COLUMN `content_size` BIGINT DEFAULT NULL AFTER `content_hash`");
+        ensureColumn(tableName, "compressed_size",
+                "ALTER TABLE `" + tableName + "` ADD COLUMN `compressed_size` BIGINT DEFAULT NULL AFTER `content_size`");
+        ensureColumn(tableName, "compress_type",
+                "ALTER TABLE `" + tableName + "` ADD COLUMN `compress_type` VARCHAR(32) DEFAULT NULL AFTER `compressed_size`");
+        ensureColumn(tableName, "content_type",
+                "ALTER TABLE `" + tableName + "` ADD COLUMN `content_type` VARCHAR(128) DEFAULT NULL AFTER `compress_type`");
+    }
+
+    private void ensureNullableLongText(String tableName, String columnName) {
+        String nullable = jdbcTemplate.queryForObject("""
+                SELECT IS_NULLABLE
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                  AND COLUMN_NAME = ?
+                """, String.class, tableName, columnName);
+        if ("YES".equalsIgnoreCase(nullable)) {
+            return;
+        }
+        jdbcTemplate.execute("ALTER TABLE `" + tableName + "` MODIFY COLUMN `" + columnName + "` LONGTEXT NULL");
     }
 
     private void ensureIndex(String tableName, String indexName, String createSql) {

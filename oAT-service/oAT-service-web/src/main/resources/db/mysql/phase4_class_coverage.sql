@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS `oat_class_coverage` (
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_report_class` (`report_id`, `class_name`),
+  INDEX `idx_class_cov_report_rates` (`report_id`, `line_rate`, `branch_rate`, `method_rate`, `total_complexity`),
   INDEX `idx_report_line_rate` (`report_id`, `line_rate`),
   INDEX `idx_report_branch_rate` (`report_id`, `branch_rate`),
   INDEX `idx_report_method_rate` (`report_id`, `method_rate`),

@@ -13,9 +13,11 @@ import java.util.UUID;
 @Repository
 public class FrontendCoverageReportRepository {
     private final JdbcTemplate jdbcTemplate;
+    private final CoverageStorage coverageStorage;
 
-    public FrontendCoverageReportRepository(JdbcTemplate jdbcTemplate) {
+    public FrontendCoverageReportRepository(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
         this.jdbcTemplate = jdbcTemplate;
+        this.coverageStorage = coverageStorage;
     }
 
     @Transactional
@@ -23,11 +25,13 @@ public class FrontendCoverageReportRepository {
         if (!StringUtils.hasText(report.id)) {
             report.id = UUID.randomUUID().toString();
         }
+        CoverageStorage.StoredObject object = storeRawCoverage(report);
         jdbcTemplate.update("""
                         INSERT INTO oat_frontend_coverage_report (
                             id, request_id, project_id, app_id, commit_id, version_number, branch,
-                            case_name, build_id, test_stage, timestamp, coverage_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            case_name, build_id, test_stage, timestamp, coverage_json,
+                            object_key, content_hash, content_size, compressed_size, compress_type, content_type
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                 report.id,
                 report.requestId,
@@ -40,7 +44,13 @@ public class FrontendCoverageReportRepository {
                 report.buildId,
                 report.testStage,
                 report.timestamp,
-                report.coverageJson);
+                object == null ? report.coverageJson : null,
+                object == null ? report.objectKey : object.objectKey(),
+                object == null ? report.contentHash : object.contentHash(),
+                object == null ? report.contentSize : object.contentSize(),
+                object == null ? report.compressedSize : object.compressedSize(),
+                object == null ? report.compressType : object.compressType(),
+                object == null ? report.contentType : object.contentType());
         return report.id;
     }
 
@@ -215,7 +225,39 @@ public class FrontendCoverageReportRepository {
             report.timestamp = null;
         }
         report.coverageJson = rs.getString("coverage_json");
+        report.objectKey = rs.getString("object_key");
+        report.contentHash = rs.getString("content_hash");
+        report.contentSize = getLong(rs, "content_size");
+        report.compressedSize = getLong(rs, "compressed_size");
+        report.compressType = rs.getString("compress_type");
+        report.contentType = rs.getString("content_type");
+        if (!StringUtils.hasText(report.coverageJson) && StringUtils.hasText(report.objectKey)) {
+            report.coverageJson = coverageStorage.loadText(report.objectKey, report.compressType);
+        }
         return report;
+    }
+
+    private CoverageStorage.StoredObject storeRawCoverage(FrontendCoverageReport report) {
+        if (!StringUtils.hasText(report.coverageJson) || !coverageStorage.isAvailable()) {
+            return null;
+        }
+        return coverageStorage.storeText(buildObjectKey(report), report.coverageJson, "application/json");
+    }
+
+    private String buildObjectKey(FrontendCoverageReport report) {
+        String appId = StringUtils.hasText(report.appId) ? report.appId : "unknown-app";
+        String date = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai"))
+                .format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+        return "coverage/frontend/" + safe(appId) + "/" + date + "/" + report.id + ".json.gz";
+    }
+
+    private String safe(String value) {
+        return value == null ? "unknown" : value.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private Long getLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
     }
 
     public static class FrontendCoverageReport {
@@ -231,5 +273,11 @@ public class FrontendCoverageReportRepository {
         public String testStage;
         public Long timestamp;
         public String coverageJson;
+        public String objectKey;
+        public String contentHash;
+        public Long contentSize;
+        public Long compressedSize;
+        public String compressType;
+        public String contentType;
     }
 }
