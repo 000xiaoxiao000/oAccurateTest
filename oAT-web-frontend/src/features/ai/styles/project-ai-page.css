@@ -2735,7 +2735,7 @@
   grid-template-columns: 320px minmax(0, 1fr);
   gap: 14px;
   min-height: 620px;
-  height: var(--ai-workspace-height);
+  height: auto;
   align-items: stretch;
 }
 
@@ -2747,7 +2747,7 @@
   min-width: 0;
   min-height: 0;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .ai-page .side-stack,
@@ -2757,9 +2757,9 @@
   display: grid;
   align-content: start;
   gap: 12px;
-  height: 100%;
-  max-height: 100%;
-  overflow: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
   padding-right: 8px;
 }
 
@@ -2789,6 +2789,19 @@
   line-height: 1.25;
   flex: 0 0 auto;
   word-break: keep-all;
+}
+
+.ai-page :deep(.panel-title-actions) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ai-page :deep(.panel-toggle) {
+  flex: 0 0 auto;
 }
 
 .ai-page :deep(.muted),
@@ -3076,8 +3089,8 @@
   gap: 12px;
   min-height: 0;
   height: 100%;
-  max-height: 100%;
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
   padding-right: 52px;
 }
 
@@ -3085,7 +3098,7 @@
   display: grid;
   align-content: start;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
   scrollbar-gutter: stable;
 }
 
@@ -3195,7 +3208,7 @@
 
 .ai-page :deep(.ask-form) {
   position: sticky;
-  bottom: 0;
+  bottom: 16px;
   z-index: 3;
   display: grid;
   gap: 10px;

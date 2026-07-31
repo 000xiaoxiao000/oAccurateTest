@@ -3,41 +3,51 @@
     <section class="panel ask-panel">
       <div class="card-title">
         <h2>会话</h2>
-        <button class="ghost-button small" type="button" @click="$emit('new-session')">新会话</button>
-      </div>
-      <div class="session-tools">
-        <input v-model.trim="sessionSearchModel" class="text-input small-input" type="search" placeholder="搜索会话标题或内容" aria-label="搜索 AI 会话" />
-        <select v-model="sessionSortModel" class="text-input small-input">
-          <option value="recent">最近更新</option>
-          <option value="oldest">最早更新</option>
-          <option value="name">标题排序</option>
-        </select>
-      </div>
-      <div class="session-list">
-        <article
-          v-for="session in visibleSessions"
-          :key="session.id"
-          class="session-card"
-          :class="{ active: session.id === activeSessionId, pinned: session.pinned }"
-        >
-          <button class="session-main" type="button" @click="$emit('switch-session', session.id)">
-            <strong>{{ session.pinned ? '★ ' : '' }}{{ session.title }}</strong>
-            <span>{{ session.messages.length }} 条消息 · {{ formatSessionTime(session.updatedAt) }}</span>
+        <div class="panel-title-actions">
+          <button class="ghost-button small" type="button" @click="$emit('new-session')">新会话</button>
+          <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('sessions')" @click="togglePanel('sessions')">
+            {{ isPanelExpanded('sessions') ? '收起' : '展开' }}
           </button>
-          <div class="session-actions">
-            <button type="button" title="置顶/取消置顶" @click="$emit('toggle-pin-session', session.id)">{{ session.pinned ? '取消置顶' : '置顶' }}</button>
-            <button type="button" title="重命名" @click="$emit('rename-session', session.id)">重命名</button>
-            <button type="button" title="删除" @click="$emit('delete-session', session.id)">删除</button>
-          </div>
-        </article>
+        </div>
+      </div>
+      <div v-show="isPanelExpanded('sessions')" class="panel-body">
+        <div class="session-tools">
+          <input v-model.trim="sessionSearchModel" class="text-input small-input" type="search" placeholder="搜索会话标题或内容" aria-label="搜索 AI 会话" />
+          <select v-model="sessionSortModel" class="text-input small-input">
+            <option value="recent">最近更新</option>
+            <option value="oldest">最早更新</option>
+            <option value="name">标题排序</option>
+          </select>
+        </div>
+        <div class="session-list">
+          <article
+            v-for="session in visibleSessions"
+            :key="session.id"
+            class="session-card"
+            :class="{ active: session.id === activeSessionId, pinned: session.pinned }"
+          >
+            <button class="session-main" type="button" @click="$emit('switch-session', session.id)">
+              <strong>{{ session.pinned ? '★ ' : '' }}{{ session.title }}</strong>
+              <span>{{ session.messages.length }} 条消息 · {{ formatSessionTime(session.updatedAt) }}</span>
+            </button>
+            <div class="session-actions">
+              <button type="button" title="置顶/取消置顶" @click="$emit('toggle-pin-session', session.id)">{{ session.pinned ? '取消置顶' : '置顶' }}</button>
+              <button type="button" title="重命名" @click="$emit('rename-session', session.id)">重命名</button>
+              <button type="button" title="删除" @click="$emit('delete-session', session.id)">删除</button>
+            </div>
+          </article>
+        </div>
       </div>
     </section>
 
     <section class="panel ability-panel">
       <div class="card-title">
         <h2>能力卡片</h2>
+        <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('abilities')" @click="togglePanel('abilities')">
+          {{ isPanelExpanded('abilities') ? '收起' : '展开' }}
+        </button>
       </div>
-      <div class="ability-list">
+      <div v-show="isPanelExpanded('abilities')" class="ability-list panel-body">
         <article v-for="card in context.abilityCards" :key="`${card.title}-${card.value}`" class="ability-card">
           <strong>{{ card.title }}</strong>
           <span class="ability-value">{{ card.value }}</span>
@@ -49,8 +59,11 @@
     <section class="panel">
       <div class="card-title">
         <h2>快速问题</h2>
+        <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('questions')" @click="togglePanel('questions')">
+          {{ isPanelExpanded('questions') ? '收起' : '展开' }}
+        </button>
       </div>
-      <div class="question-list">
+      <div v-show="isPanelExpanded('questions')" class="question-list panel-body">
         <button
           v-for="question in context.starterQuestions"
           :key="question"
@@ -66,9 +79,14 @@
     <section class="panel">
       <div class="card-title">
         <h2>快捷入口</h2>
-        <span class="muted">{{ mergedQuickLinks.length }} 个</span>
+        <div class="panel-title-actions">
+          <span class="muted">{{ mergedQuickLinks.length }} 个</span>
+          <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('links')" @click="togglePanel('links')">
+            {{ isPanelExpanded('links') ? '收起' : '展开' }}
+          </button>
+        </div>
       </div>
-      <div class="link-list compact-links">
+      <div v-show="isPanelExpanded('links')" class="link-list compact-links panel-body">
         <button v-for="link in mergedQuickLinks" :key="link.title + link.url" class="link-card link-button" type="button" @click="$emit('open-link', link)">
           <strong>{{ link.title }}</strong>
           <span>{{ link.description }}</span>
@@ -80,9 +98,14 @@
     <section class="panel">
       <div class="card-title">
         <h2>项目上下文</h2>
-        <span class="muted">{{ context.appNames.length }} 个应用</span>
+        <div class="panel-title-actions">
+          <span class="muted">{{ context.appNames.length }} 个应用</span>
+          <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('context')" @click="togglePanel('context')">
+            {{ isPanelExpanded('context') ? '收起' : '展开' }}
+          </button>
+        </div>
       </div>
-      <div class="context-list">
+      <div v-show="isPanelExpanded('context')" class="context-list panel-body">
         <div class="context-row">
           <span>AI 形象</span>
           <strong>{{ context.mascot?.mascotName || 'AI' }} · {{ context.mascot?.mascotRole || '助手' }}</strong>
@@ -101,96 +124,113 @@
     <section class="panel learning-panel">
       <div class="card-title">
         <h2>AI 自主学习</h2>
-        <button class="ghost-button small" type="button" :disabled="learningLoading" @click="$emit('refresh-learning')">
-          {{ learningLoading ? '刷新中...' : '刷新报告' }}
-        </button>
-      </div>
-      <div v-if="learningError" class="learning-error">{{ learningError }}</div>
-      <div v-else class="learning-grid">
-        <article class="meta-card">
-          <span>反馈总数</span>
-          <strong>{{ feedbackStats?.total ?? 0 }}</strong>
-        </article>
-        <article class="meta-card">
-          <span>满意度</span>
-          <strong>{{ feedbackStats?.satisfactionRate || '0%' }}</strong>
-        </article>
-        <article class="meta-card">
-          <span>知识库条目</span>
-          <strong>{{ selfLearningStatus?.knowledgeBaseSize ?? 0 }}</strong>
-        </article>
-        <article class="meta-card">
-          <span>跟踪主题</span>
-          <strong>{{ selfLearningStatus?.trackedTopics ?? 0 }}</strong>
-        </article>
-      </div>
-      <div v-if="learningReport?.suggestions?.length" class="learning-suggestions">
-        <div class="learning-suggestions-header">
-          <h3>优化建议</h3>
-          <div class="learning-suggestions-actions">
-            <span class="muted">{{ learningReport.suggestions.length }} 条</span>
-            <button class="ghost-button small" type="button" :disabled="learningLoading" @click="$emit('clear-learning-suggestions')">清空</button>
-          </div>
+        <div class="panel-title-actions">
+          <button class="ghost-button small" type="button" :disabled="learningLoading" @click="$emit('refresh-learning')">
+            {{ learningLoading ? '刷新中...' : '刷新报告' }}
+          </button>
+          <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('learning')" @click="togglePanel('learning')">
+            {{ isPanelExpanded('learning') ? '收起' : '展开' }}
+          </button>
         </div>
-        <div class="learning-suggestions-list">
-          <article v-for="item in learningReport.suggestions" :key="item.id" class="learning-suggestion" :class="item.priority.toLowerCase()">
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.description }}</p>
+      </div>
+      <div v-show="isPanelExpanded('learning')" class="panel-body">
+        <div v-if="learningError" class="learning-error">{{ learningError }}</div>
+        <div v-else class="learning-grid">
+          <article class="meta-card">
+            <span>反馈总数</span>
+            <strong>{{ feedbackStats?.total ?? 0 }}</strong>
+          </article>
+          <article class="meta-card">
+            <span>满意度</span>
+            <strong>{{ feedbackStats?.satisfactionRate || '0%' }}</strong>
+          </article>
+          <article class="meta-card">
+            <span>知识库条目</span>
+            <strong>{{ selfLearningStatus?.knowledgeBaseSize ?? 0 }}</strong>
+          </article>
+          <article class="meta-card">
+            <span>跟踪主题</span>
+            <strong>{{ selfLearningStatus?.trackedTopics ?? 0 }}</strong>
           </article>
         </div>
+        <div v-if="learningReport?.suggestions?.length" class="learning-suggestions">
+          <div class="learning-suggestions-header">
+            <h3>优化建议</h3>
+            <div class="learning-suggestions-actions">
+              <span class="muted">{{ learningReport.suggestions.length }} 条</span>
+              <button class="ghost-button small" type="button" :disabled="learningLoading" @click="$emit('clear-learning-suggestions')">清空</button>
+            </div>
+          </div>
+          <div class="learning-suggestions-list">
+            <article v-for="item in learningReport.suggestions" :key="item.id" class="learning-suggestion" :class="item.priority.toLowerCase()">
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.description }}</p>
+            </article>
+          </div>
+        </div>
+        <p v-else class="learning-empty">提交回答反馈后，系统会自动积累知识并生成优化建议。</p>
       </div>
-      <p v-else class="learning-empty">提交回答反馈后，系统会自动积累知识并生成优化建议。</p>
     </section>
 
     <section class="panel">
       <div class="card-title">
         <h2>提问锚点</h2>
-        <span class="muted">{{ visibleQuestionAnchors.length }}/{{ questionAnchors.length }} 个</span>
-      </div>
-      <div class="anchor-tools">
-        <div class="anchor-filter" role="group" aria-label="锚点筛选">
-          <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'all' }" type="button" @click="$emit('update:anchorFilterMode', 'all')">全部</button>
-          <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'pending' }" type="button" @click="$emit('update:anchorFilterMode', 'pending')">仅看未回复</button>
+        <div class="panel-title-actions">
+          <span class="muted">{{ visibleQuestionAnchors.length }}/{{ questionAnchors.length }} 个</span>
+          <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('anchors')" @click="togglePanel('anchors')">
+            {{ isPanelExpanded('anchors') ? '收起' : '展开' }}
+          </button>
         </div>
-        <div class="anchor-search-row">
-          <input v-model.trim="anchorSearchModel" class="text-input small-input" type="search" placeholder="搜索问题关键词" aria-label="搜索提问锚点" />
-          <button v-if="anchorSearch" class="anchor-clear" type="button" title="清空搜索" @click="$emit('update:anchorSearch', '')">×</button>
-        </div>
-        <p class="anchor-tip">点击可快速定位到对应问答</p>
       </div>
-      <div class="anchor-list">
-        <button
-          v-for="anchor in visibleQuestionAnchors"
-          :key="anchor.id"
-          class="anchor-item"
-          :class="{ active: activeAnchorId === anchor.id, pending: !anchor.answered, answered: anchor.answered, expanded: expandedAnchorIds.has(anchor.id) }"
-          type="button"
-          @mouseenter="$emit('update:previewAnchorId', anchor.id)"
-          @mouseleave="$emit('update:previewAnchorId', '')"
-          @click="$emit('scroll-to-anchor', anchor.id)"
-        >
-          <span class="anchor-top">
-            <strong>{{ anchor.label }}</strong>
-            <span class="anchor-status" :class="anchor.answered ? 'answered' : 'pending'">
-              <i></i>{{ anchor.answered ? '已回复' : '待回复' }}
+      <div v-show="isPanelExpanded('anchors')" class="panel-body">
+        <div class="anchor-tools">
+          <div class="anchor-filter" role="group" aria-label="锚点筛选">
+            <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'all' }" type="button" @click="$emit('update:anchorFilterMode', 'all')">全部</button>
+            <button class="anchor-filter-button" :class="{ active: anchorFilterMode === 'pending' }" type="button" @click="$emit('update:anchorFilterMode', 'pending')">仅看未回复</button>
+          </div>
+          <div class="anchor-search-row">
+            <input v-model.trim="anchorSearchModel" class="text-input small-input" type="search" placeholder="搜索问题关键词" aria-label="搜索提问锚点" />
+            <button v-if="anchorSearch" class="anchor-clear" type="button" title="清空搜索" @click="$emit('update:anchorSearch', '')">×</button>
+          </div>
+          <p class="anchor-tip">点击可快速定位到对应问答</p>
+        </div>
+        <div class="anchor-list">
+          <button
+            v-for="anchor in visibleQuestionAnchors"
+            :key="anchor.id"
+            class="anchor-item"
+            :class="{ active: activeAnchorId === anchor.id, pending: !anchor.answered, answered: anchor.answered, expanded: expandedAnchorIds.has(anchor.id) }"
+            type="button"
+            @mouseenter="$emit('update:previewAnchorId', anchor.id)"
+            @mouseleave="$emit('update:previewAnchorId', '')"
+            @click="$emit('scroll-to-anchor', anchor.id)"
+          >
+            <span class="anchor-top">
+              <strong>{{ anchor.label }}</strong>
+              <span class="anchor-status" :class="anchor.answered ? 'answered' : 'pending'">
+                <i></i>{{ anchor.answered ? '已回复' : '待回复' }}
+              </span>
             </span>
-          </span>
-          <span class="anchor-question">{{ anchor.question }}</span>
-          <span class="anchor-meta">{{ anchor.responseTimeText || (anchor.answered ? '已生成回答' : '等待回复中') }}</span>
-          <span class="anchor-actions" @click.stop>
-            <button class="anchor-link-button" type="button" @click="$emit('toggle-anchor-text', anchor.id)">{{ expandedAnchorIds.has(anchor.id) ? '收起' : '展开' }}</button>
-            <button class="anchor-link-button" type="button" @click="$emit('copy-anchor-link', anchor)">复制链接</button>
-          </span>
-        </button>
-        <div v-if="!visibleQuestionAnchors.length" class="empty-card compact">暂无匹配的提问锚点</div>
+            <span class="anchor-question">{{ anchor.question }}</span>
+            <span class="anchor-meta">{{ anchor.responseTimeText || (anchor.answered ? '已生成回答' : '等待回复中') }}</span>
+            <span class="anchor-actions" @click.stop>
+              <button class="anchor-link-button" type="button" @click="$emit('toggle-anchor-text', anchor.id)">{{ expandedAnchorIds.has(anchor.id) ? '收起' : '展开' }}</button>
+              <button class="anchor-link-button" type="button" @click="$emit('copy-anchor-link', anchor)">复制链接</button>
+            </span>
+          </button>
+          <div v-if="!visibleQuestionAnchors.length" class="empty-card compact">暂无匹配的提问锚点</div>
+        </div>
       </div>
     </section>
 
     <section class="panel">
       <div class="card-title">
         <h2>会话时间线</h2>
+        <button class="ghost-button small panel-toggle" type="button" :aria-expanded="isPanelExpanded('timeline')" @click="togglePanel('timeline')">
+          {{ isPanelExpanded('timeline') ? '收起' : '展开' }}
+        </button>
       </div>
-      <div class="timeline-list">
+      <div v-show="isPanelExpanded('timeline')" class="timeline-list panel-body">
         <button
           v-for="item in timelineItems"
           :key="item.id"
@@ -210,7 +250,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 import type { AIFeedbackStats, AIInteractivePagePayload, AILearningReport, AIQuickLink } from '@/api/types'
 import type { AiChatSession, AiQuestionAnchor, AiTimelineItem } from '@/features/ai/types'
@@ -268,6 +308,21 @@ const anchorSearchModel = computed({
   set: (value: string) => emit('update:anchorSearch', value),
 })
 const selfLearningStatus = computed(() => props.feedbackStats?.selfLearning || null)
+const collapsedPanelIds = ref<Set<string>>(new Set())
+
+function isPanelExpanded(panelId: string) {
+  return !collapsedPanelIds.value.has(panelId)
+}
+
+function togglePanel(panelId: string) {
+  const next = new Set(collapsedPanelIds.value)
+  if (next.has(panelId)) {
+    next.delete(panelId)
+  } else {
+    next.add(panelId)
+  }
+  collapsedPanelIds.value = next
+}
 
 function formatSessionTime(value: number) {
   if (!value) return '-'
