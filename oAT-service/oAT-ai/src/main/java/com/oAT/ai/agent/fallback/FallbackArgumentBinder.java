@@ -1,5 +1,6 @@
 package com.oAT.ai.agent.fallback;
 
+import com.oAT.ai.agent.cache.ToolCallCacheSupport;
 import dev.langchain4j.agent.tool.P;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -307,9 +308,14 @@ public final class FallbackArgumentBinder {
             if (report != null) {
                 report.strategy = relaxedMode ? "relaxed" : "strict";
             }
+            String cached = ToolCallCacheSupport.getCachedResult(binding.method.getName(), args);
+            if (cached != null) {
+                return FallbackExecutionResult.success(cached);
+            }
             Object[] invokeArgs = buildMethodArguments(binding.method, args, schema, relaxedMode, report);
             binding.method.setAccessible(true);
             Object result = binding.method.invoke(binding.toolInstance, invokeArgs);
+            ToolCallCacheSupport.cacheResult(binding.method.getName(), args, result != null ? result.toString() : null);
             return FallbackExecutionResult.success(result);
         } catch (Exception e) {
             String strategy = relaxedMode ? "relaxed" : "strict";

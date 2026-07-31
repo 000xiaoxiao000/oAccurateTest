@@ -202,7 +202,7 @@ public class EnhancedToolCallCache {
      */
     private void printStats() {
         CacheStats stats = getStats();
-        logger.info("Cache Stats: entries={}, expired={}, hits={}, misses={}, hitRate={}%, size={}KB",
+        logger.info("Cache Stats: entries(当前缓存条目数)={}, expired(已过期条目数)={}, hits(缓存命中次数)={}, misses(缓存未命中次数)={}, hitRate(缓存命中率)={}%, size(缓存占用大小)={}KB",
             stats.getTotalEntries(),
             stats.getExpiredEntries(),
             stats.getTotalHits(),

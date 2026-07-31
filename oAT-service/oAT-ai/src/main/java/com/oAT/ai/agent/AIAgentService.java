@@ -7,6 +7,7 @@ import com.oAT.ai.agent.fallback.FallbackToolExecutionService;
 import com.oAT.ai.agent.fallback.FallbackToolMethodBinding;
 import com.oAT.ai.agent.fallback.FallbackToolMethodSchema;
 import com.oAT.ai.agent.fallback.FallbackToolParameterSchema;
+import com.oAT.ai.agent.cache.CachedToolExecutor;
 import com.oAT.ai.agent.cache.SemanticCacheService;
 import com.oAT.ai.agent.tools.*;
 import com.oAT.ai.config.AIConfig;
@@ -226,7 +227,7 @@ public class AIAgentService {
 
     private void registerToolProviderEntry(Object toolInstance, Method method) {
         ToolSpecification specification = ToolSpecifications.toolSpecificationFrom(method);
-        ToolExecutor executor = new DefaultToolExecutor(toolInstance, method);
+        ToolExecutor executor = new CachedToolExecutor(method.getName(), new DefaultToolExecutor(toolInstance, method));
         AIToolProviderEntry entry = new AIToolProviderEntry(specification, executor);
         registerToolProviderEntry(method.getName(), entry);
         registerToolProviderEntry(specification.name(), entry);
