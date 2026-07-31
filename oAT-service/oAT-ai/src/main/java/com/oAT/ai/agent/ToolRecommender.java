@@ -75,8 +75,6 @@ public class ToolRecommender {
                 "mcdc", "测试率", "代码覆盖率", "覆盖率", "未覆盖", "漏测", "覆盖率是多少", "这个项目的代码覆盖率", "项目覆盖率",
                 "整体覆盖率", "覆盖率概览", "覆盖率最低", "哪个模块的覆盖率最低", "低覆盖模块", "低覆盖类", "覆盖率最高",
                 "覆盖率趋势", "历史覆盖率", "最近覆盖率", "覆盖率报告"));
-        INTENT_KEYWORDS.put("performance", Set.of("性能", "performance", "慢接口",
-                "响应时间", "平均响应", "p50", "p95", "p99", "延迟", "耗时", "吞吐量", "调用频率", "回归", "退化", "基线", "性能回归", "性能退化"));
         INTENT_KEYWORDS.put("defect", Set.of("缺陷", "defect", "错误", "error",
                 "异常", "exception", "bug", "故障", "HTTP错误", "5xx", "4xx", "定位", "根因", "线上", "异常定位", "根因定位", "线上缺陷"));
         INTENT_KEYWORDS.put("bug_detect", Set.of("bug", "可能存在", "潜在bug", "潜在问题", "代码缺陷",
@@ -352,7 +350,6 @@ public class ToolRecommender {
         if (containsAny(lowerQuestion, "线上缺陷", "快速定位", "故障定位", "根因定位", "异常定位")) {
             boost(scores, "defect", 3.5);
             boost(scores, "trace", 3.0);
-            boost(scores, "performance", 1.0);
         }
         if (containsAny(lowerQuestion, "低覆盖", "高风险", "补测", "测试盲区", "覆盖缺口")) {
             boost(scores, "coverage", 3.0);
@@ -360,7 +357,6 @@ public class ToolRecommender {
             boost(scores, "code_quality", 1.5);
         }
         if (containsAny(lowerQuestion, "性能回归", "性能退化", "耗时变慢", "基线对比", "回归分析")) {
-            boost(scores, "performance", 3.5);
             boost(scores, "trace", 2.5);
         }
     }
@@ -472,11 +468,6 @@ public class ToolRecommender {
                 return 8.0;
             }
         }
-        if (containsAny(lowerQuestion, "性能回归", "性能退化", "耗时变慢", "基线对比", "回归分析")) {
-            if (Set.of("compareOverTime", "getAppPerformanceOverview", "getSlowEndpoints", "getEndpointCallFrequency", "analyzeUrlCallPattern").contains(toolName)) {
-                return 8.0;
-            }
-        }
         if (containsAny(lowerQuestion, "生成覆盖率", "拉取代码", "自动生成", "生成报告", "覆盖率生成")) {
             if ("generateCoverageReport".equals(toolName)) return 20.0;
             if (Set.of("checkGitConfiguration", "queryJobStatus").contains(toolName)) return 8.0;
@@ -565,15 +556,6 @@ public class ToolRecommender {
 
         registerTool(new ToolMeta("searchCodeRelation", "代码关系搜索",
                 "搜索代码中的调用/引用关系", new String[]{"代码关系", "searchRelation"}, new String[]{"code_relation"}));
-
-        registerTool(new ToolMeta("getAppPerformanceOverview", "性能概览",
-                "获取应用的整体性能指标", new String[]{"性能", "performance", "概览"}, new String[]{"performance"}));
-
-        registerTool(new ToolMeta("getSlowEndpoints", "慢接口分析",
-                "找出响应时间最长的接口", new String[]{"慢接口", "slow", "endpoint"}, new String[]{"performance"}));
-
-        registerTool(new ToolMeta("getEndpointCallFrequency", "接口调用频次",
-                "统计各接口的调用次数", new String[]{"调用频率", "frequency", "热点"}, new String[]{"performance"}));
 
         registerTool(new ToolMeta("getDefectOverview", "缺陷概览",
                 "获取缺陷和错误的总体情况", new String[]{"缺陷", "defect", "概览"}, new String[]{"defect"}));

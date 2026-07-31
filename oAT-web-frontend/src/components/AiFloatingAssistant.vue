@@ -465,12 +465,17 @@ async function sendQuestion() {
   }
   asking.value = true
   error.value = ''
+  const currentImageData = imageData.value
   messages.value.push({ id: uid(), role: 'user', text: text || (attachmentName.value ? `[附件：${attachmentName.value}]` : '[图片提问]') })
+  question.value = ''
+  imageData.value = ''
+  attachmentName.value = ''
+  attachmentText.value = ''
   try {
     const result = await projectStore.askAi(projectId.value, {
       question: `${text}${attachmentPrompt}`,
       pageContext: buildPageContext(text, route.fullPath),
-      imageData: imageData.value || undefined,
+      imageData: currentImageData || undefined,
       sessionState: JSON.stringify({ messages: messages.value.slice(-20) }),
       memoryScope: 'assistant',
     })
@@ -488,10 +493,6 @@ async function sendQuestion() {
       actions: result.actions || [],
     })
     await executeAutoAction(result.actions)
-    question.value = ''
-    imageData.value = ''
-    attachmentName.value = ''
-    attachmentText.value = ''
   } catch (err) {
     error.value = friendlyAiError(err)
     messages.value.push({ id: uid(), role: 'assistant', text: error.value })

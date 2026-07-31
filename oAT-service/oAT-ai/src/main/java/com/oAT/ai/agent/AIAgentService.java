@@ -161,7 +161,6 @@ public class AIAgentService {
         TraceQueryTool traceQueryTool = new TraceQueryTool(dataProvider);
         SnapshotTool snapshotTool = new SnapshotTool(dataProvider);
         CodeRelationTool codeRelationTool = new CodeRelationTool(dataProvider);
-        PerformanceAnalysisTool performanceTool = new PerformanceAnalysisTool(dataProvider);
         DefectStatisticsTool defectTool = new DefectStatisticsTool(dataProvider);
         TestcaseRecommendationTool testcaseTool = new TestcaseRecommendationTool(dataProvider);
         CodeQualityTool codeQualityTool = new CodeQualityTool(dataProvider);
@@ -176,7 +175,6 @@ public class AIAgentService {
         tools.add(traceQueryTool);
         tools.add(snapshotTool);
         tools.add(codeRelationTool);
-        tools.add(performanceTool);
         tools.add(defectTool);
         tools.add(testcaseTool);
         tools.add(codeQualityTool);
@@ -192,7 +190,6 @@ public class AIAgentService {
         registerTool(traceQueryTool);
         registerTool(snapshotTool);
         registerTool(codeRelationTool);
-        registerTool(performanceTool);
         registerTool(defectTool);
         registerTool(testcaseTool);
         registerTool(codeQualityTool);
@@ -315,6 +312,9 @@ public class AIAgentService {
         if (isToolCatalogQuestion(question)) {
             return buildToolCatalogResponse();
         }
+        if (isUnsupportedPerformanceQuestion(question)) {
+            return unsupportedPerformanceAnswer();
+        }
         if (!isAvailable()) {
             return null;
         }
@@ -348,6 +348,9 @@ public class AIAgentService {
         if (isToolCatalogQuestion(question)) {
             return buildToolCatalogResponse();
         }
+        if (isUnsupportedPerformanceQuestion(question)) {
+            return unsupportedPerformanceAnswer();
+        }
         if (!isAvailable()) {
             return null;
         }
@@ -380,6 +383,9 @@ public class AIAgentService {
         if (isToolCatalogQuestion(question)) {
             return buildToolCatalogResponse();
         }
+        if (isUnsupportedPerformanceQuestion(question)) {
+            return unsupportedPerformanceAnswer();
+        }
         if (!isAvailable()) {
             return null;
         }
@@ -404,7 +410,7 @@ public class AIAgentService {
     }
 
     private String resolveEarlyAnswer(String question) {
-        if (semanticCacheEnabled) {
+        if (!isRealtimeQuestion(question) && semanticCacheEnabled) {
             SemanticCacheService.CachedResponse cached = semanticCacheService.get(question);
             if (cached != null && cached.isFromCache() && cached.getAnswer() != null) {
                 logger.info("Semantic cache hit for question: {}",
@@ -413,7 +419,7 @@ public class AIAgentService {
             }
         }
 
-        if (selfLearningEnabled && knowledgeHitEnabled) {
+        if (!isRealtimeQuestion(question) && selfLearningEnabled && knowledgeHitEnabled) {
             try {
                 AISelfLearningService selfLearning = getSelfLearningService();
                 String learnedAnswer = selfLearning.findBestPracticeAnswer(question);
@@ -430,6 +436,33 @@ public class AIAgentService {
             }
         }
         return null;
+    }
+
+    private boolean isRealtimeQuestion(String question) {
+        if (question == null) {
+            return false;
+        }
+        String normalized = question.toLowerCase(Locale.ROOT);
+        return normalized.contains("在线") || normalized.contains("离线")
+                || normalized.contains("运行状态") || normalized.contains("应用状态")
+                || normalized.contains("应用列表") || normalized.contains("哪些应用")
+                || normalized.contains("online") || normalized.contains("offline");
+    }
+
+    private boolean isUnsupportedPerformanceQuestion(String question) {
+        if (question == null) {
+            return false;
+        }
+        String normalized = question.toLowerCase(Locale.ROOT);
+        return normalized.contains("性能") || normalized.contains("performance")
+                || normalized.contains("慢接口") || normalized.contains("响应时间")
+                || normalized.contains("p95") || normalized.contains("p99")
+                || normalized.contains("延迟") || normalized.contains("吞吐量")
+                || normalized.contains("性能回归") || normalized.contains("性能退化");
+    }
+
+    private String unsupportedPerformanceAnswer() {
+        return "当前系统未接入可用于性能判断的可靠指标（如完整请求量、响应耗时分布和时间窗口），因此不提供性能结论。请使用监控系统或 APM 查询性能数据，避免依据应用在线状态推断性能。";
     }
 
     private String finalizeAgentResponse(AgentContext context,

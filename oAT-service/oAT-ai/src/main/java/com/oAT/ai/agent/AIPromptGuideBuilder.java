@@ -72,8 +72,7 @@ public final class AIPromptGuideBuilder {
             answerFocus = "输出模块优先级、风险原因、缺失场景、补测用例建议、预期覆盖提升；优先结合低覆盖、复杂度、调用关系和缺陷数据排序。";
         } else if (containsAny(normalized, "性能回归", "性能退化", "耗时变慢", "基线对比", "回归分析")) {
             scenario = "性能回归分析";
-            preferredTools.addAll(Arrays.asList("compareOverTime", "getAppPerformanceOverview", "getSlowEndpoints", "getEndpointCallFrequency", "analyzeUrlCallPattern"));
-            answerFocus = "输出基线对比、退化接口、P95/P99/平均耗时变化、慢链路节点、可能原因和验证建议；缺少接口时先找慢接口和性能概览。";
+            answerFocus = "当前未接入可靠的性能指标查询能力，不要调用工具或根据在线状态推断性能；明确告知用户使用 APM/监控系统查询。";
         }
 
         if (scenario == null) {
@@ -147,7 +146,6 @@ public final class AIPromptGuideBuilder {
         categoryNames.put("app_status", "项目与应用");
         categoryNames.put("coverage", "覆盖率分析");
         categoryNames.put("trace", "调用链路");
-        categoryNames.put("performance", "性能分析");
         categoryNames.put("defect", "缺陷与异常");
         categoryNames.put("testcase", "测试推荐");
         categoryNames.put("code_relation", "代码关系");

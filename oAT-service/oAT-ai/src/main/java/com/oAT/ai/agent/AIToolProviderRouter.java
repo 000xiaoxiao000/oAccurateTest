@@ -86,8 +86,6 @@ final class AIToolProviderRouter {
             addAll(toolNames, "generateCoverageReport", "queryJobStatus", "downloadCoverageReport", "checkGitConfiguration", "getApps", "searchAppByName");
         } else if (containsAny(normalized, "覆盖", "coverage", "低覆盖", "未覆盖", "覆盖率")) {
             addAll(toolNames, "getProjectCoverageOverview", "getAppCoverageReport", "getLowCoverageClasses", "getCoverageImprovementSuggestions", "getApps", "searchAppByName");
-        } else if (containsAny(normalized, "性能", "performance", "慢接口", "响应时间", "p95", "p99", "耗时", "退化")) {
-            addAll(toolNames, "getAppPerformanceOverview", "getSlowEndpoints", "getEndpointCallFrequency", "compareOverTime", "getApps", "searchAppByName");
         } else if (containsAny(normalized, "缺陷", "defect", "错误", "error", "异常", "exception", "根因")) {
             addAll(toolNames, "getDefectOverview", "getRecentExceptions", "getAppErrorDetails", "getRecentTraces", "locateRootCause", "getApps");
         } else if (containsAny(normalized, "链路", "trace", "调用链", "span", "链路详情")) {

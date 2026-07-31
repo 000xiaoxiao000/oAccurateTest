@@ -1504,6 +1504,14 @@
   flex: 0 0 14px;
 }
 
+.attachment-svg,
+.send-svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+
 .send-icon::before {
   position: absolute;
   inset: 2px 1px 2px 3px;
@@ -1748,14 +1756,14 @@
 }
 
 .ai-page :deep(.ask-workspace-panel .ask-form.is-dragging) {
-  border-color: #3867f5;
+  border-color: var(--ai-accent);
   border-style: dashed;
-  background: #f8fbff;
-  box-shadow: 0 0 0 4px rgba(56, 103, 245, .12), 0 16px 36px rgba(15, 23, 42, .07);
+  background: var(--ai-accent-surface);
+  box-shadow: 0 0 0 4px var(--ai-accent-border), 0 16px 36px rgba(15, 23, 42, .07);
 }
 
 .ai-page :deep(.ask-workspace-panel .ask-form.is-dragging .text-area) {
-  background: #f8fbff;
+  background: var(--ai-accent-surface);
 }
 
 .ai-page :deep(.ask-workspace-panel .ask-form:focus-within) {
@@ -1856,7 +1864,7 @@
   border: 0;
   border-radius: 999px;
   padding: 0;
-  background: #3867f5;
+  background: var(--ai-accent);
   color: #fff;
   box-shadow: none;
   transform: none;
@@ -1864,7 +1872,7 @@
 
 .ai-page :deep(.ask-workspace-panel .deepseek-send-button:hover:not(:disabled)),
 .ai-page :deep(.ask-workspace-panel .send-button:hover:not(:disabled)) {
-  background: #2f59df;
+  background: var(--ai-accent-strong);
   transform: translateY(-1px);
 }
 
@@ -4198,12 +4206,13 @@
 }
 
 .ai-page :deep(.compose-image-preview) {
+  position: relative;
   display: grid;
   place-items: center;
   width: 76px;
   height: 76px;
   flex: 0 0 76px;
-  overflow: hidden;
+  overflow: visible;
   border: 1px solid var(--ai-final-border);
   border-radius: 14px;
   background: #f8fafc;
@@ -4212,7 +4221,29 @@
 .ai-page :deep(.compose-image-preview img) {
   width: 100%;
   height: 100%;
+  border-radius: 13px;
   object-fit: cover;
+}
+
+.ai-page :deep(.compose-image-remove) {
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  padding: 0;
+  background: #4b5563;
+  color: #fff;
+  cursor: pointer;
+  transition: background .16s ease;
+}
+
+.ai-page :deep(.compose-image-remove:hover) {
+  background: #1f2937;
 }
 
 .ai-page :deep(.compose-file-card) {
@@ -4220,26 +4251,28 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  width: min(360px, 100%);
+  width: min(280px, 100%);
   min-width: 0;
-  min-height: 76px;
+  min-height: 60px;
   border: 1px solid var(--ai-final-border);
-  border-radius: 16px;
-  padding: 10px 38px 10px 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
   background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
 }
 
 .ai-page :deep(.compose-file-icon) {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  border-radius: 10px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--ai-accent) 16%, white);
   color: var(--ai-final-primary-dark);
   font-size: 10px;
   font-weight: 900;
+  letter-spacing: .02em;
 }
 
 .ai-page :deep(.compose-file-copy) {
@@ -4267,19 +4300,24 @@
 
 .ai-page :deep(.compose-file-remove) {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: -7px;
+  left: -7px;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 0;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #fff;
   border-radius: 999px;
-  background: #64707a;
+  padding: 0;
+  background: #4b5563;
   color: #fff;
-  font-size: 18px;
   line-height: 1;
   cursor: pointer;
+  transition: background .16s ease;
+}
+
+.ai-page :deep(.compose-file-remove:hover) {
+  background: #1f2937;
 }
 
 @media (max-width: 720px) {
@@ -4433,13 +4471,13 @@
   border: 0;
   border-radius: 999px;
   padding: 0;
-  background: #3867f5;
+  background: var(--ai-accent);
   color: #fff;
 }
 
 .ai-page :deep(.ask-workspace-panel .deepseek-send-button:hover:not(:disabled)),
 .ai-page :deep(.ask-workspace-panel .send-button:hover:not(:disabled)) {
-  background: #2f59df;
+  background: var(--ai-accent-strong);
 }
 
 .ai-page :deep(.ask-workspace-panel .send-label),
@@ -4548,8 +4586,8 @@
 }
 
 .ai-page :deep(.ask-workspace-panel .ask-form.is-dragging) {
-  border-color: #3867f5;
+  border-color: var(--ai-accent);
   border-style: dashed;
-  background: #f8fbff;
-  box-shadow: 0 0 0 4px rgba(56, 103, 245, .12), 0 16px 36px rgba(15, 23, 42, .07);
+  background: var(--ai-accent-surface);
+  box-shadow: 0 0 0 4px var(--ai-accent-border), 0 16px 36px rgba(15, 23, 42, .07);
 }

@@ -59,6 +59,7 @@
             :asking="asking"
             :image-data="imageData"
             :attachment-name="attachmentName"
+            :attachment-size="attachmentSize"
             :recording="recording"
             :active-messages="activeMessages"
             :message-sections="messageSections"
@@ -136,6 +137,7 @@ const question = ref('')
 const askWorkspaceRef = ref<InstanceType<typeof ProjectAiAskWorkspace> | null>(null)
 const imageData = ref('')
 const attachmentName = ref('')
+const attachmentSize = ref(0)
 const attachmentPromptText = ref('')
 const recording = ref(false)
 let recognition: SpeechRecognitionLike | null = null
@@ -339,9 +341,15 @@ async function submitAsk() {
   }
   asking.value = true
   error.value = ''
+  const currentQuestion = question.value.trim()
+  const currentImageData = imageData.value
+  question.value = ''
+  imageData.value = ''
+  attachmentName.value = ''
+  attachmentSize.value = 0
+  attachmentPromptText.value = ''
   try {
     ensureActiveSession()
-    const currentQuestion = question.value.trim()
     activeSession.value?.messages.push({
       id: createMessageId(),
       role: 'user',
@@ -354,7 +362,7 @@ async function submitAsk() {
     const assistantMessage: AiSessionMessage = { id: createMessageId(), role: 'assistant', text: '正在连接 AI 流式响应...' }
     activeSession.value?.messages.push(assistantMessage)
     const startedAt = performance.now()
-    await askAiWithFallback(currentQuestion, assistantMessage)
+    await askAiWithFallback(currentQuestion, assistantMessage, currentImageData)
     assistantMessage.responseTime = Math.max(1, Math.round(performance.now() - startedAt))
     await executeAutoAction(reply.value?.actions)
     touchSession(activeSession.value)
@@ -362,10 +370,6 @@ async function submitAsk() {
     await nextTick()
     const latestAnchor = questionAnchors.value[questionAnchors.value.length - 1]
     if (latestAnchor) scrollToAnchor(latestAnchor.id)
-    question.value = ''
-    imageData.value = ''
-    attachmentName.value = ''
-    attachmentPromptText.value = ''
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       const lastAssistant = [...activeMessages.value].reverse().find((item) => item.role === 'assistant')
@@ -536,16 +540,16 @@ async function executeAutoAction(actions?: AIAction[]) {
 }
 
 
-async function askAiWithFallback(currentQuestion: string, assistantMessage: AiSessionMessage) {
+async function askAiWithFallback(currentQuestion: string, assistantMessage: AiSessionMessage, currentImageData = '') {
   try {
-    await askAiStreaming(currentQuestion, assistantMessage)
+    await askAiStreaming(currentQuestion, assistantMessage, currentImageData)
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err
     assistantMessage.text = '流式响应不可用，正在切换普通响应...'
     const reply = await projectStore.askAi(projectId.value, {
       question: currentQuestion,
       pageContext: `route=/p/${projectId.value}/ai`,
-      imageData: imageData.value || undefined,
+      imageData: currentImageData || undefined,
       sessionState: buildSessionState(),
       activeSessionId: activeSessionId.value,
       sessionSortMode: sessionSort.value,
@@ -568,7 +572,7 @@ function friendlyAiError(err: unknown) {
   return err instanceof Error ? err.message : 'AI 提问失败'
 }
 
-async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessionMessage) {
+async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessionMessage, currentImageData = '') {
   askAbortController = new AbortController()
   const body = new URLSearchParams()
   body.set('question', currentQuestion)
@@ -577,7 +581,7 @@ async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessi
   body.set('activeSessionId', activeSessionId.value)
   body.set('sessionSortMode', sessionSort.value)
   body.set('memoryScope', 'workbench')
-  if (imageData.value) body.set('imageData', imageData.value)
+  if (currentImageData) body.set('imageData', currentImageData)
   const response = await fetch(backendApiUrl(`/api/projects/${projectId.value}/ai/ask/stream`), {
     method: 'POST',
     credentials: 'include',
@@ -682,6 +686,7 @@ function handleAttachmentFile(file: File) {
   error.value = ''
   imageData.value = ''
   attachmentName.value = file.name
+  attachmentSize.value = file.size
   const metadata = `文件名：${file.name}\n类型：${file.type || '未知'}\n大小：${formatAttachmentSize(file.size)}`
   if (file.type.startsWith('image/')) {
     const reader = new FileReader()
@@ -710,6 +715,7 @@ function clearImage() {
   }
   imageData.value = ''
   attachmentName.value = ''
+  attachmentSize.value = 0
   attachmentPromptText.value = ''
 }
 

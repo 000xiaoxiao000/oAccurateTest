@@ -26,7 +26,9 @@ public final class ToolCallCacheSupport {
     private static final Set<String> NON_CACHEABLE_TOOL_PREFIXES = Set.of(
             "generate", "download", "clear", "delete", "remove", "create", "update", "save", "submit", "start", "stop", "cancel");
     private static final Set<String> NON_CACHEABLE_TOOL_NAMES = Set.of(
-            "queryjobstatus", "checkgitconfiguration");
+            "queryjobstatus", "checkgitconfiguration",
+            // 应用在线状态来自实时会话，不能复用几分钟前的结果。
+            "getapps", "getonlineapps", "getappdetail", "searchappbyname");
 
     private ToolCallCacheSupport() {
     }

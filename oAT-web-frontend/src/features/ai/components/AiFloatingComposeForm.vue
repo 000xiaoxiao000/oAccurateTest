@@ -10,13 +10,15 @@
     <textarea :value="question" rows="3" placeholder="随时提问，例如：这个页面的数据该从哪里看" @input="$emit('update:question', ($event.target as HTMLTextAreaElement).value)" @keydown.enter.exact="$emit('enter', $event)" @paste="handlePaste"></textarea>
     <input ref="imageInput" type="file" accept="image/*,.txt,.md,.json,.yaml,.yml,.csv,.log,.xml,.html,.css,.js,.ts,.java,.py,.sql,.pdf,.doc,.docx,.xls,.xlsx" class="hidden-input" @change="$emit('image-change', $event)" />
     <div class="compose-actions">
-      <span class="state">{{ stateText }}</span>
-      <div class="toolbar">
+      <div class="toolbar toolbar-left">
         <button type="button" :class="['tool-button', (imageData || attachmentName) && 'active']" aria-label="添加文件或图片" title="添加文件或图片" @click="selectImage">
           <svg class="tool-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </button>
+        <span class="state">{{ stateText }}</span>
+      </div>
+      <div class="toolbar toolbar-right">
         <button class="send-button" type="submit" :disabled="asking" aria-label="发送问题" title="发送问题">
           <svg class="send-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path d="M12 20V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -119,8 +121,8 @@ function handlePaste(event: ClipboardEvent) {
 
 .compose textarea::placeholder { color: #94a3b8; }
 .compose textarea:focus { box-shadow: none; }
-.compose.is-dragging { border-color: #3867f5; border-style: dashed; background: #f8fbff; box-shadow: 0 0 0 4px rgba(56, 103, 245, .12), 0 12px 28px rgba(15, 23, 42, .08); }
-.compose.is-dragging textarea { background: #f8fbff; }
+.compose.is-dragging { border-color: #0f766e; border-style: dashed; background: #f0fdfa; box-shadow: 0 0 0 4px rgba(15, 118, 110, .12), 0 12px 28px rgba(15, 23, 42, .08); }
+.compose.is-dragging textarea { background: #f0fdfa; }
 
 .compose-actions,
 .toolbar {
@@ -133,6 +135,9 @@ function handlePaste(event: ClipboardEvent) {
   gap: 10px;
   min-height: 34px;
 }
+
+.toolbar-left { flex: 1 1 auto; min-width: 0; }
+.toolbar-right { flex: 0 0 auto; }
 
 .state {
   min-width: 0;
