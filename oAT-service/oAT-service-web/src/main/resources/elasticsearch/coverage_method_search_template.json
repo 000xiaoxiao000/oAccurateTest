@@ -19,6 +19,7 @@
         "language": {"type": "keyword"},
         "className": {"type": "keyword"},
         "classNameText": {"type": "text"},
+        "methodNamesText": {"type": "text"},
         "displayName": {"type": "keyword"},
         "sourcePath": {"type": "keyword"},
         "methodOrder": {"type": "integer"},

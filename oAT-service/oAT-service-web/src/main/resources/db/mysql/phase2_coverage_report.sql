@@ -1,3 +1,6 @@
+CREATE DATABASE IF NOT EXISTS `oaccurate_test` DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_0900_ai_ci;
+USE `oaccurate_test`;
+
 CREATE TABLE IF NOT EXISTS `oat_coverage_report` (
   `id` VARCHAR(64) PRIMARY KEY,
   `app_id` VARCHAR(64) NOT NULL,

@@ -1,0 +1,37 @@
+{
+  "index_patterns": ["probe_alert-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1,
+      "refresh_interval": "5s"
+    },
+    "mappings": {
+      "dynamic": "false",
+      "properties": {
+        "id": { "type": "keyword" },
+        "projectId": { "type": "keyword" },
+        "appId": { "type": "keyword" },
+        "appName": { "type": "keyword" },
+        "probeKey": { "type": "keyword" },
+        "sessionId": { "type": "keyword" },
+        "addressIp": { "type": "keyword" },
+        "pid": { "type": "keyword" },
+        "systemDir": { "type": "keyword", "index": false },
+        "agentVersion": { "type": "keyword" },
+        "eventType": { "type": "keyword" },
+        "eventTime": { "type": "date", "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS" },
+        "lastHeartbeatTime": { "type": "long" },
+        "offlineDurationMillis": { "type": "long" },
+        "message": { "type": "text" },
+        "notifyEnabled": { "type": "boolean" },
+        "notifyStatus": { "type": "keyword" },
+        "notifyChannel": { "type": "keyword" },
+        "notifyResponse": { "type": "text", "index": false },
+        "notifyError": { "type": "text" },
+        "createTime": { "type": "date", "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS" },
+        "updateTime": { "type": "date", "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS" }
+      }
+    }
+  }
+}

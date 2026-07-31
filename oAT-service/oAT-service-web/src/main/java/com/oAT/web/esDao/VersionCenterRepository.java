@@ -206,30 +206,25 @@ public class VersionCenterRepository {
     }
 
     private VersionComparePayload objectifyCompareReport(String reportId, VersionCompareReport report) {
-        if (report == null || !coverageStorage.isAvailable()) {
-            return new VersionComparePayload(
-                    report == null ? null : report.getJobLog(),
-                    report == null ? null : UtilJson.writeValueAsString(report.getDifferences()),
-                    report == null ? null : UtilJson.writeValueAsString(report.getCases()),
-                    report == null ? null : report.getJobLog(),
-                    report == null ? null : report.getDifferences(),
-                    report == null ? null : report.getCases());
+        if (report == null) {
+            return new VersionComparePayload(null, null, null, null, null, null);
         }
         String jobLog = report.getJobLog();
         VersionCompareReport.Difference[] differences = report.getDifferences();
         VersionCompareReport.ImpactCase[] cases = report.getCases();
+        String appId = safe(report.getAppId());
         if (StringUtils.hasText(jobLog)) {
-            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + report.getAppId() + "/" + reportId + "/job-log.txt.gz", jobLog, "text/plain");
+            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + appId + "/" + reportId + "/job-log.txt.gz", jobLog, "text/plain");
             report.setJobLogObjectKey(object.objectKey());
             report.setJobLog(null);
         }
         if (differences != null) {
-            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + report.getAppId() + "/" + reportId + "/differences.json.gz", UtilJson.writeValueAsString(differences), "application/json");
+            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + appId + "/" + reportId + "/differences.json.gz", UtilJson.writeValueAsString(differences), "application/json");
             report.setDifferencesObjectKey(object.objectKey());
             report.setDifferences(null);
         }
         if (cases != null) {
-            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + report.getAppId() + "/" + reportId + "/cases.json.gz", UtilJson.writeValueAsString(cases), "application/json");
+            CoverageStorage.StoredObject object = coverageStorage.storeText("version-report/" + appId + "/" + reportId + "/cases.json.gz", UtilJson.writeValueAsString(cases), "application/json");
             report.setCasesObjectKey(object.objectKey());
             report.setCases(null);
         }
@@ -270,6 +265,7 @@ public class VersionCenterRepository {
     private String json(Object value) { return UtilJson.writeValueAsString(value); }
     private Timestamp ts(Date date) { return date == null ? null : new Timestamp(date.getTime()); }
     private Date toDate(Timestamp timestamp) { return timestamp == null ? null : new Date(timestamp.getTime()); }
+    private String safe(String value) { return StringUtils.hasText(value) ? value.replaceAll("[^a-zA-Z0-9._-]", "_") : "unknown"; }
 
     private record VersionComparePayload(String jobLogJson,
                                          String differencesJson,

@@ -23,17 +23,20 @@ public class StorageMigrationStartupRunner implements ApplicationRunner, Ordered
     private final int batchSize;
     private final int maxRounds;
     private final boolean exitOnComplete;
+    private final boolean rebuildEsReadModel;
 
     public StorageMigrationStartupRunner(CoverageStorageMigrationService migrationService,
                                          ConfigurableApplicationContext applicationContext,
                                          @Value("${oat.storage.migration.batch-size:100}") int batchSize,
                                          @Value("${oat.storage.migration.max-rounds:10000}") int maxRounds,
-                                         @Value("${oat.storage.migration.exit-on-complete:true}") boolean exitOnComplete) {
+                                         @Value("${oat.storage.migration.exit-on-complete:true}") boolean exitOnComplete,
+                                         @Value("${oat.storage.migration.rebuild-es-read-model:false}") boolean rebuildEsReadModel) {
         this.migrationService = migrationService;
         this.applicationContext = applicationContext;
         this.batchSize = batchSize;
         this.maxRounds = maxRounds;
         this.exitOnComplete = exitOnComplete;
+        this.rebuildEsReadModel = rebuildEsReadModel;
     }
 
     @Override
@@ -48,6 +51,7 @@ public class StorageMigrationStartupRunner implements ApplicationRunner, Ordered
             logger.info("Storage migration pending before round {}: {}", rounds + 1, pending);
             if (pendingTotal <= 0) {
                 logger.info("Storage migration completed: no pending rows");
+                rebuildEsReadModelIfNeeded(effectiveBatchSize);
                 exitIfNeeded(0);
                 return;
             }
@@ -80,6 +84,23 @@ public class StorageMigrationStartupRunner implements ApplicationRunner, Ordered
             }
         }
         return total;
+    }
+
+    private void rebuildEsReadModelIfNeeded(int limit) {
+        if (!rebuildEsReadModel) {
+            return;
+        }
+        int offset = 0;
+        while (true) {
+            Map<String, Integer> rebuilt = migrationService.rebuildCoverageEsReadModel(limit, offset);
+            logger.info("Coverage ES read model rebuilt batch: {}", rebuilt);
+            int reports = rebuilt.getOrDefault("coverageTrendsIndexed", 0);
+            int classes = rebuilt.getOrDefault("coverageMethodSearchClassesIndexed", 0);
+            if (reports < limit && classes < limit) {
+                return;
+            }
+            offset += limit;
+        }
     }
 
     private void exitIfNeeded(int code) {

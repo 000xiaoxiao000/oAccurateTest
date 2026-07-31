@@ -42,6 +42,21 @@ public class CoverageReportRepository {
         return query("app_id = ? AND version_number = ?", appId, versionNumber);
     }
 
+    public List<CoverageReportIndex> findBatchForEsRebuild(int limit) {
+        return findBatchForEsRebuild(limit, 0);
+    }
+
+    public List<CoverageReportIndex> findBatchForEsRebuild(int limit, int offset) {
+        return jdbcTemplate.query("""
+                        SELECT * FROM oat_coverage_report
+                        ORDER BY create_time DESC
+                        LIMIT ? OFFSET ?
+                        """,
+                rowMapper,
+                Math.max(1, Math.min(limit, 1000)),
+                Math.max(offset, 0));
+    }
+
     public long countByAppIdAndVersionNumber(String appId, String versionNumber) {
         Long count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(1) FROM oat_coverage_report WHERE app_id = ? AND version_number = ?",

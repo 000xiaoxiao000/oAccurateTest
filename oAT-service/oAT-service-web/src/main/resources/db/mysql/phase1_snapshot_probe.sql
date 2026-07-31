@@ -1,3 +1,6 @@
+CREATE DATABASE IF NOT EXISTS `oaccurate_test` DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_0900_ai_ci;
+USE `oaccurate_test`;
+
 CREATE TABLE IF NOT EXISTS `oat_snapshot_commit_mapping` (
   `id` VARCHAR(64) PRIMARY KEY,
   `snapshot_id` VARCHAR(64) NOT NULL,
@@ -62,4 +65,5 @@ CREATE TABLE IF NOT EXISTS `oat_client_session` (
   INDEX `idx_last_heartbeat_time` (`last_heartbeat_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户端会话表';
 
--- system 索引已按计划拆分到 phase5_normalized_core.sql 中的 oat_user/oat_project/oat_app/oat_label_group/oat_project_member/oat_system_log。
+-- system 索引已按计划拆分到 phase5_normalized_core.sql 中的 oat_user/oat_project/oat_app/oat_label_group/oat_project_member。
+-- system_log 属于日志检索读模型，按 coverage-storage-plan.md 进入 ES。

@@ -2,6 +2,7 @@ package com.oAT.web.esDao;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.oAT.web.common.UtilJson;
+import com.oAT.web.coveragecore.index.CoverageEsIndexService.CoverageClassIdSearchResult;
 import com.oAT.web.coveragecore.index.CoverageEsIndexService;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.ClassCoverageIndex.MethodCoverageDetail;
@@ -18,7 +19,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -59,6 +63,18 @@ public class ClassCoverageRepository {
                 methods_json = VALUES(methods_json),
                 update_time = CURRENT_TIMESTAMP
             """;
+    private static final String UPSERT_METHOD_SQL = """
+            INSERT INTO oat_method_coverage (
+                id, class_coverage_id, report_id, app_id, class_name, method_name, method_desc, method_order,
+                total_lines, covered_lines, total_branches, covered_branches, total_branch_targets, covered_branch_targets,
+                complexity, covered, branch_rate, has_code_changes, detail_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
+            ON DUPLICATE KEY UPDATE method_name=VALUES(method_name), method_desc=VALUES(method_desc), method_order=VALUES(method_order),
+                total_lines=VALUES(total_lines), covered_lines=VALUES(covered_lines), total_branches=VALUES(total_branches),
+                covered_branches=VALUES(covered_branches), total_branch_targets=VALUES(total_branch_targets),
+                covered_branch_targets=VALUES(covered_branch_targets), complexity=VALUES(complexity), covered=VALUES(covered),
+                branch_rate=VALUES(branch_rate), has_code_changes=VALUES(has_code_changes), detail_json=VALUES(detail_json), update_time=CURRENT_TIMESTAMP
+            """;
 
     public ClassCoverageRepository(JdbcTemplate jdbcTemplate, CoverageEsIndexService coverageEsIndexService) {
         this.jdbcTemplate = jdbcTemplate;
@@ -83,6 +99,21 @@ public class ClassCoverageRepository {
                         ORDER BY class_name ASC
                         """,
                 detailRowMapper, reportId);
+    }
+
+    public List<ClassCoverageIndex> findBatchWithMethodsForEsRebuild(int limit) {
+        return findBatchWithMethodsForEsRebuild(limit, 0);
+    }
+
+    public List<ClassCoverageIndex> findBatchWithMethodsForEsRebuild(int limit, int offset) {
+        return jdbcTemplate.query("""
+                        SELECT * FROM oat_class_coverage
+                        ORDER BY update_time DESC, id ASC
+                        LIMIT ? OFFSET ?
+                        """,
+                detailRowMapper,
+                Math.max(1, Math.min(limit, 1000)),
+                Math.max(offset, 0));
     }
 
     public Page<ClassCoverageIndex> findByReportIdWithMethods(String reportId, Pageable pageable) {
@@ -112,6 +143,16 @@ public class ClassCoverageRepository {
                                                            Integer minComplexity,
                                                            Integer maxComplexity,
                                                            Pageable pageable) {
+        int page = pageable == null || pageable.isUnpaged() ? 0 : pageable.getPageNumber();
+        int size = pageable == null || pageable.isUnpaged() ? 500 : pageable.getPageSize();
+        CoverageClassIdSearchResult esResult = coverageEsIndexService.searchClassCoverageIds(reportId, className, methodName,
+                minLineRate, maxLineRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate,
+                minComplexity, maxComplexity, null, page, size);
+        if (esResult.isAvailable()) {
+            List<ClassCoverageIndex> content = findSummaryByIds(esResult.getIds());
+            return new PageImpl<>(content, pageable == null ? Pageable.unpaged() : pageable, esResult.getTotal());
+        }
+
         StringBuilder sql = new StringBuilder("SELECT * FROM oat_class_coverage c WHERE c.report_id = ?");
         List<Object> parameters = new ArrayList<>();
         parameters.add(reportId);
@@ -144,6 +185,13 @@ public class ClassCoverageRepository {
                                                        Integer minComplexity,
                                                        Integer maxComplexity,
                                                        String classNamePrefix) {
+        CoverageClassIdSearchResult esResult = coverageEsIndexService.searchTreeClassCoverageIds(reportId, className, methodName,
+                minLineRate, maxLineRate, minBranchRate, maxBranchRate, minMethodRate, maxMethodRate,
+                minComplexity, maxComplexity, classNamePrefix);
+        if (esResult.isAvailable()) {
+            return findSummaryByIds(esResult.getIds());
+        }
+
         StringBuilder sql = new StringBuilder("SELECT * FROM oat_class_coverage c WHERE c.report_id = ?");
         List<Object> parameters = new ArrayList<>();
         parameters.add(reportId);
@@ -168,9 +216,7 @@ public class ClassCoverageRepository {
             return saved;
         }
         jdbcTemplate.batchUpdate(UPSERT_CLASS_SQL, saved, 500, this::bindClassCoverage);
-        for (ClassCoverageIndex index : saved) {
-            saveMethodCoverage(index);
-        }
+        saveMethodCoverage(saved);
         coverageEsIndexService.indexClassCoverage(saved);
         return saved;
     }
@@ -179,7 +225,7 @@ public class ClassCoverageRepository {
     public ClassCoverageIndex save(ClassCoverageIndex index) {
         normalize(index);
         jdbcTemplate.update(UPSERT_CLASS_SQL, ps -> bindClassCoverage(ps, index));
-        saveMethodCoverage(index);
+        saveMethodCoverage(List.of(index));
         coverageEsIndexService.indexClassCoverage(List.of(index));
         return index;
     }
@@ -253,45 +299,80 @@ public class ClassCoverageRepository {
         }
     }
 
-    private void saveMethodCoverage(ClassCoverageIndex index) {
-        jdbcTemplate.update("DELETE FROM oat_method_coverage WHERE class_coverage_id = ?", index.getId());
-        if (index.getMethods() == null) {
+    private List<ClassCoverageIndex> findSummaryByIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        String placeholders = String.join(",", Collections.nCopies(ids.size(), "?"));
+        List<ClassCoverageIndex> rows = jdbcTemplate.query("""
+                        SELECT * FROM oat_class_coverage
+                        WHERE id IN (%s)
+                        """.formatted(placeholders),
+                summaryRowMapper,
+                ids.toArray());
+        Map<String, ClassCoverageIndex> byId = new HashMap<>();
+        for (ClassCoverageIndex row : rows) {
+            byId.put(row.getId(), row);
+        }
+        List<ClassCoverageIndex> ordered = new ArrayList<>();
+        for (String id : ids) {
+            ClassCoverageIndex row = byId.get(id);
+            if (row != null) {
+                ordered.add(row);
+            }
+        }
+        return ordered;
+    }
+
+    private void saveMethodCoverage(List<ClassCoverageIndex> indexes) {
+        List<String> classIds = indexes.stream()
+                .map(ClassCoverageIndex::getId)
+                .filter(StringUtils::hasText)
+                .toList();
+        if (!classIds.isEmpty()) {
+            jdbcTemplate.batchUpdate("DELETE FROM oat_method_coverage WHERE class_coverage_id = ?",
+                    classIds,
+                    500,
+                    (ps, classId) -> ps.setString(1, classId));
+        }
+        List<MethodCoverageRow> rows = new ArrayList<>();
+        for (ClassCoverageIndex index : indexes) {
+            if (index.getMethods() == null) {
+                continue;
+            }
+            for (int i = 0; i < index.getMethods().size(); i++) {
+                rows.add(new MethodCoverageRow(index, index.getMethods().get(i), i));
+            }
+        }
+        if (rows.isEmpty()) {
             return;
         }
-        for (int i = 0; i < index.getMethods().size(); i++) {
-            MethodCoverageDetail method = index.getMethods().get(i);
-            jdbcTemplate.update("""
-                            INSERT INTO oat_method_coverage (
-                                id, class_coverage_id, report_id, app_id, class_name, method_name, method_desc, method_order,
-                                total_lines, covered_lines, total_branches, covered_branches, total_branch_targets, covered_branch_targets,
-                                complexity, covered, branch_rate, has_code_changes, detail_json
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
-                            ON DUPLICATE KEY UPDATE method_name=VALUES(method_name), method_desc=VALUES(method_desc), method_order=VALUES(method_order),
-                                total_lines=VALUES(total_lines), covered_lines=VALUES(covered_lines), total_branches=VALUES(total_branches),
-                                covered_branches=VALUES(covered_branches), total_branch_targets=VALUES(total_branch_targets),
-                                covered_branch_targets=VALUES(covered_branch_targets), complexity=VALUES(complexity), covered=VALUES(covered),
-                                branch_rate=VALUES(branch_rate), has_code_changes=VALUES(has_code_changes), detail_json=VALUES(detail_json), update_time=CURRENT_TIMESTAMP
-                            """,
-                    index.getId() + "_" + i,
-                    index.getId(),
-                    index.getReportId(),
-                    index.getAppId(),
-                    index.getClassName(),
-                    method == null ? null : method.getMethodName(),
-                    method == null ? null : method.getMethodDesc(),
-                    i,
-                    method == null ? null : method.getTotalLines(),
-                    method == null ? null : method.getCoveredLines(),
-                    method == null ? null : method.getTotalBranches(),
-                    method == null ? null : method.getCoveredBranches(),
-                    method == null ? null : method.getTotalBranchTargets(),
-                    method == null ? null : method.getCoveredBranchTargets(),
-                    method == null ? null : method.getComplexity(),
-                    method == null ? null : method.isCovered(),
-                    method == null ? null : method.getBranchRate(),
-                    method == null ? null : method.isHasCodeChanges(),
-                    UtilJson.writeValueAsString(method));
-        }
+        jdbcTemplate.batchUpdate(UPSERT_METHOD_SQL, rows, 500, this::bindMethodCoverage);
+    }
+
+    private void bindMethodCoverage(PreparedStatement ps, MethodCoverageRow row) throws SQLException {
+        ClassCoverageIndex index = row.index();
+        MethodCoverageDetail method = row.method();
+        int i = row.order();
+        ps.setString(1, index.getId() + "_" + i);
+        ps.setString(2, index.getId());
+        ps.setString(3, index.getReportId());
+        ps.setString(4, index.getAppId());
+        ps.setString(5, index.getClassName());
+        ps.setString(6, method == null ? null : method.getMethodName());
+        ps.setString(7, method == null ? null : method.getMethodDesc());
+        ps.setInt(8, i);
+        ps.setObject(9, method == null ? null : method.getTotalLines());
+        ps.setObject(10, method == null ? null : method.getCoveredLines());
+        ps.setObject(11, method == null ? null : method.getTotalBranches());
+        ps.setObject(12, method == null ? null : method.getCoveredBranches());
+        ps.setObject(13, method == null ? null : method.getTotalBranchTargets());
+        ps.setObject(14, method == null ? null : method.getCoveredBranchTargets());
+        ps.setObject(15, method == null ? null : method.getComplexity());
+        ps.setObject(16, method == null ? null : method.isCovered());
+        ps.setObject(17, method == null ? null : method.getBranchRate());
+        ps.setObject(18, method == null ? null : method.isHasCodeChanges());
+        ps.setString(19, UtilJson.writeValueAsString(method));
     }
 
     private List<MethodCoverageDetail> loadMethodCoverage(ClassCoverageIndex index) throws SQLException {
@@ -465,4 +546,6 @@ public class ClassCoverageRepository {
             return null;
         }
     }
+
+    private record MethodCoverageRow(ClassCoverageIndex index, MethodCoverageDetail method, int order) {}
 }

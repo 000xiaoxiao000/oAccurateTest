@@ -1,3 +1,6 @@
+CREATE DATABASE IF NOT EXISTS `oaccurate_test` DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_0900_ai_ci;
+USE `oaccurate_test`;
+
 CREATE TABLE IF NOT EXISTS `oat_user` (
   `id` VARCHAR(64) PRIMARY KEY,
   `name` VARCHAR(128),
@@ -75,20 +78,6 @@ CREATE TABLE IF NOT EXISTS `oat_project_member` (
   UNIQUE KEY `uk_project_member` (`project_id`, `member_id`),
   INDEX `idx_member` (`member_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目成员表';
-
-CREATE TABLE IF NOT EXISTS `oat_system_log` (
-  `id` VARCHAR(64) PRIMARY KEY,
-  `project_id` VARCHAR(64),
-  `user_id` VARCHAR(64),
-  `user_name` VARCHAR(128),
-  `action` VARCHAR(128),
-  `title` TEXT,
-  `payload_json` JSON NOT NULL,
-  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX `idx_project_time` (`project_id`, `update_time`),
-  INDEX `idx_user` (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统日志表';
 
 CREATE TABLE IF NOT EXISTS `oat_version` (
   `id` VARCHAR(64) PRIMARY KEY,

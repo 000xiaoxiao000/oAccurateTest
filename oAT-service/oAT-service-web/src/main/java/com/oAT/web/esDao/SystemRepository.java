@@ -1,8 +1,17 @@
 package com.oAT.web.esDao;
 
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.query_dsl.TermQuery;
+import co.elastic.clients.elasticsearch.core.DeleteByQueryRequest;
 import com.oAT.web.common.UtilJson;
 import com.oAT.web.esDao.entity.*;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.elasticsearch.client.elc.NativeQuery;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -12,20 +21,33 @@ import org.springframework.util.StringUtils;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.StreamSupport;
 
 @Repository
 public class SystemRepository {
+    private static final String SYSTEM_LOG_INDEX_ALIAS = "system_log";
+    private static final String SYSTEM_LOG_INDEX_PATTERN = "system_log-*";
+    private static final DateTimeFormatter INDEX_SUFFIX = DateTimeFormatter.ofPattern("yyyy.MM");
+
     private final JdbcTemplate jdbcTemplate;
+    private final ElasticsearchOperations elasticsearchOperations;
+    private final ElasticsearchClient elasticsearchClient;
     private final RowMapper<SystemIndex> rowMapper = this::mapRow;
 
-    public SystemRepository(JdbcTemplate jdbcTemplate) {
+    public SystemRepository(JdbcTemplate jdbcTemplate,
+                            ElasticsearchOperations elasticsearchOperations,
+                            ElasticsearchClient elasticsearchClient) {
         this.jdbcTemplate = jdbcTemplate;
+        this.elasticsearchOperations = elasticsearchOperations;
+        this.elasticsearchClient = elasticsearchClient;
     }
 
     public Optional<SystemIndex> findById(String id) {
-        return queryUnion("id = ?", null, id).stream().findFirst();
+        Optional<SystemIndex> mysqlIndex = queryUnion("id = ?", null, id).stream().findFirst();
+        return mysqlIndex.isPresent() ? mysqlIndex : findSystemLogById(id);
     }
 
     public boolean existsById(String id) {
@@ -36,11 +58,10 @@ public class SystemRepository {
                           UNION ALL SELECT COUNT(1) FROM oat_app WHERE id = ?
                           UNION ALL SELECT COUNT(1) FROM oat_label_group WHERE id = ?
                           UNION ALL SELECT COUNT(1) FROM oat_project_member WHERE id = ?
-                          UNION ALL SELECT COUNT(1) FROM oat_system_log WHERE id = ?
                         ) t
                         """,
-                Integer.class, id, id, id, id, id, id);
-        return count != null && count > 0;
+                Integer.class, id, id, id, id, id);
+        return (count != null && count > 0) || findSystemLogById(id).isPresent();
     }
 
     public List<SystemIndex> findAllById(Iterable<String> ids) {
@@ -79,7 +100,7 @@ public class SystemRepository {
     }
 
     public List<SystemIndex> findBySystemLog_ProjectId(String projectId, Pageable pageable) {
-        return queryPage("systemLog", "project_id = ?", pageable, projectId);
+        return findSystemLogsByProjectId(projectId, pageable);
     }
 
     public List<SystemIndex> findAll() {
@@ -95,7 +116,7 @@ public class SystemRepository {
             case "app" -> saveApp(index);
             case "labelGroup" -> saveLabelGroup(index);
             case "projectMember" -> saveProjectMember(index);
-            case "systemLog" -> saveSystemLog(index);
+            case "systemLog" -> saveSystemLogToEs(index);
             default -> throw new IllegalArgumentException("unsupported system index type: " + index.getType());
         }
         return index;
@@ -108,7 +129,7 @@ public class SystemRepository {
         jdbcTemplate.update("DELETE FROM oat_app WHERE id = ?", id);
         jdbcTemplate.update("DELETE FROM oat_label_group WHERE id = ?", id);
         jdbcTemplate.update("DELETE FROM oat_project_member WHERE id = ?", id);
-        jdbcTemplate.update("DELETE FROM oat_system_log WHERE id = ?", id);
+        deleteSystemLogFromEs(id);
     }
 
     @Transactional
@@ -118,7 +139,7 @@ public class SystemRepository {
         jdbcTemplate.update("DELETE FROM oat_app");
         jdbcTemplate.update("DELETE FROM oat_label_group");
         jdbcTemplate.update("DELETE FROM oat_project_member");
-        jdbcTemplate.update("DELETE FROM oat_system_log");
+        deleteAllSystemLogsFromEs();
     }
 
     @Transactional
@@ -174,16 +195,10 @@ public class SystemRepository {
                         """, index.getId(), member == null ? null : member.getProjectId(), member == null ? null : member.getMemberId(), json(index), ts(index.getCreateTime()), ts(index.getUpdateTime()));
     }
 
-    private void saveSystemLog(SystemIndex index) {
-        SystemLog log = index.getSystemLog();
-        jdbcTemplate.update("""
-                        INSERT INTO oat_system_log (id, project_id, user_id, user_name, action, title, payload_json, create_time, update_time)
-                        VALUES (?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)
-                        ON DUPLICATE KEY UPDATE project_id=VALUES(project_id), user_id=VALUES(user_id), user_name=VALUES(user_name), action=VALUES(action), title=VALUES(title), payload_json=VALUES(payload_json), create_time=VALUES(create_time), update_time=VALUES(update_time)
-                        """, index.getId(), log == null ? null : log.getProjectId(), log == null ? null : log.getUserId(), log == null ? null : log.getUserName(), log == null ? null : log.getAction(), log == null ? null : log.getTitle(), json(index), ts(index.getCreateTime()), ts(index.getUpdateTime()));
-    }
-
     private List<SystemIndex> queryPage(String type, String whereClause, Pageable pageable, Object... args) {
+        if ("systemLog".equals(type)) {
+            return findSystemLogsByProjectId(null, pageable);
+        }
         Table table = table(type);
         String sql = "SELECT '" + type + "' type, id, payload_json, create_time, update_time FROM " + table.name + " WHERE " + whereClause + " ORDER BY update_time DESC";
         List<Object> params = new ArrayList<>(Arrays.asList(args));
@@ -201,11 +216,71 @@ public class SystemRepository {
                 "SELECT 'project' type, id, payload_json, create_time, update_time FROM oat_project WHERE " + whereClause,
                 "SELECT 'app' type, id, payload_json, create_time, update_time FROM oat_app WHERE " + whereClause,
                 "SELECT 'labelGroup' type, id, payload_json, create_time, update_time FROM oat_label_group WHERE " + whereClause,
-                "SELECT 'projectMember' type, id, payload_json, create_time, update_time FROM oat_project_member WHERE " + whereClause,
-                "SELECT 'systemLog' type, id, payload_json, create_time, update_time FROM oat_system_log WHERE " + whereClause);
+                "SELECT 'projectMember' type, id, payload_json, create_time, update_time FROM oat_project_member WHERE " + whereClause);
         if (orderBy != null) sql = "SELECT * FROM (" + sql + ") t ORDER BY " + orderBy;
-        Object[] params = repeatArgs(args, 6);
+        Object[] params = repeatArgs(args, 5);
         return query(sql, params);
+    }
+
+    private void saveSystemLogToEs(SystemIndex index) {
+        elasticsearchOperations.save(index, systemLogIndexFor(index));
+    }
+
+    private Optional<SystemIndex> findSystemLogById(String id) {
+        if (!StringUtils.hasText(id)) {
+            return Optional.empty();
+        }
+        NativeQuery query = NativeQuery.builder()
+                .withQuery(q -> q.ids(i -> i.values(id)))
+                .build();
+        SearchHits<SystemIndex> hits = elasticsearchOperations.search(query,
+                SystemIndex.class,
+                IndexCoordinates.of(SYSTEM_LOG_INDEX_PATTERN));
+        return hits.getSearchHits().stream().findFirst().map(SearchHit::getContent);
+    }
+
+    private List<SystemIndex> findSystemLogsByProjectId(String projectId, Pageable pageable) {
+        var builder = NativeQuery.builder()
+                .withSort(Sort.by(Sort.Direction.DESC, "createTime"));
+        if (StringUtils.hasText(projectId)) {
+            builder.withQuery(TermQuery.of(t -> t.field("systemLog.projectId").value(projectId))._toQuery());
+        }
+        if (pageable != null && pageable.isPaged()) {
+            builder.withPageable(pageable);
+        }
+        SearchHits<SystemIndex> hits = elasticsearchOperations.search(builder.build(),
+                SystemIndex.class,
+                IndexCoordinates.of(SYSTEM_LOG_INDEX_PATTERN));
+        List<SystemIndex> logs = new ArrayList<>(hits.getSearchHits().size());
+        for (SearchHit<SystemIndex> hit : hits.getSearchHits()) {
+            logs.add(hit.getContent());
+        }
+        return logs;
+    }
+
+    private void deleteSystemLogFromEs(String id) {
+        if (!StringUtils.hasText(id)) {
+            return;
+        }
+        try {
+            elasticsearchClient.deleteByQuery(DeleteByQueryRequest.of(d -> d
+                    .index(SYSTEM_LOG_INDEX_PATTERN)
+                    .ignoreUnavailable(true)
+                    .query(q -> q.ids(i -> i.values(id)))));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to delete system log from ES: " + id, e);
+        }
+    }
+
+    private void deleteAllSystemLogsFromEs() {
+        try {
+            elasticsearchClient.deleteByQuery(DeleteByQueryRequest.of(d -> d
+                    .index(SYSTEM_LOG_INDEX_PATTERN)
+                    .ignoreUnavailable(true)
+                    .query(q -> q.matchAll(m -> m))));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to delete system logs from ES", e);
+        }
     }
 
     private Object[] repeatArgs(Object[] args, int times) {
@@ -240,6 +315,12 @@ public class SystemRepository {
     private Timestamp ts(Date date) { return date == null ? null : new Timestamp(date.getTime()); }
     private Date toDate(Timestamp timestamp) { return timestamp == null ? null : new Date(timestamp.getTime()); }
 
+    private IndexCoordinates systemLogIndexFor(SystemIndex index) {
+        Date createTime = index.getCreateTime() == null ? new Date() : index.getCreateTime();
+        String suffix = createTime.toInstant().atZone(ZoneId.systemDefault()).format(INDEX_SUFFIX);
+        return IndexCoordinates.of(SYSTEM_LOG_INDEX_ALIAS + "-" + suffix);
+    }
+
     private Table table(String type) {
         return switch (type) {
             case "user" -> new Table("oat_user");
@@ -247,7 +328,6 @@ public class SystemRepository {
             case "app" -> new Table("oat_app");
             case "labelGroup" -> new Table("oat_label_group");
             case "projectMember" -> new Table("oat_project_member");
-            case "systemLog" -> new Table("oat_system_log");
             default -> throw new IllegalArgumentException("unsupported system index type: " + type);
         };
     }

@@ -139,9 +139,7 @@ public class CoverageStorage {
      * the original UTF-8 bytes so callers can validate after decompression.
      */
     public StoredObject storeText(String objectKey, String content, String contentType) {
-        if (!isAvailable()) {
-            return null;
-        }
+        requireAvailable();
         if (!org.springframework.util.StringUtils.hasText(objectKey)) {
             throw new IllegalArgumentException("objectKey must not be empty");
         }
@@ -166,7 +164,8 @@ public class CoverageStorage {
     }
 
     public String loadText(String objectKey, String compressType) {
-        if (!isAvailable() || !org.springframework.util.StringUtils.hasText(objectKey)) {
+        requireAvailable();
+        if (!org.springframework.util.StringUtils.hasText(objectKey)) {
             return null;
         }
         try (InputStream is = minioClient.getObject(
@@ -178,14 +177,15 @@ public class CoverageStorage {
             byte[] raw = COMPRESS_GZIP.equalsIgnoreCase(compressType) ? gunzip(bytes) : bytes;
             return new String(raw, StandardCharsets.UTF_8);
         } catch (ErrorResponseException e) {
-            if ("NoSuchKey".equals(e.errorResponse().code())) {
-                return null;
-            }
-            logger.warn("Failed to load object from MinIO: key={}, error={}", objectKey, e.getMessage());
-            return null;
+            throw new IllegalStateException("Failed to load object from MinIO: " + objectKey, e);
         } catch (Exception e) {
-            logger.warn("Failed to load object from MinIO: key={}, error={}", objectKey, e.getMessage());
-            return null;
+            throw new IllegalStateException("Failed to load object from MinIO: " + objectKey, e);
+        }
+    }
+
+    public void requireAvailable() {
+        if (!isAvailable()) {
+            throw new IllegalStateException("MinIO coverage storage is not available");
         }
     }
 

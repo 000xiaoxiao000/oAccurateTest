@@ -1,3 +1,6 @@
+CREATE DATABASE IF NOT EXISTS `oaccurate_test` DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_0900_ai_ci;
+USE `oaccurate_test`;
+
 ALTER TABLE `oat_coverage_report`
   ADD COLUMN `source_type` VARCHAR(32) DEFAULT 'JAVA' AFTER `create_time`;
 

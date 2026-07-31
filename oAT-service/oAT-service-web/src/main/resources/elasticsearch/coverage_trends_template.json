@@ -19,6 +19,8 @@
         "versionNumber": {"type": "keyword"},
         "commitId": {"type": "keyword"},
         "branch": {"type": "keyword"},
+        "baseVersionNumber": {"type": "keyword"},
+        "baseRepoCommitId": {"type": "keyword"},
         "buildId": {"type": "keyword"},
         "testStage": {"type": "keyword"},
         "reportType": {"type": "integer"},

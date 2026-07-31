@@ -7,7 +7,6 @@ import com.oAT.web.esDao.entity.Comment;
 import com.oAT.web.esDao.entity.Remote;
 import com.oAT.web.esDao.entity.Sql;
 import com.oAT.web.esDao.entity.SystemSnapshot;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -15,8 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -34,12 +31,6 @@ public class SystemSnapshotRepository {
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<SystemSnapshot> rowMapper = this::mapRow;
     private final CoverageStorage coverageStorage;
-
-    @Value("${oat.storage.large-payload.path:${user.home}/oAT/codeData/large-payload/}")
-    private String largePayloadPath;
-
-    @Value("${oat.storage.snapshot-artifact.inline-threshold-bytes:8192}")
-    private long artifactInlineThresholdBytes;
 
     public SystemSnapshotRepository(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
         this.jdbcTemplate = jdbcTemplate;
@@ -229,28 +220,13 @@ public class SystemSnapshotRepository {
 
     private ArtifactPayload storeArtifact(String snapshotId, String type, int order, String content) {
         if (content == null) {
-            return new ArtifactPayload("DB", null, null, null, null);
+            return new ArtifactPayload("MINIO", null, null, null, null);
         }
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         String hash = sha256(bytes);
-        if (coverageStorage.isAvailable()) {
-            Path relativePath = Path.of("snapshot", snapshotId, type + "-" + order + "-" + hash + ".json.gz");
-            CoverageStorage.StoredObject object = coverageStorage.storeText(relativePath.toString(), content, "application/json");
-            return new ArtifactPayload("MINIO", object.objectKey(), object.contentHash(), object.contentSize(), null);
-        }
-        if (bytes.length <= artifactInlineThresholdBytes) {
-            return new ArtifactPayload("DB", null, hash, (long) bytes.length, content);
-        }
-        try {
-            Path relativePath = Path.of("snapshot-artifact", snapshotId, type + "-" + order + "-" + hash + ".json");
-            Path root = Path.of(largePayloadPath);
-            Path file = root.resolve(relativePath);
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, content, StandardCharsets.UTF_8);
-            return new ArtifactPayload("FILE", relativePath.toString(), hash, (long) bytes.length, null);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to store snapshot artifact", e);
-        }
+        String objectKey = "snapshot/" + safe(snapshotId) + "/" + safe(type) + "/" + order + "-" + hash + ".json.gz";
+        CoverageStorage.StoredObject object = coverageStorage.storeText(objectKey, content, "application/json");
+        return new ArtifactPayload("MINIO", object.objectKey(), object.contentHash(), object.contentSize(), null);
     }
 
     private void loadArtifacts(SystemSnapshot snapshot) {
@@ -281,16 +257,12 @@ public class SystemSnapshotRepository {
     }
 
     private String loadArtifact(String storageType, String inlineContent, String path) {
-        if (StringUtils.hasText(inlineContent)) return inlineContent;
         if (!StringUtils.hasText(path)) return null;
-        if ("MINIO".equalsIgnoreCase(storageType)) {
-            return coverageStorage.loadText(path, "gzip");
-        }
-        try {
-            return Files.readString(Path.of(largePayloadPath).resolve(path), StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return null;
-        }
+        return coverageStorage.loadText(path, "gzip");
+    }
+
+    private String safe(String value) {
+        return StringUtils.hasText(value) ? value.replaceAll("[^a-zA-Z0-9._-]", "_") : "unknown";
     }
 
     private String sha256(byte[] bytes) {

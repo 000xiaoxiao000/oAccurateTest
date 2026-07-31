@@ -5,7 +5,6 @@ import com.oAT.web.coverage.CoverageStorage;
 import com.oAT.web.esDao.entity.StaticSourceClassInfo;
 import com.oAT.web.esDao.entity.StaticSourceInfo;
 import com.oAT.web.esDao.entity.StaticSourceMethodInfo;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -13,8 +12,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -29,12 +26,6 @@ public class StaticInfoRepository {
     private final JdbcTemplate jdbcTemplate;
     private final RowMapper<StaticSourceInfo> rowMapper = this::mapRow;
     private final CoverageStorage coverageStorage;
-
-    @Value("${oat.storage.large-payload.path:${user.home}/oAT/codeData/large-payload/}")
-    private String largePayloadPath;
-
-    @Value("${oat.storage.static-source.inline-threshold-bytes:8192}")
-    private long inlineThresholdBytes;
 
     public StaticInfoRepository(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
         this.jdbcTemplate = jdbcTemplate;
@@ -65,9 +56,7 @@ public class StaticInfoRepository {
         StaticSourceClassInfo classInfo = info.getClassInfo();
         SourcePayload sourcePayload = storeSourceCode(info.getAppId(), classInfo.getClassName(), classInfo.getSourceCode());
         String originalSourceCode = classInfo.getSourceCode();
-        if (sourcePayload.path() != null) {
-            classInfo.setSourceCode(null);
-        }
+        classInfo.setSourceCode(null);
         try {
             jdbcTemplate.update("""
                             INSERT INTO oat_static_source_class (
@@ -167,44 +156,17 @@ public class StaticInfoRepository {
         }
         byte[] bytes = sourceCode.getBytes(StandardCharsets.UTF_8);
         String hash = sha256(bytes);
-        if (coverageStorage.isAvailable()) {
-            String safeClassName = className == null ? "unknown" : className.replaceAll("[^a-zA-Z0-9._-]", "_");
-            String objectKey = "source/" + (appId == null ? "unknown-app" : appId) + "/" + safeClassName + "-" + hash + ".java.gz";
-            CoverageStorage.StoredObject object = coverageStorage.storeText(objectKey, sourceCode, "text/x-java-source");
-            return new SourcePayload(null, object.objectKey(), object.contentHash(), object.contentSize());
-        }
-        if (bytes.length <= inlineThresholdBytes) {
-            return new SourcePayload(sourceCode, null, hash, (long) bytes.length);
-        }
-        try {
-            String safeClassName = className == null ? "unknown" : className.replaceAll("[^a-zA-Z0-9._-]", "_");
-            Path relativePath = Path.of("static-source", appId == null ? "unknown-app" : appId, safeClassName + "-" + hash + ".java");
-            Path root = Path.of(largePayloadPath);
-            Path file = root.resolve(relativePath);
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, sourceCode, StandardCharsets.UTF_8);
-            return new SourcePayload(null, relativePath.toString(), hash, (long) bytes.length);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to store static source code", e);
-        }
+        String safeClassName = className == null ? "unknown" : className.replaceAll("[^a-zA-Z0-9._-]", "_");
+        String objectKey = "source/" + (appId == null ? "unknown-app" : appId) + "/" + safeClassName + "-" + hash + ".java.gz";
+        CoverageStorage.StoredObject object = coverageStorage.storeText(objectKey, sourceCode, "text/x-java-source");
+        return new SourcePayload(null, object.objectKey(), object.contentHash(), object.contentSize());
     }
 
     private String loadSourceCode(String inlineContent, String sourcePath) {
-        if (StringUtils.hasText(inlineContent)) {
-            return inlineContent;
-        }
         if (!StringUtils.hasText(sourcePath)) {
             return null;
         }
-        String minioContent = coverageStorage.loadText(sourcePath, "gzip");
-        if (minioContent != null) {
-            return minioContent;
-        }
-        try {
-            return Files.readString(Path.of(largePayloadPath).resolve(sourcePath), StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            return null;
-        }
+        return coverageStorage.loadText(sourcePath, "gzip");
     }
 
     private String sha256(byte[] bytes) {

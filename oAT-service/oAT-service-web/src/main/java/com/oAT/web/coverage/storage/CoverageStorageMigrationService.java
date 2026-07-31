@@ -1,6 +1,12 @@
 package com.oAT.web.coverage.storage;
 
 import com.oAT.web.coverage.CoverageStorage;
+import com.oAT.web.coveragecore.index.CoverageEsIndexService;
+import com.oAT.web.esDao.ClassCoverageRepository;
+import com.oAT.web.esDao.CoverageReportRepository;
+import com.oAT.web.esDao.entity.ClassCoverageIndex;
+import com.oAT.web.esDao.entity.CoverageReportIndex;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,10 +20,20 @@ import java.util.Map;
 public class CoverageStorageMigrationService {
     private final JdbcTemplate jdbcTemplate;
     private final CoverageStorage coverageStorage;
+    private final CoverageReportRepository coverageReportRepository;
+    private final ClassCoverageRepository classCoverageRepository;
+    private final CoverageEsIndexService coverageEsIndexService;
 
-    public CoverageStorageMigrationService(JdbcTemplate jdbcTemplate, CoverageStorage coverageStorage) {
+    public CoverageStorageMigrationService(JdbcTemplate jdbcTemplate,
+                                           CoverageStorage coverageStorage,
+                                           CoverageReportRepository coverageReportRepository,
+                                           ClassCoverageRepository classCoverageRepository,
+                                           CoverageEsIndexService coverageEsIndexService) {
         this.jdbcTemplate = jdbcTemplate;
         this.coverageStorage = coverageStorage;
+        this.coverageReportRepository = coverageReportRepository;
+        this.classCoverageRepository = classCoverageRepository;
+        this.coverageEsIndexService = coverageEsIndexService;
     }
 
     public Map<String, Integer> pendingCounts() {
@@ -73,7 +89,38 @@ public class CoverageStorageMigrationService {
         return result;
     }
 
+    public Map<String, Integer> rebuildCoverageEsReadModel(int requestedLimit) {
+        return rebuildCoverageEsReadModel(requestedLimit, 0);
+    }
+
+    public Map<String, Integer> rebuildCoverageEsReadModel(int requestedLimit, int requestedOffset) {
+        int limit = requestedLimit <= 0 ? 100 : Math.min(requestedLimit, 1000);
+        int offset = Math.max(requestedOffset, 0);
+        Map<String, Integer> result = new LinkedHashMap<>();
+        int reportsIndexed = 0;
+        if (tableExists("oat_coverage_report")) {
+            List<CoverageReportIndex> reports = coverageReportRepository.findBatchForEsRebuild(limit, offset);
+            for (CoverageReportIndex report : reports) {
+                coverageEsIndexService.indexTrend(report);
+                reportsIndexed++;
+            }
+        }
+        int classesIndexed = 0;
+        if (tableExists("oat_class_coverage") && tableExists("oat_method_coverage")) {
+            List<ClassCoverageIndex> classes = classCoverageRepository.findBatchWithMethodsForEsRebuild(limit, offset);
+            coverageEsIndexService.indexClassCoverage(classes);
+            classesIndexed = classes.size();
+        }
+        result.put("offset", offset);
+        result.put("coverageTrendsIndexed", reportsIndexed);
+        result.put("coverageMethodSearchClassesIndexed", classesIndexed);
+        return result;
+    }
+
     private int migrateFrontendRaw(int limit) {
+        if (!tableExists("oat_frontend_coverage_report")) {
+            return 0;
+        }
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT id, app_id, coverage_json
                 FROM oat_frontend_coverage_report
@@ -99,6 +146,9 @@ public class CoverageStorageMigrationService {
     }
 
     private int migrateUniversalRaw(int limit) {
+        if (!tableExists("oat_universal_coverage_report")) {
+            return 0;
+        }
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT id, app_id, source_type, coverage_data
                 FROM oat_universal_coverage_report
@@ -126,6 +176,9 @@ public class CoverageStorageMigrationService {
     }
 
     private int migrateStaticSource(int limit) {
+        if (!tableExists("oat_static_source_class")) {
+            return 0;
+        }
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT id, app_id, class_name, source_code
                 FROM oat_static_source_class
@@ -152,6 +205,9 @@ public class CoverageStorageMigrationService {
     }
 
     private int migrateSnapshotArtifacts(int limit) {
+        if (!tableExists("oat_system_snapshot_artifact")) {
+            return 0;
+        }
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT id, snapshot_id, artifact_type, artifact_order, content_text
                 FROM oat_system_snapshot_artifact
@@ -174,7 +230,7 @@ public class CoverageStorageMigrationService {
                     WHERE id = ?
                     """, object.objectKey(), object.contentHash(), object.contentSize(), id);
         }
-        if (count > 0) {
+        if (count > 0 && tableExists("oat_system_snapshot")) {
             jdbcTemplate.update("""
                     UPDATE oat_system_snapshot
                     SET payload_json = JSON_REMOVE(payload_json, '$.codes', '$.sqls', '$.remotes')
@@ -185,6 +241,9 @@ public class CoverageStorageMigrationService {
     }
 
     private int migrateVersionCompare(int limit) {
+        if (!tableExists("oat_version_compare_report")) {
+            return 0;
+        }
         List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
                 SELECT id, app_id, job_log, differences_json, cases_json
                 FROM oat_version_compare_report
@@ -229,6 +288,9 @@ public class CoverageStorageMigrationService {
     }
 
     private int clearClassMethodsJson(int limit) {
+        if (!tableExists("oat_class_coverage")) {
+            return 0;
+        }
         return jdbcTemplate.update("""
                 UPDATE oat_class_coverage
                 SET methods_json = NULL
@@ -242,8 +304,22 @@ public class CoverageStorageMigrationService {
     }
 
     private int count(String sql) {
-        Integer value = jdbcTemplate.queryForObject(sql, Integer.class);
-        return value == null ? 0 : value;
+        try {
+            Integer value = jdbcTemplate.queryForObject(sql, Integer.class);
+            return value == null ? 0 : value;
+        } catch (DataAccessException e) {
+            return 0;
+        }
+    }
+
+    private boolean tableExists(String tableName) {
+        Integer value = jdbcTemplate.queryForObject("""
+                SELECT COUNT(1)
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = ?
+                """, Integer.class, tableName);
+        return value != null && value > 0;
     }
 
     private String safe(String value) {

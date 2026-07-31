@@ -46,6 +46,18 @@ public class StorageMigrationApiControl {
         return new ResultNotified<>(true, "migrated", migrationService.migrateBatch(limit));
     }
 
+    @PostMapping("/coverage/es-rebuild")
+    public ResultNotified<Map<String, Integer>> rebuildCoverageEsReadModel(@SessionAttribute UserVo user,
+                                                                           @RequestParam(required = false) String token,
+                                                                           @RequestParam(defaultValue = "100") int limit,
+                                                                           @RequestParam(defaultValue = "0") int offset) {
+        ensureAllowed(user, token);
+        Assert.isTrue(limit > 0 && limit <= 1000, "limit 必须在 1 到 1000 之间");
+        Assert.isTrue(offset >= 0, "offset 必须大于等于 0");
+        return new ResultNotified<>(true, "coverage es read model rebuilt",
+                migrationService.rebuildCoverageEsReadModel(limit, offset));
+    }
+
     private void ensureAllowed(UserVo user, String token) {
         Assert.isTrue(apiEnabled, "存储迁移接口未启用，请配置 oat.storage.migration.api-enabled=true 后再执行");
         Assert.notNull(user, "请先登录");

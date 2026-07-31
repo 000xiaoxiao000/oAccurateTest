@@ -1,0 +1,29 @@
+{
+  "index_patterns": ["system_log-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 1,
+      "refresh_interval": "5s"
+    },
+    "mappings": {
+      "dynamic": "false",
+      "properties": {
+        "id": { "type": "keyword" },
+        "type": { "type": "keyword" },
+        "createTime": { "type": "date", "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS" },
+        "updateTime": { "type": "date", "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS" },
+        "systemLog": {
+          "properties": {
+            "projectId": { "type": "keyword" },
+            "userId": { "type": "keyword" },
+            "userName": { "type": "keyword" },
+            "action": { "type": "keyword" },
+            "title": { "type": "text" },
+            "message": { "type": "text" }
+          }
+        }
+      }
+    }
+  }
+}

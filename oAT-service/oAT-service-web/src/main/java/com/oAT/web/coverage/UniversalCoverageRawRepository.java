@@ -45,13 +45,13 @@ public class UniversalCoverageRawRepository {
                 report.testStage,
                 report.traceId,
                 report.timestamp,
-                object == null ? report.coverageData : null,
-                object == null ? report.objectKey : object.objectKey(),
-                object == null ? report.contentHash : object.contentHash(),
-                object == null ? report.contentSize : object.contentSize(),
-                object == null ? report.compressedSize : object.compressedSize(),
-                object == null ? report.compressType : object.compressType(),
-                object == null ? report.contentType : object.contentType());
+                null,
+                object.objectKey(),
+                object.contentHash(),
+                object.contentSize(),
+                object.compressedSize(),
+                object.compressType(),
+                object.contentType());
         return report.id;
     }
 
@@ -212,22 +212,21 @@ public class UniversalCoverageRawRepository {
         if (rs.wasNull()) {
             report.timestamp = null;
         }
-        report.coverageData = rs.getString("coverage_data");
         report.objectKey = rs.getString("object_key");
         report.contentHash = rs.getString("content_hash");
         report.contentSize = getLong(rs, "content_size");
         report.compressedSize = getLong(rs, "compressed_size");
         report.compressType = rs.getString("compress_type");
         report.contentType = rs.getString("content_type");
-        if (!StringUtils.hasText(report.coverageData) && StringUtils.hasText(report.objectKey)) {
+        if (StringUtils.hasText(report.objectKey)) {
             report.coverageData = coverageStorage.loadText(report.objectKey, report.compressType);
         }
         return report;
     }
 
     private CoverageStorage.StoredObject storeRawCoverage(UniversalCoverageRawReport report) {
-        if (!StringUtils.hasText(report.coverageData) || !coverageStorage.isAvailable()) {
-            return null;
+        if (!StringUtils.hasText(report.coverageData)) {
+            throw new IllegalArgumentException("coverageData must not be empty");
         }
         return coverageStorage.storeText(buildObjectKey(report), report.coverageData, "application/json");
     }

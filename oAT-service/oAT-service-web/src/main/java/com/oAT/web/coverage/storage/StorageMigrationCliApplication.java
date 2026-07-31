@@ -3,6 +3,11 @@ package com.oAT.web.coverage.storage;
 import com.oAT.web.coverage.CoverageStorage;
 import com.oAT.web.coverage.CoverageStorageProperties;
 import com.oAT.web.coverage.FrontendCoverageSchemaInitializer;
+import com.oAT.web.config.ElasticsearchTemplateInitializer;
+import com.oAT.web.config.RestClientConfig;
+import com.oAT.web.coveragecore.index.CoverageEsIndexService;
+import com.oAT.web.esDao.ClassCoverageRepository;
+import com.oAT.web.esDao.CoverageReportRepository;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -32,7 +37,12 @@ public class StorageMigrationCliApplication {
             CoverageStorage.class,
             CoverageStorageMigrationService.class,
             StorageMigrationStartupRunner.class,
-            FrontendCoverageSchemaInitializer.class
+            FrontendCoverageSchemaInitializer.class,
+            RestClientConfig.class,
+            ElasticsearchTemplateInitializer.class,
+            CoverageEsIndexService.class,
+            CoverageReportRepository.class,
+            ClassCoverageRepository.class
     })
     static class StorageMigrationCliConfiguration {
     }

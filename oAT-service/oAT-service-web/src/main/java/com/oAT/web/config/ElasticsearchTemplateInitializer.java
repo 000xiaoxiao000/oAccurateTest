@@ -1,12 +1,13 @@
 package com.oAT.web.config;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch._types.mapping.Property;
 import co.elastic.clients.elasticsearch.ilm.PutLifecycleRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsAliasRequest;
 import co.elastic.clients.elasticsearch.indices.PutIndexTemplateRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
@@ -23,6 +24,8 @@ public class ElasticsearchTemplateInitializer {
     private static final String TRACE_NODE_TEMPLATE_NAME = "trace_node_template";
     private static final String COVERAGE_METHOD_SEARCH_TEMPLATE_NAME = "coverage_method_search_template";
     private static final String COVERAGE_TRENDS_TEMPLATE_NAME = "coverage_trends_template";
+    private static final String SYSTEM_LOG_TEMPLATE_NAME = "system_log_template";
+    private static final String PROBE_ALERT_TEMPLATE_NAME = "probe_alert_template";
     private static final String TRACE_NODE_ILM_POLICY_NAME = "trace_node_ilm_policy";
     private static final String COVERAGE_METHOD_SEARCH_ILM_POLICY_NAME = "coverage_method_search_ilm_policy";
     private static final String COVERAGE_TRENDS_ILM_POLICY_NAME = "coverage_trends_ilm_policy";
@@ -35,7 +38,7 @@ public class ElasticsearchTemplateInitializer {
         this.elasticsearchClient = elasticsearchClient;
     }
 
-    @EventListener(ApplicationReadyEvent.class)
+    @EventListener(ApplicationStartedEvent.class)
     public void initializeTemplates() {
         try {
             createIlmPolicy(TRACE_NODE_ILM_POLICY_NAME, "elasticsearch/trace_node_ilm_policy.json");
@@ -44,6 +47,9 @@ public class ElasticsearchTemplateInitializer {
             createTemplate(TRACE_NODE_TEMPLATE_NAME, "elasticsearch/trace_node_template.json");
             createTemplate(COVERAGE_METHOD_SEARCH_TEMPLATE_NAME, "elasticsearch/coverage_method_search_template.json");
             createTemplate(COVERAGE_TRENDS_TEMPLATE_NAME, "elasticsearch/coverage_trends_template.json");
+            createTemplate(SYSTEM_LOG_TEMPLATE_NAME, "elasticsearch/system_log_template.json");
+            createTemplate(PROBE_ALERT_TEMPLATE_NAME, "elasticsearch/probe_alert_template.json");
+            updateCoverageIndexMappings();
             ensureWriteAlias();
             logger.info("Elasticsearch templates and ILM policy initialized successfully");
         } catch (Exception e) {
@@ -86,6 +92,23 @@ public class ElasticsearchTemplateInitializer {
             }
         } catch (Exception e) {
             logger.error("Failed to create index template: {}", templateName, e);
+        }
+    }
+
+    private void updateCoverageIndexMappings() {
+        try {
+            elasticsearchClient.indices().putMapping(m -> m
+                    .index("coverage_method_search-*")
+                    .ignoreUnavailable(true)
+                    .properties("methodNamesText", Property.of(p -> p.text(t -> t))));
+            elasticsearchClient.indices().putMapping(m -> m
+                    .index("coverage_trends-*")
+                    .ignoreUnavailable(true)
+                    .properties("baseVersionNumber", Property.of(p -> p.keyword(k -> k)))
+                    .properties("baseRepoCommitId", Property.of(p -> p.keyword(k -> k))));
+            logger.info("Coverage index mappings ensured in Elasticsearch");
+        } catch (Exception e) {
+            logger.warn("Failed to update coverage index mappings: {}", e.getMessage());
         }
     }
 
