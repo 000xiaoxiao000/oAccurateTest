@@ -22,17 +22,19 @@
         role="row"
       >
         <span class="line-number" role="cell">{{ line.line }}</span>
+        <span class="line-branch-slot" role="cell">
+          <span
+            v-if="branchesByLine[line.line]?.length"
+            class="line-branches"
+            :class="branchTone(line.line)"
+            :title="branchTitle(line.line)"
+          >
+            {{ coveredBranchesByLine(line.line) }}/{{ branchesByLine[line.line].length }}
+          </span>
+        </span>
         <code class="line-code" role="cell">{{ line.text || ' ' }}</code>
         <span v-if="line.cases?.length" class="line-cases" role="cell" :title="line.cases.join('\\n')">
           {{ line.cases.length }} cases
-        </span>
-        <span
-          v-if="branchesByLine[line.line]?.length"
-          class="line-branches"
-          :class="branchTone(line.line)"
-          role="cell"
-        >
-          {{ coveredBranchesByLine(line.line) }}/{{ branchesByLine[line.line].length }} 分支
         </span>
       </div>
     </div>
@@ -88,6 +90,19 @@ const branchSummary = computed(() => {
 
 function coveredBranchesByLine(line: number) {
   return (branchesByLine.value[line] || []).filter((branch) => Number(branch.hits || 0) > 0).length
+}
+
+function branchTitle(line: number) {
+  const branches = branchesByLine.value[line] || []
+  if (!branches.length) return ''
+  const covered = coveredBranchesByLine(line)
+  const details = branches.map((branch, index) => {
+    const hits = Number(branch.hits || 0)
+    const target = branch.branchIndex ?? index + 1
+    const group = branch.groupId ? `条件 ${branch.groupId}，` : ''
+    return `${group}目标 ${target}：${hits > 0 ? `已执行 ${hits} 次` : '未执行'}`
+  })
+  return [`分支条件执行情况：${covered}/${branches.length} 已执行`, ...details].join('\n')
 }
 
 function branchTone(line: number) {
@@ -274,7 +289,7 @@ onBeforeUnmount(() => {
 
 .source-row {
   display: grid;
-  grid-template-columns: 64px minmax(max-content, 1fr) auto auto;
+  grid-template-columns: 64px 56px minmax(max-content, 1fr) auto;
   width: max-content;
   min-width: 100%;
   min-height: 28px;
@@ -302,8 +317,7 @@ onBeforeUnmount(() => {
   outline-offset: -2px;
 }
 
-.line-cases,
-.line-branches {
+.line-cases {
   display: inline-flex;
   align-items: center;
   padding: 0 10px;
@@ -311,6 +325,15 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.line-branch-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-right: 1px solid rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .line-number {
@@ -334,12 +357,19 @@ onBeforeUnmount(() => {
 }
 
 .line-branches {
-  max-width: 168px;
-  margin: 4px 8px 4px 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  max-width: 44px;
+  min-height: 20px;
+  padding: 0 7px;
   border-radius: 999px;
+  font-size: 12px;
   font-weight: 900;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .line-branches.branch-full {
@@ -366,11 +396,10 @@ onBeforeUnmount(() => {
   }
 
   .source-row {
-    grid-template-columns: 48px 44px minmax(220px, 1fr);
+    grid-template-columns: 48px 48px minmax(220px, 1fr);
   }
 
-  .line-cases,
-  .line-branches {
+  .line-cases {
     display: none;
   }
 }

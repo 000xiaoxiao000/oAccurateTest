@@ -31,7 +31,7 @@ public class JavaCoverageUnitProjector {
         unit.setSourcePath(StringUtils.hasText(index.getSourcePath()) ? index.getSourcePath() : index.getClassName());
         unit.setFunctions(projectFunctions(index.getMethods(), sourceLines));
         unit.setLines(projectLines(index.getMethods(), sourceLines));
-        unit.setBranches(projectBranches(index.getMethods()));
+        unit.setBranches(projectBranches(index.getMethods(), sourceLines));
         return unit;
     }
 
@@ -51,7 +51,7 @@ public class JavaCoverageUnitProjector {
             function.setEndLine(methodLines.isEmpty() ? maxLine(method.getTotalLineNumbers()) : maxCoverageLine(methodLines));
             function.setComplexity(method.getComplexity());
             function.setLines(methodLines);
-            function.setBranches(projectMethodBranches(method));
+            function.setBranches(projectMethodBranches(method, sourceLines));
             functions.add(function);
         }
         return functions;
@@ -77,21 +77,23 @@ public class JavaCoverageUnitProjector {
         return lines;
     }
 
-    private List<CoverageBranch> projectMethodBranches(ClassCoverageIndex.MethodCoverageDetail method) {
+    private List<CoverageBranch> projectMethodBranches(ClassCoverageIndex.MethodCoverageDetail method, String[] sourceLines) {
         List<CoverageBranch> branches = new ArrayList<>();
         if (method.getTotalBranchTargetProbeMap() == null) {
             return branches;
         }
         Map<String, List<Integer>> coveredMap = method.getCoveredBranchTargetProbeMap();
-        for (Map.Entry<String, List<Integer>> entry : method.getTotalBranchTargetProbeMap().entrySet()) {
+        Set<Integer> usedDisplayLines = new LinkedHashSet<>();
+        for (Map.Entry<String, List<Integer>> entry : sortedBranchEntries(method.getTotalBranchTargetProbeMap())) {
             List<Integer> targets = entry.getValue();
             if (targets == null) {
                 continue;
             }
             List<Integer> coveredTargets = coveredMap == null ? List.of() : coveredMap.getOrDefault(entry.getKey(), List.of());
+            int displayLine = remapBranchDisplayLine(parseLine(entry.getKey()), sourceLines, usedDisplayLines);
             for (Integer target : targets) {
                 CoverageBranch branch = new CoverageBranch();
-                branch.setLine(parseLine(entry.getKey()));
+                branch.setLine(displayLine);
                 branch.setGroupId(entry.getKey());
                 branch.setBranchIndex(target == null ? 0 : target);
                 branch.setHits(coveredTargets.contains(target) ? 1 : 0);
@@ -199,25 +201,27 @@ public class JavaCoverageUnitProjector {
         return trimmed.isEmpty() || trimmed.matches("[{};]+");
     }
 
-    private List<CoverageBranch> projectBranches(List<ClassCoverageIndex.MethodCoverageDetail> methods) {
+    private List<CoverageBranch> projectBranches(List<ClassCoverageIndex.MethodCoverageDetail> methods, String[] sourceLines) {
         List<CoverageBranch> branches = new ArrayList<>();
         if (methods == null) {
             return branches;
         }
+        Set<Integer> usedDisplayLines = new LinkedHashSet<>();
         for (ClassCoverageIndex.MethodCoverageDetail method : methods) {
             if (method == null || method.getTotalBranchTargetProbeMap() == null) {
                 continue;
             }
             Map<String, List<Integer>> coveredMap = method.getCoveredBranchTargetProbeMap();
-            for (Map.Entry<String, List<Integer>> entry : method.getTotalBranchTargetProbeMap().entrySet()) {
+            for (Map.Entry<String, List<Integer>> entry : sortedBranchEntries(method.getTotalBranchTargetProbeMap())) {
                 List<Integer> targets = entry.getValue();
                 if (targets == null) {
                     continue;
                 }
                 List<Integer> coveredTargets = coveredMap == null ? List.of() : coveredMap.getOrDefault(entry.getKey(), List.of());
+                int displayLine = remapBranchDisplayLine(parseLine(entry.getKey()), sourceLines, usedDisplayLines);
                 for (Integer target : targets) {
                     CoverageBranch branch = new CoverageBranch();
-                    branch.setLine(parseLine(entry.getKey()));
+                    branch.setLine(displayLine);
                     branch.setGroupId(entry.getKey());
                     branch.setBranchIndex(target == null ? 0 : target);
                     branch.setHits(coveredTargets.contains(target) ? 1 : 0);
@@ -227,6 +231,47 @@ public class JavaCoverageUnitProjector {
             }
         }
         return branches;
+    }
+
+    private List<Map.Entry<String, List<Integer>>> sortedBranchEntries(Map<String, List<Integer>> branchMap) {
+        if (branchMap == null || branchMap.isEmpty()) {
+            return List.of();
+        }
+        return branchMap.entrySet().stream()
+                .sorted((left, right) -> Integer.compare(parseLine(left.getKey()), parseLine(right.getKey())))
+                .toList();
+    }
+
+    private int remapBranchDisplayLine(int rawLine, String[] sourceLines, Set<Integer> usedDisplayLines) {
+        if (rawLine <= 0 || sourceLines == null || rawLine > sourceLines.length) {
+            return rawLine;
+        }
+        for (int candidate = rawLine; candidate <= Math.min(sourceLines.length, rawLine + 4); candidate++) {
+            if (usedDisplayLines.contains(candidate)) {
+                continue;
+            }
+            if (isBranchExpressionLine(sourceLines, candidate)) {
+                usedDisplayLines.add(candidate);
+                return candidate;
+            }
+        }
+        usedDisplayLines.add(rawLine);
+        return rawLine;
+    }
+
+    private boolean isBranchExpressionLine(String[] sourceLines, int lineNumber) {
+        if (sourceLines == null || lineNumber <= 0 || lineNumber > sourceLines.length) {
+            return false;
+        }
+        String text = sourceLines[lineNumber - 1];
+        if (text == null) {
+            return false;
+        }
+        String trimmed = text.trim();
+        return trimmed.contains("?")
+                || trimmed.contains("&&")
+                || trimmed.contains("||")
+                || trimmed.matches(".*\\b(if|for|while|switch|catch)\\b.*");
     }
 
     private int minLine(List<Integer> lines) {
