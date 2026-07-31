@@ -19,19 +19,15 @@
       <div class="overview-grid">
         <article class="metric-card green">
           <strong>{{ payload.probeAlertDashboard.onlineCount }}</strong>
-          <span>在线探针</span>
+          <span>在线探针（数量）</span>
         </article>
         <article class="metric-card red">
           <strong>{{ payload.probeAlertDashboard.offlineCount }}</strong>
-          <span>离线探针</span>
+          <span>离线探针（次数）</span>
         </article>
         <article class="metric-card blue">
           <strong>{{ payload.probeAlertDashboard.recentEventCount }}</strong>
           <span>最近告警</span>
-        </article>
-        <article class="metric-card amber">
-          <strong>{{ payload.probeAlertDashboard.failedNotifyCount }}</strong>
-          <span>通知失败</span>
         </article>
       </div>
 
@@ -137,13 +133,6 @@
                 </div>
                 <strong>{{ event.probeText || '未知探针' }}</strong>
                 <p>{{ event.message || '无事件说明' }}</p>
-                <div class="event-meta">
-                  <span class="status-pill small" :class="colorClass(event.notifyStatusColor)">
-                    {{ event.notifyStatusLabel || event.notifyStatus || '未知状态' }}
-                  </span>
-                  <span>{{ event.notifyResponse || '无 Webhook 响应' }}</span>
-                  <span v-if="event.notifyError" class="error-text">{{ event.notifyError }}</span>
-                </div>
               </article>
             </div>
             <AppPagination

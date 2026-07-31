@@ -45,7 +45,6 @@ CREATE TABLE IF NOT EXISTS `oat_app` (
   `create_user_id` VARCHAR(64),
   `probe_alert_enabled` BOOLEAN,
   `probe_offline_threshold_seconds` INT,
-  `probe_webhook_url` VARCHAR(1024),
   `probe_alert_on_online` BOOLEAN,
   `probe_alert_on_offline` BOOLEAN,
   `probe_alert_on_recovered` BOOLEAN,

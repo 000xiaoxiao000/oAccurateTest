@@ -179,7 +179,6 @@ export const useProjectStore = defineStore('project', () => {
       currentCommitId?: string
       probeAlertEnabled?: boolean
       probeOfflineThresholdSeconds?: number
-      probeWebhookUrl?: string
       probeAlertOnOnline?: boolean
       probeAlertOnOffline?: boolean
       probeAlertOnRecovered?: boolean

@@ -19,9 +19,6 @@ public class ProbeAlertEventService {
     private ProbeAlertEventRepository probeAlertEventRepository;
 
     @Autowired
-    private ProbeWebhookNotifyService probeWebhookNotifyService;
-
-    @Autowired
     private ProbeAlertSseService probeAlertSseService;
 
     public ProbeAlertEvent createOnlineEvent(ProbeInstanceStatus status, AppVo app) {
@@ -59,46 +56,34 @@ public class ProbeAlertEventService {
         event.setEventTime(now);
         event.setLastHeartbeatTime(status.getLastHeartbeatTime());
         event.setMessage(message);
-        event.setNotifyChannel("WEBHOOK");
         event.setCreateTime(now);
         event.setUpdateTime(now);
         return event;
     }
 
-    private ProbeAlertEvent saveAndNotify(ProbeAlertEvent event, AppVo app, boolean eventNotifyEnabled) {
+    private ProbeAlertEvent saveAndNotify(ProbeAlertEvent event, AppVo app, boolean eventTypeEnabled) {
         boolean alertEnabled = app != null
                 && Boolean.TRUE.equals(app.getProbeAlertEnabled())
-                && eventNotifyEnabled;
-        boolean webhookEnabled = alertEnabled && org.springframework.util.StringUtils.hasText(app.getProbeWebhookUrl());
-        event.setNotifyEnabled(webhookEnabled);
-        event.setNotifyStatus(webhookEnabled ? ProbeAlertEvent.NotifyStatus.PENDING.toString() : ProbeAlertEvent.NotifyStatus.SKIPPED.toString());
+                && eventTypeEnabled;
+        if (!alertEnabled) {
+            logger.debug("跳过探针告警事件, appId={}, eventType={}, reason={}",
+                    event.getAppId(), event.getEventType(), buildSkipReason(app, eventTypeEnabled));
+            return null;
+        }
         ProbeAlertEvent saved = probeAlertEventRepository.save(event);
-        if (webhookEnabled) {
-            logger.info("创建探针告警事件并投递 Webhook, eventId={}, appId={}, eventType={}, webhookUrl={}",
-                    saved.getId(), saved.getAppId(), saved.getEventType(), app.getProbeWebhookUrl());
-            probeWebhookNotifyService.sendAsync(saved, app);
-        } else {
-            logger.warn("创建探针告警事件但跳过 Webhook, eventId={}, appId={}, eventType={}, reason={}",
-                    saved.getId(), saved.getAppId(), saved.getEventType(), buildSkipReason(app, eventNotifyEnabled));
-        }
-        if (alertEnabled) {
-            probeAlertSseService.broadcast(saved);
-        }
+        probeAlertSseService.broadcast(saved);
         return saved;
     }
 
-    private String buildSkipReason(AppVo app, boolean eventNotifyEnabled) {
+    private String buildSkipReason(AppVo app, boolean eventTypeEnabled) {
         if (app == null) {
             return "应用配置为空";
         }
         if (!Boolean.TRUE.equals(app.getProbeAlertEnabled())) {
             return "未启用探针上下线告警";
         }
-        if (!eventNotifyEnabled) {
-            return "当前事件类型未启用通知";
-        }
-        if (!org.springframework.util.StringUtils.hasText(app.getProbeWebhookUrl())) {
-            return "未配置 Webhook 地址";
+        if (!eventTypeEnabled) {
+            return "当前事件类型未启用告警";
         }
         return "未知原因";
     }

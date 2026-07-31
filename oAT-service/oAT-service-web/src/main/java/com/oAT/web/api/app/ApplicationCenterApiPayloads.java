@@ -130,7 +130,6 @@ public final class ApplicationCenterApiPayloads {
         private String currentCommitId;
         private boolean probeAlertEnabled;
         private Integer probeOfflineThresholdSeconds;
-        private String probeWebhookUrl;
         private boolean probeAlertOnOnline;
         private boolean probeAlertOnOffline;
         private boolean probeAlertOnRecovered;
@@ -161,8 +160,6 @@ public final class ApplicationCenterApiPayloads {
         public void setProbeAlertEnabled(boolean probeAlertEnabled) { this.probeAlertEnabled = probeAlertEnabled; }
         public Integer getProbeOfflineThresholdSeconds() { return probeOfflineThresholdSeconds; }
         public void setProbeOfflineThresholdSeconds(Integer probeOfflineThresholdSeconds) { this.probeOfflineThresholdSeconds = probeOfflineThresholdSeconds; }
-        public String getProbeWebhookUrl() { return probeWebhookUrl; }
-        public void setProbeWebhookUrl(String probeWebhookUrl) { this.probeWebhookUrl = probeWebhookUrl; }
         public boolean isProbeAlertOnOnline() { return probeAlertOnOnline; }
         public void setProbeAlertOnOnline(boolean probeAlertOnOnline) { this.probeAlertOnOnline = probeAlertOnOnline; }
         public boolean isProbeAlertOnOffline() { return probeAlertOnOffline; }
@@ -184,7 +181,6 @@ public final class ApplicationCenterApiPayloads {
         private String currentCommitId;
         private Boolean probeAlertEnabled;
         private Integer probeOfflineThresholdSeconds;
-        private String probeWebhookUrl;
         private Boolean probeAlertOnOnline;
         private Boolean probeAlertOnOffline;
         private Boolean probeAlertOnRecovered;
@@ -213,8 +209,6 @@ public final class ApplicationCenterApiPayloads {
         public void setProbeAlertEnabled(Boolean probeAlertEnabled) { this.probeAlertEnabled = probeAlertEnabled; }
         public Integer getProbeOfflineThresholdSeconds() { return probeOfflineThresholdSeconds; }
         public void setProbeOfflineThresholdSeconds(Integer probeOfflineThresholdSeconds) { this.probeOfflineThresholdSeconds = probeOfflineThresholdSeconds; }
-        public String getProbeWebhookUrl() { return probeWebhookUrl; }
-        public void setProbeWebhookUrl(String probeWebhookUrl) { this.probeWebhookUrl = probeWebhookUrl; }
         public Boolean getProbeAlertOnOnline() { return probeAlertOnOnline; }
         public void setProbeAlertOnOnline(Boolean probeAlertOnOnline) { this.probeAlertOnOnline = probeAlertOnOnline; }
         public Boolean getProbeAlertOnOffline() { return probeAlertOnOffline; }

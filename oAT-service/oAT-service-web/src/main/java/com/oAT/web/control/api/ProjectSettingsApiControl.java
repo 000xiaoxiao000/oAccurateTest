@@ -260,9 +260,6 @@ public class ProjectSettingsApiControl {
         boolean probeAlertOnOffline = Boolean.TRUE.equals(request.getProbeAlertOnOffline());
         boolean probeAlertOnRecovered = Boolean.TRUE.equals(request.getProbeAlertOnRecovered());
         boolean probeAlertOnOnline = Boolean.TRUE.equals(request.getProbeAlertOnOnline());
-        if (probeAlertEnabled) {
-            Assert.isTrue(StringUtils.hasText(request.getProbeWebhookUrl()), "启用告警时必须填写 Webhook 地址");
-        }
         if (probeAlertEnabled && !probeAlertOnOffline && !probeAlertOnRecovered && !probeAlertOnOnline) {
             probeAlertOnOffline = true;
             probeAlertOnRecovered = true;
@@ -277,7 +274,6 @@ public class ProjectSettingsApiControl {
         app.setProbeAlertOnRecovered(probeAlertOnRecovered);
         app.setProbeAlertOnOnline(probeAlertOnOnline);
         app.setProbeOfflineThresholdSeconds(threshold);
-        app.setProbeWebhookUrl(request.getProbeWebhookUrl());
     }
 
     private AppSummary toAppSummary(AppVo app) {

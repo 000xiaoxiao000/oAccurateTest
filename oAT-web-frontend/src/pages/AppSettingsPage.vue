@@ -91,16 +91,6 @@
                 :disabled="!form.probeAlertEnabled"
               />
             </label>
-            <label>
-              <span>Webhook 地址</span>
-              <input
-                v-model.trim="form.probeWebhookUrl"
-                class="text-input"
-                type="text"
-                placeholder="例如：https://example.com/webhook/alerts"
-                :disabled="!form.probeAlertEnabled"
-              />
-            </label>
           </div>
 
           <p class="helper-text">{{ isResidentCollector ? '常驻 Java Agent 按心跳生成上线、下线、恢复事件。' : '批量型语言按最近覆盖率上报时间判活，不产生 trace 级上下线事件。' }}</p>
@@ -114,19 +104,15 @@
           <div class="dashboard" v-if="payload.probeAlertDashboard">
             <div class="metric">
               <strong>{{ payload.probeAlertDashboard.onlineCount }}</strong>
-              <span>在线探针</span>
+              <span>在线探针（数量）</span>
             </div>
             <div class="metric">
               <strong>{{ payload.probeAlertDashboard.offlineCount }}</strong>
-              <span>离线探针</span>
+              <span>离线探针（次数）</span>
             </div>
             <div class="metric">
               <strong>{{ payload.probeAlertDashboard.recentEventCount }}</strong>
               <span>最近告警</span>
-            </div>
-            <div class="metric">
-              <strong>{{ payload.probeAlertDashboard.failedNotifyCount }}</strong>
-              <span>通知失败</span>
             </div>
           </div>
         </section>
@@ -163,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
@@ -200,20 +186,9 @@ const form = reactive({
   currentCommitId: '',
   probeAlertEnabled: false,
   probeOfflineThresholdSeconds: 90,
-  probeWebhookUrl: '',
   probeAlertOnOnline: false,
   probeAlertOnOffline: false,
   probeAlertOnRecovered: false,
-})
-
-function getDefaultWebhookUrl() {
-  return `${window.location.origin}/webhook/oat/probe-alert`
-}
-
-watch(() => form.probeAlertEnabled, (enabled) => {
-  if (enabled && !form.probeWebhookUrl) {
-    form.probeWebhookUrl = getDefaultWebhookUrl()
-  }
 })
 
 function syncForm() {
@@ -233,7 +208,6 @@ function syncForm() {
   form.currentCommitId = app.currentCommitId || ''
   form.probeAlertEnabled = app.probeAlertEnabled
   form.probeOfflineThresholdSeconds = app.probeOfflineThresholdSeconds || 90
-  form.probeWebhookUrl = app.probeWebhookUrl || ''
   form.probeAlertOnOnline = app.probeAlertOnOnline
   form.probeAlertOnOffline = app.probeAlertOnOffline
   form.probeAlertOnRecovered = app.probeAlertOnRecovered
@@ -296,10 +270,6 @@ async function removeApp() {
 }
 
 async function save() {
-  if (form.probeAlertEnabled && !form.probeWebhookUrl) {
-    toast.warning('启用告警时必须填写 Webhook 地址')
-    return
-  }
   loading.value = true
   error.value = ''
   try {

@@ -75,16 +75,6 @@
               :disabled="!form.probeAlertEnabled"
             />
           </label>
-          <label>
-            <span>Webhook 地址</span>
-            <input
-              v-model.trim="form.probeWebhookUrl"
-              class="text-input"
-              type="text"
-              placeholder="例如：https://example.com/webhook/alerts"
-              :disabled="!form.probeAlertEnabled"
-            />
-          </label>
         </div>
         <p class="helper-text">{{ isResidentCollector ? '常驻 Java Agent 按心跳生成上线、下线、恢复事件。' : '批量型语言按最近覆盖率上报时间判活。' }}</p>
         <div v-if="isResidentCollector" class="checkbox-group">
@@ -235,7 +225,6 @@ const form = reactive({
   currentCommitId: '',
   probeAlertEnabled: false,
   probeOfflineThresholdSeconds: 90,
-  probeWebhookUrl: '',
   probeAlertOnOnline: false,
   probeAlertOnOffline: false,
   probeAlertOnRecovered: false,
@@ -361,7 +350,6 @@ async function submitCreate() {
     form.currentCommitId = ''
     form.probeAlertEnabled = false
     form.probeOfflineThresholdSeconds = 90
-    form.probeWebhookUrl = ''
     form.probeAlertOnOnline = false
     form.probeAlertOnOffline = false
     form.probeAlertOnRecovered = false

@@ -90,8 +90,10 @@ public class ProbeStatusService {
                 status.setLastStatusChangeTime(now);
                 status.setUpdateTime(now);
                 ProbeAlertEvent event = probeAlertEventService.createOfflineEvent(status, app, thresholdSeconds);
-                status.setLastAlertEventType(event.getEventType());
-                status.setLastAlertTime(event.getEventTime());
+                if (event != null) {
+                    status.setLastAlertEventType(event.getEventType());
+                    status.setLastAlertTime(event.getEventTime());
+                }
                 probeInstanceStatusRepository.save(status);
                 updateClientSessionStatus(status.getSessionId(), ClientSession.Status.disable, now);
             } catch (Exception e) {
@@ -142,16 +144,20 @@ public class ProbeStatusService {
                 logger.info("探针恢复上线, probeKey={}, appId={}, offlineSeconds={}",
                         status.getProbeKey(), status.getAppId(), offlineDurationMillis == null ? 0 : offlineDurationMillis / 1000L);
                 ProbeAlertEvent event = probeAlertEventService.createRecoveredEvent(status, app, offlineDurationMillis);
-                status.setLastAlertEventType(event.getEventType());
-                status.setLastAlertTime(event.getEventTime());
+                if (event != null) {
+                    status.setLastAlertEventType(event.getEventType());
+                    status.setLastAlertTime(event.getEventTime());
+                }
                 updateClientSessionStatus(status.getSessionId(), ClientSession.Status.active, now);
             } else if (login) {
                 status.setOnlineSince(now);
                 status.setLastStatusChangeTime(now);
                 logger.info("探针新会话上线, probeKey={}, appId={}, sessionId={}", probeKey, status.getAppId(), status.getSessionId());
                 ProbeAlertEvent event = probeAlertEventService.createOnlineEvent(status, app);
-                status.setLastAlertEventType(event.getEventType());
-                status.setLastAlertTime(event.getEventTime());
+                if (event != null) {
+                    status.setLastAlertEventType(event.getEventType());
+                    status.setLastAlertTime(event.getEventTime());
+                }
             }
             status.setUpdateTime(now);
             probeInstanceStatusRepository.save(status);
@@ -170,8 +176,10 @@ public class ProbeStatusService {
         if (login) {
             logger.info("探针首次上线, probeKey={}, appId={}, sessionId={}", probeKey, status.getAppId(), status.getSessionId());
             ProbeAlertEvent event = probeAlertEventService.createOnlineEvent(status, app);
-            status.setLastAlertEventType(event.getEventType());
-            status.setLastAlertTime(event.getEventTime());
+            if (event != null) {
+                status.setLastAlertEventType(event.getEventType());
+                status.setLastAlertTime(event.getEventTime());
+            }
         }
         probeInstanceStatusRepository.save(status);
     }

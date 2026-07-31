@@ -251,7 +251,6 @@ export interface AppSettingsSummary {
   currentCommitId?: string
   probeAlertEnabled: boolean
   probeOfflineThresholdSeconds?: number
-  probeWebhookUrl?: string
   probeAlertOnOnline: boolean
   probeAlertOnOffline: boolean
   probeAlertOnRecovered: boolean
@@ -261,7 +260,6 @@ export interface ProbeAlertDashboard {
   onlineCount: number
   offlineCount: number
   recentEventCount: number
-  failedNotifyCount: number
   latestEventTimeText?: string
   latestEventMessage?: string
   statuses?: ProbeStatusItem[]
@@ -309,11 +307,6 @@ export interface ProbeAlertEventItem {
   probeText?: string
   eventTimeText?: string
   message?: string
-  notifyStatus?: string
-  notifyStatusLabel?: string
-  notifyStatusColor?: string
-  notifyResponse?: string
-  notifyError?: string
 }
 
 export interface ProbeAlertsPayload {

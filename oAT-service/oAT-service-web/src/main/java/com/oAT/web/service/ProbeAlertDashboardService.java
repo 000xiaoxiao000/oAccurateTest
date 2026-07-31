@@ -41,7 +41,6 @@ public class ProbeAlertDashboardService {
         dashboard.setOnlineCount(statuses.stream().filter(this::isOnline).count());
         dashboard.setOfflineCount(statuses.stream().filter(this::isOffline).count());
         dashboard.setRecentEventCount(events.size());
-        dashboard.setFailedNotifyCount(events.stream().filter(this::isNotifyFailed).count());
         dashboard.setStatuses(statuses.stream().map(this::toStatusItem).collect(Collectors.toList()));
         dashboard.setRecentEvents(events.stream().map(this::toEventItem).collect(Collectors.toList()));
         if (!events.isEmpty()) {
@@ -98,11 +97,6 @@ public class ProbeAlertDashboardService {
         item.setProbeText(buildProbeText(event));
         item.setEventTimeText(formatDate(event.getEventTime()));
         item.setMessage(event.getMessage());
-        item.setNotifyStatus(event.getNotifyStatus());
-        item.setNotifyStatusLabel(notifyStatusLabel(event.getNotifyStatus()));
-        item.setNotifyStatusColor(notifyStatusColor(event.getNotifyStatus()));
-        item.setNotifyResponse(event.getNotifyResponse());
-        item.setNotifyError(event.getNotifyError());
         return item;
     }
 
@@ -112,10 +106,6 @@ public class ProbeAlertDashboardService {
 
     private boolean isOffline(ProbeInstanceStatus status) {
         return ProbeInstanceStatus.Status.OFFLINE.toString().equals(status.getStatus());
-    }
-
-    private boolean isNotifyFailed(ProbeAlertEvent event) {
-        return ProbeAlertEvent.NotifyStatus.FAILED.toString().equals(event.getNotifyStatus());
     }
 
     private String eventTypeLabel(String eventType) {
@@ -139,35 +129,6 @@ public class ProbeAlertDashboardService {
             return "green";
         }
         return "blue";
-    }
-
-    private String notifyStatusLabel(String notifyStatus) {
-        if (ProbeAlertEvent.NotifyStatus.SUCCESS.toString().equals(notifyStatus)) {
-            return "已通知";
-        }
-        if (ProbeAlertEvent.NotifyStatus.FAILED.toString().equals(notifyStatus)) {
-            return "通知失败";
-        }
-        if (ProbeAlertEvent.NotifyStatus.SKIPPED.toString().equals(notifyStatus)) {
-            return "未通知";
-        }
-        if (ProbeAlertEvent.NotifyStatus.PENDING.toString().equals(notifyStatus)) {
-            return "待通知";
-        }
-        return emptyFallback(notifyStatus);
-    }
-
-    private String notifyStatusColor(String notifyStatus) {
-        if (ProbeAlertEvent.NotifyStatus.SUCCESS.toString().equals(notifyStatus)) {
-            return "green";
-        }
-        if (ProbeAlertEvent.NotifyStatus.FAILED.toString().equals(notifyStatus)) {
-            return "red";
-        }
-        if (ProbeAlertEvent.NotifyStatus.PENDING.toString().equals(notifyStatus)) {
-            return "yellow";
-        }
-        return "grey";
     }
 
     private String buildProbeText(ProbeAlertEvent event) {

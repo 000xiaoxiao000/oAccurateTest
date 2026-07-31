@@ -42,7 +42,6 @@ public class AppVo implements Serializable {
 
     private Boolean probeAlertEnabled;
     private Integer probeOfflineThresholdSeconds;
-    private String probeWebhookUrl;
     private Boolean probeAlertOnOnline;
     private Boolean probeAlertOnOffline;
     private Boolean probeAlertOnRecovered;
@@ -223,14 +222,6 @@ public class AppVo implements Serializable {
 
     public void setProbeOfflineThresholdSeconds(Integer probeOfflineThresholdSeconds) {
         this.probeOfflineThresholdSeconds = probeOfflineThresholdSeconds;
-    }
-
-    public String getProbeWebhookUrl() {
-        return probeWebhookUrl;
-    }
-
-    public void setProbeWebhookUrl(String probeWebhookUrl) {
-        this.probeWebhookUrl = probeWebhookUrl;
     }
 
     public Boolean getProbeAlertOnOnline() {

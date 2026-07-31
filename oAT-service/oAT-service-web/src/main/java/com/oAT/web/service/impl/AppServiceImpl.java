@@ -88,7 +88,6 @@ public class AppServiceImpl implements AppService, StandardDate {
         }
         app.setProbeAlertEnabled(Boolean.TRUE.equals(appVo.getProbeAlertEnabled()));
         app.setProbeOfflineThresholdSeconds(normalizeProbeOfflineThresholdSeconds(appVo.getProbeOfflineThresholdSeconds()));
-        app.setProbeWebhookUrl(appVo.getProbeWebhookUrl());
         app.setProbeAlertOnOnline(Boolean.TRUE.equals(appVo.getProbeAlertOnOnline()));
         app.setProbeAlertOnOffline(appVo.getProbeAlertOnOffline() == null ? Boolean.TRUE : appVo.getProbeAlertOnOffline());
         app.setProbeAlertOnRecovered(appVo.getProbeAlertOnRecovered() == null ? Boolean.TRUE : appVo.getProbeAlertOnRecovered());

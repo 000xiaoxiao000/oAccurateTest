@@ -7,7 +7,6 @@ public class ProbeAlertDashboardVo {
     private long onlineCount;
     private long offlineCount;
     private long recentEventCount;
-    private long failedNotifyCount;
     private String latestEventTimeText;
     private String latestEventMessage;
     private List<ProbeStatusItemVo> statuses = new ArrayList<>();
@@ -35,14 +34,6 @@ public class ProbeAlertDashboardVo {
 
     public void setRecentEventCount(long recentEventCount) {
         this.recentEventCount = recentEventCount;
-    }
-
-    public long getFailedNotifyCount() {
-        return failedNotifyCount;
-    }
-
-    public void setFailedNotifyCount(long failedNotifyCount) {
-        this.failedNotifyCount = failedNotifyCount;
     }
 
     public String getLatestEventTimeText() {
@@ -216,11 +207,6 @@ public class ProbeAlertDashboardVo {
         private String probeText;
         private String eventTimeText;
         private String message;
-        private String notifyStatus;
-        private String notifyStatusLabel;
-        private String notifyStatusColor;
-        private String notifyResponse;
-        private String notifyError;
 
         public String getId() {
             return id;
@@ -294,44 +280,5 @@ public class ProbeAlertDashboardVo {
             this.message = message;
         }
 
-        public String getNotifyStatus() {
-            return notifyStatus;
-        }
-
-        public void setNotifyStatus(String notifyStatus) {
-            this.notifyStatus = notifyStatus;
-        }
-
-        public String getNotifyStatusLabel() {
-            return notifyStatusLabel;
-        }
-
-        public void setNotifyStatusLabel(String notifyStatusLabel) {
-            this.notifyStatusLabel = notifyStatusLabel;
-        }
-
-        public String getNotifyStatusColor() {
-            return notifyStatusColor;
-        }
-
-        public void setNotifyStatusColor(String notifyStatusColor) {
-            this.notifyStatusColor = notifyStatusColor;
-        }
-
-        public String getNotifyResponse() {
-            return notifyResponse;
-        }
-
-        public void setNotifyResponse(String notifyResponse) {
-            this.notifyResponse = notifyResponse;
-        }
-
-        public String getNotifyError() {
-            return notifyError;
-        }
-
-        public void setNotifyError(String notifyError) {
-            this.notifyError = notifyError;
-        }
     }
 }

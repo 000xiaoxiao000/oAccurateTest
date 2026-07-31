@@ -24,11 +24,6 @@
         "lastHeartbeatTime": { "type": "long" },
         "offlineDurationMillis": { "type": "long" },
         "message": { "type": "text" },
-        "notifyEnabled": { "type": "boolean" },
-        "notifyStatus": { "type": "keyword" },
-        "notifyChannel": { "type": "keyword" },
-        "notifyResponse": { "type": "text", "index": false },
-        "notifyError": { "type": "text" },
         "createTime": { "type": "date", "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS" },
         "updateTime": { "type": "date", "format": "strict_date_optional_time||epoch_millis||yyyy-MM-dd HH:mm:ss,SSS" }
       }

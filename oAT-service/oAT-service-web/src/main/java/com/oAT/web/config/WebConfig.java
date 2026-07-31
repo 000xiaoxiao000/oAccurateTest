@@ -58,7 +58,6 @@ public class WebConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns("/", "/login", "/doLogin", "/register", "/doRegister",
                         "/client/**", "/r/**", "/error", "/share/**", "/share/api/**",
-                        "/webhook/**",
                         "/api/projects/*/apps/*/coverage/frontend/report",
                         "/api/projects/*/apps/*/coverage/universal/*/report",
                         "/api/auth/login", "/api/auth/register", "/api/auth/me");

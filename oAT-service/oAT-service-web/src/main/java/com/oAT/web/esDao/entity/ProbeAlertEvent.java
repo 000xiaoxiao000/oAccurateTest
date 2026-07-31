@@ -23,11 +23,6 @@ public class ProbeAlertEvent implements Serializable {
     private Long lastHeartbeatTime;
     private Long offlineDurationMillis;
     private String message;
-    private Boolean notifyEnabled;
-    private String notifyStatus;
-    private String notifyChannel;
-    private String notifyResponse;
-    private String notifyError;
     private Date createTime;
     private Date updateTime;
 
@@ -35,13 +30,6 @@ public class ProbeAlertEvent implements Serializable {
         ONLINE,
         OFFLINE,
         RECOVERED
-    }
-
-    public enum NotifyStatus {
-        PENDING,
-        SUCCESS,
-        FAILED,
-        SKIPPED
     }
 
     public String getId() {
@@ -162,46 +150,6 @@ public class ProbeAlertEvent implements Serializable {
 
     public void setMessage(String message) {
         this.message = message;
-    }
-
-    public Boolean getNotifyEnabled() {
-        return notifyEnabled;
-    }
-
-    public void setNotifyEnabled(Boolean notifyEnabled) {
-        this.notifyEnabled = notifyEnabled;
-    }
-
-    public String getNotifyStatus() {
-        return notifyStatus;
-    }
-
-    public void setNotifyStatus(String notifyStatus) {
-        this.notifyStatus = notifyStatus;
-    }
-
-    public String getNotifyChannel() {
-        return notifyChannel;
-    }
-
-    public void setNotifyChannel(String notifyChannel) {
-        this.notifyChannel = notifyChannel;
-    }
-
-    public String getNotifyResponse() {
-        return notifyResponse;
-    }
-
-    public void setNotifyResponse(String notifyResponse) {
-        this.notifyResponse = notifyResponse;
-    }
-
-    public String getNotifyError() {
-        return notifyError;
-    }
-
-    public void setNotifyError(String notifyError) {
-        this.notifyError = notifyError;
     }
 
     public Date getCreateTime() {

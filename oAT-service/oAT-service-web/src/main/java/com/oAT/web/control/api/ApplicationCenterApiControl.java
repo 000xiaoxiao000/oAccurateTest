@@ -179,15 +179,10 @@ public class ApplicationCenterApiControl {
             probeAlertOnRecovered = true;
         }
 
-        if (probeAlertEnabled) {
-            Assert.isTrue(StringUtils.hasText(request.getProbeWebhookUrl()), "启用告警时必须填写 Webhook 地址");
-        }
-
         existingApp.setProbeAlertEnabled(probeAlertEnabled);
         existingApp.setProbeAlertOnOffline(probeAlertOnOffline);
         existingApp.setProbeAlertOnRecovered(probeAlertOnRecovered);
         existingApp.setProbeAlertOnOnline(probeAlertOnOnline);
-        existingApp.setProbeWebhookUrl(request.getProbeWebhookUrl());
 
         Integer threshold = request.getProbeOfflineThresholdSeconds();
         if (threshold != null && threshold > 0 && threshold < 30) {
@@ -360,7 +355,6 @@ public class ApplicationCenterApiControl {
         summary.setCurrentCommitId(app.getCurrentCommitId());
         summary.setProbeAlertEnabled(Boolean.TRUE.equals(app.getProbeAlertEnabled()));
         summary.setProbeOfflineThresholdSeconds(app.getProbeOfflineThresholdSeconds());
-        summary.setProbeWebhookUrl(app.getProbeWebhookUrl());
         summary.setProbeAlertOnOffline(Boolean.TRUE.equals(app.getProbeAlertOnOffline()));
         summary.setProbeAlertOnRecovered(Boolean.TRUE.equals(app.getProbeAlertOnRecovered()));
         summary.setProbeAlertOnOnline(Boolean.TRUE.equals(app.getProbeAlertOnOnline()));

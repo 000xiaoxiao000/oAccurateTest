@@ -154,7 +154,6 @@ export function createProjectApp(
     currentCommitId?: string
     probeAlertEnabled?: boolean
     probeOfflineThresholdSeconds?: number
-    probeWebhookUrl?: string
     probeAlertOnOnline?: boolean
     probeAlertOnOffline?: boolean
     probeAlertOnRecovered?: boolean
@@ -255,7 +254,6 @@ export function saveAppSettings(
     currentCommitId: string
     probeAlertEnabled: boolean
     probeOfflineThresholdSeconds?: number
-    probeWebhookUrl: string
     probeAlertOnOnline: boolean
     probeAlertOnOffline: boolean
     probeAlertOnRecovered: boolean

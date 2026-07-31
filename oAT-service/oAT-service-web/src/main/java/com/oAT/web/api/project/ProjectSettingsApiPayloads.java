@@ -97,7 +97,6 @@ public final class ProjectSettingsApiPayloads {
         private String currentCommitId;
         private Boolean probeAlertEnabled;
         private Integer probeOfflineThresholdSeconds;
-        private String probeWebhookUrl;
         private Boolean probeAlertOnOnline;
         private Boolean probeAlertOnOffline;
         private Boolean probeAlertOnRecovered;
@@ -126,8 +125,6 @@ public final class ProjectSettingsApiPayloads {
         public void setProbeAlertEnabled(Boolean probeAlertEnabled) { this.probeAlertEnabled = probeAlertEnabled; }
         public Integer getProbeOfflineThresholdSeconds() { return probeOfflineThresholdSeconds; }
         public void setProbeOfflineThresholdSeconds(Integer probeOfflineThresholdSeconds) { this.probeOfflineThresholdSeconds = probeOfflineThresholdSeconds; }
-        public String getProbeWebhookUrl() { return probeWebhookUrl; }
-        public void setProbeWebhookUrl(String probeWebhookUrl) { this.probeWebhookUrl = probeWebhookUrl; }
         public Boolean getProbeAlertOnOnline() { return probeAlertOnOnline; }
         public void setProbeAlertOnOnline(Boolean probeAlertOnOnline) { this.probeAlertOnOnline = probeAlertOnOnline; }
         public Boolean getProbeAlertOnOffline() { return probeAlertOnOffline; }
