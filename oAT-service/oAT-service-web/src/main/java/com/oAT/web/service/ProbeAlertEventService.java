@@ -66,14 +66,14 @@ public class ProbeAlertEventService {
     }
 
     private ProbeAlertEvent saveAndNotify(ProbeAlertEvent event, AppVo app, boolean eventNotifyEnabled) {
-        boolean notifyEnabled = app != null
+        boolean alertEnabled = app != null
                 && Boolean.TRUE.equals(app.getProbeAlertEnabled())
-                && eventNotifyEnabled
-                && org.springframework.util.StringUtils.hasText(app.getProbeWebhookUrl());
-        event.setNotifyEnabled(notifyEnabled);
-        event.setNotifyStatus(notifyEnabled ? ProbeAlertEvent.NotifyStatus.PENDING.toString() : ProbeAlertEvent.NotifyStatus.SKIPPED.toString());
+                && eventNotifyEnabled;
+        boolean webhookEnabled = alertEnabled && org.springframework.util.StringUtils.hasText(app.getProbeWebhookUrl());
+        event.setNotifyEnabled(webhookEnabled);
+        event.setNotifyStatus(webhookEnabled ? ProbeAlertEvent.NotifyStatus.PENDING.toString() : ProbeAlertEvent.NotifyStatus.SKIPPED.toString());
         ProbeAlertEvent saved = probeAlertEventRepository.save(event);
-        if (notifyEnabled) {
+        if (webhookEnabled) {
             logger.info("创建探针告警事件并投递 Webhook, eventId={}, appId={}, eventType={}, webhookUrl={}",
                     saved.getId(), saved.getAppId(), saved.getEventType(), app.getProbeWebhookUrl());
             probeWebhookNotifyService.sendAsync(saved, app);
@@ -81,7 +81,9 @@ public class ProbeAlertEventService {
             logger.warn("创建探针告警事件但跳过 Webhook, eventId={}, appId={}, eventType={}, reason={}",
                     saved.getId(), saved.getAppId(), saved.getEventType(), buildSkipReason(app, eventNotifyEnabled));
         }
-        probeAlertSseService.broadcast(saved);
+        if (alertEnabled) {
+            probeAlertSseService.broadcast(saved);
+        }
         return saved;
     }
 

@@ -83,7 +83,13 @@
           <div class="form-grid">
             <label>
               <span>{{ isResidentCollector ? '下线阈值（秒）' : '静默阈值（秒）' }}</span>
-              <input v-model.number="form.probeOfflineThresholdSeconds" class="text-input" type="number" min="30" />
+              <input
+                v-model.number="form.probeOfflineThresholdSeconds"
+                class="text-input"
+                type="number"
+                min="30"
+                :disabled="!form.probeAlertEnabled"
+              />
             </label>
             <label>
               <span>Webhook 地址</span>
@@ -92,6 +98,7 @@
                 class="text-input"
                 type="text"
                 placeholder="例如：https://example.com/webhook/alerts"
+                :disabled="!form.probeAlertEnabled"
               />
             </label>
           </div>
@@ -99,9 +106,9 @@
           <p class="helper-text">{{ isResidentCollector ? '常驻 Java Agent 按心跳生成上线、下线、恢复事件。' : '批量型语言按最近覆盖率上报时间判活，不产生 trace 级上下线事件。' }}</p>
 
           <div v-if="isResidentCollector" class="checkbox-group">
-            <label class="checkbox-row"><input v-model="form.probeAlertOnOffline" type="checkbox" /> <span>下线</span></label>
-            <label class="checkbox-row"><input v-model="form.probeAlertOnRecovered" type="checkbox" /> <span>恢复上线</span></label>
-            <label class="checkbox-row"><input v-model="form.probeAlertOnOnline" type="checkbox" /> <span>首次上线</span></label>
+            <label class="checkbox-row"><input v-model="form.probeAlertOnOffline" type="checkbox" :disabled="!form.probeAlertEnabled" /> <span>下线</span></label>
+            <label class="checkbox-row"><input v-model="form.probeAlertOnRecovered" type="checkbox" :disabled="!form.probeAlertEnabled" /> <span>恢复上线</span></label>
+            <label class="checkbox-row"><input v-model="form.probeAlertOnOnline" type="checkbox" :disabled="!form.probeAlertEnabled" /> <span>首次上线</span></label>
           </div>
 
           <div class="dashboard" v-if="payload.probeAlertDashboard">
