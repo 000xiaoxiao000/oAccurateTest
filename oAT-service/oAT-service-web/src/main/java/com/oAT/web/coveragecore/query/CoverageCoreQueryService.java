@@ -257,7 +257,7 @@ public class CoverageCoreQueryService {
         unit.getFunctions().forEach(function -> function.getLines().forEach(line -> mergeLine(lineMap, line.getLine(), line.getHits())));
         CoverageSourceContent content = coverageSourceContentService.loadSource(report, classCoverage);
         if (content.getContent() != null) {
-            String[] sourceLines = content.getContent().split("\\r?\\n", -1);
+            String[] sourceLines = splitSourceLines(content.getContent());
             for (int index = 0; index < sourceLines.length; index++) {
                 int lineNumber = index + 1;
                 SourceCoverageLine line = lineMap.computeIfAbsent(lineNumber, key -> {
@@ -465,9 +465,13 @@ public class CoverageCoreQueryService {
                 .filter(candidate -> matchesClassCoverage(candidate, unitKey))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("覆盖率源码单元不存在"));
-        CoverageUnit unit = language == CoverageLanguage.JAVA
-                ? javaCoverageUnitProjector.project(classCoverage)
-                : classCoverageUnitProjector.project(classCoverage, language);
+        CoverageUnit unit;
+        if (language == CoverageLanguage.JAVA) {
+            CoverageSourceContent content = coverageSourceContentService.loadSource(report, classCoverage);
+            unit = javaCoverageUnitProjector.project(classCoverage, content.getContent());
+        } else {
+            unit = classCoverageUnitProjector.project(classCoverage, language);
+        }
         return new UnitProjection(report, classCoverage, unit);
     }
 
@@ -496,6 +500,20 @@ public class CoverageCoreQueryService {
             return null;
         }
         return function.getStartLine() + "-" + function.getEndLine();
+    }
+
+    private String[] splitSourceLines(String content) {
+        String[] lines = content.split("\\r?\\n", -1);
+        int end = lines.length;
+        while (end > 0 && lines[end - 1].isEmpty()) {
+            end--;
+        }
+        if (end == lines.length) {
+            return lines;
+        }
+        String[] trimmed = new String[end];
+        System.arraycopy(lines, 0, trimmed, 0, end);
+        return trimmed;
     }
 
     private void mergeLine(Map<Integer, SourceCoverageLine> lineMap, int lineNumber, int hits) {

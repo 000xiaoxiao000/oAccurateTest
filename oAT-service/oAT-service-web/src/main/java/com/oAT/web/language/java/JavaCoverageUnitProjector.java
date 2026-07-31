@@ -19,18 +19,23 @@ import java.util.Set;
 @Component
 public class JavaCoverageUnitProjector {
     public CoverageUnit project(ClassCoverageIndex index) {
+        return project(index, null);
+    }
+
+    public CoverageUnit project(ClassCoverageIndex index, String sourceCode) {
+        String[] sourceLines = sourceCode == null ? null : sourceCode.split("\\r?\\n", -1);
         CoverageUnit unit = new CoverageUnit();
         unit.setLanguage(CoverageLanguage.JAVA);
         unit.setUnitKey(index.getClassName());
         unit.setDisplayName(StringUtils.hasText(index.getDisplayName()) ? index.getDisplayName() : index.getClassName());
         unit.setSourcePath(StringUtils.hasText(index.getSourcePath()) ? index.getSourcePath() : index.getClassName());
-        unit.setFunctions(projectFunctions(index.getMethods()));
-        unit.setLines(projectLines(index.getMethods()));
+        unit.setFunctions(projectFunctions(index.getMethods(), sourceLines));
+        unit.setLines(projectLines(index.getMethods(), sourceLines));
         unit.setBranches(projectBranches(index.getMethods()));
         return unit;
     }
 
-    private List<CoverageFunction> projectFunctions(List<ClassCoverageIndex.MethodCoverageDetail> methods) {
+    private List<CoverageFunction> projectFunctions(List<ClassCoverageIndex.MethodCoverageDetail> methods, String[] sourceLines) {
         List<CoverageFunction> functions = new ArrayList<>();
         if (methods == null) {
             return functions;
@@ -41,23 +46,25 @@ public class JavaCoverageUnitProjector {
             }
             CoverageFunction function = new CoverageFunction();
             function.setSignature(method.getMethodName() + (StringUtils.hasText(method.getMethodDesc()) ? method.getMethodDesc() : ""));
-            function.setStartLine(minLine(method.getTotalLineNumbers()));
-            function.setEndLine(maxLine(method.getTotalLineNumbers()));
+            List<CoverageLine> methodLines = projectMethodLines(method, sourceLines);
+            function.setStartLine(methodLines.isEmpty() ? minLine(method.getTotalLineNumbers()) : minCoverageLine(methodLines));
+            function.setEndLine(methodLines.isEmpty() ? maxLine(method.getTotalLineNumbers()) : maxCoverageLine(methodLines));
             function.setComplexity(method.getComplexity());
-            function.setLines(projectMethodLines(method));
+            function.setLines(methodLines);
             function.setBranches(projectMethodBranches(method));
             functions.add(function);
         }
         return functions;
     }
 
-    private List<CoverageLine> projectMethodLines(ClassCoverageIndex.MethodCoverageDetail method) {
-        Set<Integer> coveredLines = method.getCoveredLineNumbers() == null ? Set.of() : new LinkedHashSet<>(method.getCoveredLineNumbers());
+    private List<CoverageLine> projectMethodLines(ClassCoverageIndex.MethodCoverageDetail method, String[] sourceLines) {
         List<CoverageLine> lines = new ArrayList<>();
         if (method.getTotalLineNumbers() == null) {
             return lines;
         }
-        for (Integer lineNumber : method.getTotalLineNumbers()) {
+        List<Integer> totalLineNumbers = executableLines(method.getTotalLineNumbers(), sourceLines);
+        Set<Integer> coveredLines = remapCoveredLines(method.getCoveredLineNumbers(), totalLineNumbers, sourceLines);
+        for (Integer lineNumber : totalLineNumbers) {
             if (lineNumber == null || lineNumber <= 0) {
                 continue;
             }
@@ -95,7 +102,7 @@ public class JavaCoverageUnitProjector {
         return branches;
     }
 
-    private List<CoverageLine> projectLines(List<ClassCoverageIndex.MethodCoverageDetail> methods) {
+    private List<CoverageLine> projectLines(List<ClassCoverageIndex.MethodCoverageDetail> methods, String[] sourceLines) {
         Set<Integer> totalLines = new LinkedHashSet<>();
         Set<Integer> coveredLines = new LinkedHashSet<>();
         if (methods != null) {
@@ -104,10 +111,9 @@ public class JavaCoverageUnitProjector {
                     continue;
                 }
                 if (method.getTotalLineNumbers() != null) {
-                    totalLines.addAll(method.getTotalLineNumbers());
-                }
-                if (method.getCoveredLineNumbers() != null) {
-                    coveredLines.addAll(method.getCoveredLineNumbers());
+                    List<Integer> methodLines = executableLines(method.getTotalLineNumbers(), sourceLines);
+                    totalLines.addAll(methodLines);
+                    coveredLines.addAll(remapCoveredLines(method.getCoveredLineNumbers(), methodLines, sourceLines));
                 }
             }
         }
@@ -123,6 +129,74 @@ public class JavaCoverageUnitProjector {
             lines.add(line);
         }
         return lines;
+    }
+
+    private List<Integer> executableLines(List<Integer> lineNumbers, String[] sourceLines) {
+        List<Integer> lines = new ArrayList<>();
+        if (lineNumbers == null) {
+            return lines;
+        }
+        Set<Integer> seen = new LinkedHashSet<>();
+        for (Integer lineNumber : lineNumbers) {
+            if (lineNumber == null || lineNumber <= 0 || isNonExecutableStructureLine(sourceLines, lineNumber)) {
+                continue;
+            }
+            seen.add(lineNumber);
+        }
+        lines.addAll(seen);
+        return lines;
+    }
+
+    private Set<Integer> remapCoveredLines(List<Integer> coveredLineNumbers, List<Integer> executableLines, String[] sourceLines) {
+        Set<Integer> coveredLines = new LinkedHashSet<>();
+        if (coveredLineNumbers == null || executableLines == null || executableLines.isEmpty()) {
+            return coveredLines;
+        }
+        Set<Integer> executableLineSet = new LinkedHashSet<>(executableLines);
+        for (Integer lineNumber : coveredLineNumbers) {
+            if (lineNumber == null || lineNumber <= 0) {
+                continue;
+            }
+            if (executableLineSet.contains(lineNumber)) {
+                coveredLines.add(lineNumber);
+                continue;
+            }
+            if (isNonExecutableStructureLine(sourceLines, lineNumber)) {
+                Integer nearest = nearestExecutableLine(lineNumber, executableLines);
+                if (nearest != null) {
+                    coveredLines.add(nearest);
+                }
+            }
+        }
+        return coveredLines;
+    }
+
+    private Integer nearestExecutableLine(int lineNumber, List<Integer> executableLines) {
+        Integer nearest = null;
+        int nearestDistance = Integer.MAX_VALUE;
+        for (Integer candidate : executableLines) {
+            if (candidate == null) {
+                continue;
+            }
+            int distance = Math.abs(candidate - lineNumber);
+            if (distance < nearestDistance || (distance == nearestDistance && candidate < lineNumber)) {
+                nearest = candidate;
+                nearestDistance = distance;
+            }
+        }
+        return nearest;
+    }
+
+    private boolean isNonExecutableStructureLine(String[] sourceLines, int lineNumber) {
+        if (sourceLines == null || lineNumber <= 0 || lineNumber > sourceLines.length) {
+            return false;
+        }
+        String text = sourceLines[lineNumber - 1];
+        if (text == null) {
+            return true;
+        }
+        String trimmed = text.trim();
+        return trimmed.isEmpty() || trimmed.matches("[{};]+");
     }
 
     private List<CoverageBranch> projectBranches(List<ClassCoverageIndex.MethodCoverageDetail> methods) {
@@ -167,6 +241,20 @@ public class JavaCoverageUnitProjector {
             return 0;
         }
         return lines.stream().filter(line -> line != null && line > 0).max(Integer::compareTo).orElse(0);
+    }
+
+    private int minCoverageLine(List<CoverageLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return 0;
+        }
+        return lines.stream().map(CoverageLine::getLine).filter(line -> line != null && line > 0).min(Integer::compareTo).orElse(0);
+    }
+
+    private int maxCoverageLine(List<CoverageLine> lines) {
+        if (lines == null || lines.isEmpty()) {
+            return 0;
+        }
+        return lines.stream().map(CoverageLine::getLine).filter(line -> line != null && line > 0).max(Integer::compareTo).orElse(0);
     }
 
     private int parseLine(String key) {

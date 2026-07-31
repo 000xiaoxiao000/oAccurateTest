@@ -22,7 +22,6 @@
         role="row"
       >
         <span class="line-number" role="cell">{{ line.line }}</span>
-        <span class="line-hits" role="cell">{{ line.hits || 0 }}</span>
         <code class="line-code" role="cell">{{ line.text || ' ' }}</code>
         <span v-if="line.cases?.length" class="line-cases" role="cell" :title="line.cases.join('\\n')">
           {{ line.cases.length }} cases
@@ -275,7 +274,7 @@ onBeforeUnmount(() => {
 
 .source-row {
   display: grid;
-  grid-template-columns: 64px 56px minmax(max-content, 1fr) auto auto;
+  grid-template-columns: 64px minmax(max-content, 1fr) auto auto;
   width: max-content;
   min-width: 100%;
   min-height: 28px;
@@ -303,8 +302,6 @@ onBeforeUnmount(() => {
   outline-offset: -2px;
 }
 
-.line-number,
-.line-hits,
 .line-cases,
 .line-branches {
   display: inline-flex;
@@ -316,11 +313,17 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.line-number,
-.line-hits {
+.line-number {
+  display: inline-flex;
+  align-items: center;
   justify-content: flex-end;
+  padding: 0 10px;
   border-right: 1px solid rgba(15, 23, 42, 0.08);
   background: rgba(255, 255, 255, 0.42);
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .line-code {
