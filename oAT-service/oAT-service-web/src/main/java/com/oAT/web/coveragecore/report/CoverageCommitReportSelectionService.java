@@ -2,7 +2,9 @@ package com.oAT.web.coveragecore.report;
 
 import com.oAT.web.esDao.entity.StandardDate;
 import com.oAT.web.esDao.CoverageReportRepository;
+import com.oAT.web.esDao.SystemSnapshotRepository;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
+import com.oAT.web.esDao.entity.SystemSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -10,10 +12,12 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,11 +25,14 @@ public class CoverageCommitReportSelectionService {
 
     private final CoverageReportRepository coverageReportRepository;
     private final CoverageSnapshotContextSupport coverageSnapshotContextSupport;
+    private final SystemSnapshotRepository systemSnapshotRepository;
 
     public CoverageCommitReportSelectionService(CoverageReportRepository coverageReportRepository,
-                                                CoverageSnapshotContextSupport coverageSnapshotContextSupport) {
+                                                CoverageSnapshotContextSupport coverageSnapshotContextSupport,
+                                                SystemSnapshotRepository systemSnapshotRepository) {
         this.coverageReportRepository = coverageReportRepository;
         this.coverageSnapshotContextSupport = coverageSnapshotContextSupport;
+        this.systemSnapshotRepository = systemSnapshotRepository;
     }
 
     public List<CoverageReportIndex> selectVersionCommitReports(String appId, String versionNumber) {
@@ -33,12 +40,16 @@ public class CoverageCommitReportSelectionService {
         if (reports == null || reports.isEmpty()) {
             return Collections.emptyList();
         }
+        Set<String> activeSnapshotIds = activeSnapshotIds(appId, versionNumber);
         Map<String, CoverageReportIndex> latestByCommit = new LinkedHashMap<>();
         for (CoverageReportIndex report : reports) {
             if (report == null || !StringUtils.hasText(report.getId())) {
                 continue;
             }
             if (CoverageReportTypes.normalize(report.getReportType()) != CoverageReportTypes.CURRENT_COMMIT) {
+                continue;
+            }
+            if (!belongsToActiveSnapshots(report, activeSnapshotIds)) {
                 continue;
             }
             String commitKey = CoverageCommitKeys.normalize(report.getRepoCommitId());
@@ -129,6 +140,37 @@ public class CoverageCommitReportSelectionService {
             }
         }
         return latest == null ? null : new SimpleDateFormat(StandardDate.dateFormat).format(latest);
+    }
+
+    private Set<String> activeSnapshotIds(String appId, String versionNumber) {
+        List<SystemSnapshot> snapshots = systemSnapshotRepository.findByAppId(appId);
+        if (snapshots == null || snapshots.isEmpty()) {
+            return Collections.emptySet();
+        }
+        List<SystemSnapshot> selected = snapshots;
+        if (StringUtils.hasText(versionNumber)) {
+            List<SystemSnapshot> versionMatched = snapshots.stream()
+                    .filter(snapshot -> snapshot != null && versionNumber.equals(snapshot.getVersion() == null ? null : snapshot.getVersion().trim()))
+                    .collect(Collectors.toList());
+            if (!versionMatched.isEmpty()) {
+                selected = versionMatched;
+            }
+        }
+        return selected.stream()
+                .map(SystemSnapshot::getId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(HashSet::new));
+    }
+
+    private boolean belongsToActiveSnapshots(CoverageReportIndex report, Set<String> activeSnapshotIds) {
+        List<String> reportSnapshotIds = coverageSnapshotContextSupport.parseSnapshotIds(report.getSnapshotIds());
+        if (reportSnapshotIds.isEmpty()) {
+            return true;
+        }
+        if (activeSnapshotIds == null || activeSnapshotIds.isEmpty()) {
+            return false;
+        }
+        return activeSnapshotIds.containsAll(reportSnapshotIds);
     }
 
     private boolean isReportAfter(CoverageReportIndex candidate, CoverageReportIndex current) {

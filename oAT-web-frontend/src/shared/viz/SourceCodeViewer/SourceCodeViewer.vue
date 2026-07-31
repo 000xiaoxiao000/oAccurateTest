@@ -96,13 +96,26 @@ function branchTitle(line: number) {
   const branches = branchesByLine.value[line] || []
   if (!branches.length) return ''
   const covered = coveredBranchesByLine(line)
-  const details = branches.map((branch, index) => {
+  const orderedBranches = orderBranchesForDisplay(line, branches)
+  const details = orderedBranches.map((branch, index) => {
     const hits = Number(branch.hits || 0)
-    const target = branch.branchIndex ?? index + 1
-    const group = branch.groupId ? `条件 ${branch.groupId}，` : ''
-    return `${group}目标 ${target}：${hits > 0 ? `已执行 ${hits} 次` : '未执行'}`
+    return `条件 ${index + 1}：${hits > 0 ? `已执行 ${hits} 次` : '未执行'}`
   })
   return [`分支条件执行情况：${covered}/${branches.length} 已执行`, ...details].join('\n')
+}
+
+function orderBranchesForDisplay(line: number, branches: NonNullable<SourceCoveragePayload['branches']>) {
+  const sourceLine = sourceLines.value.find((item) => item.line === line)?.text || ''
+  const isTernary = sourceLine.includes('?') && sourceLine.includes(':')
+  if (!isTernary || branches.length !== 2) {
+    return branches
+  }
+  const covered = branches.filter((branch) => Number(branch.hits || 0) > 0)
+  const uncovered = branches.filter((branch) => Number(branch.hits || 0) <= 0)
+  if (covered.length === 1 && uncovered.length === 1) {
+    return [...uncovered, ...covered]
+  }
+  return branches
 }
 
 function branchTone(line: number) {

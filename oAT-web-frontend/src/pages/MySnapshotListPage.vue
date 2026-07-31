@@ -585,7 +585,7 @@ async function submitSaveAsSystem() {
   savingSystemSnapshot.value = true
   error.value = ''
   try {
-    const systemSnapshotId = await projectStore.persistMySnapshotAsSystemSnapshot(projectId.value, saveAsSystemSnapshotId.value, {
+    await projectStore.persistMySnapshotAsSystemSnapshot(projectId.value, saveAsSystemSnapshotId.value, {
       appId: saveAsSystemForm.appId,
       directory: saveAsSystemForm.directory.trim() || 'root',
       title: saveAsSystemForm.title.trim(),
@@ -594,12 +594,9 @@ async function submitSaveAsSystem() {
       labels: saveAsSystemForm.labels,
       principals: [],
     })
-    const appId = saveAsSystemForm.appId
     savingSystemSnapshot.value = false
     closeSaveAsSystemDialog()
-    if (appId && systemSnapshotId) {
-      await router.push(`/p/${projectId.value}/apps/${appId}/snapshots/${systemSnapshotId}`)
-    }
+    await load()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '保存系统快照失败'
   } finally {

@@ -91,7 +91,7 @@ public class JavaCoverageUnitProjector {
             }
             List<Integer> coveredTargets = coveredMap == null ? List.of() : coveredMap.getOrDefault(entry.getKey(), List.of());
             int displayLine = remapBranchDisplayLine(parseLine(entry.getKey()), sourceLines, usedDisplayLines);
-            for (Integer target : targets) {
+            for (Integer target : effectiveBranchTargets(targets, displayLine, sourceLines)) {
                 CoverageBranch branch = new CoverageBranch();
                 branch.setLine(displayLine);
                 branch.setGroupId(entry.getKey());
@@ -219,7 +219,7 @@ public class JavaCoverageUnitProjector {
                 }
                 List<Integer> coveredTargets = coveredMap == null ? List.of() : coveredMap.getOrDefault(entry.getKey(), List.of());
                 int displayLine = remapBranchDisplayLine(parseLine(entry.getKey()), sourceLines, usedDisplayLines);
-                for (Integer target : targets) {
+                for (Integer target : effectiveBranchTargets(targets, displayLine, sourceLines)) {
                     CoverageBranch branch = new CoverageBranch();
                     branch.setLine(displayLine);
                     branch.setGroupId(entry.getKey());
@@ -231,6 +231,22 @@ public class JavaCoverageUnitProjector {
             }
         }
         return branches;
+    }
+
+    private List<Integer> effectiveBranchTargets(List<Integer> targets, int displayLine, String[] sourceLines) {
+        LinkedHashSet<Integer> effectiveTargets = new LinkedHashSet<>();
+        if (targets != null) {
+            for (Integer target : targets) {
+                if (target != null) {
+                    effectiveTargets.add(target);
+                }
+            }
+        }
+        if (isBranchExpressionLine(sourceLines, displayLine) && effectiveTargets.size() == 1) {
+            int nextTarget = effectiveTargets.stream().mapToInt(Integer::intValue).max().orElse(0) + 1;
+            effectiveTargets.add(nextTarget);
+        }
+        return new ArrayList<>(effectiveTargets);
     }
 
     private List<Map.Entry<String, List<Integer>>> sortedBranchEntries(Map<String, List<Integer>> branchMap) {
