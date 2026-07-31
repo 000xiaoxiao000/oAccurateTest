@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS `oat_class_coverage` (
   `branch_rate` DOUBLE,
   `method_rate` DOUBLE,
   `has_code_changes` BOOLEAN,
-  `methods_json` JSON,
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX `idx_report_class` (`report_id`, `class_name`),

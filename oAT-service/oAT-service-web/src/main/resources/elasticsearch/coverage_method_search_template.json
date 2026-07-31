@@ -38,6 +38,7 @@
         "totalBranchTargets": {"type": "integer"},
         "coveredBranchTargets": {"type": "integer"},
         "complexity": {"type": "integer"},
+        "detailJson": {"type": "text", "index": false},
         "createTime": {"type": "date"}
       }
     }

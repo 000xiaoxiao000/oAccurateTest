@@ -1,7 +1,5 @@
 package com.oAT.web.esDao;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.oAT.web.common.UtilJson;
 import com.oAT.web.coveragecore.index.CoverageEsIndexService.CoverageClassIdSearchResult;
 import com.oAT.web.coveragecore.index.CoverageEsIndexService;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
@@ -37,8 +35,8 @@ public class ClassCoverageRepository {
                 id, report_id, app_id, class_name, source_type, language, display_name, source_path, total_methods, covered_methods,
                 total_branches, covered_branches, total_branch_targets, covered_branch_targets,
                 total_lines, covered_lines, total_complexity, line_rate, branch_rate,
-                method_rate, has_code_changes, methods_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
+                method_rate, has_code_changes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 report_id = VALUES(report_id),
                 app_id = VALUES(app_id),
@@ -60,20 +58,7 @@ public class ClassCoverageRepository {
                 branch_rate = VALUES(branch_rate),
                 method_rate = VALUES(method_rate),
                 has_code_changes = VALUES(has_code_changes),
-                methods_json = VALUES(methods_json),
                 update_time = CURRENT_TIMESTAMP
-            """;
-    private static final String UPSERT_METHOD_SQL = """
-            INSERT INTO oat_method_coverage (
-                id, class_coverage_id, report_id, app_id, class_name, method_name, method_desc, method_order,
-                total_lines, covered_lines, total_branches, covered_branches, total_branch_targets, covered_branch_targets,
-                complexity, covered, branch_rate, has_code_changes, detail_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON))
-            ON DUPLICATE KEY UPDATE method_name=VALUES(method_name), method_desc=VALUES(method_desc), method_order=VALUES(method_order),
-                total_lines=VALUES(total_lines), covered_lines=VALUES(covered_lines), total_branches=VALUES(total_branches),
-                covered_branches=VALUES(covered_branches), total_branch_targets=VALUES(total_branch_targets),
-                covered_branch_targets=VALUES(covered_branch_targets), complexity=VALUES(complexity), covered=VALUES(covered),
-                branch_rate=VALUES(branch_rate), has_code_changes=VALUES(has_code_changes), detail_json=VALUES(detail_json), update_time=CURRENT_TIMESTAMP
             """;
 
     public ClassCoverageRepository(JdbcTemplate jdbcTemplate, CoverageEsIndexService coverageEsIndexService) {
@@ -159,8 +144,7 @@ public class ClassCoverageRepository {
         appendClassFilters(sql, parameters, className, minLineRate, maxLineRate, minBranchRate, maxBranchRate,
                 minMethodRate, maxMethodRate, minComplexity, maxComplexity, null);
         if (StringUtils.hasText(methodName)) {
-            sql.append(" AND EXISTS (SELECT 1 FROM oat_method_coverage m WHERE m.class_coverage_id = c.id AND LOWER(m.method_name) LIKE ?)");
-            parameters.add("%" + methodName.toLowerCase() + "%");
+            throw new IllegalStateException("methodName search requires coverage_method_search ES index");
         }
         Long total = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM (" + sql + ") t", Long.class, parameters.toArray());
         sql.append(" ORDER BY c.class_name ASC");
@@ -198,8 +182,7 @@ public class ClassCoverageRepository {
         appendClassFilters(sql, parameters, className, minLineRate, maxLineRate, minBranchRate, maxBranchRate,
                 minMethodRate, maxMethodRate, minComplexity, maxComplexity, classNamePrefix);
         if (StringUtils.hasText(methodName)) {
-            sql.append(" AND EXISTS (SELECT 1 FROM oat_method_coverage m WHERE m.class_coverage_id = c.id AND LOWER(m.method_name) LIKE ?)");
-            parameters.add("%" + methodName.toLowerCase() + "%");
+            throw new IllegalStateException("methodName search requires coverage_method_search ES index");
         }
         sql.append(" ORDER BY c.class_name ASC");
         return jdbcTemplate.query(sql.toString(), summaryRowMapper, parameters.toArray());
@@ -216,7 +199,6 @@ public class ClassCoverageRepository {
             return saved;
         }
         jdbcTemplate.batchUpdate(UPSERT_CLASS_SQL, saved, 500, this::bindClassCoverage);
-        saveMethodCoverage(saved);
         coverageEsIndexService.indexClassCoverage(saved);
         return saved;
     }
@@ -225,7 +207,6 @@ public class ClassCoverageRepository {
     public ClassCoverageIndex save(ClassCoverageIndex index) {
         normalize(index);
         jdbcTemplate.update(UPSERT_CLASS_SQL, ps -> bindClassCoverage(ps, index));
-        saveMethodCoverage(List.of(index));
         coverageEsIndexService.indexClassCoverage(List.of(index));
         return index;
     }
@@ -252,12 +233,10 @@ public class ClassCoverageRepository {
         ps.setObject(19, index.getBranchRate());
         ps.setObject(20, index.getMethodRate());
         ps.setObject(21, index.getHasCodeChanges());
-        ps.setString(22, null);
     }
 
     @Transactional
     public void deleteByReportId(String reportId) {
-        jdbcTemplate.update("DELETE FROM oat_method_coverage WHERE report_id = ?", reportId);
         jdbcTemplate.update("DELETE FROM oat_class_coverage WHERE report_id = ?", reportId);
         coverageEsIndexService.deleteByReportId(reportId);
     }
@@ -324,72 +303,6 @@ public class ClassCoverageRepository {
         return ordered;
     }
 
-    private void saveMethodCoverage(List<ClassCoverageIndex> indexes) {
-        List<String> classIds = indexes.stream()
-                .map(ClassCoverageIndex::getId)
-                .filter(StringUtils::hasText)
-                .toList();
-        if (!classIds.isEmpty()) {
-            jdbcTemplate.batchUpdate("DELETE FROM oat_method_coverage WHERE class_coverage_id = ?",
-                    classIds,
-                    500,
-                    (ps, classId) -> ps.setString(1, classId));
-        }
-        List<MethodCoverageRow> rows = new ArrayList<>();
-        for (ClassCoverageIndex index : indexes) {
-            if (index.getMethods() == null) {
-                continue;
-            }
-            for (int i = 0; i < index.getMethods().size(); i++) {
-                rows.add(new MethodCoverageRow(index, index.getMethods().get(i), i));
-            }
-        }
-        if (rows.isEmpty()) {
-            return;
-        }
-        jdbcTemplate.batchUpdate(UPSERT_METHOD_SQL, rows, 500, this::bindMethodCoverage);
-    }
-
-    private void bindMethodCoverage(PreparedStatement ps, MethodCoverageRow row) throws SQLException {
-        ClassCoverageIndex index = row.index();
-        MethodCoverageDetail method = row.method();
-        int i = row.order();
-        ps.setString(1, index.getId() + "_" + i);
-        ps.setString(2, index.getId());
-        ps.setString(3, index.getReportId());
-        ps.setString(4, index.getAppId());
-        ps.setString(5, index.getClassName());
-        ps.setString(6, method == null ? null : method.getMethodName());
-        ps.setString(7, method == null ? null : method.getMethodDesc());
-        ps.setInt(8, i);
-        ps.setObject(9, method == null ? null : method.getTotalLines());
-        ps.setObject(10, method == null ? null : method.getCoveredLines());
-        ps.setObject(11, method == null ? null : method.getTotalBranches());
-        ps.setObject(12, method == null ? null : method.getCoveredBranches());
-        ps.setObject(13, method == null ? null : method.getTotalBranchTargets());
-        ps.setObject(14, method == null ? null : method.getCoveredBranchTargets());
-        ps.setObject(15, method == null ? null : method.getComplexity());
-        ps.setObject(16, method == null ? null : method.isCovered());
-        ps.setObject(17, method == null ? null : method.getBranchRate());
-        ps.setObject(18, method == null ? null : method.isHasCodeChanges());
-        ps.setString(19, UtilJson.writeValueAsString(method));
-    }
-
-    private List<MethodCoverageDetail> loadMethodCoverage(ClassCoverageIndex index) throws SQLException {
-        return jdbcTemplate.query("""
-                        SELECT detail_json FROM oat_method_coverage
-                        WHERE class_coverage_id = ?
-                        ORDER BY method_order ASC
-                        """,
-                (rs, rowNum) -> {
-                    try {
-                        return UtilJson.getObjectMapper().readValue(rs.getString("detail_json"), MethodCoverageDetail.class);
-                    } catch (Exception e) {
-                        throw new SQLException("Failed to parse method detail_json", e);
-                    }
-                },
-                index.getId());
-    }
     private List<ClassCoverageIndex> filter(List<ClassCoverageIndex> source,
                                             String className,
                                             String methodName,
@@ -514,18 +427,7 @@ public class ClassCoverageRepository {
 
     private ClassCoverageIndex mapDetailRow(ResultSet rs, int rowNum) throws SQLException {
         ClassCoverageIndex index = mapSummaryRow(rs, rowNum);
-        index.setMethods(loadMethodCoverage(index));
-        if (index.getMethods() == null || index.getMethods().isEmpty()) {
-            String methodsJson = rs.getString("methods_json");
-            if (StringUtils.hasText(methodsJson)) {
-                try {
-                    index.setMethods(UtilJson.getObjectMapper().readValue(methodsJson,
-                            new TypeReference<List<MethodCoverageDetail>>() {}));
-                } catch (Exception e) {
-                    throw new SQLException("Failed to parse methods_json", e);
-                }
-            }
-        }
+        index.setMethods(coverageEsIndexService.loadMethodDetails(index.getId()));
         return index;
     }
 
@@ -546,6 +448,4 @@ public class ClassCoverageRepository {
             return null;
         }
     }
-
-    private record MethodCoverageRow(ClassCoverageIndex index, MethodCoverageDetail method, int order) {}
 }

@@ -250,7 +250,6 @@ public class FrontendCoverageSchemaInitializer {
                   `branch_rate` DOUBLE,
                   `method_rate` DOUBLE,
                   `has_code_changes` BOOLEAN,
-                  `methods_json` JSON,
                   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
                   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                   INDEX `idx_report_class` (`report_id`, `class_name`),
@@ -261,34 +260,6 @@ public class FrontendCoverageSchemaInitializer {
                   INDEX `idx_report_complexity` (`report_id`, `total_complexity`),
                   INDEX `idx_app` (`app_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='类覆盖率明细表'
-                """);
-        jdbcTemplate.execute("""
-                CREATE TABLE IF NOT EXISTS `oat_method_coverage` (
-                  `id` VARCHAR(160) PRIMARY KEY,
-                  `class_coverage_id` VARCHAR(128) NOT NULL,
-                  `report_id` VARCHAR(64) NOT NULL,
-                  `app_id` VARCHAR(64),
-                  `class_name` VARCHAR(512) NOT NULL,
-                  `method_name` VARCHAR(512),
-                  `method_desc` VARCHAR(1024),
-                  `method_order` INT NOT NULL,
-                  `total_lines` INT DEFAULT 0,
-                  `covered_lines` INT DEFAULT 0,
-                  `total_branches` INT DEFAULT 0,
-                  `covered_branches` INT DEFAULT 0,
-                  `total_branch_targets` INT DEFAULT 0,
-                  `covered_branch_targets` INT DEFAULT 0,
-                  `complexity` INT DEFAULT 0,
-                  `covered` BOOLEAN,
-                  `branch_rate` DOUBLE,
-                  `has_code_changes` BOOLEAN,
-                  `detail_json` JSON NOT NULL,
-                  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
-                  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                  INDEX `idx_class_order` (`class_coverage_id`, `method_order`),
-                  INDEX `idx_report_method` (`report_id`, `method_name`),
-                  INDEX `idx_report_class` (`report_id`, `class_name`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='方法覆盖率明细表'
                 """);
         jdbcTemplate.execute("""
                 CREATE TABLE IF NOT EXISTS `oat_system_snapshot` (

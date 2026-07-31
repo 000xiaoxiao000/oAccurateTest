@@ -216,33 +216,6 @@ CREATE TABLE IF NOT EXISTS `oat_static_source_class` (
   INDEX `idx_class_id` (`class_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='静态源码类信息表';
 
-CREATE TABLE IF NOT EXISTS `oat_method_coverage` (
-  `id` VARCHAR(160) PRIMARY KEY,
-  `class_coverage_id` VARCHAR(128) NOT NULL,
-  `report_id` VARCHAR(64) NOT NULL,
-  `app_id` VARCHAR(64),
-  `class_name` VARCHAR(512) NOT NULL,
-  `method_name` VARCHAR(512),
-  `method_desc` VARCHAR(1024),
-  `method_order` INT NOT NULL,
-  `total_lines` INT DEFAULT 0,
-  `covered_lines` INT DEFAULT 0,
-  `total_branches` INT DEFAULT 0,
-  `covered_branches` INT DEFAULT 0,
-  `total_branch_targets` INT DEFAULT 0,
-  `covered_branch_targets` INT DEFAULT 0,
-  `complexity` INT DEFAULT 0,
-  `covered` BOOLEAN,
-  `branch_rate` DOUBLE,
-  `has_code_changes` BOOLEAN,
-  `detail_json` JSON NOT NULL,
-  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX `idx_class_order` (`class_coverage_id`, `method_order`),
-  INDEX `idx_report_method` (`report_id`, `method_name`),
-  INDEX `idx_report_class` (`report_id`, `class_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='方法覆盖率明细表';
-
 CREATE TABLE IF NOT EXISTS `oat_system_snapshot_artifact` (
   `id` VARCHAR(160) PRIMARY KEY,
   `snapshot_id` VARCHAR(64) NOT NULL,

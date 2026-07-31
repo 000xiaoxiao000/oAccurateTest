@@ -9,6 +9,7 @@ import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.json.JsonData;
 import com.oAT.web.esDao.entity.ClassCoverageIndex;
 import com.oAT.web.esDao.entity.CoverageReportIndex;
+import com.oAT.web.common.UtilJson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
@@ -91,12 +92,14 @@ public class CoverageEsIndexService {
         if (classes == null) {
             return;
         }
+        List<String> classIds = new ArrayList<>();
         List<IndexQuery> queries = new ArrayList<>();
         Date now = new Date();
         for (ClassCoverageIndex index : classes) {
             if (index == null || !StringUtils.hasText(index.getId())) {
                 continue;
             }
+            classIds.add(index.getId());
             queries.add(new IndexQueryBuilder()
                     .withId(index.getId())
                     .withObject(classDoc(index, now))
@@ -118,10 +121,65 @@ public class CoverageEsIndexService {
             return;
         }
         try {
+            deleteMethodDetailsByClassIds(classIds);
             elasticsearchOperations.bulkIndex(queries, BulkOptions.defaultOptions(),
                     IndexCoordinates.of("coverage_method_search-" + suffix(now)));
         } catch (Exception e) {
-            logger.warn("Failed to bulk index coverage search docs: docs={}, error={}", queries.size(), e.getMessage());
+            throw new IllegalStateException("Failed to bulk index coverage search docs: " + queries.size(), e);
+        }
+    }
+
+    public List<ClassCoverageIndex.MethodCoverageDetail> loadMethodDetails(String classCoverageId) {
+        if (!StringUtils.hasText(classCoverageId)) {
+            return Collections.emptyList();
+        }
+        try {
+            SearchResponse<Map> response = elasticsearchClient.search(s -> s
+                            .index("coverage_method_search-*")
+                            .ignoreUnavailable(true)
+                            .size(10_000)
+                            .query(q -> q.bool(b -> b
+                                    .filter(termQuery("docType", "method"))
+                                    .filter(termQuery("id", classCoverageId))))
+                            .sort(sort -> sort.field(f -> f.field("methodOrder").order(SortOrder.Asc))),
+                    Map.class);
+            List<ClassCoverageIndex.MethodCoverageDetail> methods = new ArrayList<>();
+            for (Hit<Map> hit : response.hits().hits()) {
+                Map source = hit.source();
+                if (source == null || source.get("detailJson") == null) {
+                    continue;
+                }
+                methods.add(UtilJson.convertValue(String.valueOf(source.get("detailJson")),
+                        ClassCoverageIndex.MethodCoverageDetail.class));
+            }
+            return methods;
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to load method coverage details from ES: " + classCoverageId, e);
+        }
+    }
+
+    public void deleteMethodDetailsByClassIds(List<String> classCoverageIds) {
+        List<co.elastic.clients.elasticsearch._types.FieldValue> ids = classCoverageIds == null
+                ? Collections.emptyList()
+                : classCoverageIds.stream()
+                .filter(StringUtils::hasText)
+                .map(co.elastic.clients.elasticsearch._types.FieldValue::of)
+                .toList();
+        if (ids.isEmpty()) {
+            return;
+        }
+        try {
+            elasticsearchClient.deleteByQuery(d -> d
+                    .index("coverage_method_search-*")
+                    .ignoreUnavailable(true)
+                    .conflicts(Conflicts.Proceed)
+                    .query(q -> q.bool(b -> b
+                            .filter(termQuery("docType", "method"))
+                            .filter(f -> f.terms(t -> t.field("id")
+                                    .terms(v -> v.value(ids))))))
+                    .refresh(true));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to delete method coverage details from ES", e);
         }
     }
 
@@ -229,7 +287,7 @@ public class CoverageEsIndexService {
                     .query(q -> q.term(t -> t.field("reportId").value(reportId)))
                     .refresh(true));
         } catch (Exception e) {
-            logger.warn("Failed to delete coverage search docs: reportId={}, error={}", reportId, e.getMessage());
+            throw new IllegalStateException("Failed to delete coverage search docs: " + reportId, e);
         }
     }
 
@@ -274,6 +332,7 @@ public class CoverageEsIndexService {
         doc.put("totalBranchTargets", method.getTotalBranchTargets());
         doc.put("coveredBranchTargets", method.getCoveredBranchTargets());
         doc.put("complexity", method.getComplexity());
+        doc.put("detailJson", UtilJson.writeValueAsString(method));
         return doc;
     }
 

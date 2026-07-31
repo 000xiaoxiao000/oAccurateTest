@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useProjectStore } from '@/stores/project'
@@ -204,6 +204,16 @@ const form = reactive({
   probeAlertOnOnline: false,
   probeAlertOnOffline: false,
   probeAlertOnRecovered: false,
+})
+
+function getDefaultWebhookUrl() {
+  return `${window.location.origin}/webhook/oat/probe-alert`
+}
+
+watch(() => form.probeAlertEnabled, (enabled) => {
+  if (enabled && !form.probeWebhookUrl) {
+    form.probeWebhookUrl = getDefaultWebhookUrl()
+  }
 })
 
 function syncForm() {
@@ -286,6 +296,10 @@ async function removeApp() {
 }
 
 async function save() {
+  if (form.probeAlertEnabled && !form.probeWebhookUrl) {
+    toast.warning('启用告警时必须填写 Webhook 地址')
+    return
+  }
   loading.value = true
   error.value = ''
   try {

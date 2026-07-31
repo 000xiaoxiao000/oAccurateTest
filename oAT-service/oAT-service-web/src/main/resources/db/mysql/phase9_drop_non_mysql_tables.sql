@@ -7,3 +7,4 @@ USE `oaccurate_test`;
 -- These are ES read models per coverage-storage-plan.md, not MySQL tables.
 DROP TABLE IF EXISTS `oat_system_log`;
 DROP TABLE IF EXISTS `oat_probe_alert_event`;
+DROP TABLE IF EXISTS `oat_method_coverage`;

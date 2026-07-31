@@ -65,11 +65,6 @@ public class CoverageStorageMigrationService {
                    OR (differences_json IS NOT NULL AND differences_object_key IS NULL)
                    OR (cases_json IS NOT NULL AND cases_object_key IS NULL)
                 """));
-        result.put("classMethodsJson", count("""
-                SELECT COUNT(1)
-                FROM oat_class_coverage
-                WHERE methods_json IS NOT NULL
-                """));
         return result;
     }
 
@@ -85,7 +80,6 @@ public class CoverageStorageMigrationService {
         result.put("staticSource", migrateStaticSource(limit));
         result.put("snapshotArtifact", migrateSnapshotArtifacts(limit));
         result.put("versionCompare", migrateVersionCompare(limit));
-        result.put("classMethodsJsonCleared", clearClassMethodsJson(limit));
         return result;
     }
 
@@ -106,7 +100,7 @@ public class CoverageStorageMigrationService {
             }
         }
         int classesIndexed = 0;
-        if (tableExists("oat_class_coverage") && tableExists("oat_method_coverage")) {
+        if (tableExists("oat_class_coverage")) {
             List<ClassCoverageIndex> classes = classCoverageRepository.findBatchWithMethodsForEsRebuild(limit, offset);
             coverageEsIndexService.indexClassCoverage(classes);
             classesIndexed = classes.size();
@@ -285,18 +279,6 @@ public class CoverageStorageMigrationService {
                     """, jobLogKey, differencesKey, casesKey, id);
         }
         return count;
-    }
-
-    private int clearClassMethodsJson(int limit) {
-        if (!tableExists("oat_class_coverage")) {
-            return 0;
-        }
-        return jdbcTemplate.update("""
-                UPDATE oat_class_coverage
-                SET methods_json = NULL
-                WHERE methods_json IS NOT NULL
-                LIMIT ?
-                """, limit);
     }
 
     private String text(Object value) {
