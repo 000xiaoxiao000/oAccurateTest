@@ -37,6 +37,8 @@ export type AiAttachment = {
   promptText: string
 }
 
+export type AiAttachmentRequest = Pick<AiAttachment, 'name' | 'size' | 'type'> & { text?: string }
+
 export type AiFeedbackType = 'helpful' | 'not_helpful' | 'incorrect' | 'incomplete'
 
 export type AiFloatingPosition = { left: number; top: number }

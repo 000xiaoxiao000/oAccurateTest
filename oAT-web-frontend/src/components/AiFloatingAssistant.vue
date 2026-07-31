@@ -462,6 +462,7 @@ async function sendQuestion() {
   asking.value = true
   error.value = ''
   const currentImageData = attachments.value.find((item) => item.isImage)?.imageData || ''
+  const currentAttachments = attachments.value.map(({ name, size, type, promptText }) => ({ name, size, type, promptText }))
   const displayText = text || (attachments.value.length ? `[已添加 ${attachments.value.length} 个附件]` : '[图片提问]')
   messages.value.push({ id: uid(), role: 'user', text: displayText })
   question.value = ''
@@ -471,6 +472,7 @@ async function sendQuestion() {
       question: [text, attachmentPrompt].filter(Boolean).join('\n\n'),
       pageContext: buildPageContext(text, route.fullPath),
       imageData: currentImageData || undefined,
+      attachments: currentAttachments.map(({ name, size, type, promptText }) => ({ name, size, type, text: promptText })),
       sessionState: JSON.stringify({ messages: messages.value.slice(-20) }),
       memoryScope: 'assistant',
     })
@@ -624,12 +626,12 @@ function handleFilesDrop(files: File[]) {
 }
 
 function handleAttachmentFile(file: File) {
-  if (file.size > 20 * 1024 * 1024) {
-    error.value = '文件不能超过 20MB'
+  if (file.size > 100 * 1024 * 1024) {
+    error.value = '文件不能超过 100MB'
     return
   }
-  if (attachments.value.length >= 20) {
-    error.value = '最多添加 20 个附件'
+  if (attachments.value.length >= 50) {
+    error.value = '最多添加 50 个附件'
     return
   }
   error.value = ''

@@ -47,6 +47,8 @@ public class AIStreamingControl {
 
     private static final Long SSE_TIMEOUT = 300_000L; // 5分钟
     private static final String DEFAULT_STREAM_MEMORY_SCOPE = "workbench";
+    private static final int MAX_ATTACHMENTS = 50;
+    private static final long MAX_ATTACHMENT_BYTES = 100L * 1024L * 1024L;
 
     private final ExecutorService sseExecutor = Executors.newFixedThreadPool(10);
 
@@ -69,7 +71,14 @@ public class AIStreamingControl {
                                    @RequestParam String question,
                                    @RequestParam(required = false) String pageContext,
                                    @RequestParam(required = false) String imageData,
+                                   @RequestParam(required = false, defaultValue = "0") int attachmentCount,
+                                   @RequestParam(required = false) String attachmentSizes,
                                    @RequestParam(required = false) String memoryScope) {
+
+        String attachmentError = validateAttachments(attachmentCount, attachmentSizes, imageData);
+        if (attachmentError != null) {
+            throw new IllegalArgumentException(attachmentError);
+        }
 
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
         AtomicBoolean completed = new AtomicBoolean(false);
@@ -179,6 +188,29 @@ public class AIStreamingControl {
         });
 
         return emitter;
+    }
+
+    private String validateAttachments(int count, String sizes, String imageData) {
+        if (count < 0 || count > MAX_ATTACHMENTS) return "最多添加 50 个附件";
+        if (sizes != null && !sizes.isBlank()) {
+            String[] values = sizes.split(",");
+            if (values.length != count) return "附件信息不完整，请重新上传";
+            for (String value : values) {
+                try {
+                    if (Long.parseLong(value) < 0 || Long.parseLong(value) > MAX_ATTACHMENT_BYTES) {
+                        return "单个附件不能超过 100MB";
+                    }
+                } catch (NumberFormatException e) {
+                    return "附件大小不合法";
+                }
+            }
+        } else if (count > 0) {
+            return "附件信息不完整，请重新上传";
+        }
+        if (imageData != null && imageData.length() > MAX_ATTACHMENT_BYTES * 4 / 3 + 1024) {
+            return "图片附件不能超过 100MB";
+        }
+        return null;
     }
 
     /**

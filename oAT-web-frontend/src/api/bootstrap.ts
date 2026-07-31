@@ -569,6 +569,7 @@ export function askAiInteractive(
     question?: string
     pageContext?: string
     imageData?: string
+    attachments?: Array<{ name: string; size: number; type?: string; text?: string }>
     sessionState?: string
     activeSessionId?: string
     sessionSortMode?: string

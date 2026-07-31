@@ -67,6 +67,7 @@ public final class AIInteractiveApiPayloads {
         private String sessionSortMode;
         private Boolean timelineExpanded;
         private String memoryScope;
+        private List<AttachmentRequest> attachments;
 
         public String getQuestion() { return question; }
         public void setQuestion(String question) { this.question = question; }
@@ -84,6 +85,24 @@ public final class AIInteractiveApiPayloads {
         public void setTimelineExpanded(Boolean timelineExpanded) { this.timelineExpanded = timelineExpanded; }
         public String getMemoryScope() { return memoryScope; }
         public void setMemoryScope(String memoryScope) { this.memoryScope = memoryScope; }
+        public List<AttachmentRequest> getAttachments() { return attachments; }
+        public void setAttachments(List<AttachmentRequest> attachments) { this.attachments = attachments; }
+    }
+
+    public static class AttachmentRequest {
+        private String name;
+        private long size;
+        private String type;
+        private String text;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public long getSize() { return size; }
+        public void setSize(long size) { this.size = size; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
+        public String getText() { return text; }
+        public void setText(String text) { this.text = text; }
     }
 
     public static class SessionStateRequest {

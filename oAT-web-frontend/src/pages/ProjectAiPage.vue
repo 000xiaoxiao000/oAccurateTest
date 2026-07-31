@@ -341,6 +341,7 @@ async function submitAsk() {
   const attachmentPrompt = attachments.value.map((item) => item.promptText).filter(Boolean).join('\n\n')
   const currentQuestion = [userText, attachmentPrompt].filter(Boolean).join('\n\n')
   const currentImageData = attachments.value.find((item) => item.isImage)?.imageData || ''
+  const currentAttachments = attachments.value.map(({ name, size, type, promptText }) => ({ name, size, type, promptText }))
   const displayText = userText || (attachments.value.length ? `[已添加 ${attachments.value.length} 个附件]` : '[图片提问]')
   question.value = ''
   attachments.value = []
@@ -358,7 +359,7 @@ async function submitAsk() {
     const assistantMessage: AiSessionMessage = { id: createMessageId(), role: 'assistant', text: '正在连接 AI 流式响应...' }
     activeSession.value?.messages.push(assistantMessage)
     const startedAt = performance.now()
-    await askAiWithFallback(currentQuestion, assistantMessage, currentImageData)
+    await askAiWithFallback(currentQuestion, assistantMessage, currentImageData, currentAttachments)
     assistantMessage.responseTime = Math.max(1, Math.round(performance.now() - startedAt))
     await executeAutoAction(reply.value?.actions)
     touchSession(activeSession.value)
@@ -536,9 +537,9 @@ async function executeAutoAction(actions?: AIAction[]) {
 }
 
 
-async function askAiWithFallback(currentQuestion: string, assistantMessage: AiSessionMessage, currentImageData = '') {
+async function askAiWithFallback(currentQuestion: string, assistantMessage: AiSessionMessage, currentImageData = '', currentAttachments: Array<{ name: string; size: number; type: string; promptText: string }> = []) {
   try {
-    await askAiStreaming(currentQuestion, assistantMessage, currentImageData)
+    await askAiStreaming(currentQuestion, assistantMessage, currentImageData, currentAttachments)
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') throw err
     assistantMessage.text = '流式响应不可用，正在切换普通响应...'
@@ -546,6 +547,7 @@ async function askAiWithFallback(currentQuestion: string, assistantMessage: AiSe
       question: currentQuestion,
       pageContext: `route=/p/${projectId.value}/ai`,
       imageData: currentImageData || undefined,
+      attachments: currentAttachments.map(({ name, size, type, promptText }) => ({ name, size, type, text: promptText })),
       sessionState: buildSessionState(),
       activeSessionId: activeSessionId.value,
       sessionSortMode: sessionSort.value,
@@ -568,7 +570,7 @@ function friendlyAiError(err: unknown) {
   return err instanceof Error ? err.message : 'AI 提问失败'
 }
 
-async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessionMessage, currentImageData = '') {
+async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessionMessage, currentImageData = '', currentAttachments: Array<{ name: string; size: number }> = []) {
   askAbortController = new AbortController()
   const body = new URLSearchParams()
   body.set('question', currentQuestion)
@@ -578,6 +580,8 @@ async function askAiStreaming(currentQuestion: string, assistantMessage: AiSessi
   body.set('sessionSortMode', sessionSort.value)
   body.set('memoryScope', 'workbench')
   if (currentImageData) body.set('imageData', currentImageData)
+  body.set('attachmentCount', String(currentAttachments.length))
+  body.set('attachmentSizes', currentAttachments.map((item) => item.size).join(','))
   const response = await fetch(backendApiUrl(`/api/projects/${projectId.value}/ai/ask/stream`), {
     method: 'POST',
     credentials: 'include',
@@ -673,12 +677,12 @@ function handleFilesDrop(files: File[]) {
 }
 
 function handleAttachmentFile(file: File) {
-  if (file.size > 20 * 1024 * 1024) {
-    error.value = '附件不能超过 20MB'
+  if (file.size > 100 * 1024 * 1024) {
+    error.value = '附件不能超过 100MB'
     return
   }
-  if (attachments.value.length >= 20) {
-    error.value = '最多添加 20 个附件'
+  if (attachments.value.length >= 50) {
+    error.value = '最多添加 50 个附件'
     return
   }
   error.value = ''

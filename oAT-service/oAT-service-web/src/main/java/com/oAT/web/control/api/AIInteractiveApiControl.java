@@ -25,6 +25,9 @@ import java.util.Map;
 @RequestMapping("/api/projects/{projectId}/ai")
 public class AIInteractiveApiControl {
 
+    private static final int MAX_ATTACHMENTS = 50;
+    private static final long MAX_ATTACHMENT_BYTES = 100L * 1024L * 1024L;
+
     private final AIInteractiveService aiInteractiveService;
 
     public AIInteractiveApiControl(AIInteractiveService aiInteractiveService) {
@@ -58,6 +61,10 @@ public class AIInteractiveApiControl {
                                                     @SessionAttribute UserVo user,
                                                     @RequestBody AskRequest request) {
         String question = request.getQuestion() == null ? "" : request.getQuestion().trim();
+        String attachmentError = validateAttachments(request.getAttachments(), request.getImageData());
+        if (attachmentError != null) {
+            return new ResultNotified<>(false, attachmentError);
+        }
         if (!StringUtils.hasText(question) && !StringUtils.hasText(request.getImageData())) {
             return new ResultNotified<>(false, "请输入您想了解的内容或上传图片");
         }
@@ -74,6 +81,26 @@ public class AIInteractiveApiControl {
                 request.getMemoryScope()
         );
         return new ResultNotified<>(true, "分析完成", reply);
+    }
+
+    private String validateAttachments(List<AttachmentRequest> attachments, String imageData) {
+        if (attachments != null && attachments.size() > MAX_ATTACHMENTS) {
+            return "最多添加 50 个附件";
+        }
+        if (attachments != null) {
+            for (AttachmentRequest attachment : attachments) {
+                if (attachment == null || attachment.getSize() < 0) {
+                    return "附件大小不合法";
+                }
+                if (attachment.getSize() > MAX_ATTACHMENT_BYTES) {
+                    return "单个附件不能超过 100MB";
+                }
+            }
+        }
+        if (imageData != null && imageData.length() > MAX_ATTACHMENT_BYTES * 4 / 3 + 1024) {
+            return "图片附件不能超过 100MB";
+        }
+        return null;
     }
 
     @PostMapping("/session-state")

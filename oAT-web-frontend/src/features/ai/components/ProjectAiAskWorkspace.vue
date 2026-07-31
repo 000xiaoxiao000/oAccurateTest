@@ -94,7 +94,7 @@
       accept="image/*,.txt,.md,.json,.yaml,.yml,.csv,.log,.xml,.html,.css,.js,.ts,.java,.py,.sql,.pdf,.doc,.docx,.xls,.xlsx"
       @change="$emit('image-change', $event)"
     />
-    <form v-if="activeMessages.length" ref="askFormRef" class="ask-form" :class="{ 'is-dragging': draggingFiles, 'has-attachment': attachments.length }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
+    <form v-if="activeMessages.length" ref="askFormRef" class="ask-form" :class="{ 'is-dragging': draggingFiles, 'has-attachment': attachments.length, 'tool-picker-open': toolPickerOpen }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @keydown.esc.stop.prevent="closeToolPicker" @submit.prevent="$emit('submit-ask')">
       <div v-if="attachments.length" class="compose-attachments">
         <div v-for="item in attachments" :key="item.id" class="compose-attachment">
           <div v-if="item.isImage" class="compose-image-preview">
@@ -136,10 +136,34 @@
           </button>
         </div>
         <div class="ask-submit-actions">
-          <button class="icon-button attachment-icon-button" type="button" aria-label="添加文件或图片" title="添加文件或图片" @click="$emit('select-image')">
+          <div class="ai-tool-picker">
+            <button class="icon-button ai-tool-picker-button" type="button" aria-label="选择 AI 工具" :aria-expanded="toolPickerOpen" aria-controls="workspace-ai-tool-panel" title="选择 AI 工具" @click.stop="toggleToolPicker">
+              <svg class="button-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M5 7.5h14M8 4.5v6M16 4.5v6M7 16.5h10M12 13.5v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </button>
+            <div v-if="toolPickerOpen" id="workspace-ai-tool-panel" class="ai-tool-panel" @pointerdown.stop>
+              <div class="ai-tool-panel-head">
+                <strong>选择 AI 工具</strong>
+                <span>选择后写入输入框</span>
+              </div>
+              <div v-for="group in aiToolGroups" :key="group" class="ai-tool-group">
+                <div class="ai-tool-group-title">{{ group }}</div>
+                <button v-for="tool in toolsByGroup(group)" :key="tool.id" class="ai-tool-option" type="button" @click="selectAiTool(tool.prompt)">
+                  <span class="ai-tool-glyph" :class="`icon-${tool.icon}`" aria-hidden="true">{{ tool.name.slice(0, 1) }}</span>
+                  <span>
+                    <strong>{{ tool.name }}</strong>
+                    <small>{{ tool.description }}</small>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <button class="icon-button attachment-icon-button" type="button" aria-label="添加文件或图片" aria-describedby="workspace-attachment-help" @click="$emit('select-image')">
             <svg class="button-icon attachment-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
+            <span id="workspace-attachment-help" class="attachment-tooltip" role="tooltip">快速模式下，仅识别图片与文件中的文字<br>最多 50 个，每个 100 MB</span>
           </button>
           <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
             <span class="button-icon stop-icon"></span>
@@ -154,7 +178,7 @@
         </div>
       </div>
     </form>
-    <form v-else ref="askFormRef" class="ask-form deepseek-compose" :class="{ 'has-attachment': attachments.length, 'is-dragging': draggingFiles }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @submit.prevent="$emit('submit-ask')">
+    <form v-else ref="askFormRef" class="ask-form deepseek-compose" :class="{ 'has-attachment': attachments.length, 'is-dragging': draggingFiles, 'tool-picker-open': toolPickerOpen }" @dragenter.prevent="draggingFiles = true" @dragover.prevent="draggingFiles = true" @dragleave.prevent="handleDragLeave" @drop.prevent="handleDrop" @keydown.esc.stop.prevent="closeToolPicker" @submit.prevent="$emit('submit-ask')">
       <div v-if="attachments.length" class="compose-attachments">
         <div v-for="item in attachments" :key="item.id" class="compose-attachment">
           <div v-if="item.isImage" class="compose-image-preview">
@@ -191,10 +215,34 @@
       <div class="form-actions deepseek-compose-actions">
         <div class="ask-tools deepseek-compose-left"></div>
         <div class="ask-submit-actions deepseek-compose-controls">
-          <button class="icon-button attachment-icon-button" type="button" aria-label="添加文件或图片" title="添加文件或图片" @click="$emit('select-image')">
+          <div class="ai-tool-picker">
+            <button class="icon-button ai-tool-picker-button" type="button" aria-label="选择 AI 工具" :aria-expanded="toolPickerOpen" aria-controls="workspace-ai-tool-panel-empty" title="选择 AI 工具" @click.stop="toggleToolPicker">
+              <svg class="button-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path d="M5 7.5h14M8 4.5v6M16 4.5v6M7 16.5h10M12 13.5v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </button>
+            <div v-if="toolPickerOpen" id="workspace-ai-tool-panel-empty" class="ai-tool-panel" @pointerdown.stop>
+              <div class="ai-tool-panel-head">
+                <strong>选择 AI 工具</strong>
+                <span>选择后写入输入框</span>
+              </div>
+              <div v-for="group in aiToolGroups" :key="group" class="ai-tool-group">
+                <div class="ai-tool-group-title">{{ group }}</div>
+                <button v-for="tool in toolsByGroup(group)" :key="tool.id" class="ai-tool-option" type="button" @click="selectAiTool(tool.prompt)">
+                  <span class="ai-tool-glyph" :class="`icon-${tool.icon}`" aria-hidden="true">{{ tool.name.slice(0, 1) }}</span>
+                  <span>
+                    <strong>{{ tool.name }}</strong>
+                    <small>{{ tool.description }}</small>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <button class="icon-button attachment-icon-button" type="button" aria-label="添加文件或图片" aria-describedby="workspace-attachment-help-empty" @click="$emit('select-image')">
             <svg class="button-icon attachment-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
               <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
+            <span id="workspace-attachment-help-empty" class="attachment-tooltip" role="tooltip">快速模式下，仅识别图片与文件中的文字<br>最多 50 个，每个 100 MB</span>
           </button>
           <button v-if="asking" class="danger-button control-button" type="button" @click="$emit('stop-ask')">
             <span class="button-icon stop-icon"></span>
@@ -216,6 +264,7 @@
 import { computed, ref } from 'vue'
 
 import type { AIFeedbackPayload } from '@/api/types'
+import { AI_TOOL_PROMPT_GROUPS, AI_TOOL_PROMPTS } from '@/features/ai/toolPrompts'
 import type { AiAttachment, AiMessageSection, AiQuestionAnchor, AiSessionMessage } from '@/features/ai/types'
 import { renderMarkdown } from '@/utils/markdown'
 
@@ -259,11 +308,33 @@ const askFormRef = ref<HTMLFormElement | null>(null)
 const askInputRef = ref<HTMLTextAreaElement | null>(null)
 const imageInput = ref<HTMLInputElement | null>(null)
 const draggingFiles = ref(false)
+const toolPickerOpen = ref(false)
+const aiToolGroups = AI_TOOL_PROMPT_GROUPS
 
 const questionModel = computed({
   get: () => props.question,
   set: (value: string) => emit('update:question', value),
 })
+
+function toolsByGroup(group: string) {
+  return AI_TOOL_PROMPTS.filter((tool) => tool.group === group)
+}
+
+function toggleToolPicker() {
+  toolPickerOpen.value = !toolPickerOpen.value
+}
+
+function closeToolPicker() {
+  toolPickerOpen.value = false
+}
+
+function selectAiTool(prompt: string) {
+  const current = props.question.trim()
+  const next = current ? `${current}\n${prompt}` : prompt
+  emit('update:question', next)
+  toolPickerOpen.value = false
+  focusAskInput()
+}
 
 function extLabel(item: AiAttachment) {
   const ext = item.name.includes('.') ? item.name.split('.').pop() || '' : ''
@@ -333,3 +404,137 @@ defineExpose({
   selectImageFile,
 })
 </script>
+
+<style scoped>
+.ai-tool-picker {
+  position: relative;
+}
+
+.ai-tool-picker-button[aria-expanded="true"] {
+  background: rgba(15, 118, 110, .12);
+  color: #0f766e;
+}
+
+.ai-tool-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 12px);
+  z-index: 30;
+  display: grid;
+  gap: 12px;
+  width: min(440px, calc(100vw - 40px));
+  max-height: min(540px, calc(100vh - 220px));
+  overflow-y: auto;
+  padding: 14px;
+  border: 1px solid rgba(203, 213, 225, .9);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, .2);
+}
+
+.ai-tool-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-tool-panel-head strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ai-tool-panel-head span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.ai-tool-group {
+  display: grid;
+  gap: 7px;
+}
+
+.ai-tool-group-title {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ai-tool-option {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(226, 232, 240, .95);
+  border-radius: 10px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+
+.ai-tool-option:hover,
+.ai-tool-option:focus-visible {
+  border-color: rgba(15, 118, 110, .38);
+  background: #f8fafc;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.ai-tool-glyph {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(15, 118, 110, .12);
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ai-tool-option strong,
+.ai-tool-option small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-tool-option strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-tool-option small {
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.attachment-icon-button { position: relative; }
+.attachment-tooltip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 5;
+  width: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #29292d;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .15s ease, transform .15s ease;
+}
+.attachment-icon-button:hover .attachment-tooltip,
+.attachment-icon-button:focus-visible .attachment-tooltip { opacity: 1; transform: translateY(0); }
+</style>
