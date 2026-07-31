@@ -70,7 +70,7 @@ defineEmits<{
 .modal-mask {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 1200;
   display: grid;
   place-items: center;
   padding: 24px;
