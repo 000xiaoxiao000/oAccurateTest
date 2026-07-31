@@ -3632,6 +3632,51 @@
   padding-right: 16px;
 }
 
+.ai-page :deep(.ask-form) {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ai-accent) 16%, #cbd5e1);
+  border-radius: var(--oat-radius-lg);
+  padding: 0;
+  background: #fff;
+  box-shadow: 0 -10px 24px rgba(15, 23, 42, .045);
+}
+
+.ai-page :deep(.ask-form:focus-within) {
+  border-color: color-mix(in srgb, var(--ai-accent) 42%, #cbd5e1);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--ai-accent) 9%, transparent),
+    0 -10px 24px rgba(15, 23, 42, .045);
+}
+
+.ai-page :deep(.ask-form .text-area) {
+  min-height: 118px;
+  max-height: 220px;
+  border: 0;
+  border-radius: 0;
+  padding: 16px 18px 12px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.ai-page :deep(.ask-form .text-area:focus) {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ai-page :deep(.ask-form .form-actions) {
+  min-height: 62px;
+  border-top: 1px solid rgba(15, 23, 42, .07);
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, .62), rgba(255, 255, 255, .98));
+}
+
+.ai-page :deep(.ask-form .ghost-button),
+.ai-page :deep(.ask-form .primary-button),
+.ai-page :deep(.ask-form .danger-button) {
+  min-height: 38px;
+}
+
 @media (max-width: 1180px) {
   .ai-page :deep(.hero-card) {
     grid-template-columns: minmax(0, 1fr) 96px;
